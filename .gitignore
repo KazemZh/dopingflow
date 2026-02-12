@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+
+# Virtual environments
+.env/
+.venv/
+venv/
+ml_doping/
+
+# Logs
+logs/
+*.log
+
+# Workflow outputs
+random_structures/
+reference_structures/
+database/
+*.csv
+
+# IDE
+.vscode/
+.idea/
+
+# Pytest cache
+.pytest_cache/

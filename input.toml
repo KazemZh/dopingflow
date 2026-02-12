@@ -1,0 +1,231 @@
+# ============================================================
+# input.toml  (shared input file for the whole workflow)
+# ============================================================
+# Put this file in the SAME directory as the scripts.
+# Both scripts will read from here.
+#
+# Notes:
+# - TOML comments start with '#'
+# - Section names in brackets, e.g. [structure]
+# - Lists use [ ... ]
+# - Dictionaries inside lists use { ... }
+# ============================================================
+
+
+# -----------------------------
+# (Shared) Structure settings
+# -----------------------------
+[structure]
+# Name of the pristine structure file (VASP POSCAR format)
+# Must exist in the same directory as the scripts (unless you give a path)
+base_poscar = "reference_structures/base.POSCAR"
+
+# Supercell applied before doping (script 01 uses this)
+# For example [2,1,5] multiplies the cell a×2, b×1, c×5
+supercell = [2, 1, 5]
+
+# Output directory created by script 01
+# (It will be wiped & recreated each run)
+outdir = "random_structures"
+
+# -----------------------------
+# Script 00: reference energies (chemical potentials)
+# -----------------------------
+[references]
+
+# Where to get bulk reference structures:
+# - "local": read from reference_structures/ folder (recommended default)
+# - "mp"   : download from Materials Project using mp-api (optional convenience)
+source = "local"
+
+# Folder (relative to workflow root) containing reference structures
+# Naming convention (fixed by script):
+#   eference_structures/Sn.POSCAR
+#   eference_structures/Sb.POSCAR
+#   eference_structures/Zr.POSCAR
+#   ...
+bulk_dir = "reference_structures/"
+
+# If source="mp", provide a Material Project ID for each element you need
+# (These are examples ONLY — replace with your choices)
+# mp_ids = { Sn = "mp-xxx", Sb = "mp-yyy", Zr = "mp-zzz" }
+
+# Relaxation/energy evaluation settings for the reference bulks
+# (we relax them with M3GNet to get a stable energy)
+fmax = 0.02
+
+# If true:
+#   Skip Step 00 if reference_structures/reference_energies.json already exists.
+# If false:
+#   Recompute and overwrite the reference energies JSON.
+skip_if_done = true
+
+
+# -----------------------------
+# Script 01: generation settings
+# -----------------------------
+[generate]
+# Species order in the written POSCAR (script 01)
+# - If empty, script 01 will not reorder sites.
+# - Put whatever is relevant to YOUR system.
+poscar_order = ["Zr","Ti","Sb","Sn","O"]
+
+# Base seed used to make deterministic randomness per effective composition
+seed_base = 12345
+
+
+# -----------------------------
+# Script 01: doping input
+# -----------------------------
+[doping]
+# Choose how compositions are provided:
+# - "explicit": you write the exact compositions in 'compositions'
+# - "enumerate": the script generates compositions from the rules below
+mode = "explicit"
+
+# Host species to substitute (doping happens ONLY on these sites)
+# Example: "Sn", "Ti", "Fe", ...
+host_species = "Sn"
+
+# ---- explicit mode ----
+# List exactly the dopant % you want (percent relative to host_species sublattice).
+# IMPORTANT:
+# - Values can be non-multiples of 5 (e.g., Sb=3)
+# - Script 01 will round to integer atom counts and compute the effective %
+# - Output folder/tag is based on the EFFECTIVE (rounded) composition
+compositions = [
+  { Sb = 5 },                    # example: may become Sb5 depending on host count
+  { Sb = 5, Zr = 5 },
+]
+
+# ---- enumerate mode (used only if mode="enumerate") ----
+# The script will generate compositions by distributing totals among dopants.
+# Example interpretation:
+# - must_include dopants must appear in every generated composition
+# - allowed_totals are total % values to generate (sum of all dopants)
+# - levels are the allowed % values to assign to individual dopants
+# - max_dopants_total limits the number of dopant species in a composition
+#   (set <=0 to allow all possible dopants)
+must_include = ["Sb"]
+dopants = ["Ti","Zr","Sb"]
+max_dopants_total = 2
+allowed_totals = [5, 10, 15]
+levels = [5, 10]
+
+
+# -----------------------------
+# Script 02: scan settings
+# -----------------------------
+[scan]
+
+# POSCAR read inside each random_structures/<tag>/ directory
+poscar_in = "POSCAR"
+
+# Keep best K candidates by M3GNet single-point energy
+topk = 15
+
+# Symmetry tolerance for generating unique configs
+symprec = 1e-3
+
+# Parallel evaluation
+nproc = 12
+chunksize = 50
+
+# Maximum number of raw configurations allowed before aborting
+max_enum = 50000000
+
+# Safety limit on symmetry-unique configs
+max_unique = 200000
+
+# Sublattice definition:
+# enumerate only NON-anion sites (i.e., cations in oxides)
+anion_species = ["O"]
+
+# NOTE:
+# host_species is taken from [doping].host_species
+# and must not be redefined here to avoid inconsistencies.
+
+# If true:
+#   Skip a structure folder if "ranking_scan.csv" already exists.
+# If false:
+#   Always rerun the scan stage for that folder.
+skip_if_done = true
+
+
+# -----------------------------
+# Script 03: relaxation settings
+# -----------------------------
+[relax]
+
+# Target maximum force (eV/Å) for structure relaxation.
+# Relaxation stops when all forces are below this value.
+fmax = 0.05
+
+# Number of candidate structures relaxed in parallel.
+# Each worker runs one M3GNet Relaxer instance.
+n_workers = 6
+
+# Number of TensorFlow threads used per worker process.
+# Keep small (e.g. 1) when running multiple workers to avoid oversubscription.
+tf_threads = 1
+
+# Number of OpenMP threads per worker.
+# Also keep small to prevent CPU overloading when using many workers.
+omp_threads = 1
+
+# If true:
+#   Skip a structure folder if "ranking_relax.csv" already exists.
+# If false:
+#   Always rerun relaxation for that folder.
+skip_if_done = true
+
+
+# -----------------------------
+# Script 04: filter relaxed candidates
+# -----------------------------
+[filter]
+
+# Choose filtering mode:
+# - "window": keep all candidates within window_meV above the minimum relaxed energy
+# - "topn"  : keep the lowest-energy max_candidates candidates
+mode = "window"
+
+# Used only when mode="window"
+window_meV = 50.0
+
+# Used only when mode="topn"
+max_candidates = 12
+
+# If true, skip a folder if outputs already exist
+skip_if_done = true
+
+# -----------------------------
+# Script 05: bandgap prediction (ALIGNN)
+# -----------------------------
+[bandgap]
+
+# If true:
+#   Skip a structure folder if "bandgap_alignn_summary.csv" already exists.
+# If false:
+#   Always recompute bandgaps for that folder.
+skip_if_done = true
+
+# Graph construction parameters used by ALIGNN
+cutoff = 8.0
+max_neighbors = 12
+
+
+# -----------------------------
+# Script 06: formation energy settings
+# -----------------------------
+[formation]
+
+# If true:
+#   Skip a folder if "formation_energies.csv" already exists.
+skip_if_done = true
+
+# Report additionally a normalized value:
+# - "per_dopant" : E_form / (total dopant atoms)
+# - "per_host"   : E_form / (host sublattice size in pristine)
+# - "total"      : only total eV
+normalize = "per_dopant"

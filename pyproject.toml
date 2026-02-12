@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dopingflow"
+version = "0.1.0"
+description = "ML-driven doping workflow pipeline."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Kazem Zhour" }]
+
+dependencies = [
+  "typer>=0.12",
+  "rich>=13.7",
+  "numpy>=1.26",
+  "pymatgen>=2024.2.8",
+  "ase>=3.22.1",
+  "tomli>=2.0; python_version<'3.11'",
+]
+
+[project.optional-dependencies]
+m3gnet = [
+  "m3gnet==0.2.4",
+  "tensorflow==2.15.1",
+]
+
+mp = [
+  "mp-api>=0.40",
+]
+
+alignn = [
+  "torch==2.1.2",
+  "dgl==1.1.2",
+  "alignn==2024.12.12",
+  "jarvis-tools==2024.3.4",
+]
+
+dev = [
+  "pytest>=8",
+  "ruff>=0.5",
+]
+
+docs = [
+  "sphinx>=7",
+  "sphinx-rtd-theme",
+  "myst-parser",
+]
+
+
+[project.scripts]
+dopingflow = "dopingflow.cli:app"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.ruff]
+line-length = 100

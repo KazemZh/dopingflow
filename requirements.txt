@@ -1,0 +1,48 @@
+# ============================================================
+# Core scientific stack
+# ============================================================
+
+# Numerical arrays
+numpy==1.26.4
+
+
+# ============================================================
+# Materials science stack (structure handling, symmetry, IO)
+# ============================================================
+
+# Crystal structures, symmetry, POSCAR handling
+pymatgen==2024.2.8
+
+# Atomic Simulation Environment
+ase==3.22.1
+
+
+# ============================================================
+# ML Potential (Step 02 & Step 03)
+# ============================================================
+
+# M3GNet potential
+m3gnet==0.2.4
+
+# TensorFlow backend for M3GNet
+tensorflow==2.15.1
+
+
+# ============================================================
+# ALIGNN stack (Step 05: bandgap prediction)
+# ============================================================
+
+# PyTorch backend required by ALIGNN (CPU wheel)
+torch==2.1.2
+
+# Deep Graph Library (CPU build)
+dgl==1.1.2
+
+# ALIGNN model implementation (PyPI-available versions)
+alignn==2024.12.12
+
+# JARVIS tools for Atoms objects and utilities
+jarvis-tools==2024.3.4
+
+# Test package
+pytest>=8.0
