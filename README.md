@@ -21,8 +21,6 @@ Designed for reproducible, scalable materials screening.
 
 # 📁 Project Structure
 
-## Project Structure
-
 ```
 .
 ├── CHANGELOG.md
