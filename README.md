@@ -21,45 +21,76 @@ Designed for reproducible, scalable materials screening.
 
 # 📁 Project Structure
 
-ml-doping-workflow/
-├─ pyproject.toml
-├─ README.md
-├─ LICENSE
-├─ CHANGELOG.md
-├─ input.toml
-├─ logs/
-├─ reference_structures/
-│ ├─ bulk/
-│ ├─ mp_cache/
-│ └─ reference_energies.json
-├─ random_structures/
-│ └─ <composition_tag>/
-│ ├─ POSCAR
-│ ├─ candidate_001/
-│ │ ├─ 01_scan/
-│ │ ├─ 02_relax/
-│ │ ├─ 03_band/
-│ │ └─ 04_formation/
-│ └─ ...
-├─ src/
-│ └─ dopingflow/
-│ ├─ init.py
-│ ├─ cli.py
-│ ├─ logging.py
-│ ├─ refs.py
-│ ├─ generate.py
-│ ├─ scan.py
-│ ├─ relax.py
-│ ├─ filtering.py
-│ ├─ bandgap.py
-│ ├─ formation.py
-│ ├─ collect.py
-│ └─ utils/
-├─ tests/
-│ ├─ test_cli.py
-│ ├─ test_cli_help.py
-│ └─ test_imports.py
-└─ docs/
+## Project Structure
+
+```
+.
+├── CHANGELOG.md
+├── docs
+│   ├── build
+│   │   ├── doctrees
+│   │   │   ├── api
+│   │   │   ├── environment.pickle
+│   │   │   └── index.doctree
+│   │   └── html
+│   │       ├── api
+│   │       ├── .buildinfo
+│   │       ├── genindex.html
+│   │       ├── index.html
+│   │       ├── objects.inv
+│   │       ├── py-modindex.html
+│   │       ├── search.html
+│   │       ├── searchindex.js
+│   │       ├── _sources
+│   │       └── _static
+│   ├── make.bat
+│   ├── Makefile
+│   └── source
+│       ├── api
+│       │   ├── dopingflow.rst
+│       │   └── modules.rst
+│       ├── conf.py
+│       ├── index.rst
+│       ├── _static
+│       └── _templates
+├── .gitignore
+├── input.toml
+├── LICENSE
+├── pyproject.toml
+├── README.md
+├── requirements.txt
+├── results_database.csv
+├── src
+│   ├── dopingflow
+│   │   ├── bandgap.py
+│   │   ├── cli.py
+│   │   ├── collect.py
+│   │   ├── filtering.py
+│   │   ├── formation.py
+│   │   ├── generate.py
+│   │   ├── __init__.py
+│   │   ├── logging.py
+│   │   ├── refs.py
+│   │   ├── relax.py
+│   │   ├── scan.py
+│   │   └── utils
+│   │       ├── io.py
+│   │       ├── parallel.py
+│   │       └── pymatgen_helpers.py
+│   └── dopingflow.egg-info
+│       ├── dependency_links.txt
+│       ├── entry_points.txt
+│       ├── PKG-INFO
+│       ├── requires.txt
+│       ├── SOURCES.txt
+│       └── top_level.txt
+└── tests
+    ├── test_cli_help.py
+    ├── test_cli.py
+    ├── test_generate_minimal.py
+    └── test_imports.py
+
+```
 
 ---
 
