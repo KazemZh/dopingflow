@@ -213,7 +213,12 @@ Use `--verbose` for detailed logs.
 
 # 📜 License
 
-MIT License.
+This project is proprietary and confidential.
+
+All rights reserved © 2026 Kazem Zhour.
+
+No part of this repository may be used, copied, modified, or distributed
+without explicit written permission from the author.
 
 ---
 
