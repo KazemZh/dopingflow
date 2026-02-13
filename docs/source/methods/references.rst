@@ -1,5 +1,21 @@
-Reference Energy Construction (Step 00)
-========================================
+0. Reference Energy Construction
+=================================
+
+Implementation
+--------------
+
+This stage is implemented in:
+
+::
+
+   src/dopingflow/refs.py
+
+The public entry point is:
+
+::
+
+   run_refs_build(...)
+
 
 Purpose
 -------
@@ -13,12 +29,37 @@ The following quantities are computed:
 - The elemental chemical potentials of all species involved
   (host + dopants)
 
-All reference energies are generated using a consistent
-machine-learned interatomic potential and stored in:
+All reference data are written to:
 
 ::
 
-    reference_structures/reference_energies.json
+   reference_structures/reference_energies.json
+
+These references are later used for formation energy evaluation.
+
+
+Inputs
+------
+
+This stage uses settings from:
+
+- ``[structure]``: provides the pristine structure and supercell.
+- ``[doping]``: defines the host species and dopant set.
+- ``[references]``: controls reference source, relaxation settings, and caching behavior.
+
+
+Method Summary
+--------------
+
+1. Read the pristine unit-cell structure.
+2. Apply the workflow supercell expansion.
+3. Relax the pristine supercell.
+4. Identify all elements involved (host + dopants).
+5. For each element:
+   a. Obtain a bulk structure (local or external source).
+   b. Relax the bulk structure.
+   c. Compute per-atom chemical potential.
+6. Store all reference quantities in a JSON file.
 
 
 Formation Energy Framework
@@ -52,8 +93,8 @@ Pristine Supercell Energy
 
 The pristine reference energy is computed by:
 
-1. Reading a unit-cell structure defined in the input configuration.
-2. Applying the workflow supercell expansion.
+1. Reading the unit-cell structure defined in the input.
+2. Applying the supercell defined in ``[structure].supercell``.
 3. Performing full structural relaxation.
 4. Extracting the final total energy.
 
@@ -65,7 +106,7 @@ Elemental Chemical Potentials
 
 For each relevant element, a bulk structure is:
 
-- Obtained either from a local file or external database.
+- Obtained either from a local file or an external database.
 - Fully relaxed.
 - Used to compute a per-atom chemical potential:
 
@@ -79,6 +120,29 @@ where:
 - :math:`N_{\mathrm{atoms}}` is the number of atoms in the bulk cell.
 
 
+Reference Sources
+-----------------
+
+Two reference sources are supported.
+
+
+Local bulk structures
+~~~~~~~~~~~~~~~~~~~~~
+
+Bulk structures are read from a user-specified directory.
+Each element must have a corresponding structure file.
+
+
+External database
+~~~~~~~~~~~~~~~~~
+
+Bulk structures may be retrieved programmatically from
+an external materials database using provided identifiers
+and API credentials.
+
+Downloaded structures are cached locally to ensure reproducibility.
+
+
 Relaxation Method
 -----------------
 
@@ -88,52 +152,46 @@ All reference relaxations use:
 - Optimizer: FIRE
 - Convergence criterion: maximum force below ``fmax``
 
-The relaxations are fully unconstrained (cell + atomic positions).
-
-
-Reference Sources
------------------
-
-Two reference sources are supported:
-
-**Local bulk structures**
-
-Bulk structures are read from a user-specified directory.
-
-**External database**
-
-Bulk structures may be retrieved programmatically from an external
-materials database using provided identifiers and API credentials.
-
-Downloaded structures are cached locally for reproducibility.
+The relaxations are fully unconstrained
+(cell parameters and atomic positions).
 
 
 Caching Strategy
 ----------------
 
-If reference energies have already been computed and
-``skip_if_done`` is enabled, this stage is skipped.
+If:
+
+::
+
+   skip_if_done = true
+
+and the reference JSON already exists,
+this stage is skipped.
 
 This ensures deterministic behavior and avoids unnecessary recomputation.
 
 
-Modeling Assumptions
---------------------
+Outputs
+-------
 
-- Substitutional doping only
-- Neutral defect configurations
-- No explicit temperature contribution
-- No vibrational free energies
-- No competing phase stability analysis
-- Chemical potentials derived from relaxed elemental bulk phases
-- No electrochemical environment
+The file ``reference_energies.json`` contains:
+
+- Timestamp
+- Host species
+- Supercell definition
+- Relaxed pristine supercell energy
+- Chemical potentials per element
+- Metadata describing bulk relaxation conditions
+- Reference source information
 
 
-Limitations
------------
+Notes and Limitations
+---------------------
 
-- Energies are ML-predicted (not DFT-level total energies)
-- Reference phase selection affects chemical potentials
-- No finite-size correction
-- No charged defect corrections
-- No entropy contributions
+- This stage does not evaluate doped structures.
+- Energies are ML-predicted (not DFT-level total energies).
+- Reference phase selection affects chemical potentials.
+- No finite-size corrections are applied.
+- No charge-state corrections are included.
+- No entropy or temperature effects are considered.
+- No competing phase stability analysis is performed.

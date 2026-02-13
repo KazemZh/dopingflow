@@ -11,16 +11,29 @@ Add your content using ``reStructuredText`` syntax. See the
 documentation for details.
 
 
+========================
+
+Add your content using ``reStructuredText`` syntax. See the
+`reStructuredText <https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html>`_
+documentation for details.
+
+
 Welcome to dopingflow's documentation
 ======================================
 
 .. toctree::
    :maxdepth: 2
-
-   api/modules
+   :caption: User Guide
 
    workflow_overview
+   installation_and_usage
+   required_inputs
    input_file
+
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Stages
 
    methods/references
    methods/generation
@@ -31,6 +44,18 @@ Welcome to dopingflow's documentation
    methods/formation_energy
    methods/database
 
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Examples
+
    examples/minimal_example
    examples/sb_codoping
    examples/production_run
+
+
+.. toctree::
+   :maxdepth: 1
+   :caption: API Reference
+
+   api/modules
