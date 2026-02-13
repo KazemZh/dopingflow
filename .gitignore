@@ -27,3 +27,6 @@ database/
 
 # Pytest cache
 .pytest_cache/
+
+# Documentations
+docs/build/

@@ -19,3 +19,17 @@ Welcome to dopingflow's documentation
 
    api/modules
 
+   workflow_overview
+   input_file
+
+   methods/generation
+   methods/scanning
+   methods/relaxation
+   methods/filtering
+   methods/bandgap
+   methods/formation_energy
+   methods/database
+
+   examples/minimal_example
+   examples/sb_codoping
+   examples/production_run
