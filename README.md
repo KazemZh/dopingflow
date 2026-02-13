@@ -39,14 +39,17 @@ Designed for reproducible, scalable materials screening.
 │       │   └── sb_codoping.rst
 │       ├── index.rst
 │       ├── input_file.rst
+│       ├── installation_and_usage.rst
 │       ├── methods
 │       │   ├── bandgap.rst
 │       │   ├── database.rst
 │       │   ├── filtering.rst
 │       │   ├── formation_energy.rst
 │       │   ├── generation.rst
+│       │   ├── references.rst
 │       │   ├── relaxation.rst
 │       │   └── scanning.rst
+│       ├── required_inputs.rst
 │       ├── _static
 │       │   └── .gitkeep
 │       ├── _templates
@@ -90,7 +93,7 @@ Designed for reproducible, scalable materials screening.
     ├── test_cli.py
     ├── test_generate_minimal.py
     └── test_imports.py
-    
+
 ```
 
 ---
