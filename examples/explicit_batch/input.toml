@@ -1,0 +1,58 @@
+[structure]
+base_poscar = "reference_structures/base.POSCAR"
+supercell = [5, 2, 1]
+outdir = "random_structures"
+
+[doping]
+mode = "explicit"
+host_species = "Sn"
+compositions = [
+  { Sb = 5.0, Ti = 5.0 },
+  { Sb = 5.0, Zr = 5.0 },
+  { Sb = 10.0, Nb = 5.0 }
+]
+
+[generate]
+poscar_order = ["Ti","Zr","Nb","Sb","Sn","O"]
+seed_base = 2026
+clean_outdir = true
+
+[scan]
+topk = 15
+symprec = 1e-3
+max_enum = 50000000
+nproc = 12
+chunksize = 50
+anion_species = ["O"]
+max_unique = 200000
+skip_if_done = true
+
+[relax]
+fmax = 0.05
+n_workers = 6
+tf_threads = 1
+omp_threads = 1
+skip_if_done = true
+skip_candidate_if_done = true
+
+[filter]
+mode = "window"
+window_meV = 50.0
+max_candidates = 12
+skip_if_done = true
+
+[bandgap]
+skip_if_done = true
+cutoff = 8.0
+max_neighbors = 12
+
+[formation]
+skip_if_done = true
+normalize = "per_dopant"
+
+[references]
+source = "local"
+bulk_dir = "reference_structures/"
+pristine_poscar = "reference_structures/base.POSCAR"
+fmax = 0.02
+skip_if_done = true

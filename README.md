@@ -34,9 +34,10 @@ Designed for reproducible, scalable materials screening.
 │       │   └── modules.rst
 │       ├── conf.py
 │       ├── examples
-│       │   ├── minimal_example.rst
-│       │   ├── production_run.rst
-│       │   └── sb_codoping.rst
+│       │   ├── enumerate_screening.rst
+│       │   ├── explicit_batch.rst
+│       │   ├── explicit_single.rst
+│       │   └── smoke_test.rst
 │       ├── index.rst
 │       ├── input_file.rst
 │       ├── installation_and_usage.rst
@@ -54,6 +55,19 @@ Designed for reproducible, scalable materials screening.
 │       │   └── .gitkeep
 │       ├── _templates
 │       └── workflow_overview.rst
+├── examples
+│   ├── enumerate_screening
+│   │   ├── input.toml
+│   │   └── README.md
+│   ├── explicit_batch
+│   │   ├── input.toml
+│   │   └── README.md
+│   ├── explicit_single_composition
+│   │   ├── input.toml
+│   │   └── README.md
+│   └── smoke_test
+│       ├── input.toml
+│       └── README.md
 ├── .github
 │   └── workflows
 │       └── docs.yml
