@@ -49,9 +49,10 @@ Welcome to dopingflow's documentation
    :maxdepth: 1
    :caption: Examples
 
-   examples/minimal_example
-   examples/sb_codoping
-   examples/production_run
+   examples/explicit_single
+   examples/explicit_batch
+   examples/enumerate_screening
+   examples/smoke_test
 
 
 .. toctree::
