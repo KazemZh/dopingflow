@@ -48,6 +48,7 @@ Designed for reproducible, scalable materials screening.
 │       │   ├── relaxation.rst
 │       │   └── scanning.rst
 │       ├── _static
+│       │   └── .gitkeep
 │       ├── _templates
 │       └── workflow_overview.rst
 ├── .github
@@ -89,7 +90,7 @@ Designed for reproducible, scalable materials screening.
     ├── test_cli.py
     ├── test_generate_minimal.py
     └── test_imports.py
-
+    
 ```
 
 ---
