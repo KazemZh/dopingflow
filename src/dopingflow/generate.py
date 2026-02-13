@@ -125,10 +125,35 @@ def normalize_to_counts_and_effective(
     n_host: int, requested_pct: Dict[str, float]
 ) -> tuple[Dict[str, int], Dict[str, float], List[str], float, float]:
     """
-    Convert requested dopant percentages (relative to host sites) into integer counts
-    by rounding. Returns:
-      counts, effective_pct, warnings, requested_total_pct, effective_total_pct
+    Convert requested dopant percentages (relative to host sites) into integer dopant counts
+    by rounding to the nearest integer number of substitutions.
+
+    Parameters
+    ----------
+    n_host : int
+        Number of host sites available for substitution.
+    requested_pct : dict[str, float]
+        Dopant element -> requested percent (relative to host sites).
+
+    Returns
+    -------
+    counts : dict[str, int]
+        Dopant element -> integer dopant count after rounding.
+    effective_pct : dict[str, float]
+        Dopant element -> effective percent after rounding.
+    warnings : list[str]
+        Human-readable warnings about rounding deviations.
+    requested_total_pct : float
+        Sum of requested dopant percentages.
+    effective_total_pct : float
+        Sum of effective dopant percentages after rounding.
+
+    Raises
+    ------
+    ValueError
+        If requested total exceeds 100% or rounded dopant atoms exceed host sites.
     """
+
     warnings: List[str] = []
 
     requested_total = float(sum(requested_pct.values()))
