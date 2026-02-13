@@ -22,6 +22,7 @@ Welcome to dopingflow's documentation
    workflow_overview
    input_file
 
+   methods/references
    methods/generation
    methods/scanning
    methods/relaxation
