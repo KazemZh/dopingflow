@@ -26,21 +26,6 @@ Designed for reproducible, scalable materials screening.
 ├── CHANGELOG.md
 ├── docs
 │   ├── build
-│   │   ├── doctrees
-│   │   │   ├── api
-│   │   │   ├── environment.pickle
-│   │   │   └── index.doctree
-│   │   └── html
-│   │       ├── api
-│   │       ├── .buildinfo
-│   │       ├── genindex.html
-│   │       ├── index.html
-│   │       ├── objects.inv
-│   │       ├── py-modindex.html
-│   │       ├── search.html
-│   │       ├── searchindex.js
-│   │       ├── _sources
-│   │       └── _static
 │   ├── make.bat
 │   ├── Makefile
 │   └── source
@@ -48,9 +33,26 @@ Designed for reproducible, scalable materials screening.
 │       │   ├── dopingflow.rst
 │       │   └── modules.rst
 │       ├── conf.py
+│       ├── examples
+│       │   ├── minimal_example.rst
+│       │   ├── production_run.rst
+│       │   └── sb_codoping.rst
 │       ├── index.rst
+│       ├── input_file.rst
+│       ├── methods
+│       │   ├── bandgap.rst
+│       │   ├── database.rst
+│       │   ├── filtering.rst
+│       │   ├── formation_energy.rst
+│       │   ├── generation.rst
+│       │   ├── relaxation.rst
+│       │   └── scanning.rst
 │       ├── _static
-│       └── _templates
+│       ├── _templates
+│       └── workflow_overview.rst
+├── .github
+│   └── workflows
+│       └── docs.yml
 ├── .gitignore
 ├── input.toml
 ├── LICENSE
