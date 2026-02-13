@@ -32,3 +32,17 @@ exclude_patterns = []
 
 html_theme = "sphinx_rtd_theme"
 html_static_path = ['_static']
+
+# --Logo----------------------------------------------------------------------
+
+# HTML logo
+html_logo = "_static/logo.png"
+
+# PDF logo
+latex_elements = {
+    "preamble": r"""
+\usepackage{graphicx}
+""",
+}
+
+latex_logo = "_static/logo.png"
