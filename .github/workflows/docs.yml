@@ -25,7 +25,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -e .
-          pip install sphinx myst-parser
+          pip install sphinx myst-parser sphinx-rtd-theme
 
       - name: Build HTML
         run: |
