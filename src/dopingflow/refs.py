@@ -116,7 +116,7 @@ def _parse_ref_config(raw: dict[str, Any], root: Path) -> RefConfig:
     if source not in {"local", "mp"}:
         raise ValueError("[references].source must be 'local' or 'mp'")
 
-    bulk_dir_rel = Path(str(refs.get("bulk_dir", "reference_structures/bulk")))
+    bulk_dir_rel = Path(str(refs.get("bulk_dir", "reference_structures")))
     bulk_dir = (root / bulk_dir_rel).resolve()
 
     mp_ids = refs.get("mp_ids", {}) or {}
