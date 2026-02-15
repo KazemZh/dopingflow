@@ -1,0 +1,922 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>dopingflow package &mdash; dopingflow 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="prev" title="dopingflow" href="modules.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            dopingflow
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../workflow_overview.html">Workflow Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation_and_usage.html">Installation, Usage, and Outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../required_inputs.html">Required Input Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file.html">Input File Specification (input.toml)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Stages</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../methods/references.html">0. Reference Energy Construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/generation.html">1. Structure Generation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/scanning.html">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/filtering.html">4. Relaxed-Candidate Filtering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/bandgap.html">5. Bandgap Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/formation_energy.html">6. Formation Energy Evaluation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/database.html">7. Database Collection</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="modules.html">dopingflow</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">dopingflow package</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#submodules">Submodules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-dopingflow.bandgap">dopingflow.bandgap module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.bandgap.BandgapConfig"><code class="docutils literal notranslate"><span class="pre">BandgapConfig</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.bandgap.run_bandgap"><code class="docutils literal notranslate"><span class="pre">run_bandgap()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.bandgap.run_bandgap_from_toml"><code class="docutils literal notranslate"><span class="pre">run_bandgap_from_toml()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-dopingflow.cli">dopingflow.cli module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.cli.bandgap_cmd"><code class="docutils literal notranslate"><span class="pre">bandgap_cmd()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.cli.collect_cmd"><code class="docutils literal notranslate"><span class="pre">collect_cmd()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.cli.filter_cmd"><code class="docutils literal notranslate"><span class="pre">filter_cmd()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.cli.formation_cmd"><code class="docutils literal notranslate"><span class="pre">formation_cmd()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.cli.generate_cmd"><code class="docutils literal notranslate"><span class="pre">generate_cmd()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.cli.refs_build_cmd"><code class="docutils literal notranslate"><span class="pre">refs_build_cmd()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.cli.relax_cmd"><code class="docutils literal notranslate"><span class="pre">relax_cmd()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.cli.run_all_cmd"><code class="docutils literal notranslate"><span class="pre">run_all_cmd()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.cli.scan_cmd"><code class="docutils literal notranslate"><span class="pre">scan_cmd()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-dopingflow.collect">dopingflow.collect module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.collect.DBConfig"><code class="docutils literal notranslate"><span class="pre">DBConfig</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.collect.read_bandgap_summary"><code class="docutils literal notranslate"><span class="pre">read_bandgap_summary()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.collect.read_filtered_table"><code class="docutils literal notranslate"><span class="pre">read_filtered_table()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.collect.read_formation_csv"><code class="docutils literal notranslate"><span class="pre">read_formation_csv()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.collect.read_json"><code class="docutils literal notranslate"><span class="pre">read_json()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.collect.read_scan_ranking"><code class="docutils literal notranslate"><span class="pre">read_scan_ranking()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.collect.read_selected_txt"><code class="docutils literal notranslate"><span class="pre">read_selected_txt()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.collect.run_collect"><code class="docutils literal notranslate"><span class="pre">run_collect()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.collect.run_collect_from_toml"><code class="docutils literal notranslate"><span class="pre">run_collect_from_toml()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.collect.safe_get"><code class="docutils literal notranslate"><span class="pre">safe_get()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-dopingflow.filtering">dopingflow.filtering module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.filtering.FilterConfig"><code class="docutils literal notranslate"><span class="pre">FilterConfig</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.filtering.run_filtering"><code class="docutils literal notranslate"><span class="pre">run_filtering()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.filtering.run_filtering_from_toml"><code class="docutils literal notranslate"><span class="pre">run_filtering_from_toml()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-dopingflow.formation">dopingflow.formation module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.formation.FormationConfig"><code class="docutils literal notranslate"><span class="pre">FormationConfig</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.formation.run_formation"><code class="docutils literal notranslate"><span class="pre">run_formation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.formation.run_formation_from_toml"><code class="docutils literal notranslate"><span class="pre">run_formation_from_toml()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-dopingflow.generate">dopingflow.generate module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.generate.GenerateConfig"><code class="docutils literal notranslate"><span class="pre">GenerateConfig</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.generate.build_structure_from_counts"><code class="docutils literal notranslate"><span class="pre">build_structure_from_counts()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.generate.composition_tag"><code class="docutils literal notranslate"><span class="pre">composition_tag()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.generate.enumerate_compositions"><code class="docutils literal notranslate"><span class="pre">enumerate_compositions()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.generate.normalize_to_counts_and_effective"><code class="docutils literal notranslate"><span class="pre">normalize_to_counts_and_effective()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.generate.reorder_structure_by_species"><code class="docutils literal notranslate"><span class="pre">reorder_structure_by_species()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.generate.run_generate"><code class="docutils literal notranslate"><span class="pre">run_generate()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.generate.run_generate_from_toml"><code class="docutils literal notranslate"><span class="pre">run_generate_from_toml()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.generate.stable_seed_from_tag"><code class="docutils literal notranslate"><span class="pre">stable_seed_from_tag()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.generate.validate_composition_minimal"><code class="docutils literal notranslate"><span class="pre">validate_composition_minimal()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-dopingflow.logging">dopingflow.logging module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.logging.setup_logging"><code class="docutils literal notranslate"><span class="pre">setup_logging()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-dopingflow.refs">dopingflow.refs module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.refs.RefConfig"><code class="docutils literal notranslate"><span class="pre">RefConfig</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.refs.run_refs_build"><code class="docutils literal notranslate"><span class="pre">run_refs_build()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.refs.run_refs_build_from_toml"><code class="docutils literal notranslate"><span class="pre">run_refs_build_from_toml()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-dopingflow.relax">dopingflow.relax module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.relax.RelaxConfig"><code class="docutils literal notranslate"><span class="pre">RelaxConfig</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.relax.run_relax"><code class="docutils literal notranslate"><span class="pre">run_relax()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.relax.run_relax_from_toml"><code class="docutils literal notranslate"><span class="pre">run_relax_from_toml()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-dopingflow.scan">dopingflow.scan module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.scan.ScanConfig"><code class="docutils literal notranslate"><span class="pre">ScanConfig</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.scan.run_scan"><code class="docutils literal notranslate"><span class="pre">run_scan()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.scan.run_scan_from_toml"><code class="docutils literal notranslate"><span class="pre">run_scan_from_toml()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-dopingflow">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="modules.html">dopingflow</a></li>
+      <li class="breadcrumb-item active">dopingflow package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/dopingflow.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="dopingflow-package">
+<h1>dopingflow package<a class="headerlink" href="#dopingflow-package" title="Link to this heading"></a></h1>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+</section>
+<section id="module-dopingflow.bandgap">
+<span id="dopingflow-bandgap-module"></span><h2>dopingflow.bandgap module<a class="headerlink" href="#module-dopingflow.bandgap" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="dopingflow.bandgap.BandgapConfig">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">dopingflow.bandgap.</span></span><span class="sig-name descname"><span class="pre">BandgapConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">outdir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'Path'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">skip_if_done</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'bool'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cutoff</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'float'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_neighbors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'int'</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dopingflow.bandgap.BandgapConfig" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.bandgap.BandgapConfig.cutoff">
+<span class="sig-name descname"><span class="pre">cutoff</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><a class="headerlink" href="#dopingflow.bandgap.BandgapConfig.cutoff" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.bandgap.BandgapConfig.max_neighbors">
+<span class="sig-name descname"><span class="pre">max_neighbors</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#dopingflow.bandgap.BandgapConfig.max_neighbors" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.bandgap.BandgapConfig.outdir">
+<span class="sig-name descname"><span class="pre">outdir</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Path</span></span><a class="headerlink" href="#dopingflow.bandgap.BandgapConfig.outdir" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.bandgap.BandgapConfig.skip_if_done">
+<span class="sig-name descname"><span class="pre">skip_if_done</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#dopingflow.bandgap.BandgapConfig.skip_if_done" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.bandgap.run_bandgap">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.bandgap.</span></span><span class="sig-name descname"><span class="pre">run_bandgap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw_cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">config_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#dopingflow.bandgap.run_bandgap" title="Link to this definition"></a></dt>
+<dd><p>Step 05: Predict bandgap (ALIGNN local model) for relaxed candidates.</p>
+<dl class="simple">
+<dt>Selection:</dt><dd><ol class="arabic simple">
+<li><p>If selected_candidates.txt exists in a composition folder -&gt; use it</p></li>
+<li><p>Else fallback to candidate_*/02_relax/POSCAR</p></li>
+</ol>
+</dd>
+<dt>Outputs per composition folder:</dt><dd><ul class="simple">
+<li><p>bandgap_alignn_summary.csv</p></li>
+<li><p>candidate_*/03_band/meta.json</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.bandgap.run_bandgap_from_toml">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.bandgap.</span></span><span class="sig-name descname"><span class="pre">run_bandgap_from_toml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#dopingflow.bandgap.run_bandgap_from_toml" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="module-dopingflow.cli">
+<span id="dopingflow-cli-module"></span><h2>dopingflow.cli module<a class="headerlink" href="#module-dopingflow.cli" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.cli.bandgap_cmd">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.cli.</span></span><span class="sig-name descname"><span class="pre">bandgap_cmd</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dopingflow.cli.bandgap_cmd" title="Link to this definition"></a></dt>
+<dd><p>Step 05: Predict bandgap for filtered relaxed candidates (ALIGNN).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.cli.collect_cmd">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.cli.</span></span><span class="sig-name descname"><span class="pre">collect_cmd</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dopingflow.cli.collect_cmd" title="Link to this definition"></a></dt>
+<dd><p>Step 07: Collect selected candidates into one CSV database.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.cli.filter_cmd">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.cli.</span></span><span class="sig-name descname"><span class="pre">filter_cmd</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">only</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">force</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_meV</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">topn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dopingflow.cli.filter_cmd" title="Link to this definition"></a></dt>
+<dd><p>Step 04: Filter relaxed candidates (window or top-N).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.cli.formation_cmd">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.cli.</span></span><span class="sig-name descname"><span class="pre">formation_cmd</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dopingflow.cli.formation_cmd" title="Link to this definition"></a></dt>
+<dd><p>Step 06: Compute formation energies using cached references.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.cli.generate_cmd">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.cli.</span></span><span class="sig-name descname"><span class="pre">generate_cmd</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dopingflow.cli.generate_cmd" title="Link to this definition"></a></dt>
+<dd><p>Step 01: Generate random doped structures.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.cli.refs_build_cmd">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.cli.</span></span><span class="sig-name descname"><span class="pre">refs_build_cmd</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dopingflow.cli.refs_build_cmd" title="Link to this definition"></a></dt>
+<dd><p>Step 00: Build/cache reference energies.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.cli.relax_cmd">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.cli.</span></span><span class="sig-name descname"><span class="pre">relax_cmd</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dopingflow.cli.relax_cmd" title="Link to this definition"></a></dt>
+<dd><p>Step 03: Relax scanned candidates with M3GNet Relaxer.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.cli.run_all_cmd">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.cli.</span></span><span class="sig-name descname"><span class="pre">run_all_cmd</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stop</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">only</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dry_run</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filter_only</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">force</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_meV</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">topn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dopingflow.cli.run_all_cmd" title="Link to this definition"></a></dt>
+<dd><p>Run the full pipeline in order, with optional step selection.</p>
+<dl class="simple">
+<dt>Step keys:</dt><dd><p>refs -&gt; generate -&gt; scan -&gt; relax -&gt; filter -&gt; bandgap -&gt; formation -&gt; collect</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.cli.scan_cmd">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.cli.</span></span><span class="sig-name descname"><span class="pre">scan_cmd</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;typer.models.OptionInfo</span> <span class="pre">object&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dopingflow.cli.scan_cmd" title="Link to this definition"></a></dt>
+<dd><p>Step 02: Symmetry-unique scan + M3GNet single-point energies (top-k).</p>
+</dd></dl>
+
+</section>
+<section id="module-dopingflow.collect">
+<span id="dopingflow-collect-module"></span><h2>dopingflow.collect module<a class="headerlink" href="#module-dopingflow.collect" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="dopingflow.collect.DBConfig">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">dopingflow.collect.</span></span><span class="sig-name descname"><span class="pre">DBConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">outdir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'Path'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">skip_if_done</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'bool'</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dopingflow.collect.DBConfig" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.collect.DBConfig.outdir">
+<span class="sig-name descname"><span class="pre">outdir</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Path</span></span><a class="headerlink" href="#dopingflow.collect.DBConfig.outdir" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.collect.DBConfig.skip_if_done">
+<span class="sig-name descname"><span class="pre">skip_if_done</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#dopingflow.collect.DBConfig.skip_if_done" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.collect.read_bandgap_summary">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.collect.</span></span><span class="sig-name descname"><span class="pre">read_bandgap_summary</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#dopingflow.collect.read_bandgap_summary" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.collect.read_filtered_table">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.collect.</span></span><span class="sig-name descname"><span class="pre">read_filtered_table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#dopingflow.collect.read_filtered_table" title="Link to this definition"></a></dt>
+<dd><dl class="simple">
+<dt>Parse ranking_relax_filtered.csv (fallback) into:</dt><dd><p>candidate -&gt; {“rank_relax_filtered”: int, “E_relaxed_eV_filtered”: float}</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.collect.read_formation_csv">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.collect.</span></span><span class="sig-name descname"><span class="pre">read_formation_csv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#dopingflow.collect.read_formation_csv" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.collect.read_json">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.collect.</span></span><span class="sig-name descname"><span class="pre">read_json</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#dopingflow.collect.read_json" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.collect.read_scan_ranking">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.collect.</span></span><span class="sig-name descname"><span class="pre">read_scan_ranking</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#dopingflow.collect.read_scan_ranking" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.collect.read_selected_txt">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.collect.</span></span><span class="sig-name descname"><span class="pre">read_selected_txt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#dopingflow.collect.read_selected_txt" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.collect.run_collect">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.collect.</span></span><span class="sig-name descname"><span class="pre">run_collect</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw_cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">config_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Path</span></span></span><a class="headerlink" href="#dopingflow.collect.run_collect" title="Link to this definition"></a></dt>
+<dd><p>Step 07: Collect results into ONE flat CSV database (results_database.csv),
+ONLY for the filtered/selected candidates (Step 04 output).</p>
+<dl class="simple">
+<dt>Selection priority:</dt><dd><ol class="arabic simple">
+<li><p>selected_candidates.txt</p></li>
+<li><p>ranking_relax_filtered.csv</p></li>
+</ol>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.collect.run_collect_from_toml">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.collect.</span></span><span class="sig-name descname"><span class="pre">run_collect_from_toml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Path</span></span></span><a class="headerlink" href="#dopingflow.collect.run_collect_from_toml" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.collect.safe_get">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.collect.</span></span><span class="sig-name descname"><span class="pre">safe_get</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">d</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">keys</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dopingflow.collect.safe_get" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="module-dopingflow.filtering">
+<span id="dopingflow-filtering-module"></span><h2>dopingflow.filtering module<a class="headerlink" href="#module-dopingflow.filtering" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="dopingflow.filtering.FilterConfig">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">dopingflow.filtering.</span></span><span class="sig-name descname"><span class="pre">FilterConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">outdir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'Path'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_meV</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'float'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_candidates</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'int'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">skip_if_done</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'bool'</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dopingflow.filtering.FilterConfig" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.filtering.FilterConfig.max_candidates">
+<span class="sig-name descname"><span class="pre">max_candidates</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#dopingflow.filtering.FilterConfig.max_candidates" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.filtering.FilterConfig.mode">
+<span class="sig-name descname"><span class="pre">mode</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#dopingflow.filtering.FilterConfig.mode" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.filtering.FilterConfig.outdir">
+<span class="sig-name descname"><span class="pre">outdir</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Path</span></span><a class="headerlink" href="#dopingflow.filtering.FilterConfig.outdir" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.filtering.FilterConfig.skip_if_done">
+<span class="sig-name descname"><span class="pre">skip_if_done</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#dopingflow.filtering.FilterConfig.skip_if_done" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.filtering.FilterConfig.window_meV">
+<span class="sig-name descname"><span class="pre">window_meV</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><a class="headerlink" href="#dopingflow.filtering.FilterConfig.window_meV" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.filtering.run_filtering">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.filtering.</span></span><span class="sig-name descname"><span class="pre">run_filtering</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw_cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">only</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">force</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_meV</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">topn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#dopingflow.filtering.run_filtering" title="Link to this definition"></a></dt>
+<dd><p>Step 04: filter relaxed candidates after Step 03.</p>
+<dl class="simple">
+<dt>For each composition folder in [structure].outdir:</dt><dd><p>reads: ranking_relax.csv
+writes: ranking_relax_filtered.csv, selected_candidates.txt</p>
+</dd>
+<dt>Filtering:</dt><dd><ul class="simple">
+<li><p>[filter].mode=”window”: keep candidates within window_meV above Emin</p></li>
+<li><p>[filter].mode=”topn”: keep lowest-energy max_candidates</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.filtering.run_filtering_from_toml">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.filtering.</span></span><span class="sig-name descname"><span class="pre">run_filtering_from_toml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">only</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">force</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_meV</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">topn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#dopingflow.filtering.run_filtering_from_toml" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="module-dopingflow.formation">
+<span id="dopingflow-formation-module"></span><h2>dopingflow.formation module<a class="headerlink" href="#module-dopingflow.formation" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="dopingflow.formation.FormationConfig">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">dopingflow.formation.</span></span><span class="sig-name descname"><span class="pre">FormationConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">outdir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'Path'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">host_species</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">anion_species</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'List[str]'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">skip_if_done</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'bool'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normalize</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dopingflow.formation.FormationConfig" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.formation.FormationConfig.anion_species">
+<span class="sig-name descname"><span class="pre">anion_species</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#dopingflow.formation.FormationConfig.anion_species" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.formation.FormationConfig.host_species">
+<span class="sig-name descname"><span class="pre">host_species</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#dopingflow.formation.FormationConfig.host_species" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.formation.FormationConfig.normalize">
+<span class="sig-name descname"><span class="pre">normalize</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#dopingflow.formation.FormationConfig.normalize" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.formation.FormationConfig.outdir">
+<span class="sig-name descname"><span class="pre">outdir</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Path</span></span><a class="headerlink" href="#dopingflow.formation.FormationConfig.outdir" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.formation.FormationConfig.skip_if_done">
+<span class="sig-name descname"><span class="pre">skip_if_done</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#dopingflow.formation.FormationConfig.skip_if_done" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.formation.run_formation">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.formation.</span></span><span class="sig-name descname"><span class="pre">run_formation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw_cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">config_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#dopingflow.formation.run_formation" title="Link to this definition"></a></dt>
+<dd><p>Step 06: Compute formation energies for relaxed (and optionally filtered) candidates.</p>
+<dl class="simple">
+<dt>Reads:</dt><dd><ul class="simple">
+<li><p>E_doped from candidate_*/02_relax/meta.json (energy_relaxed_eV)</p></li>
+<li><p>mu, E_pristine from reference_structures/reference_energies.json</p></li>
+</ul>
+</dd>
+<dt>Writes per composition folder:</dt><dd><ul class="simple">
+<li><p>formation_energies.csv</p></li>
+<li><p>candidate_*/04_formation/meta.json</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.formation.run_formation_from_toml">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.formation.</span></span><span class="sig-name descname"><span class="pre">run_formation_from_toml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#dopingflow.formation.run_formation_from_toml" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="module-dopingflow.generate">
+<span id="dopingflow-generate-module"></span><h2>dopingflow.generate module<a class="headerlink" href="#module-dopingflow.generate" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="dopingflow.generate.GenerateConfig">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">dopingflow.generate.</span></span><span class="sig-name descname"><span class="pre">GenerateConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_poscar</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">supercell</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'Tuple[int,</span> <span class="pre">int,</span> <span class="pre">int]'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outdir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">poscar_order</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'List[str]'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed_base</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'int'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clean_outdir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'bool'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">host_species</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compositions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'List[Dict[str,</span> <span class="pre">float]]'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dopants</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'List[str]'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">must_include</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'List[str]'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_dopants_total</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'int'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">allowed_totals</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'List[float]'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">levels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'List[float]'</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dopingflow.generate.GenerateConfig" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.generate.GenerateConfig.allowed_totals">
+<span class="sig-name descname"><span class="pre">allowed_totals</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#dopingflow.generate.GenerateConfig.allowed_totals" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.generate.GenerateConfig.base_poscar">
+<span class="sig-name descname"><span class="pre">base_poscar</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#dopingflow.generate.GenerateConfig.base_poscar" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.generate.GenerateConfig.clean_outdir">
+<span class="sig-name descname"><span class="pre">clean_outdir</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#dopingflow.generate.GenerateConfig.clean_outdir" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.generate.GenerateConfig.compositions">
+<span class="sig-name descname"><span class="pre">compositions</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#dopingflow.generate.GenerateConfig.compositions" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.generate.GenerateConfig.dopants">
+<span class="sig-name descname"><span class="pre">dopants</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#dopingflow.generate.GenerateConfig.dopants" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.generate.GenerateConfig.host_species">
+<span class="sig-name descname"><span class="pre">host_species</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#dopingflow.generate.GenerateConfig.host_species" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.generate.GenerateConfig.levels">
+<span class="sig-name descname"><span class="pre">levels</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#dopingflow.generate.GenerateConfig.levels" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.generate.GenerateConfig.max_dopants_total">
+<span class="sig-name descname"><span class="pre">max_dopants_total</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#dopingflow.generate.GenerateConfig.max_dopants_total" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.generate.GenerateConfig.mode">
+<span class="sig-name descname"><span class="pre">mode</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#dopingflow.generate.GenerateConfig.mode" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.generate.GenerateConfig.must_include">
+<span class="sig-name descname"><span class="pre">must_include</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#dopingflow.generate.GenerateConfig.must_include" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.generate.GenerateConfig.outdir">
+<span class="sig-name descname"><span class="pre">outdir</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#dopingflow.generate.GenerateConfig.outdir" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.generate.GenerateConfig.poscar_order">
+<span class="sig-name descname"><span class="pre">poscar_order</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#dopingflow.generate.GenerateConfig.poscar_order" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.generate.GenerateConfig.seed_base">
+<span class="sig-name descname"><span class="pre">seed_base</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#dopingflow.generate.GenerateConfig.seed_base" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.generate.GenerateConfig.supercell">
+<span class="sig-name descname"><span class="pre">supercell</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#dopingflow.generate.GenerateConfig.supercell" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.generate.build_structure_from_counts">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.generate.</span></span><span class="sig-name descname"><span class="pre">build_structure_from_counts</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pristine</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Structure</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">host_species</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dopant_counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Structure</span></span></span><a class="headerlink" href="#dopingflow.generate.build_structure_from_counts" title="Link to this definition"></a></dt>
+<dd><p>Randomly substitute host_species sites with dopants according to dopant_counts.
+Deterministic given seed + tag.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.generate.composition_tag">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.generate.</span></span><span class="sig-name descname"><span class="pre">composition_tag</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">effective_pct</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">must_first</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#dopingflow.generate.composition_tag" title="Link to this definition"></a></dt>
+<dd><p>Tag used as folder name. Example: Sb5_Ba5  (numbers are integers if near-int).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.generate.enumerate_compositions">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.generate.</span></span><span class="sig-name descname"><span class="pre">enumerate_compositions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dopants</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">must_include</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_dopants_total</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">allowed_totals</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">levels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#dopingflow.generate.enumerate_compositions" title="Link to this definition"></a></dt>
+<dd><p>Generate composition dictionaries according to rules.
+(Same intent as your original script.)</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.generate.normalize_to_counts_and_effective">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.generate.</span></span><span class="sig-name descname"><span class="pre">normalize_to_counts_and_effective</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_host</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">requested_pct</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#dopingflow.generate.normalize_to_counts_and_effective" title="Link to this definition"></a></dt>
+<dd><p>Convert requested dopant percentages (relative to host sites) into integer dopant counts
+by rounding to the nearest integer number of substitutions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>n_host</strong> (<em>int</em>) – Number of host sites available for substitution.</p></li>
+<li><p><strong>requested_pct</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>float</em><em>]</em>) – Dopant element -&gt; requested percent (relative to host sites).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><strong>counts</strong> (<em>dict[str, int]</em>) – Dopant element -&gt; integer dopant count after rounding.</p></li>
+<li><p><strong>effective_pct</strong> (<em>dict[str, float]</em>) – Dopant element -&gt; effective percent after rounding.</p></li>
+<li><p><strong>warnings</strong> (<em>list[str]</em>) – Human-readable warnings about rounding deviations.</p></li>
+<li><p><strong>requested_total_pct</strong> (<em>float</em>) – Sum of requested dopant percentages.</p></li>
+<li><p><strong>effective_total_pct</strong> (<em>float</em>) – Sum of effective dopant percentages after rounding.</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – If requested total exceeds 100% or rounded dopant atoms exceed host sites.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.generate.reorder_structure_by_species">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.generate.</span></span><span class="sig-name descname"><span class="pre">reorder_structure_by_species</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">s</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Structure</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">order</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Structure</span></span></span><a class="headerlink" href="#dopingflow.generate.reorder_structure_by_species" title="Link to this definition"></a></dt>
+<dd><p>Reorder sites so POSCAR species order matches user preference.
+If order is empty, keep pymatgen default ordering.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.generate.run_generate">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.generate.</span></span><span class="sig-name descname"><span class="pre">run_generate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw_cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">config_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Path</span></span></span><a class="headerlink" href="#dopingflow.generate.run_generate" title="Link to this definition"></a></dt>
+<dd><p>Generate one random doped POSCAR per composition.</p>
+<dl class="simple">
+<dt>Output:</dt><dd><p>&lt;outdir&gt;/&lt;tag&gt;/POSCAR
+&lt;outdir&gt;/&lt;tag&gt;/metadata.json</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>outdir path</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.generate.run_generate_from_toml">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.generate.</span></span><span class="sig-name descname"><span class="pre">run_generate_from_toml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Path</span></span></span><a class="headerlink" href="#dopingflow.generate.run_generate_from_toml" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.generate.stable_seed_from_tag">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.generate.</span></span><span class="sig-name descname"><span class="pre">stable_seed_from_tag</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tag</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed_base</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#dopingflow.generate.stable_seed_from_tag" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.generate.validate_composition_minimal">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.generate.</span></span><span class="sig-name descname"><span class="pre">validate_composition_minimal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">requested_pct</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#dopingflow.generate.validate_composition_minimal" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="module-dopingflow.logging">
+<span id="dopingflow-logging-module"></span><h2>dopingflow.logging module<a class="headerlink" href="#module-dopingflow.logging" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.logging.setup_logging">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.logging.</span></span><span class="sig-name descname"><span class="pre">setup_logging</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Path</span></span></span><a class="headerlink" href="#dopingflow.logging.setup_logging" title="Link to this definition"></a></dt>
+<dd><p>Configure logging for dopingflow.</p>
+<ul class="simple">
+<li><p>Console output</p></li>
+<li><p>Per-run log file</p></li>
+<li><p>Noise suppression</p></li>
+</ul>
+</dd></dl>
+
+</section>
+<section id="module-dopingflow.refs">
+<span id="dopingflow-refs-module"></span><h2>dopingflow.refs module<a class="headerlink" href="#module-dopingflow.refs" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="dopingflow.refs.RefConfig">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">dopingflow.refs.</span></span><span class="sig-name descname"><span class="pre">RefConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">supercell</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'tuple[int,</span> <span class="pre">int,</span> <span class="pre">int]'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">host_species</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pristine_poscar</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bulk_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'Path'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mp_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'Dict[str,</span> <span class="pre">str]'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fmax</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'float'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">skip_if_done</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'bool'</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dopingflow.refs.RefConfig" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.refs.RefConfig.bulk_dir">
+<span class="sig-name descname"><span class="pre">bulk_dir</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Path</span></span><a class="headerlink" href="#dopingflow.refs.RefConfig.bulk_dir" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.refs.RefConfig.fmax">
+<span class="sig-name descname"><span class="pre">fmax</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><a class="headerlink" href="#dopingflow.refs.RefConfig.fmax" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.refs.RefConfig.host_species">
+<span class="sig-name descname"><span class="pre">host_species</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#dopingflow.refs.RefConfig.host_species" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.refs.RefConfig.mp_ids">
+<span class="sig-name descname"><span class="pre">mp_ids</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#dopingflow.refs.RefConfig.mp_ids" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.refs.RefConfig.pristine_poscar">
+<span class="sig-name descname"><span class="pre">pristine_poscar</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#dopingflow.refs.RefConfig.pristine_poscar" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.refs.RefConfig.skip_if_done">
+<span class="sig-name descname"><span class="pre">skip_if_done</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#dopingflow.refs.RefConfig.skip_if_done" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.refs.RefConfig.source">
+<span class="sig-name descname"><span class="pre">source</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#dopingflow.refs.RefConfig.source" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.refs.RefConfig.supercell">
+<span class="sig-name descname"><span class="pre">supercell</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#dopingflow.refs.RefConfig.supercell" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.refs.run_refs_build">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.refs.</span></span><span class="sig-name descname"><span class="pre">run_refs_build</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw_cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">config_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Path</span></span></span><a class="headerlink" href="#dopingflow.refs.run_refs_build" title="Link to this definition"></a></dt>
+<dd><p>Build/cache reference energies needed for formation energy calculations.</p>
+<p>Writes: references/reference_energies.json
+Returns: path to written JSON</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.refs.run_refs_build_from_toml">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.refs.</span></span><span class="sig-name descname"><span class="pre">run_refs_build_from_toml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Path</span></span></span><a class="headerlink" href="#dopingflow.refs.run_refs_build_from_toml" title="Link to this definition"></a></dt>
+<dd><p>Convenience wrapper used by the CLI:
+reads input.toml -&gt; raw dict, sets root=config parent, calls run_refs_build.</p>
+</dd></dl>
+
+</section>
+<section id="module-dopingflow.relax">
+<span id="dopingflow-relax-module"></span><h2>dopingflow.relax module<a class="headerlink" href="#module-dopingflow.relax" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="dopingflow.relax.RelaxConfig">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">dopingflow.relax.</span></span><span class="sig-name descname"><span class="pre">RelaxConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fmax</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'float'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_workers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'int'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tf_threads</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'int'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">omp_threads</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'int'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">order</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'List[str]'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outdir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'Path'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">skip_if_done</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'bool'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">skip_candidate_if_done</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'bool'</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dopingflow.relax.RelaxConfig" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.relax.RelaxConfig.fmax">
+<span class="sig-name descname"><span class="pre">fmax</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><a class="headerlink" href="#dopingflow.relax.RelaxConfig.fmax" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.relax.RelaxConfig.n_workers">
+<span class="sig-name descname"><span class="pre">n_workers</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#dopingflow.relax.RelaxConfig.n_workers" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.relax.RelaxConfig.omp_threads">
+<span class="sig-name descname"><span class="pre">omp_threads</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#dopingflow.relax.RelaxConfig.omp_threads" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.relax.RelaxConfig.order">
+<span class="sig-name descname"><span class="pre">order</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#dopingflow.relax.RelaxConfig.order" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.relax.RelaxConfig.outdir">
+<span class="sig-name descname"><span class="pre">outdir</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Path</span></span><a class="headerlink" href="#dopingflow.relax.RelaxConfig.outdir" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.relax.RelaxConfig.skip_candidate_if_done">
+<span class="sig-name descname"><span class="pre">skip_candidate_if_done</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#dopingflow.relax.RelaxConfig.skip_candidate_if_done" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.relax.RelaxConfig.skip_if_done">
+<span class="sig-name descname"><span class="pre">skip_if_done</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#dopingflow.relax.RelaxConfig.skip_if_done" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.relax.RelaxConfig.tf_threads">
+<span class="sig-name descname"><span class="pre">tf_threads</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#dopingflow.relax.RelaxConfig.tf_threads" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.relax.run_relax">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.relax.</span></span><span class="sig-name descname"><span class="pre">run_relax</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw_cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">config_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#dopingflow.relax.run_relax" title="Link to this definition"></a></dt>
+<dd><dl class="simple">
+<dt>Step 03: Relax candidates produced by Step 02.</dt><dd><dl class="simple">
+<dt>For each structure folder in [structure].outdir:</dt><dd><ul class="simple">
+<li><p>relax candidate_*/01_scan/POSCAR in parallel</p></li>
+<li><p>write candidate_*/02_relax/POSCAR and meta.json</p></li>
+<li><p>write ranking_relax.csv per structure folder</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.relax.run_relax_from_toml">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.relax.</span></span><span class="sig-name descname"><span class="pre">run_relax_from_toml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#dopingflow.relax.run_relax_from_toml" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="module-dopingflow.scan">
+<span id="dopingflow-scan-module"></span><h2>dopingflow.scan module<a class="headerlink" href="#module-dopingflow.scan" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="dopingflow.scan.ScanConfig">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">dopingflow.scan.</span></span><span class="sig-name descname"><span class="pre">ScanConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">poscar_in</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">topk</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'int'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">symprec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'float'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_enum</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'int'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nproc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'int'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunksize</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'int'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">order</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'List[str]'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">anion_species</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'List[str]'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">host_species</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_unique</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'int'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">skip_if_done</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'bool'</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dopingflow.scan.ScanConfig" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.scan.ScanConfig.anion_species">
+<span class="sig-name descname"><span class="pre">anion_species</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#dopingflow.scan.ScanConfig.anion_species" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.scan.ScanConfig.chunksize">
+<span class="sig-name descname"><span class="pre">chunksize</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#dopingflow.scan.ScanConfig.chunksize" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.scan.ScanConfig.host_species">
+<span class="sig-name descname"><span class="pre">host_species</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#dopingflow.scan.ScanConfig.host_species" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.scan.ScanConfig.max_enum">
+<span class="sig-name descname"><span class="pre">max_enum</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#dopingflow.scan.ScanConfig.max_enum" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.scan.ScanConfig.max_unique">
+<span class="sig-name descname"><span class="pre">max_unique</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#dopingflow.scan.ScanConfig.max_unique" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.scan.ScanConfig.nproc">
+<span class="sig-name descname"><span class="pre">nproc</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#dopingflow.scan.ScanConfig.nproc" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.scan.ScanConfig.order">
+<span class="sig-name descname"><span class="pre">order</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#dopingflow.scan.ScanConfig.order" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.scan.ScanConfig.poscar_in">
+<span class="sig-name descname"><span class="pre">poscar_in</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#dopingflow.scan.ScanConfig.poscar_in" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.scan.ScanConfig.skip_if_done">
+<span class="sig-name descname"><span class="pre">skip_if_done</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#dopingflow.scan.ScanConfig.skip_if_done" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.scan.ScanConfig.symprec">
+<span class="sig-name descname"><span class="pre">symprec</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><a class="headerlink" href="#dopingflow.scan.ScanConfig.symprec" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dopingflow.scan.ScanConfig.topk">
+<span class="sig-name descname"><span class="pre">topk</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#dopingflow.scan.ScanConfig.topk" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.scan.run_scan">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.scan.</span></span><span class="sig-name descname"><span class="pre">run_scan</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw_cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">config_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#dopingflow.scan.run_scan" title="Link to this definition"></a></dt>
+<dd><dl class="simple">
+<dt>Step 02: For each structure folder in [structure].outdir:</dt><dd><ul class="simple">
+<li><p>enumerate symmetry-unique dopant permutations on the cation sublattice</p></li>
+<li><p>evaluate single-point energy using M3GNet in parallel</p></li>
+<li><p>keep top-k lowest energies</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.scan.run_scan_from_toml">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.scan.</span></span><span class="sig-name descname"><span class="pre">run_scan_from_toml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#dopingflow.scan.run_scan_from_toml" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="module-dopingflow">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-dopingflow" title="Link to this heading"></a></h2>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="modules.html" class="btn btn-neutral float-left" title="dopingflow" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

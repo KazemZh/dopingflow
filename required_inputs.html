@@ -1,0 +1,218 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Required Input Files &mdash; dopingflow 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=01f34227"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Input File Specification (input.toml)" href="input_file.html" />
+    <link rel="prev" title="Installation, Usage, and Outputs" href="installation_and_usage.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            dopingflow
+              <img src="_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="workflow_overview.html">Workflow Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation_and_usage.html">Installation, Usage, and Outputs</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Required Input Files</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#directory-layout-example">Directory Layout Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#alignn-model-directory-environment-variable">ALIGNN Model Directory (Environment Variable)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#important-notes">Important Notes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#summary">Summary</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="input_file.html">Input File Specification (input.toml)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Stages</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="methods/references.html">0. Reference Energy Construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/generation.html">1. Structure Generation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/scanning.html">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/filtering.html">4. Relaxed-Candidate Filtering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/bandgap.html">5. Bandgap Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/formation_energy.html">6. Formation Energy Evaluation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/database.html">7. Database Collection</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="examples/explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api/modules.html">dopingflow</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Required Input Files</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/required_inputs.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="required-input-files">
+<span id="input-file-req"></span><h1>Required Input Files<a class="headerlink" href="#required-input-files" title="Link to this heading"></a></h1>
+<p>This page summarizes <strong>all external files required to run the workflow</strong>.</p>
+<p>The workflow itself is code-driven, but it depends on a small number
+of user-provided structure files and a configuration file.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>At minimum, the following files are required:</p>
+<ol class="arabic simple">
+<li><p><a class="reference internal" href="input_file.html#input-file-spec"><span class="std std-ref">input.toml</span></a> (workflow configuration).</p></li>
+<li><p>Pristine unit-cell structure of the crystal to be doped (POSCAR format)</p></li>
+<li><p>Optional: host and dopant reference bulk structures (POSCAR format)</p></li>
+</ol>
+<p>All file paths are interpreted relative to the directory
+containing <code class="docutils literal notranslate"><span class="pre">input.toml</span></code> unless absolute paths are used.</p>
+</section>
+<section id="directory-layout-example">
+<h2>Directory Layout Example<a class="headerlink" href="#directory-layout-example" title="Link to this heading"></a></h2>
+<p>A clean minimal directory structure may look like:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">project_root</span><span class="o">/</span>
+    <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+    <span class="n">reference_structures</span><span class="o">/</span>
+        <span class="n">base</span><span class="o">.</span><span class="n">POSCAR</span>        <span class="c1"># pristine unit cell</span>
+        <span class="n">host</span><span class="o">.</span><span class="n">POSCAR</span>        <span class="c1"># host elemental bulk (for formation energies)</span>
+        <span class="n">dopant1</span><span class="o">.</span><span class="n">POSCAR</span>     <span class="c1"># dopant bulk reference</span>
+        <span class="n">dopant2</span><span class="o">.</span><span class="n">POSCAR</span>     <span class="c1"># dopant bulk reference</span>
+        <span class="n">dopant3</span><span class="o">.</span><span class="n">POSCAR</span>     <span class="c1"># dopant bulk reference</span>
+        <span class="o">...</span>
+</pre></div>
+</div>
+<p>Notes:</p>
+<ul class="simple">
+<li><p>All structure files may be placed inside <code class="docutils literal notranslate"><span class="pre">reference_structures/</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">base.POSCAR</span></code> is the pristine crystal structure used for supercell generation.</p></li>
+<li><p>The elemental POSCAR files (host.POSCAR, dopant1.POSCAR, dopant2.POSCAR …) are only required
+if formation energies are computed using local bulk references.</p></li>
+<li><p>The exact filenames are user-defined, but must match what is specified
+in <code class="docutils literal notranslate"><span class="pre">input.toml</span></code>.</p></li>
+</ul>
+</section>
+<section id="alignn-model-directory-environment-variable">
+<h2>ALIGNN Model Directory (Environment Variable)<a class="headerlink" href="#alignn-model-directory-environment-variable" title="Link to this heading"></a></h2>
+<p>For bandgap prediction (Step 05), a trained ALIGNN model must be available.</p>
+<p>The path must be set via environment variable:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">export</span> <span class="n">ALIGNN_MODEL_DIR</span><span class="o">=/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">alignn</span><span class="o">/</span><span class="n">model</span>
+</pre></div>
+</div>
+<p>This directory must contain:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">config.json</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">checkpoint_*.pt</span></code></p></li>
+</ul>
+<p>Without this variable, Step 05 will fail.</p>
+</section>
+<section id="important-notes">
+<h2>Important Notes<a class="headerlink" href="#important-notes" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Dopant unit-cell POSCAR files are <strong>not required for structure generation</strong>.
+Doping is substitutional and uses the pristine structure only.</p></li>
+<li><p>Dopant bulk POSCAR files are only needed if:
+- You compute formation energies using local references.</p></li>
+<li><p>The workflow does <strong>not</strong> require separate dopant unit-cell structures
+for substitution.</p></li>
+</ul>
+</section>
+<section id="summary">
+<h2>Summary<a class="headerlink" href="#summary" title="Link to this heading"></a></h2>
+<p>Minimum to start:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">input.toml</span></code></p></li>
+<li><p>Pristine POSCAR</p></li>
+</ul>
+<p>To enable full workflow including formation energies and bandgaps:</p>
+<ul class="simple">
+<li><p>Reference bulk structures (or database access)</p></li>
+<li><p>ALIGNN model directory</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="installation_and_usage.html" class="btn btn-neutral float-left" title="Installation, Usage, and Outputs" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="input_file.html" class="btn btn-neutral float-right" title="Input File Specification (input.toml)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

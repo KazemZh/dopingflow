@@ -1,0 +1,377 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Installation, Usage, and Outputs &mdash; dopingflow 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=01f34227"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Required Input Files" href="required_inputs.html" />
+    <link rel="prev" title="Workflow Overview" href="workflow_overview.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            dopingflow
+              <img src="_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="workflow_overview.html">Workflow Overview</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Installation, Usage, and Outputs</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#installation">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#required-inputs">Required Inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#running-the-workflow">Running the Workflow</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#run-the-full-pipeline-with-one-command">Run the full pipeline with one command</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#resuming-and-partial-runs-run-all">Resuming and partial runs (run-all)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#filtering-controls-inside-run-all">Filtering controls inside run-all</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#step-by-step-execution">Step-by-step execution</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#outputs-overview">Outputs Overview</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#step-00-refs-build">Step 00 (refs-build)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#step-01-generate">Step 01 (generate)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#step-02-scan">Step 02 (scan)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#step-03-relax">Step 03 (relax)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#step-04-filter">Step 04 (filter)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#step-05-bandgap">Step 05 (bandgap)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#step-06-formation">Step 06 (formation)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#step-07-collect">Step 07 (collect)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#tips">Tips</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="required_inputs.html">Required Input Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="input_file.html">Input File Specification (input.toml)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Stages</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="methods/references.html">0. Reference Energy Construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/generation.html">1. Structure Generation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/scanning.html">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/filtering.html">4. Relaxed-Candidate Filtering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/bandgap.html">5. Bandgap Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/formation_energy.html">6. Formation Energy Evaluation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/database.html">7. Database Collection</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="examples/explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api/modules.html">dopingflow</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Installation, Usage, and Outputs</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/installation_and_usage.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="installation-usage-and-outputs">
+<h1>Installation, Usage, and Outputs<a class="headerlink" href="#installation-usage-and-outputs" title="Link to this heading"></a></h1>
+<p>This page explains how to install <strong>dopingflow</strong> and how to run the workflow
+either step-by-step or using the single orchestration command.</p>
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h2>
+<p>Clone the repository and install in editable mode:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">clone</span> <span class="n">KazemZh</span><span class="o">/</span><span class="n">dopingflow</span>
+<span class="n">cd</span> <span class="n">dopingflow</span>
+<span class="n">python</span> <span class="o">-</span><span class="n">m</span> <span class="n">venv</span> <span class="o">.</span><span class="n">venv</span>
+<span class="n">source</span> <span class="o">.</span><span class="n">venv</span><span class="o">/</span><span class="nb">bin</span><span class="o">/</span><span class="n">activate</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="o">-</span><span class="n">U</span> <span class="n">pip</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="o">-</span><span class="n">e</span> <span class="o">.</span>
+</pre></div>
+</div>
+<p>Verify the CLI is available:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="o">--</span><span class="n">help</span>
+</pre></div>
+</div>
+</section>
+<section id="required-inputs">
+<h2>Required Inputs<a class="headerlink" href="#required-inputs" title="Link to this heading"></a></h2>
+<p>Refer to <a class="reference internal" href="required_inputs.html#input-file-req"><span class="std std-ref">Required Input Files</span></a> page.</p>
+</section>
+<section id="running-the-workflow">
+<h2>Running the Workflow<a class="headerlink" href="#running-the-workflow" title="Link to this heading"></a></h2>
+<p>All commands accept <code class="docutils literal notranslate"><span class="pre">-c/--config</span></code> to specify the TOML file.
+If omitted, <code class="docutils literal notranslate"><span class="pre">input.toml</span></code> in the current directory is used.</p>
+<section id="run-the-full-pipeline-with-one-command">
+<h3>Run the full pipeline with one command<a class="headerlink" href="#run-the-full-pipeline-with-one-command" title="Link to this heading"></a></h3>
+<p>To run the complete workflow in order:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">run</span><span class="o">-</span><span class="nb">all</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+</pre></div>
+</div>
+<p>This executes:</p>
+<p><code class="docutils literal notranslate"><span class="pre">refs</span> <span class="pre">-&gt;</span> <span class="pre">generate</span> <span class="pre">-&gt;</span> <span class="pre">scan</span> <span class="pre">-&gt;</span> <span class="pre">relax</span> <span class="pre">-&gt;</span> <span class="pre">filter</span> <span class="pre">-&gt;</span> <span class="pre">bandgap</span> <span class="pre">-&gt;</span> <span class="pre">formation</span> <span class="pre">-&gt;</span> <span class="pre">collect</span></code></p>
+</section>
+<section id="resuming-and-partial-runs-run-all">
+<h3>Resuming and partial runs (run-all)<a class="headerlink" href="#resuming-and-partial-runs-run-all" title="Link to this heading"></a></h3>
+<p>You can resume from a given stage:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">run</span><span class="o">-</span><span class="nb">all</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span> <span class="o">--</span><span class="kn">from</span><span class="w"> </span><span class="nn">relax</span>
+</pre></div>
+</div>
+<p>You can stop at a stage (inclusive). This is useful if you do not want to run bandgap yet:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">run</span><span class="o">-</span><span class="nb">all</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span> <span class="o">--</span><span class="n">until</span> <span class="nb">filter</span>
+</pre></div>
+</div>
+<p>You can print the planned steps without running them:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">run</span><span class="o">-</span><span class="nb">all</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span> <span class="o">--</span><span class="n">dry</span><span class="o">-</span><span class="n">run</span>
+</pre></div>
+</div>
+<p>You can run only a subset of steps inside a selected range:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">run</span><span class="o">-</span><span class="nb">all</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span> <span class="o">--</span><span class="kn">from</span><span class="w"> </span><span class="nn">refs</span> <span class="o">--</span><span class="n">until</span> <span class="n">collect</span> <span class="o">--</span><span class="n">only</span> <span class="n">refs</span><span class="p">,</span><span class="n">generate</span><span class="p">,</span><span class="n">scan</span>
+</pre></div>
+</div>
+</section>
+<section id="filtering-controls-inside-run-all">
+<h3>Filtering controls inside run-all<a class="headerlink" href="#filtering-controls-inside-run-all" title="Link to this heading"></a></h3>
+<p>The filter stage supports optional overrides (passed through by <code class="docutils literal notranslate"><span class="pre">run-all</span></code>):</p>
+<ul>
+<li><p>Restrict filtering to a single composition folder:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">run</span><span class="o">-</span><span class="nb">all</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span> <span class="o">--</span><span class="kn">from</span><span class="w"> </span><span class="nn">relax</span> <span class="o">--</span><span class="n">until</span> <span class="nb">filter</span> <span class="o">--</span><span class="nb">filter</span><span class="o">-</span><span class="n">only</span> <span class="n">Sb5_Zr5</span>
+</pre></div>
+</div>
+</li>
+<li><p>Force re-filtering even if outputs exist:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">run</span><span class="o">-</span><span class="nb">all</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span> <span class="o">--</span><span class="kn">from</span><span class="w"> </span><span class="nn">filter</span> <span class="o">--</span><span class="n">until</span> <span class="nb">filter</span> <span class="o">--</span><span class="n">force</span>
+</pre></div>
+</div>
+</li>
+<li><p>Override filtering mode by specifying one of:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">run</span><span class="o">-</span><span class="nb">all</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span> <span class="o">--</span><span class="kn">from</span><span class="w"> </span><span class="nn">filter</span> <span class="o">--</span><span class="n">until</span> <span class="nb">filter</span> <span class="o">--</span><span class="n">window</span><span class="o">-</span><span class="n">mev</span> <span class="mi">50</span>
+<span class="n">dopingflow</span> <span class="n">run</span><span class="o">-</span><span class="nb">all</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span> <span class="o">--</span><span class="kn">from</span><span class="w"> </span><span class="nn">filter</span> <span class="o">--</span><span class="n">until</span> <span class="nb">filter</span> <span class="o">--</span><span class="n">topn</span> <span class="mi">12</span>
+</pre></div>
+</div>
+</li>
+</ul>
+</section>
+<section id="step-by-step-execution">
+<h3>Step-by-step execution<a class="headerlink" href="#step-by-step-execution" title="Link to this heading"></a></h3>
+<p>Step 00: reference energies:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">refs</span><span class="o">-</span><span class="n">build</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+</pre></div>
+</div>
+<p>Step 01: structure generation:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">generate</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+</pre></div>
+</div>
+<p>Step 02: scan (symmetry-unique enumeration + M3GNet single-point energies):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">scan</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+</pre></div>
+</div>
+<p>Step 03: relax scanned candidates (M3GNet Relaxer):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">relax</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+</pre></div>
+</div>
+<p>Step 04: filter relaxed candidates:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="nb">filter</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+</pre></div>
+</div>
+<p>Optional Step 05: predict bandgap (ALIGNN):</p>
+<p>Before running bandgap, set the model path:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">export</span> <span class="n">ALIGNN_MODEL_DIR</span><span class="o">=/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">your</span><span class="o">/</span><span class="n">alignn</span><span class="o">/</span><span class="n">model_root</span>
+<span class="n">dopingflow</span> <span class="n">bandgap</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+</pre></div>
+</div>
+<p>Step 06: formation energies:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">formation</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+</pre></div>
+</div>
+<p>Step 07: collect results into one CSV database:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">collect</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="outputs-overview">
+<h2>Outputs Overview<a class="headerlink" href="#outputs-overview" title="Link to this heading"></a></h2>
+<p>This section summarizes the main outputs created by each stage.</p>
+<section id="step-00-refs-build">
+<h3>Step 00 (refs-build)<a class="headerlink" href="#step-00-refs-build" title="Link to this heading"></a></h3>
+<p>Writes:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">reference_structures/reference_energies.json</span></code></p></li>
+</ul>
+<p>This file contains:</p>
+<ul class="simple">
+<li><p>the relaxed pristine supercell energy</p></li>
+<li><p>per-atom chemical potentials for host and dopant species</p></li>
+<li><p>metadata about reference structures and relaxation settings</p></li>
+</ul>
+</section>
+<section id="step-01-generate">
+<h3>Step 01 (generate)<a class="headerlink" href="#step-01-generate" title="Link to this heading"></a></h3>
+<p>Writes a structure folder per composition under <code class="docutils literal notranslate"><span class="pre">[structure].outdir</span></code> (default: <code class="docutils literal notranslate"><span class="pre">random_structures</span></code>):</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&lt;outdir&gt;/&lt;composition_tag&gt;/POSCAR</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&lt;outdir&gt;/&lt;composition_tag&gt;/metadata.json</span></code></p></li>
+</ul>
+</section>
+<section id="step-02-scan">
+<h3>Step 02 (scan)<a class="headerlink" href="#step-02-scan" title="Link to this heading"></a></h3>
+<p>Inside each <code class="docutils literal notranslate"><span class="pre">&lt;composition_tag&gt;/</span></code> folder, writes:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">ranking_scan.csv</span></code> (top-k single-point energies)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">scan_summary.txt</span></code> (human-readable summary)</p></li>
+<li><p>candidate structures:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">&lt;</span><span class="n">composition_tag</span><span class="o">&gt;/</span><span class="n">candidate_</span><span class="c1">###/01_scan/POSCAR</span>
+<span class="o">&lt;</span><span class="n">composition_tag</span><span class="o">&gt;/</span><span class="n">candidate_</span><span class="c1">###/01_scan/meta.json</span>
+</pre></div>
+</div>
+</li>
+</ul>
+</section>
+<section id="step-03-relax">
+<h3>Step 03 (relax)<a class="headerlink" href="#step-03-relax" title="Link to this heading"></a></h3>
+<p>For each candidate:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">candidate_###/02_relax/POSCAR</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">candidate_###/02_relax/meta.json</span></code></p></li>
+</ul>
+<p>Also writes per composition folder:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">ranking_relax.csv</span></code></p></li>
+</ul>
+</section>
+<section id="step-04-filter">
+<h3>Step 04 (filter)<a class="headerlink" href="#step-04-filter" title="Link to this heading"></a></h3>
+<p>Writes per composition folder:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">ranking_relax_filtered.csv</span></code> (filtered candidate table)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">selected_candidates.txt</span></code> (names of kept candidates)</p></li>
+</ul>
+</section>
+<section id="step-05-bandgap">
+<h3>Step 05 (bandgap)<a class="headerlink" href="#step-05-bandgap" title="Link to this heading"></a></h3>
+<p>Writes per composition folder:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">bandgap_alignn_summary.csv</span></code></p></li>
+</ul>
+<p>Writes per candidate:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">candidate_###/03_band/meta.json</span></code></p></li>
+</ul>
+</section>
+<section id="step-06-formation">
+<h3>Step 06 (formation)<a class="headerlink" href="#step-06-formation" title="Link to this heading"></a></h3>
+<p>Writes per composition folder:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">formation_energies.csv</span></code></p></li>
+</ul>
+<p>Writes per candidate:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">candidate_###/04_formation/meta.json</span></code></p></li>
+</ul>
+</section>
+<section id="step-07-collect">
+<h3>Step 07 (collect)<a class="headerlink" href="#step-07-collect" title="Link to this heading"></a></h3>
+<p>Writes one flat CSV in the workflow root:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">results_database.csv</span></code></p></li>
+</ul>
+<p>This file is a compact “database view” across compositions and selected candidates,
+combining scan/relax/filter/bandgap/formation results where available.</p>
+</section>
+</section>
+<section id="tips">
+<h2>Tips<a class="headerlink" href="#tips" title="Link to this heading"></a></h2>
+<ul>
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">--verbose</span></code> with any command for more detailed logs:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">run</span><span class="o">-</span><span class="nb">all</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span> <span class="o">--</span><span class="n">verbose</span>
+</pre></div>
+</div>
+</li>
+<li><p>If bandgap is not configured yet (no <code class="docutils literal notranslate"><span class="pre">ALIGNN_MODEL_DIR</span></code>), stop before bandgap:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">run</span><span class="o">-</span><span class="nb">all</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span> <span class="o">--</span><span class="n">until</span> <span class="nb">filter</span>
+</pre></div>
+</div>
+</li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="workflow_overview.html" class="btn btn-neutral float-left" title="Workflow Overview" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="required_inputs.html" class="btn btn-neutral float-right" title="Required Input Files" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

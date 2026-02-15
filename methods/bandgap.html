@@ -1,0 +1,305 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>5. Bandgap Prediction &mdash; dopingflow 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="6. Formation Energy Evaluation" href="formation_energy.html" />
+    <link rel="prev" title="4. Relaxed-Candidate Filtering" href="filtering.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            dopingflow
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../workflow_overview.html">Workflow Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation_and_usage.html">Installation, Usage, and Outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../required_inputs.html">Required Input Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file.html">Input File Specification (input.toml)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Stages</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="references.html">0. Reference Energy Construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generation.html">1. Structure Generation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scanning.html">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="filtering.html">4. Relaxed-Candidate Filtering</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">5. Bandgap Prediction</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#implementation">Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#purpose">Purpose</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#inputs">Inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#method-summary">Method Summary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#selection-of-candidates">Selection of Candidates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#model-and-graph-construction">Model and Graph Construction</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#alignn-model-loading">ALIGNN model loading</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#graph-parameters">Graph parameters</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#outputs">Outputs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#per-folder-summary">Per-folder summary</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#per-candidate-metadata">Per-candidate metadata</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#reproducibility-and-skipping">Reproducibility and Skipping</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#notes-and-limitations">Notes and Limitations</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="formation_energy.html">6. Formation Energy Evaluation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="database.html">7. Database Collection</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../api/modules.html">dopingflow</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">5. Bandgap Prediction</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/methods/bandgap.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="bandgap-prediction">
+<h1>5. Bandgap Prediction<a class="headerlink" href="#bandgap-prediction" title="Link to this heading"></a></h1>
+<section id="implementation">
+<h2>Implementation<a class="headerlink" href="#implementation" title="Link to this heading"></a></h2>
+<p>This stage is implemented in:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">src</span><span class="o">/</span><span class="n">dopingflow</span><span class="o">/</span><span class="n">bandgap</span><span class="o">.</span><span class="n">py</span>
+</pre></div>
+</div>
+<p>The public entry point is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">run_bandgap</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="purpose">
+<h2>Purpose<a class="headerlink" href="#purpose" title="Link to this heading"></a></h2>
+<p>This stage predicts the <strong>electronic band gap</strong> of relaxed candidate structures
+using a locally available <strong>ALIGNN</strong> model.</p>
+<p>Band gaps are evaluated for candidates produced by the previous steps
+(typically after relaxation, and optionally after filtering) and written to:</p>
+<ul class="simple">
+<li><p>a per-folder summary CSV</p></li>
+<li><p>a per-candidate metadata record</p></li>
+</ul>
+<p>This is a machine-learning inference step; no electronic-structure calculation is
+performed here.</p>
+</section>
+<section id="inputs">
+<h2>Inputs<a class="headerlink" href="#inputs" title="Link to this heading"></a></h2>
+<p>This stage uses settings from the following sections of <code class="docutils literal notranslate"><span class="pre">input.toml</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">[structure]</span></code>: provides the output directory containing structure folders.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[bandgap]</span></code>: defines graph-construction parameters and skipping behavior.</p></li>
+</ul>
+<p>In addition, this stage requires an environment variable pointing to a local
+ALIGNN model directory:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ALIGNN_MODEL_DIR</span><span class="o">=/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">your</span><span class="o">/</span><span class="n">alignn_model_folder</span>
+</pre></div>
+</div>
+</section>
+<section id="method-summary">
+<h2>Method Summary<a class="headerlink" href="#method-summary" title="Link to this heading"></a></h2>
+<p>For each structure folder inside <code class="docutils literal notranslate"><span class="pre">[structure].outdir</span></code>:</p>
+<ol class="arabic simple">
+<li><p>Determine the list of candidate structures to evaluate:</p>
+<ol class="loweralpha simple">
+<li><p>If <code class="docutils literal notranslate"><span class="pre">selected_candidates.txt</span></code> exists, only those candidates are used.</p></li>
+<li><p>Otherwise, all <code class="docutils literal notranslate"><span class="pre">candidate_*/02_relax/POSCAR</span></code> files are used.</p></li>
+</ol>
+</li>
+<li><p>For each selected candidate:</p>
+<ol class="loweralpha simple">
+<li><p>Read the relaxed <code class="docutils literal notranslate"><span class="pre">POSCAR</span></code> (from Step 03).</p></li>
+<li><p>Convert the structure to a graph representation (DGL graph) using a
+neighbor cutoff and maximum neighbor count.</p></li>
+<li><p>Run a forward pass of the ALIGNN model to obtain the predicted band gap.</p></li>
+<li><p>Write a per-candidate metadata file.</p></li>
+</ol>
+</li>
+<li><p>Write a per-folder summary CSV listing band gaps for all evaluated candidates.</p></li>
+</ol>
+</section>
+<section id="selection-of-candidates">
+<h2>Selection of Candidates<a class="headerlink" href="#selection-of-candidates" title="Link to this heading"></a></h2>
+<p>This stage supports two selection modes:</p>
+<ul class="simple">
+<li><p><strong>Filtered selection (recommended)</strong>:
+If <code class="docutils literal notranslate"><span class="pre">selected_candidates.txt</span></code> exists in the folder, the band gap is computed
+only for those candidates. This integrates naturally with Step 04 filtering.</p></li>
+<li><p><strong>Fallback selection</strong>:
+If no selection list is present, all relaxed candidates are used.</p></li>
+</ul>
+<p>The relaxed structures are always taken from:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">candidate_</span><span class="o">*/</span><span class="mi">02</span><span class="n">_relax</span><span class="o">/</span><span class="n">POSCAR</span>
+</pre></div>
+</div>
+</section>
+<section id="model-and-graph-construction">
+<h2>Model and Graph Construction<a class="headerlink" href="#model-and-graph-construction" title="Link to this heading"></a></h2>
+<section id="alignn-model-loading">
+<h3>ALIGNN model loading<a class="headerlink" href="#alignn-model-loading" title="Link to this heading"></a></h3>
+<p>The model is loaded from a local directory under <code class="docutils literal notranslate"><span class="pre">ALIGNN_MODEL_DIR</span></code>.
+The code searches for a folder containing a <code class="docutils literal notranslate"><span class="pre">config.json</span></code> and a checkpoint
+file (e.g. <code class="docutils literal notranslate"><span class="pre">checkpoint_*.pt</span></code> or <code class="docutils literal notranslate"><span class="pre">*.pt</span></code>), then loads:</p>
+<ul class="simple">
+<li><p>the model configuration (from <code class="docutils literal notranslate"><span class="pre">config.json</span></code>)</p></li>
+<li><p>the checkpoint weights</p></li>
+</ul>
+</section>
+<section id="graph-parameters">
+<h3>Graph parameters<a class="headerlink" href="#graph-parameters" title="Link to this heading"></a></h3>
+<p>For each structure, a graph is constructed using:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">[bandgap].cutoff</span></code>: neighbor cutoff distance</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[bandgap].max_neighbors</span></code>: maximum neighbors per atom</p></li>
+</ul>
+<p>These parameters control how local environments are encoded for inference.</p>
+<p>The DGL backend is set to PyTorch in this stage (via <code class="docutils literal notranslate"><span class="pre">DGLBACKEND=pytorch</span></code>),
+which must be configured before importing DGL/ALIGNN.</p>
+</section>
+</section>
+<section id="outputs">
+<h2>Outputs<a class="headerlink" href="#outputs" title="Link to this heading"></a></h2>
+<section id="per-folder-summary">
+<h3>Per-folder summary<a class="headerlink" href="#per-folder-summary" title="Link to this heading"></a></h3>
+<p>For each structure folder, this stage writes:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">bandgap_alignn_summary</span><span class="o">.</span><span class="n">csv</span>
+</pre></div>
+</div>
+<p>This file contains:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">candidate</span></code>: candidate directory name</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">bandgap_eV_ALIGNN_MBJ</span></code>: predicted band gap (eV)</p></li>
+</ul>
+<p>The CSV is sorted by band gap (ascending) for convenience.</p>
+</section>
+<section id="per-candidate-metadata">
+<h3>Per-candidate metadata<a class="headerlink" href="#per-candidate-metadata" title="Link to this heading"></a></h3>
+<p>For each evaluated candidate, this stage writes:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">candidate_XXX</span><span class="o">/</span><span class="mi">03</span><span class="n">_band</span><span class="o">/</span><span class="n">meta</span><span class="o">.</span><span class="n">json</span>
+</pre></div>
+</div>
+<p>This metadata includes:</p>
+<ul class="simple">
+<li><p>predicted band gap value</p></li>
+<li><p>model provenance (model directory, config path, checkpoint path)</p></li>
+<li><p>input structure path</p></li>
+<li><p>structure size and composition</p></li>
+<li><p>graph parameters used for inference</p></li>
+<li><p>walltime for prediction</p></li>
+</ul>
+</section>
+</section>
+<section id="reproducibility-and-skipping">
+<h2>Reproducibility and Skipping<a class="headerlink" href="#reproducibility-and-skipping" title="Link to this heading"></a></h2>
+<p>If:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">bandgap</span><span class="p">]</span><span class="o">.</span><span class="n">skip_if_done</span> <span class="o">=</span> <span class="n">true</span>
+</pre></div>
+</div>
+<p>and <code class="docutils literal notranslate"><span class="pre">bandgap_alignn_summary.csv</span></code> already exists for a folder, that folder is
+skipped.</p>
+<p>Given the same relaxed POSCARs, model checkpoint, and graph parameters, this stage
+is deterministic.</p>
+</section>
+<section id="notes-and-limitations">
+<h2>Notes and Limitations<a class="headerlink" href="#notes-and-limitations" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Predicted band gaps depend on the chosen ALIGNN model and its training domain.</p></li>
+<li><p>Band gaps are ML predictions and should not be interpreted as DFT-quality values
+unless the chosen model has been validated for the target material class.</p></li>
+<li><p>This stage assumes candidate structures are already relaxed; it does not perform
+geometry optimization.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="filtering.html" class="btn btn-neutral float-left" title="4. Relaxed-Candidate Filtering" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="formation_energy.html" class="btn btn-neutral float-right" title="6. Formation Energy Evaluation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

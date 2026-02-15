@@ -1,0 +1,343 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>6. Formation Energy Evaluation &mdash; dopingflow 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="7. Database Collection" href="database.html" />
+    <link rel="prev" title="5. Bandgap Prediction" href="bandgap.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            dopingflow
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../workflow_overview.html">Workflow Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation_and_usage.html">Installation, Usage, and Outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../required_inputs.html">Required Input Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file.html">Input File Specification (input.toml)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Stages</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="references.html">0. Reference Energy Construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generation.html">1. Structure Generation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scanning.html">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="filtering.html">4. Relaxed-Candidate Filtering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bandgap.html">5. Bandgap Prediction</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">6. Formation Energy Evaluation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#implementation">Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#purpose">Purpose</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#inputs">Inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#formation-energy-framework">Formation Energy Framework</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#substitutional-doping-model">Substitutional doping model</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#formation-energy-definition">Formation energy definition</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#method-summary">Method Summary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#normalization-options">Normalization Options</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#outputs">Outputs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#per-folder-summary">Per-folder summary</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#per-candidate-metadata">Per-candidate metadata</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#reproducibility-and-skipping">Reproducibility and Skipping</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#notes-and-limitations">Notes and Limitations</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="database.html">7. Database Collection</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../api/modules.html">dopingflow</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">6. Formation Energy Evaluation</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/methods/formation_energy.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="formation-energy-evaluation">
+<h1>6. Formation Energy Evaluation<a class="headerlink" href="#formation-energy-evaluation" title="Link to this heading"></a></h1>
+<section id="implementation">
+<h2>Implementation<a class="headerlink" href="#implementation" title="Link to this heading"></a></h2>
+<p>This stage is implemented in:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">src</span><span class="o">/</span><span class="n">dopingflow</span><span class="o">/</span><span class="n">formation</span><span class="o">.</span><span class="n">py</span>
+</pre></div>
+</div>
+<p>The public entry point is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">run_formation</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="purpose">
+<h2>Purpose<a class="headerlink" href="#purpose" title="Link to this heading"></a></h2>
+<p>This stage computes the <strong>formation energy</strong> of relaxed doped structures using
+reference energies constructed in Step 00.</p>
+<p>It combines:</p>
+<ul class="simple">
+<li><p>the relaxed total energy of each doped candidate structure (<span class="math notranslate nohighlight">\(E_{\mathrm{doped}}\)</span>)</p></li>
+<li><p>the relaxed total energy of the pristine supercell (<span class="math notranslate nohighlight">\(E_{\mathrm{pristine}}\)</span>)</p></li>
+<li><p>elemental chemical potentials (<span class="math notranslate nohighlight">\(\mu_i\)</span>) for host and dopant species</p></li>
+</ul>
+<p>Formation energies are written per composition folder to:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">formation_energies.csv</span></code> (summary table)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">candidate_*/04_formation/meta.json</span></code> (per-candidate provenance)</p></li>
+</ul>
+</section>
+<section id="inputs">
+<h2>Inputs<a class="headerlink" href="#inputs" title="Link to this heading"></a></h2>
+<p>This stage uses settings from the following sections of <code class="docutils literal notranslate"><span class="pre">input.toml</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">[structure]</span></code>: provides the output directory containing structure folders.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[doping]</span></code>: defines the substitution host species.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[scan]</span></code>: provides the anion species list used to identify dopants.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[formation]</span></code>: controls skipping and the normalization convention.</p></li>
+</ul>
+<p>It also requires the reference-energy JSON from Step 00:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">reference_structures</span><span class="o">/</span><span class="n">reference_energies</span><span class="o">.</span><span class="n">json</span>
+</pre></div>
+</div>
+</section>
+<section id="formation-energy-framework">
+<h2>Formation Energy Framework<a class="headerlink" href="#formation-energy-framework" title="Link to this heading"></a></h2>
+<section id="substitutional-doping-model">
+<h3>Substitutional doping model<a class="headerlink" href="#substitutional-doping-model" title="Link to this heading"></a></h3>
+<p>The workflow assumes substitutional doping on a host sublattice.
+Dopants are identified as all species that are:</p>
+<ul class="simple">
+<li><p>not equal to the host species (<code class="docutils literal notranslate"><span class="pre">[doping].host_species</span></code>), and</p></li>
+<li><p>not in the anion list (<code class="docutils literal notranslate"><span class="pre">[scan].anion_species</span></code>)</p></li>
+</ul>
+<p>The set of dopant counts <span class="math notranslate nohighlight">\(n_i\)</span> is extracted from each candidate POSCAR.</p>
+</section>
+<section id="formation-energy-definition">
+<h3>Formation energy definition<a class="headerlink" href="#formation-energy-definition" title="Link to this heading"></a></h3>
+<p>The formation energy is defined as:</p>
+<div class="math notranslate nohighlight">
+\[E_{\mathrm{form}} =
+E_{\mathrm{doped}}
+- E_{\mathrm{pristine}}
++ \sum_i n_i \left( \mu_{\mathrm{host}} - \mu_i \right)\]</div>
+<p>where:</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(E_{\mathrm{doped}}\)</span> is the relaxed total energy of the doped supercell</p></li>
+<li><p><span class="math notranslate nohighlight">\(E_{\mathrm{pristine}}\)</span> is the relaxed total energy of the pristine supercell</p></li>
+<li><p><span class="math notranslate nohighlight">\(\mu_{\mathrm{host}}\)</span> is the host chemical potential (per atom)</p></li>
+<li><p><span class="math notranslate nohighlight">\(\mu_i\)</span> is the dopant chemical potential (per atom)</p></li>
+<li><p><span class="math notranslate nohighlight">\(n_i\)</span> is the number of dopant atoms of species <span class="math notranslate nohighlight">\(i\)</span> in the supercell</p></li>
+</ul>
+<p>This corresponds to replacing <span class="math notranslate nohighlight">\(n_i\)</span> host atoms by <span class="math notranslate nohighlight">\(n_i\)</span> dopant atoms
+for each dopant species <span class="math notranslate nohighlight">\(i\)</span>, while keeping the same supercell size.</p>
+<p>Reference energies are taken from Step 00 and must be consistent with the
+supercell size and host species used here.</p>
+</section>
+</section>
+<section id="method-summary">
+<h2>Method Summary<a class="headerlink" href="#method-summary" title="Link to this heading"></a></h2>
+<p>For each structure folder inside <code class="docutils literal notranslate"><span class="pre">[structure].outdir</span></code>:</p>
+<ol class="arabic">
+<li><p>Load the reference data from:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">reference_structures</span><span class="o">/</span><span class="n">reference_energies</span><span class="o">.</span><span class="n">json</span>
+</pre></div>
+</div>
+<p>extracting <span class="math notranslate nohighlight">\(E_{\mathrm{pristine}}\)</span> and chemical potentials <span class="math notranslate nohighlight">\(\mu_i\)</span>.</p>
+</li>
+<li><p>Determine which candidates to evaluate:</p>
+<ol class="loweralpha simple">
+<li><p>If <code class="docutils literal notranslate"><span class="pre">selected_candidates.txt</span></code> exists, only those candidates are used.</p></li>
+<li><p>Otherwise, all <code class="docutils literal notranslate"><span class="pre">candidate_*/02_relax/POSCAR</span></code> files are used.</p></li>
+</ol>
+</li>
+<li><p>For each selected candidate:</p>
+<ol class="loweralpha simple">
+<li><p>Read the relaxed energy <span class="math notranslate nohighlight">\(E_{\mathrm{doped}}\)</span> from
+<code class="docutils literal notranslate"><span class="pre">candidate_*/02_relax/meta.json</span></code>.</p></li>
+<li><p>Read species counts from <code class="docutils literal notranslate"><span class="pre">candidate_*/02_relax/POSCAR</span></code> and infer dopant
+counts under the substitutional model.</p></li>
+<li><p>Evaluate <span class="math notranslate nohighlight">\(E_{\mathrm{form}}\)</span> using the equation above.</p></li>
+<li><p>Apply the requested normalization (see below).</p></li>
+<li><p>Write <code class="docutils literal notranslate"><span class="pre">candidate_*/04_formation/meta.json</span></code>.</p></li>
+</ol>
+</li>
+<li><p>Write <code class="docutils literal notranslate"><span class="pre">formation_energies.csv</span></code> in the folder, sorted by total formation
+energy.</p></li>
+</ol>
+</section>
+<section id="normalization-options">
+<h2>Normalization Options<a class="headerlink" href="#normalization-options" title="Link to this heading"></a></h2>
+<p>This stage supports three reporting modes controlled by:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">formation</span><span class="p">]</span>
+<span class="n">normalize</span> <span class="o">=</span> <span class="s2">&quot;total&quot;</span> <span class="o">|</span> <span class="s2">&quot;per_dopant&quot;</span> <span class="o">|</span> <span class="s2">&quot;per_host&quot;</span>
+</pre></div>
+</div>
+<p>The internal formation energy is always computed as a <strong>total supercell energy</strong>
+(<span class="math notranslate nohighlight">\(E_{\mathrm{form}}\)</span> in eV). The reported value can be:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">total</span></code>:
+report <span class="math notranslate nohighlight">\(E_{\mathrm{form}}\)</span> in eV (no normalization)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">per_dopant</span></code> (default):
+report <span class="math notranslate nohighlight">\(E_{\mathrm{form}} / N_{\mathrm{dop}}\)</span>, where
+<span class="math notranslate nohighlight">\(N_{\mathrm{dop}} = \sum_i n_i\)</span> is the total number of dopant atoms</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">per_host</span></code>:
+report <span class="math notranslate nohighlight">\(E_{\mathrm{form}} / N_{\mathrm{atoms}}\)</span>, where
+<span class="math notranslate nohighlight">\(N_{\mathrm{atoms}}\)</span> is the total number of atoms in the pristine supercell
+(as stored in the reference JSON)</p></li>
+</ul>
+<p>Note:
+<code class="docutils literal notranslate"><span class="pre">per_host</span></code> currently uses the total number of atoms in the pristine supercell.
+If you later want normalization per <em>host-sublattice</em> site, that quantity can be
+stored explicitly in the reference JSON and used here.</p>
+</section>
+<section id="outputs">
+<h2>Outputs<a class="headerlink" href="#outputs" title="Link to this heading"></a></h2>
+<section id="per-folder-summary">
+<h3>Per-folder summary<a class="headerlink" href="#per-folder-summary" title="Link to this heading"></a></h3>
+<p>For each structure folder, this stage writes:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">formation_energies</span><span class="o">.</span><span class="n">csv</span>
+</pre></div>
+</div>
+<p>Columns:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">candidate</span></code>: candidate directory name</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">E_doped_eV</span></code>: relaxed total energy of the doped candidate</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">E_form_eV_total</span></code>: total formation energy in eV</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">E_form_&lt;normalize&gt;</span></code>: normalized formation energy (according to config)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">n_dopant_atoms</span></code>: total dopant atoms <span class="math notranslate nohighlight">\(N_{\mathrm{dop}}\)</span></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dopant_counts</span></code>: compact dopant count string (e.g. <code class="docutils literal notranslate"><span class="pre">Sb:2;Zr:1</span></code>)</p></li>
+</ul>
+<p>Rows are sorted by <code class="docutils literal notranslate"><span class="pre">E_form_eV_total</span></code> (ascending).</p>
+</section>
+<section id="per-candidate-metadata">
+<h3>Per-candidate metadata<a class="headerlink" href="#per-candidate-metadata" title="Link to this heading"></a></h3>
+<p>For each evaluated candidate, this stage writes:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">candidate_XXX</span><span class="o">/</span><span class="mi">04</span><span class="n">_formation</span><span class="o">/</span><span class="n">meta</span><span class="o">.</span><span class="n">json</span>
+</pre></div>
+</div>
+<p>This file includes:</p>
+<ul class="simple">
+<li><p>full formation-energy definition string from the reference JSON</p></li>
+<li><p><span class="math notranslate nohighlight">\(E_{\mathrm{doped}}\)</span>, <span class="math notranslate nohighlight">\(E_{\mathrm{pristine}}\)</span></p></li>
+<li><p>chemical potentials used for the involved species</p></li>
+<li><p>inferred dopant counts</p></li>
+<li><p>total formation energy and the reported normalized value</p></li>
+</ul>
+</section>
+</section>
+<section id="reproducibility-and-skipping">
+<h2>Reproducibility and Skipping<a class="headerlink" href="#reproducibility-and-skipping" title="Link to this heading"></a></h2>
+<p>If:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">formation</span><span class="p">]</span><span class="o">.</span><span class="n">skip_if_done</span> <span class="o">=</span> <span class="n">true</span>
+</pre></div>
+</div>
+<p>and <code class="docutils literal notranslate"><span class="pre">formation_energies.csv</span></code> already exists for a folder, that folder is
+skipped.</p>
+<p>Given unchanged relaxed energies, POSCARs, reference JSON, and configuration,
+this stage is deterministic.</p>
+</section>
+<section id="notes-and-limitations">
+<h2>Notes and Limitations<a class="headerlink" href="#notes-and-limitations" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>This stage assumes substitutional doping and uses a simple species-based
+dopant identification rule (host vs anions vs dopants).</p></li>
+<li><p>No charged-defect corrections, finite-size corrections, entropy terms, or
+competing-phase chemical potential bounds are included.</p></li>
+<li><p>The absolute values depend on the reference energies and the chosen bulk
+phases used to define <span class="math notranslate nohighlight">\(\mu_i\)</span>.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="bandgap.html" class="btn btn-neutral float-left" title="5. Bandgap Prediction" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="database.html" class="btn btn-neutral float-right" title="7. Database Collection" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

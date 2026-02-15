@@ -1,0 +1,324 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>2. Symmetry-Reduced Energy Pre-screening (Scanning) &mdash; dopingflow 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="3. Candidate Relaxation" href="relaxation.html" />
+    <link rel="prev" title="1. Structure Generation" href="generation.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            dopingflow
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../workflow_overview.html">Workflow Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation_and_usage.html">Installation, Usage, and Outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../required_inputs.html">Required Input Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file.html">Input File Specification (input.toml)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Stages</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="references.html">0. Reference Energy Construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generation.html">1. Structure Generation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#implementation">Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#purpose">Purpose</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#inputs">Inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#method-summary">Method Summary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#enumeration-sublattice-definition">Enumeration Sublattice Definition</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#combinatorics-and-safety-limits">Combinatorics and Safety Limits</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#raw-configuration-count">Raw configuration count</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#maximum-number-of-dopant-species-per-scan">Maximum number of dopant species per scan</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#symmetry-reduction">Symmetry Reduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#energy-model-and-parallel-evaluation">Energy Model and Parallel Evaluation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#selection-of-top-k-candidates">Selection of Top-k Candidates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#reproducibility">Reproducibility</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#outputs">Outputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#notes-and-limitations">Notes and Limitations</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="filtering.html">4. Relaxed-Candidate Filtering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bandgap.html">5. Bandgap Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="formation_energy.html">6. Formation Energy Evaluation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="database.html">7. Database Collection</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../api/modules.html">dopingflow</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">2. Symmetry-Reduced Energy Pre-screening (Scanning)</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/methods/scanning.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="symmetry-reduced-energy-pre-screening-scanning">
+<h1>2. Symmetry-Reduced Energy Pre-screening (Scanning)<a class="headerlink" href="#symmetry-reduced-energy-pre-screening-scanning" title="Link to this heading"></a></h1>
+<section id="implementation">
+<h2>Implementation<a class="headerlink" href="#implementation" title="Link to this heading"></a></h2>
+<p>This stage is implemented in:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">src</span><span class="o">/</span><span class="n">dopingflow</span><span class="o">/</span><span class="n">scan</span><span class="o">.</span><span class="n">py</span>
+</pre></div>
+</div>
+<p>The public entry point is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">run_scan</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="purpose">
+<h2>Purpose<a class="headerlink" href="#purpose" title="Link to this heading"></a></h2>
+<p>This stage performs an efficient <strong>energy pre-screening</strong> of dopant arrangements
+by enumerating <strong>symmetry-unique</strong> configurations on a selected sublattice and
+evaluating their <strong>single-point energies</strong> using a machine-learned interatomic
+potential.</p>
+<p>For each generated structure folder, the method:</p>
+<ul class="simple">
+<li><p>infers the substitutional sublattice and dopant counts from the input structure</p></li>
+<li><p>enumerates symmetry-unique dopant permutations on that sublattice</p></li>
+<li><p>predicts a single-point energy for each unique configuration</p></li>
+<li><p>keeps the <strong>top-k lowest-energy</strong> candidates for downstream relaxation</p></li>
+</ul>
+</section>
+<section id="inputs">
+<h2>Inputs<a class="headerlink" href="#inputs" title="Link to this heading"></a></h2>
+<p>This stage uses settings from the following sections of <code class="docutils literal notranslate"><span class="pre">input.toml</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">[structure]</span></code>: provides the output directory containing generated structures.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[doping]</span></code>: provides the host species definition.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[generate]</span></code>: provides the species ordering used when writing POSCAR files.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[scan]</span></code>: controls enumeration limits, symmetry tolerance, parallelism, and selection.</p></li>
+</ul>
+</section>
+<section id="method-summary">
+<h2>Method Summary<a class="headerlink" href="#method-summary" title="Link to this heading"></a></h2>
+<p>For each structure subdirectory in <code class="docutils literal notranslate"><span class="pre">[structure].outdir</span></code>:</p>
+<ol class="arabic simple">
+<li><p>Read the structure file specified by <code class="docutils literal notranslate"><span class="pre">[scan].poscar_in</span></code>.</p></li>
+<li><p>Identify the <strong>enumeration sublattice</strong> (all non-anion sites) and infer:
+- host species count on the sublattice
+- dopant species counts on the sublattice</p></li>
+<li><p>Estimate the total number of raw (non-symmetry-reduced) configurations.</p></li>
+<li><p>Construct a parent structure and compute symmetry operations acting on the sublattice.</p></li>
+<li><p>Enumerate dopant labelings and reduce them to <strong>symmetry-unique</strong> configurations.</p></li>
+<li><p>Evaluate a single-point energy for each unique configuration in parallel (multiprocessing).</p></li>
+<li><p>Select the lowest-energy <code class="docutils literal notranslate"><span class="pre">topk</span></code> candidates and write them to <code class="docutils literal notranslate"><span class="pre">candidate_*/01_scan</span></code>.</p></li>
+<li><p>Write a CSV ranking file and a human-readable summary.</p></li>
+</ol>
+</section>
+<section id="enumeration-sublattice-definition">
+<h2>Enumeration Sublattice Definition<a class="headerlink" href="#enumeration-sublattice-definition" title="Link to this heading"></a></h2>
+<p>The enumerated sublattice is inferred from the input structure using the rule:</p>
+<ul class="simple">
+<li><p><strong>anion sites</strong> are excluded (defined by <code class="docutils literal notranslate"><span class="pre">[scan].anion_species</span></code>)</p></li>
+<li><p><strong>all remaining sites</strong> form the enumeration sublattice</p></li>
+</ul>
+<p>This design makes the method general across crystals where doping occurs on a
+cation (or non-anion) sublattice.</p>
+<p>The dopant counts are inferred directly from the input POSCAR by counting
+species on the enumeration sublattice. The host species is provided by
+<code class="docutils literal notranslate"><span class="pre">[doping].host_species</span></code>.</p>
+</section>
+<section id="combinatorics-and-safety-limits">
+<h2>Combinatorics and Safety Limits<a class="headerlink" href="#combinatorics-and-safety-limits" title="Link to this heading"></a></h2>
+<section id="raw-configuration-count">
+<h3>Raw configuration count<a class="headerlink" href="#raw-configuration-count" title="Link to this heading"></a></h3>
+<p>Given a sublattice with <span class="math notranslate nohighlight">\(N\)</span> sites and fixed dopant counts, the number of
+raw configurations (before symmetry reduction) grows combinatorially.</p>
+<p>To avoid runaway enumeration, the workflow:</p>
+<ul class="simple">
+<li><p>estimates the raw count and enforces <code class="docutils literal notranslate"><span class="pre">[scan].max_enum</span></code></p></li>
+<li><p>enforces a hard limit on symmetry-unique configurations via <code class="docutils literal notranslate"><span class="pre">[scan].max_unique</span></code></p></li>
+</ul>
+<p>If either limit is exceeded, the scan stops for that structure and reports an error.
+This protects against infeasible compositions and/or large supercells.</p>
+</section>
+<section id="maximum-number-of-dopant-species-per-scan">
+<h3>Maximum number of dopant species per scan<a class="headerlink" href="#maximum-number-of-dopant-species-per-scan" title="Link to this heading"></a></h3>
+<p>The current symmetry-unique enumerator is implemented explicitly for up to
+<strong>three distinct dopant species</strong> on the enumerated sublattice.</p>
+<p>If the inferred dopant set contains more than three species, the scan raises an
+error.</p>
+<p>This limit applies to the scanning enumeration procedure (not necessarily to
+other stages).</p>
+</section>
+</section>
+<section id="symmetry-reduction">
+<h2>Symmetry Reduction<a class="headerlink" href="#symmetry-reduction" title="Link to this heading"></a></h2>
+<p>To avoid evaluating symmetry-equivalent configurations, the scan:</p>
+<ol class="arabic simple">
+<li><p>Constructs a <strong>parent</strong> structure where all sites of the enumeration sublattice
+are assigned to the host species.</p></li>
+<li><p>Uses a space-group analysis (with tolerance <code class="docutils literal notranslate"><span class="pre">[scan].symprec</span></code>) to obtain
+symmetry operations.</p></li>
+<li><p>Converts symmetry operations into <strong>permutations of sublattice indices</strong>.</p></li>
+<li><p>For each dopant labeling, computes a canonical representation under these permutations.</p></li>
+<li><p>Keeps only labelings with unique canonical keys.</p></li>
+</ol>
+<p>This yields the set of symmetry-unique dopant configurations.</p>
+</section>
+<section id="energy-model-and-parallel-evaluation">
+<h2>Energy Model and Parallel Evaluation<a class="headerlink" href="#energy-model-and-parallel-evaluation" title="Link to this heading"></a></h2>
+<p>Each symmetry-unique configuration is evaluated using a <strong>single-point</strong>
+energy prediction with M3GNet.</p>
+<p>Key points:</p>
+<ul class="simple">
+<li><p>the structure is not relaxed in this stage</p></li>
+<li><p>only the energy is predicted (fast screening)</p></li>
+<li><p>energies are computed in parallel using multiprocessing</p></li>
+</ul>
+<p>To improve robustness when using TensorFlow-based models, worker processes are
+created using the <code class="docutils literal notranslate"><span class="pre">spawn</span></code> start method.</p>
+</section>
+<section id="selection-of-top-k-candidates">
+<h2>Selection of Top-k Candidates<a class="headerlink" href="#selection-of-top-k-candidates" title="Link to this heading"></a></h2>
+<p>The workflow keeps the <code class="docutils literal notranslate"><span class="pre">[scan].topk</span></code> configurations with the <strong>lowest predicted</strong>
+single-point energies and writes each to:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">&lt;</span><span class="n">structure_dir</span><span class="o">&gt;/</span><span class="n">candidate_</span><span class="c1">###/01_scan/POSCAR</span>
+<span class="o">&lt;</span><span class="n">structure_dir</span><span class="o">&gt;/</span><span class="n">candidate_</span><span class="c1">###/01_scan/meta.json</span>
+</pre></div>
+</div>
+<p>A CSV ranking file is written to the structure directory:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">&lt;</span><span class="n">structure_dir</span><span class="o">&gt;/</span><span class="n">ranking_scan</span><span class="o">.</span><span class="n">csv</span>
+</pre></div>
+</div>
+<p>The ranking CSV contains:</p>
+<ul class="simple">
+<li><p>candidate name</p></li>
+<li><p>rank (single-point)</p></li>
+<li><p>predicted single-point energy</p></li>
+<li><p>a short dopant-position signature</p></li>
+</ul>
+</section>
+<section id="reproducibility">
+<h2>Reproducibility<a class="headerlink" href="#reproducibility" title="Link to this heading"></a></h2>
+<p>For a fixed input structure and scan settings, the result is deterministic with respect to:</p>
+<ul class="simple">
+<li><p>inferred dopant counts</p></li>
+<li><p>symmetry analysis (controlled by <code class="docutils literal notranslate"><span class="pre">symprec</span></code>)</p></li>
+<li><p>enumeration ordering</p></li>
+<li><p>the ML model used for prediction</p></li>
+</ul>
+<p>Parallel evaluation does not affect the final ranking, since candidates are
+selected based on energy values.</p>
+</section>
+<section id="outputs">
+<h2>Outputs<a class="headerlink" href="#outputs" title="Link to this heading"></a></h2>
+<p>For each processed structure folder:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">candidate_*/01_scan/POSCAR</span></code>: POSCAR files of selected low-energy candidates</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">candidate_*/01_scan/meta.json</span></code>: metadata describing scan settings and counts</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ranking_scan.csv</span></code>: ranked list of candidates with predicted energies</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">scan_summary.txt</span></code>: human-readable summary of the scan</p></li>
+</ul>
+</section>
+<section id="notes-and-limitations">
+<h2>Notes and Limitations<a class="headerlink" href="#notes-and-limitations" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>This stage performs <strong>single-point ML energy screening only</strong>; it does not relax structures.</p></li>
+<li><p>Symmetry reduction depends on the tolerance <code class="docutils literal notranslate"><span class="pre">symprec</span></code>; too large values may merge distinct
+configurations, too small values may reduce symmetry detection.</p></li>
+<li><p>Enumeration can become infeasible for large sublattices and/or high dopant counts;
+limits <code class="docutils literal notranslate"><span class="pre">max_enum</span></code> and <code class="docutils literal notranslate"><span class="pre">max_unique</span></code> are enforced to prevent runaway runtime/memory.</p></li>
+<li><p>The current label enumerator supports up to <strong>three distinct dopant species</strong>.</p></li>
+<li><p>Predicted single-point energies are surrogate ML values and should be interpreted
+as a ranking heuristic rather than absolute thermodynamic energies.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="generation.html" class="btn btn-neutral float-left" title="1. Structure Generation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="relaxation.html" class="btn btn-neutral float-right" title="3. Candidate Relaxation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

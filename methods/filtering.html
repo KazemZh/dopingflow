@@ -1,0 +1,309 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>4. Relaxed-Candidate Filtering &mdash; dopingflow 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="5. Bandgap Prediction" href="bandgap.html" />
+    <link rel="prev" title="3. Candidate Relaxation" href="relaxation.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            dopingflow
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../workflow_overview.html">Workflow Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation_and_usage.html">Installation, Usage, and Outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../required_inputs.html">Required Input Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file.html">Input File Specification (input.toml)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Stages</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="references.html">0. Reference Energy Construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generation.html">1. Structure Generation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scanning.html">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">4. Relaxed-Candidate Filtering</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#implementation">Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#purpose">Purpose</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#inputs">Inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#method-summary">Method Summary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#filtering-modes">Filtering Modes</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#window-mode">Window mode</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#top-n-mode">Top-n mode</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#selection-basis">Selection Basis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#outputs">Outputs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#filtered-ranking-table">Filtered ranking table</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#selected-candidate-list">Selected candidate list</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#command-line-overrides-and-forcing">Command-line Overrides and Forcing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#reproducibility-and-skipping">Reproducibility and Skipping</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#notes-and-limitations">Notes and Limitations</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="bandgap.html">5. Bandgap Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="formation_energy.html">6. Formation Energy Evaluation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="database.html">7. Database Collection</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../api/modules.html">dopingflow</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">4. Relaxed-Candidate Filtering</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/methods/filtering.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="relaxed-candidate-filtering">
+<h1>4. Relaxed-Candidate Filtering<a class="headerlink" href="#relaxed-candidate-filtering" title="Link to this heading"></a></h1>
+<section id="implementation">
+<h2>Implementation<a class="headerlink" href="#implementation" title="Link to this heading"></a></h2>
+<p>This stage is implemented in:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">src</span><span class="o">/</span><span class="n">dopingflow</span><span class="o">/</span><span class="n">filtering</span><span class="o">.</span><span class="n">py</span>
+</pre></div>
+</div>
+<p>The public entry point is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">run_filtering</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="purpose">
+<h2>Purpose<a class="headerlink" href="#purpose" title="Link to this heading"></a></h2>
+<p>This stage selects a <strong>reduced set of relaxed candidates</strong> for downstream
+property calculations by filtering the results of the relaxation stage.</p>
+<p>It operates on the per-folder relaxation ranking produced in Step 03 and writes:</p>
+<ul class="simple">
+<li><p>a filtered ranking table</p></li>
+<li><p>a plain text list of selected candidate names</p></li>
+</ul>
+<p>This stage is a lightweight post-processing step; it does not run any atomistic
+calculations.</p>
+</section>
+<section id="inputs">
+<h2>Inputs<a class="headerlink" href="#inputs" title="Link to this heading"></a></h2>
+<p>This stage uses settings from the following sections of <code class="docutils literal notranslate"><span class="pre">input.toml</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">[structure]</span></code>: provides the output directory containing structure folders.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[filter]</span></code>: defines the filtering strategy and thresholds.</p></li>
+</ul>
+<p>It expects that Step 03 has already produced, in each structure folder:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ranking_relax</span><span class="o">.</span><span class="n">csv</span>
+</pre></div>
+</div>
+</section>
+<section id="method-summary">
+<h2>Method Summary<a class="headerlink" href="#method-summary" title="Link to this heading"></a></h2>
+<p>For each structure folder inside <code class="docutils literal notranslate"><span class="pre">[structure].outdir</span></code>:</p>
+<ol class="arabic simple">
+<li><p>Read <code class="docutils literal notranslate"><span class="pre">ranking_relax.csv</span></code>.</p></li>
+<li><p>Keep only candidates with <code class="docutils literal notranslate"><span class="pre">status</span> <span class="pre">==</span> <span class="pre">&quot;ok&quot;</span></code>.</p></li>
+<li><p>Determine the minimum relaxed energy:</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(E_{\min} = \min(E_{\mathrm{relaxed}})\)</span></p></li>
+</ul>
+</li>
+<li><p>Apply one of two filtering modes:</p>
+<ul class="simple">
+<li><p><em>window mode</em>: keep candidates within an energy window above <span class="math notranslate nohighlight">\(E_{\min}\)</span></p></li>
+<li><p><em>top-n mode</em>: keep the lowest-energy <code class="docutils literal notranslate"><span class="pre">N</span></code> candidates</p></li>
+</ul>
+</li>
+<li><p>Write filtered outputs:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">ranking_relax_filtered.csv</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">selected_candidates.txt</span></code></p></li>
+</ul>
+</li>
+</ol>
+</section>
+<section id="filtering-modes">
+<h2>Filtering Modes<a class="headerlink" href="#filtering-modes" title="Link to this heading"></a></h2>
+<section id="window-mode">
+<h3>Window mode<a class="headerlink" href="#window-mode" title="Link to this heading"></a></h3>
+<p>If the filter mode is set to <code class="docutils literal notranslate"><span class="pre">window</span></code>, candidates are kept if:</p>
+<div class="math notranslate nohighlight">
+\[E_{\mathrm{relaxed}} - E_{\min} \le \Delta E\]</div>
+<p>where:</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(\Delta E = \mathrm{window\_meV}/1000\)</span> (converted from meV to eV)</p></li>
+</ul>
+<p>This selects all structures that lie within a user-defined energy window above
+the best relaxed candidate.</p>
+</section>
+<section id="top-n-mode">
+<h3>Top-n mode<a class="headerlink" href="#top-n-mode" title="Link to this heading"></a></h3>
+<p>If the filter mode is set to <code class="docutils literal notranslate"><span class="pre">topn</span></code>, candidates are kept by selecting the first
+<code class="docutils literal notranslate"><span class="pre">max_candidates</span></code> entries after sorting by relaxed energy.</p>
+<p>This guarantees a fixed number of candidates per structure folder (unless fewer
+successful relaxations exist).</p>
+</section>
+</section>
+<section id="selection-basis">
+<h2>Selection Basis<a class="headerlink" href="#selection-basis" title="Link to this heading"></a></h2>
+<p>Filtering is based exclusively on:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">energy_relaxed_eV</span></code> from <code class="docutils literal notranslate"><span class="pre">ranking_relax.csv</span></code></p></li>
+</ul>
+<p>The filter ignores candidates that:</p>
+<ul class="simple">
+<li><p>are missing required fields</p></li>
+<li><p>have non-numeric energies</p></li>
+<li><p>have <code class="docutils literal notranslate"><span class="pre">status</span></code> values other than <code class="docutils literal notranslate"><span class="pre">ok</span></code></p></li>
+</ul>
+</section>
+<section id="outputs">
+<h2>Outputs<a class="headerlink" href="#outputs" title="Link to this heading"></a></h2>
+<p>For each structure folder, this stage writes:</p>
+<section id="filtered-ranking-table">
+<h3>Filtered ranking table<a class="headerlink" href="#filtered-ranking-table" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ranking_relax_filtered</span><span class="o">.</span><span class="n">csv</span>
+</pre></div>
+</div>
+<p>with columns including:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">rank_filtered</span></code>: rank within the filtered set (starting at 1)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">candidate</span></code>: candidate folder name</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">energy_relaxed_eV</span></code>: relaxed energy (eV)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">delta_e_eV</span></code>: energy relative to the folder minimum</p></li>
+<li><p>provenance columns copied from the relaxation stage (e.g. scan rank/signature)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">filter_mode</span></code>: a string describing the applied filter rule</p></li>
+</ul>
+</section>
+<section id="selected-candidate-list">
+<h3>Selected candidate list<a class="headerlink" href="#selected-candidate-list" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">selected_candidates</span><span class="o">.</span><span class="n">txt</span>
+</pre></div>
+</div>
+<p>This is a newline-separated list of candidate folder names, in the same order as
+the filtered ranking table.</p>
+</section>
+</section>
+<section id="command-line-overrides-and-forcing">
+<h2>Command-line Overrides and Forcing<a class="headerlink" href="#command-line-overrides-and-forcing" title="Link to this heading"></a></h2>
+<p>The implementation supports runtime overrides that can force the filter behavior
+independently of the default TOML settings:</p>
+<ul class="simple">
+<li><p>overriding <code class="docutils literal notranslate"><span class="pre">window_meV</span></code> forces window mode</p></li>
+<li><p>overriding <code class="docutils literal notranslate"><span class="pre">topn</span></code> forces top-n mode</p></li>
+</ul>
+<p>A force flag can be used to regenerate outputs even if they already exist.</p>
+</section>
+<section id="reproducibility-and-skipping">
+<h2>Reproducibility and Skipping<a class="headerlink" href="#reproducibility-and-skipping" title="Link to this heading"></a></h2>
+<p>If:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="nb">filter</span><span class="p">]</span><span class="o">.</span><span class="n">skip_if_done</span> <span class="o">=</span> <span class="n">true</span>
+</pre></div>
+</div>
+<p>and both output files already exist in a folder, that folder is skipped unless
+a force option is used.</p>
+<p>Since this stage is pure file processing, its results are deterministic given the
+input <code class="docutils literal notranslate"><span class="pre">ranking_relax.csv</span></code> and filter parameters.</p>
+</section>
+<section id="notes-and-limitations">
+<h2>Notes and Limitations<a class="headerlink" href="#notes-and-limitations" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>This stage performs <strong>no new calculations</strong>; it filters results from Step 03.</p></li>
+<li><p>Filtering is done independently per structure folder; it does not compare energies
+across different compositions/folders.</p></li>
+<li><p>Energy windows are applied relative to the minimum energy within each folder, not
+relative to a global minimum.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="relaxation.html" class="btn btn-neutral float-left" title="3. Candidate Relaxation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="bandgap.html" class="btn btn-neutral float-right" title="5. Bandgap Prediction" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
