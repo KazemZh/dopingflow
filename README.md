@@ -42,16 +42,16 @@ conda activate dopingflow
 
 ### Install
 
+Full ML stack:
+
+``` bash
+pip install -e ".[m3gnet,alignn,mp,gui]"
+```
+
 Core package:
 
 ``` bash
 pip install -e .
-```
-
-Full ML stack:
-
-``` bash
-pip install -e ".[m3gnet,alignn,mp]"
 ```
 
 Development tools:
@@ -109,6 +109,31 @@ Logs are written to:
 
 Use `--verbose` for detailed output.
 
+
+------------------------------------------------------------------------
+
+
+## Graphical User Interface (Streamlit)
+
+`dopingflow` provides an optional Streamlit-based graphical user interface for interactive workflow configuration, execution, and results analysis.
+
+The GUI allows you to:
+
+- Build and edit `input.toml`
+- Run workflow stages interactively
+- Visualize generated structures
+- Explore `results_database.csv` with Plotly
+
+### Launch the GUI
+
+From the project root directory:
+
+```bash
+streamlit run gui/app.py
+```
+
+After launching, a local browser window will open automatically.
+
 ------------------------------------------------------------------------
 
 ##  Project Structure
@@ -144,7 +169,8 @@ Use `--verbose` for detailed output.
 │       │   └── scanning.rst
 │       ├── required_inputs.rst
 │       ├── _static
-│       │   └── .gitkeep
+│       │   ├── .gitkeep
+│       │   └── logo.png
 │       ├── _templates
 │       └── workflow_overview.rst
 ├── dopingflow-user-guide.pdf
@@ -165,11 +191,18 @@ Use `--verbose` for detailed output.
 │   └── workflows
 │       └── docs.yml
 ├── .gitignore
+├── gui
+│   ├── app.py
+│   ├── gui_config.py
+│   ├── io_project.py
+│   ├── README.md
+│   ├── requirements-gui.txt
+│   └── view_structure.py
 ├── input.toml
 ├── LICENSE
+├── logo.png
 ├── pyproject.toml
 ├── README.md
-├── requirements.txt
 ├── results_database.csv
 ├── src
 │   ├── dopingflow

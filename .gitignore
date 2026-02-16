@@ -15,6 +15,9 @@ ml_doping/
 logs/
 *.log
 
+# Workflow inputs
+input.toml
+
 # Workflow outputs
 random_structures/
 reference_structures/
@@ -30,3 +33,4 @@ database/
 
 # Documentations
 docs/build/
+
