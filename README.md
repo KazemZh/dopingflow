@@ -14,13 +14,15 @@ Designed for **reproducible, scalable materials discovery workflows**.
 
 ------------------------------------------------------------------------
 
-## Documentation
+## 📘 Documentation
 
--   Full User Guide (PDF):\
-    👉 **[Download dopingflow User Guide](dopingflow-user-guide.pdf)**
+The full documentation is available in multiple formats:
 
--   Detailed documentation (Sphinx source):\
-    `docs/`
+- 🌐 **Online HTML (auto-deployed via GitHub Actions):**  
+  https://kazemzh.github.io/dopingflow/
+
+- 📄 **User Guide (PDF):**  
+  👉 [Download dopingflow User Guide](dopingflow-user-guide.pdf)
 
 ------------------------------------------------------------------------
 
