@@ -1,0 +1,313 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>0. Reference Energy Construction &mdash; dopingflow 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="1. Structure Generation" href="generation.html" />
+    <link rel="prev" title="Input File Specification (input.toml)" href="../input_file.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            dopingflow
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../workflow_overview.html">Workflow Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation_and_usage.html">Installation, Usage, and Outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../required_inputs.html">Required Input Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file.html">Input File Specification (input.toml)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Stages</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">0. Reference Energy Construction</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#implementation">Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#purpose">Purpose</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#inputs">Inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#method-summary">Method Summary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#formation-energy-framework">Formation Energy Framework</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#pristine-supercell-energy">Pristine Supercell Energy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#elemental-chemical-potentials">Elemental Chemical Potentials</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#reference-sources">Reference Sources</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#local-bulk-structures">Local bulk structures</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#external-database">External database</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#relaxation-method">Relaxation Method</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#caching-strategy">Caching Strategy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#outputs">Outputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#notes-and-limitations">Notes and Limitations</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="generation.html">1. Structure Generation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scanning.html">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="filtering.html">4. Relaxed-Candidate Filtering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bandgap.html">5. Bandgap Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="formation_energy.html">6. Formation Energy Evaluation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="database.html">7. Database Collection</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../api/modules.html">dopingflow</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">0. Reference Energy Construction</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/methods/references.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="reference-energy-construction">
+<h1>0. Reference Energy Construction<a class="headerlink" href="#reference-energy-construction" title="Link to this heading"></a></h1>
+<section id="implementation">
+<h2>Implementation<a class="headerlink" href="#implementation" title="Link to this heading"></a></h2>
+<p>This stage is implemented in:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">src</span><span class="o">/</span><span class="n">dopingflow</span><span class="o">/</span><span class="n">refs</span><span class="o">.</span><span class="n">py</span>
+</pre></div>
+</div>
+<p>The public entry point is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">run_refs_build</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="purpose">
+<h2>Purpose<a class="headerlink" href="#purpose" title="Link to this heading"></a></h2>
+<p>This stage constructs the reference energies required for
+formation energy evaluation of doped structures.</p>
+<p>The following quantities are computed:</p>
+<ul class="simple">
+<li><p>The relaxed total energy of the pristine supercell</p></li>
+<li><p>The elemental chemical potentials of all species involved
+(host + dopants)</p></li>
+</ul>
+<p>All reference data are written to:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">reference_structures</span><span class="o">/</span><span class="n">reference_energies</span><span class="o">.</span><span class="n">json</span>
+</pre></div>
+</div>
+<p>These references are later used for formation energy evaluation.</p>
+</section>
+<section id="inputs">
+<h2>Inputs<a class="headerlink" href="#inputs" title="Link to this heading"></a></h2>
+<p>This stage uses settings from:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">[structure]</span></code>: provides the pristine structure and supercell.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[doping]</span></code>: defines the host species and dopant set.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[references]</span></code>: controls reference source, relaxation settings, and caching behavior.</p></li>
+</ul>
+</section>
+<section id="method-summary">
+<h2>Method Summary<a class="headerlink" href="#method-summary" title="Link to this heading"></a></h2>
+<ol class="arabic simple">
+<li><p>Read the pristine unit-cell structure.</p></li>
+<li><p>Apply the workflow supercell expansion.</p></li>
+<li><p>Relax the pristine supercell.</p></li>
+<li><p>Identify all elements involved (host + dopants).</p></li>
+<li><p>For each element:
+a. Obtain a bulk structure (local or external source).
+b. Relax the bulk structure.
+c. Compute per-atom chemical potential.</p></li>
+<li><p>Store all reference quantities in a JSON file.</p></li>
+</ol>
+</section>
+<section id="formation-energy-framework">
+<h2>Formation Energy Framework<a class="headerlink" href="#formation-energy-framework" title="Link to this heading"></a></h2>
+<p>The workflow assumes substitutional doping.</p>
+<p>The formation energy is defined as:</p>
+<div class="math notranslate nohighlight">
+\[E_{\mathrm{form}} =
+E_{\mathrm{doped}}
+- E_{\mathrm{pristine}}
++ \sum_i n_i \left( \mu_{\mathrm{host}} - \mu_i \right)\]</div>
+<p>where:</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(E_{\mathrm{doped}}\)</span> is the relaxed total energy of the doped supercell</p></li>
+<li><p><span class="math notranslate nohighlight">\(E_{\mathrm{pristine}}\)</span> is the relaxed total energy of the pristine supercell</p></li>
+<li><p><span class="math notranslate nohighlight">\(\mu_i\)</span> is the chemical potential of dopant species <span class="math notranslate nohighlight">\(i\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(\mu_{\mathrm{host}}\)</span> is the chemical potential of the substituted host species</p></li>
+<li><p><span class="math notranslate nohighlight">\(n_i\)</span> is the number of substituted atoms of species <span class="math notranslate nohighlight">\(i\)</span></p></li>
+</ul>
+<p>This corresponds to removing host atoms and inserting dopant atoms
+while preserving total lattice size.</p>
+</section>
+<section id="pristine-supercell-energy">
+<h2>Pristine Supercell Energy<a class="headerlink" href="#pristine-supercell-energy" title="Link to this heading"></a></h2>
+<p>The pristine reference energy is computed by:</p>
+<ol class="arabic simple">
+<li><p>Reading the unit-cell structure defined in the input.</p></li>
+<li><p>Applying the supercell defined in <code class="docutils literal notranslate"><span class="pre">[structure].supercell</span></code>.</p></li>
+<li><p>Performing full structural relaxation.</p></li>
+<li><p>Extracting the final total energy.</p></li>
+</ol>
+<p>Both atomic positions and lattice vectors are allowed to relax.</p>
+</section>
+<section id="elemental-chemical-potentials">
+<h2>Elemental Chemical Potentials<a class="headerlink" href="#elemental-chemical-potentials" title="Link to this heading"></a></h2>
+<p>For each relevant element, a bulk structure is:</p>
+<ul class="simple">
+<li><p>Obtained either from a local file or an external database.</p></li>
+<li><p>Fully relaxed.</p></li>
+<li><p>Used to compute a per-atom chemical potential:</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[\mu_i = \frac{E_{\mathrm{bulk}}}{N_{\mathrm{atoms}}}\]</div>
+<p>where:</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(E_{\mathrm{bulk}}\)</span> is the relaxed total energy of the bulk structure.</p></li>
+<li><p><span class="math notranslate nohighlight">\(N_{\mathrm{atoms}}\)</span> is the number of atoms in the bulk cell.</p></li>
+</ul>
+</section>
+<section id="reference-sources">
+<h2>Reference Sources<a class="headerlink" href="#reference-sources" title="Link to this heading"></a></h2>
+<p>Two reference sources are supported.</p>
+<section id="local-bulk-structures">
+<h3>Local bulk structures<a class="headerlink" href="#local-bulk-structures" title="Link to this heading"></a></h3>
+<p>Bulk structures are read from a user-specified directory.
+Each element must have a corresponding structure file.</p>
+</section>
+<section id="external-database">
+<h3>External database<a class="headerlink" href="#external-database" title="Link to this heading"></a></h3>
+<p>Bulk structures may be retrieved programmatically from
+an external materials database using provided identifiers
+and API credentials.</p>
+<p>Downloaded structures are cached locally to ensure reproducibility.</p>
+</section>
+</section>
+<section id="relaxation-method">
+<h2>Relaxation Method<a class="headerlink" href="#relaxation-method" title="Link to this heading"></a></h2>
+<p>All reference relaxations use:</p>
+<ul class="simple">
+<li><p>Interatomic potential: M3GNet</p></li>
+<li><p>Optimizer: FIRE</p></li>
+<li><p>Convergence criterion: maximum force below <code class="docutils literal notranslate"><span class="pre">fmax</span></code></p></li>
+</ul>
+<p>The relaxations are fully unconstrained
+(cell parameters and atomic positions).</p>
+</section>
+<section id="caching-strategy">
+<h2>Caching Strategy<a class="headerlink" href="#caching-strategy" title="Link to this heading"></a></h2>
+<p>If:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">skip_if_done</span> <span class="o">=</span> <span class="n">true</span>
+</pre></div>
+</div>
+<p>and the reference JSON already exists,
+this stage is skipped.</p>
+<p>This ensures deterministic behavior and avoids unnecessary recomputation.</p>
+</section>
+<section id="outputs">
+<h2>Outputs<a class="headerlink" href="#outputs" title="Link to this heading"></a></h2>
+<p>The file <code class="docutils literal notranslate"><span class="pre">reference_energies.json</span></code> contains:</p>
+<ul class="simple">
+<li><p>Timestamp</p></li>
+<li><p>Host species</p></li>
+<li><p>Supercell definition</p></li>
+<li><p>Relaxed pristine supercell energy</p></li>
+<li><p>Chemical potentials per element</p></li>
+<li><p>Metadata describing bulk relaxation conditions</p></li>
+<li><p>Reference source information</p></li>
+</ul>
+</section>
+<section id="notes-and-limitations">
+<h2>Notes and Limitations<a class="headerlink" href="#notes-and-limitations" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>This stage does not evaluate doped structures.</p></li>
+<li><p>Energies are ML-predicted (not DFT-level total energies).</p></li>
+<li><p>Reference phase selection affects chemical potentials.</p></li>
+<li><p>No finite-size corrections are applied.</p></li>
+<li><p>No charge-state corrections are included.</p></li>
+<li><p>No entropy or temperature effects are considered.</p></li>
+<li><p>No competing phase stability analysis is performed.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../input_file.html" class="btn btn-neutral float-left" title="Input File Specification (input.toml)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="generation.html" class="btn btn-neutral float-right" title="1. Structure Generation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

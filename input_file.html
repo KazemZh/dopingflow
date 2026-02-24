@@ -1,0 +1,455 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Input File Specification (input.toml) &mdash; dopingflow 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=01f34227"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="0. Reference Energy Construction" href="methods/references.html" />
+    <link rel="prev" title="Required Input Files" href="required_inputs.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            dopingflow
+              <img src="_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="workflow_overview.html">Workflow Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation_and_usage.html">Installation, Usage, and Outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="required_inputs.html">Required Input Files</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Input File Specification (input.toml)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#structure">[structure]</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#base-poscar-string">base_poscar (string)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#supercell-array-of-3-integers">supercell (array of 3 integers)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#outdir-string-default-random-structures">outdir (string, default: “random_structures”)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#doping">[doping]</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#host-species-string-required">host_species (string, required)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#mode-string">mode (string)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#max-dopants-total-integer">max_dopants_total (integer)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#dopant-elements-array-of-strings">dopant_elements (array of strings)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#required-elements-array-of-strings-optional">required_elements (array of strings, optional)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#total-levels-array-of-floats">total_levels (array of floats)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#per-dopant-levels-array-of-floats">per_dopant_levels (array of floats)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#generate">[generate]</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#seed-base-integer">seed_base (integer)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#poscar-order-array-of-strings-required">poscar_order (array of strings, required)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#scan">[scan]</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#poscar-in-string-default-poscar">poscar_in (string, default: “POSCAR”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#topk-integer">topk (integer)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#symprec-float">symprec (float)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#max-enum-integer">max_enum (integer)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#max-unique-integer">max_unique (integer)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#nproc-integer">nproc (integer)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#chunksize-integer">chunksize (integer)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#anion-species-array-of-strings">anion_species (array of strings)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#relax">[relax]</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#fmax-float">fmax (float)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#n-workers-integer">n_workers (integer)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#tf-threads-integer">tf_threads (integer)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#omp-threads-integer">omp_threads (integer)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#skip-if-done-boolean">skip_if_done (boolean)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#skip-candidate-if-done-boolean">skip_candidate_if_done (boolean)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#filter">[filter]</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id1">mode (string)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#window-mev-float">window_meV (float)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#max-candidates-integer">max_candidates (integer)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id2">skip_if_done (boolean)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#bandgap">[bandgap]</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id3">skip_if_done (boolean)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#cutoff-float">cutoff (float)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#max-neighbors-integer">max_neighbors (integer)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#formation">[formation]</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id4">skip_if_done (boolean)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#normalize-string">normalize (string)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#database-optional">[database] (optional)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#skip-if-done-boolean-default-true">skip_if_done (boolean, default: true)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#design-principles">Design Principles</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Stages</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="methods/references.html">0. Reference Energy Construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/generation.html">1. Structure Generation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/scanning.html">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/filtering.html">4. Relaxed-Candidate Filtering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/bandgap.html">5. Bandgap Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/formation_energy.html">6. Formation Energy Evaluation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/database.html">7. Database Collection</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="examples/explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api/modules.html">dopingflow</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Input File Specification (input.toml)</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/input_file.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="input-file-specification-input-toml">
+<span id="input-file-spec"></span><h1>Input File Specification (input.toml)<a class="headerlink" href="#input-file-specification-input-toml" title="Link to this heading"></a></h1>
+<p>The workflow is fully controlled through a single TOML configuration file.</p>
+<p>Each stage reads only the parameters relevant to it.
+All paths are interpreted relative to the directory containing <code class="docutils literal notranslate"><span class="pre">input.toml</span></code>.</p>
+<p>The following sections are supported:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">[structure]</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[doping]</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[generate]</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[scan]</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[relax]</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[filter]</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[bandgap]</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[formation]</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[database]</span></code> (optional)</p></li>
+</ul>
+<p>Not all sections are required for every stage. Each stage reads only what it needs.</p>
+<section id="structure">
+<h2>[structure]<a class="headerlink" href="#structure" title="Link to this heading"></a></h2>
+<p>Defines the base structure and global output directory.</p>
+<section id="base-poscar-string">
+<h3>base_poscar (string)<a class="headerlink" href="#base-poscar-string" title="Link to this heading"></a></h3>
+<p>Path to the pristine structure file (POSCAR format).</p>
+<p>Used in:
+- Step 00 (reference construction)
+- Step 01 (structure generation)</p>
+</section>
+<section id="supercell-array-of-3-integers">
+<h3>supercell (array of 3 integers)<a class="headerlink" href="#supercell-array-of-3-integers" title="Link to this heading"></a></h3>
+<p>Supercell expansion applied to the pristine structure:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">supercell</span> <span class="o">=</span> <span class="p">[</span><span class="n">nx</span><span class="p">,</span> <span class="n">ny</span><span class="p">,</span> <span class="n">nz</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>Used in:
+- Step 00
+- Step 01</p>
+</section>
+<section id="outdir-string-default-random-structures">
+<h3>outdir (string, default: “random_structures”)<a class="headerlink" href="#outdir-string-default-random-structures" title="Link to this heading"></a></h3>
+<p>Directory where all generated composition folders are written.</p>
+<p>This directory becomes the root for:
+- Step 01 outputs
+- Step 02–06 per-composition subfolders</p>
+</section>
+</section>
+<section id="doping">
+<h2>[doping]<a class="headerlink" href="#doping" title="Link to this heading"></a></h2>
+<p>Defines substitutional doping behavior.</p>
+<section id="host-species-string-required">
+<h3>host_species (string, required)<a class="headerlink" href="#host-species-string-required" title="Link to this heading"></a></h3>
+<p>Element symbol of the host species to be substituted.</p>
+<p>Used in:
+- Step 01 (generation)
+- Step 02 (scan)
+- Step 06 (formation)</p>
+</section>
+<section id="mode-string">
+<h3>mode (string)<a class="headerlink" href="#mode-string" title="Link to this heading"></a></h3>
+<p>Defines doping mode:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;explicit&quot;</span></code> — user provides exact compositions.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;enumerate&quot;</span></code> — workflow constructs compositions combinatorially.</p></li>
+</ul>
+</section>
+<section id="max-dopants-total-integer">
+<h3>max_dopants_total (integer)<a class="headerlink" href="#max-dopants-total-integer" title="Link to this heading"></a></h3>
+<p>Maximum number of distinct dopant species allowed per structure.</p>
+<p>Only enforced in enumerate mode.</p>
+</section>
+<section id="dopant-elements-array-of-strings">
+<h3>dopant_elements (array of strings)<a class="headerlink" href="#dopant-elements-array-of-strings" title="Link to this heading"></a></h3>
+<p>List of possible dopant species.</p>
+</section>
+<section id="required-elements-array-of-strings-optional">
+<h3>required_elements (array of strings, optional)<a class="headerlink" href="#required-elements-array-of-strings-optional" title="Link to this heading"></a></h3>
+<p>Subset of dopants that must appear in enumerated compositions.</p>
+</section>
+<section id="total-levels-array-of-floats">
+<h3>total_levels (array of floats)<a class="headerlink" href="#total-levels-array-of-floats" title="Link to this heading"></a></h3>
+<p>Allowed total dopant percentages (relative to host sites).</p>
+</section>
+<section id="per-dopant-levels-array-of-floats">
+<h3>per_dopant_levels (array of floats)<a class="headerlink" href="#per-dopant-levels-array-of-floats" title="Link to this heading"></a></h3>
+<p>Discrete allowed concentrations per dopant.</p>
+</section>
+</section>
+<section id="generate">
+<h2>[generate]<a class="headerlink" href="#generate" title="Link to this heading"></a></h2>
+<p>Controls structure writing and reproducibility (Step 01).</p>
+<section id="seed-base-integer">
+<h3>seed_base (integer)<a class="headerlink" href="#seed-base-integer" title="Link to this heading"></a></h3>
+<p>Base seed for deterministic random substitution.</p>
+<p>Ensures reproducible structure generation.</p>
+</section>
+<section id="poscar-order-array-of-strings-required">
+<h3>poscar_order (array of strings, required)<a class="headerlink" href="#poscar-order-array-of-strings-required" title="Link to this heading"></a></h3>
+<p>Defines element ordering in written POSCAR files.</p>
+<p>Must be non-empty.</p>
+<p>Used consistently in:
+- Step 01
+- Step 02
+- Step 03</p>
+</section>
+</section>
+<section id="scan">
+<h2>[scan]<a class="headerlink" href="#scan" title="Link to this heading"></a></h2>
+<p>Controls symmetry enumeration and single-point prescreening (Step 02).</p>
+<section id="poscar-in-string-default-poscar">
+<h3>poscar_in (string, default: “POSCAR”)<a class="headerlink" href="#poscar-in-string-default-poscar" title="Link to this heading"></a></h3>
+<p>Filename inside each composition folder used as enumeration input.</p>
+</section>
+<section id="topk-integer">
+<h3>topk (integer)<a class="headerlink" href="#topk-integer" title="Link to this heading"></a></h3>
+<p>Number of lowest-energy configurations retained.</p>
+</section>
+<section id="symprec-float">
+<h3>symprec (float)<a class="headerlink" href="#symprec-float" title="Link to this heading"></a></h3>
+<p>Tolerance passed to <code class="docutils literal notranslate"><span class="pre">SpacegroupAnalyzer</span></code> for symmetry detection.</p>
+</section>
+<section id="max-enum-integer">
+<h3>max_enum (integer)<a class="headerlink" href="#max-enum-integer" title="Link to this heading"></a></h3>
+<p>Maximum allowed number of raw combinatorial configurations.
+Prevents runaway combinatorics.</p>
+</section>
+<section id="max-unique-integer">
+<h3>max_unique (integer)<a class="headerlink" href="#max-unique-integer" title="Link to this heading"></a></h3>
+<p>Maximum allowed number of symmetry-unique configurations.</p>
+</section>
+<section id="nproc-integer">
+<h3>nproc (integer)<a class="headerlink" href="#nproc-integer" title="Link to this heading"></a></h3>
+<p>Number of parallel worker processes for energy evaluation.</p>
+</section>
+<section id="chunksize-integer">
+<h3>chunksize (integer)<a class="headerlink" href="#chunksize-integer" title="Link to this heading"></a></h3>
+<p>Chunk size used in multiprocessing pool.</p>
+</section>
+<section id="anion-species-array-of-strings">
+<h3>anion_species (array of strings)<a class="headerlink" href="#anion-species-array-of-strings" title="Link to this heading"></a></h3>
+<p>Species excluded from substitutional enumeration (e.g., oxygen).</p>
+</section>
+</section>
+<section id="relax">
+<h2>[relax]<a class="headerlink" href="#relax" title="Link to this heading"></a></h2>
+<p>Controls structural relaxation (Step 03).</p>
+<section id="fmax-float">
+<h3>fmax (float)<a class="headerlink" href="#fmax-float" title="Link to this heading"></a></h3>
+<p>Maximum force convergence criterion (eV/Å).</p>
+</section>
+<section id="n-workers-integer">
+<h3>n_workers (integer)<a class="headerlink" href="#n-workers-integer" title="Link to this heading"></a></h3>
+<p>Number of parallel relaxation workers.</p>
+</section>
+<section id="tf-threads-integer">
+<h3>tf_threads (integer)<a class="headerlink" href="#tf-threads-integer" title="Link to this heading"></a></h3>
+<p>TensorFlow intra/inter-op thread count per worker.</p>
+</section>
+<section id="omp-threads-integer">
+<h3>omp_threads (integer)<a class="headerlink" href="#omp-threads-integer" title="Link to this heading"></a></h3>
+<p>OpenMP thread count per worker.</p>
+</section>
+<section id="skip-if-done-boolean">
+<h3>skip_if_done (boolean)<a class="headerlink" href="#skip-if-done-boolean" title="Link to this heading"></a></h3>
+<p>If true, skip composition folder if <code class="docutils literal notranslate"><span class="pre">ranking_relax.csv</span></code> exists.</p>
+</section>
+<section id="skip-candidate-if-done-boolean">
+<h3>skip_candidate_if_done (boolean)<a class="headerlink" href="#skip-candidate-if-done-boolean" title="Link to this heading"></a></h3>
+<p>If true, skip candidate if <code class="docutils literal notranslate"><span class="pre">02_relax/meta.json</span></code> exists.</p>
+</section>
+</section>
+<section id="filter">
+<h2>[filter]<a class="headerlink" href="#filter" title="Link to this heading"></a></h2>
+<p>Controls candidate selection after relaxation (Step 04).</p>
+<section id="id1">
+<h3>mode (string)<a class="headerlink" href="#id1" title="Link to this heading"></a></h3>
+<p>Either:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;window&quot;</span></code> — keep structures within an energy window</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;topn&quot;</span></code> — keep lowest N structures</p></li>
+</ul>
+</section>
+<section id="window-mev-float">
+<h3>window_meV (float)<a class="headerlink" href="#window-mev-float" title="Link to this heading"></a></h3>
+<p>Energy window (meV above minimum) used when mode = <code class="docutils literal notranslate"><span class="pre">&quot;window&quot;</span></code>.</p>
+</section>
+<section id="max-candidates-integer">
+<h3>max_candidates (integer)<a class="headerlink" href="#max-candidates-integer" title="Link to this heading"></a></h3>
+<p>Number of candidates kept when mode = <code class="docutils literal notranslate"><span class="pre">&quot;topn&quot;</span></code>.</p>
+</section>
+<section id="id2">
+<h3>skip_if_done (boolean)<a class="headerlink" href="#id2" title="Link to this heading"></a></h3>
+<p>Skip filtering if output files already exist.</p>
+</section>
+</section>
+<section id="bandgap">
+<h2>[bandgap]<a class="headerlink" href="#bandgap" title="Link to this heading"></a></h2>
+<p>Controls ALIGNN bandgap prediction (Step 05).</p>
+<section id="id3">
+<h3>skip_if_done (boolean)<a class="headerlink" href="#id3" title="Link to this heading"></a></h3>
+<p>Skip bandgap calculation if summary file exists.</p>
+</section>
+<section id="cutoff-float">
+<h3>cutoff (float)<a class="headerlink" href="#cutoff-float" title="Link to this heading"></a></h3>
+<p>Radial cutoff for graph construction (Å).</p>
+</section>
+<section id="max-neighbors-integer">
+<h3>max_neighbors (integer)<a class="headerlink" href="#max-neighbors-integer" title="Link to this heading"></a></h3>
+<p>Maximum neighbors per atom in graph.</p>
+<p>Note:
+The ALIGNN model directory must be defined via environment variable:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ALIGNN_MODEL_DIR</span><span class="o">=/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">model</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="formation">
+<h2>[formation]<a class="headerlink" href="#formation" title="Link to this heading"></a></h2>
+<p>Controls formation energy calculation (Step 06).</p>
+<section id="id4">
+<h3>skip_if_done (boolean)<a class="headerlink" href="#id4" title="Link to this heading"></a></h3>
+<p>Skip formation calculation if output exists.</p>
+</section>
+<section id="normalize-string">
+<h3>normalize (string)<a class="headerlink" href="#normalize-string" title="Link to this heading"></a></h3>
+<p>Defines reported energy normalization:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;total&quot;</span></code> — total formation energy (eV)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;per_dopant&quot;</span></code> — eV per substituted dopant atom</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;per_host&quot;</span></code> — eV per atom in supercell</p></li>
+</ul>
+<p>Formation energies require:</p>
+<ul class="simple">
+<li><p>Step 00 reference construction completed</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">reference_structures/reference_energies.json</span></code></p></li>
+</ul>
+</section>
+</section>
+<section id="database-optional">
+<h2>[database] (optional)<a class="headerlink" href="#database-optional" title="Link to this heading"></a></h2>
+<p>Controls final database collection (Step 07).</p>
+<section id="skip-if-done-boolean-default-true">
+<h3>skip_if_done (boolean, default: true)<a class="headerlink" href="#skip-if-done-boolean-default-true" title="Link to this heading"></a></h3>
+<p>If true, do not overwrite existing <code class="docutils literal notranslate"><span class="pre">results_database.csv</span></code>.</p>
+<p>If this section is omitted, default behavior applies.</p>
+</section>
+</section>
+<section id="design-principles">
+<h2>Design Principles<a class="headerlink" href="#design-principles" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>All stages are deterministic given fixed input.</p></li>
+<li><p>All randomness is seed-controlled.</p></li>
+<li><p>Each stage can be skipped independently via <code class="docutils literal notranslate"><span class="pre">skip_if_done</span></code>.</p></li>
+<li><p>Each stage writes explicit metadata for full reproducibility.</p></li>
+<li><p>All outputs are composition-folder scoped except final database export.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="required_inputs.html" class="btn btn-neutral float-left" title="Required Input Files" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="methods/references.html" class="btn btn-neutral float-right" title="0. Reference Energy Construction" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

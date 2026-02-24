@@ -1,0 +1,320 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>1. Structure Generation &mdash; dopingflow 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="2. Symmetry-Reduced Energy Pre-screening (Scanning)" href="scanning.html" />
+    <link rel="prev" title="0. Reference Energy Construction" href="references.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            dopingflow
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../workflow_overview.html">Workflow Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation_and_usage.html">Installation, Usage, and Outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../required_inputs.html">Required Input Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file.html">Input File Specification (input.toml)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Stages</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="references.html">0. Reference Energy Construction</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">1. Structure Generation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#implementation">Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#purpose">Purpose</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#inputs">Inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#method-summary">Method Summary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#composition-handling">Composition Handling</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#requested-vs-effective-composition">Requested vs effective composition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#explicit-mode">Explicit mode</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#enumerate-mode">Enumerate mode</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#reproducible-random-substitution">Reproducible Random Substitution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#directory-naming-and-collision-handling">Directory Naming and Collision Handling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#poscar-species-ordering">POSCAR Species Ordering</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#outputs">Outputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#notes-and-limitations">Notes and Limitations</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="scanning.html">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="filtering.html">4. Relaxed-Candidate Filtering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bandgap.html">5. Bandgap Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="formation_energy.html">6. Formation Energy Evaluation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="database.html">7. Database Collection</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../api/modules.html">dopingflow</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">1. Structure Generation</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/methods/generation.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="structure-generation">
+<h1>1. Structure Generation<a class="headerlink" href="#structure-generation" title="Link to this heading"></a></h1>
+<section id="implementation">
+<h2>Implementation<a class="headerlink" href="#implementation" title="Link to this heading"></a></h2>
+<p>This stage is implemented in:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">src</span><span class="o">/</span><span class="n">dopingflow</span><span class="o">/</span><span class="n">generate</span><span class="o">.</span><span class="n">py</span>
+</pre></div>
+</div>
+<p>The public entry point is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">run_generate</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="purpose">
+<h2>Purpose<a class="headerlink" href="#purpose" title="Link to this heading"></a></h2>
+<p>This stage generates an initial set of doped structures starting from a pristine
+unit cell. The output is a directory of subfolders, each containing a VASP
+<code class="docutils literal notranslate"><span class="pre">POSCAR</span></code> and a small metadata file describing the effective composition and
+the random seed used for site selection.</p>
+<p>The generation step supports two workflows:</p>
+<ul class="simple">
+<li><p><strong>Explicit compositions</strong>: the user provides exact dopant percentages.</p></li>
+<li><p><strong>Enumerated compositions</strong>: the workflow constructs a systematic set of
+dopant combinations and doping levels under user-defined constraints.</p></li>
+</ul>
+</section>
+<section id="inputs">
+<h2>Inputs<a class="headerlink" href="#inputs" title="Link to this heading"></a></h2>
+<p>This stage uses settings from three sections of <code class="docutils literal notranslate"><span class="pre">input.toml</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">[structure]</span></code>: provides the pristine structure file and the supercell size.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[doping]</span></code>: defines the doping mode and composition rules.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[generate]</span></code>: controls structure-writing details and reproducible randomness.</p></li>
+</ul>
+</section>
+<section id="method-summary">
+<h2>Method Summary<a class="headerlink" href="#method-summary" title="Link to this heading"></a></h2>
+<ol class="arabic simple">
+<li><p>Read the pristine structure from <code class="docutils literal notranslate"><span class="pre">[structure].base_poscar</span></code>.</p></li>
+<li><p>Build the supercell using <code class="docutils literal notranslate"><span class="pre">[structure].supercell</span></code>.</p></li>
+<li><p>Identify all sites matching the substitution host species
+(<code class="docutils literal notranslate"><span class="pre">[doping].host_species</span></code>).</p></li>
+<li><p>For each requested composition:</p>
+<ol class="loweralpha simple">
+<li><p>Convert requested dopant percentages to integer substitution counts
+by rounding.</p></li>
+<li><p>Randomly choose host sites to substitute, using a deterministic seed.</p></li>
+<li><p>Optionally reorder species in the written POSCAR.</p></li>
+<li><p>Write <code class="docutils literal notranslate"><span class="pre">POSCAR</span></code> and <code class="docutils literal notranslate"><span class="pre">metadata.json</span></code> to an output subdirectory.</p></li>
+</ol>
+</li>
+</ol>
+<p>The output directory is <code class="docutils literal notranslate"><span class="pre">[structure].outdir</span></code> (default: <code class="docutils literal notranslate"><span class="pre">random_structures</span></code>).</p>
+</section>
+<section id="composition-handling">
+<h2>Composition Handling<a class="headerlink" href="#composition-handling" title="Link to this heading"></a></h2>
+<section id="requested-vs-effective-composition">
+<h3>Requested vs effective composition<a class="headerlink" href="#requested-vs-effective-composition" title="Link to this heading"></a></h3>
+<p>Doping levels are provided as percentages <em>relative to the number of host sites</em>
+in the generated supercell. Since the number of sites is discrete, requested
+percentages are converted to integer substitution counts by rounding.</p>
+<p>The workflow therefore distinguishes:</p>
+<ul class="simple">
+<li><p><strong>requested composition</strong>: the percentages from the input</p></li>
+<li><p><strong>effective composition</strong>: the percentages implied by the rounded integer counts</p></li>
+</ul>
+<p>If rounding changes any dopant level, warnings are reported and the <strong>effective</strong>
+composition is stored in the metadata.</p>
+<p>A basic consistency check is applied:</p>
+<ul class="simple">
+<li><p>the total number of substituted atoms may not exceed the number of host sites</p></li>
+<li><p>the total requested dopant percentage may not exceed 100%</p></li>
+</ul>
+</section>
+<section id="explicit-mode">
+<h3>Explicit mode<a class="headerlink" href="#explicit-mode" title="Link to this heading"></a></h3>
+<p>In explicit mode, each composition is provided directly by the user as a mapping
+<code class="docutils literal notranslate"><span class="pre">element</span> <span class="pre">-&gt;</span> <span class="pre">percent</span></code>. Each composition produces exactly one structure.</p>
+<p>This mode is recommended when:</p>
+<ul class="simple">
+<li><p>specific compositions are already known or desired</p></li>
+<li><p>only a small number of target compositions are needed</p></li>
+</ul>
+</section>
+<section id="enumerate-mode">
+<h3>Enumerate mode<a class="headerlink" href="#enumerate-mode" title="Link to this heading"></a></h3>
+<p>In enumerate mode, the workflow generates composition dictionaries automatically
+from:</p>
+<ul class="simple">
+<li><p>a list of possible dopant species</p></li>
+<li><p>an optional list of dopants that must appear</p></li>
+<li><p>a set of allowed total dopant levels</p></li>
+<li><p>a set of discrete per-dopant levels</p></li>
+</ul>
+<p>The workflow enumerates combinations of distinct dopants of size:</p>
+<div class="math notranslate nohighlight">
+\[k \in \{1, \dots, k_{\max}\}\]</div>
+<p>where <span class="math notranslate nohighlight">\(k_{\max}\)</span> is controlled by the input parameter
+<code class="docutils literal notranslate"><span class="pre">[doping].max_dopants_total</span></code>.</p>
+<p><strong>Interpretation</strong>:</p>
+<ul class="simple">
+<li><p>you may provide many candidate dopant elements in the input</p></li>
+<li><p>but each generated structure contains at most <code class="docutils literal notranslate"><span class="pre">max_dopants_total</span></code> distinct dopant species
+<em>when using enumerate mode</em></p></li>
+</ul>
+<p>(Explicit mode is not inherently limited unless the user adopts the same constraint.)</p>
+</section>
+</section>
+<section id="reproducible-random-substitution">
+<h2>Reproducible Random Substitution<a class="headerlink" href="#reproducible-random-substitution" title="Link to this heading"></a></h2>
+<p>The actual substitutional sites are selected randomly, but deterministically:</p>
+<ul class="simple">
+<li><p>a <strong>composition tag</strong> is constructed from the effective composition</p></li>
+<li><p>a stable seed is derived from the tag and a base seed
+(<code class="docutils literal notranslate"><span class="pre">[generate].seed_base</span></code>)</p></li>
+</ul>
+<p>This ensures that rerunning the workflow with unchanged input produces identical
+structures, while still providing randomized site selection.</p>
+</section>
+<section id="directory-naming-and-collision-handling">
+<h2>Directory Naming and Collision Handling<a class="headerlink" href="#directory-naming-and-collision-handling" title="Link to this heading"></a></h2>
+<p>Each generated structure is written to:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">&lt;</span><span class="n">outdir</span><span class="o">&gt;/&lt;</span><span class="n">composition_tag</span><span class="o">&gt;/</span><span class="n">POSCAR</span>
+<span class="o">&lt;</span><span class="n">outdir</span><span class="o">&gt;/&lt;</span><span class="n">composition_tag</span><span class="o">&gt;/</span><span class="n">metadata</span><span class="o">.</span><span class="n">json</span>
+</pre></div>
+</div>
+<p>The folder tag is constructed from the <strong>effective</strong> composition. If two different
+requested compositions round to the same effective composition, a suffix is added:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">&lt;</span><span class="n">tag</span><span class="o">&gt;</span><span class="n">__v2</span><span class="p">,</span> <span class="o">&lt;</span><span class="n">tag</span><span class="o">&gt;</span><span class="n">__v3</span><span class="p">,</span> <span class="o">...</span>
+</pre></div>
+</div>
+<p>This guarantees that all generated structures are preserved.</p>
+</section>
+<section id="poscar-species-ordering">
+<h2>POSCAR Species Ordering<a class="headerlink" href="#poscar-species-ordering" title="Link to this heading"></a></h2>
+<p>To control the species order in the written POSCAR, you may provide:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">generate</span><span class="p">]</span>
+<span class="n">poscar_order</span> <span class="o">=</span> <span class="p">[</span><span class="o">...</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>If this list is empty, the structure is written using pymatgen’s default ordering.
+If non-empty, sites are reordered to match the given preference (and any remaining
+species are appended).</p>
+</section>
+<section id="outputs">
+<h2>Outputs<a class="headerlink" href="#outputs" title="Link to this heading"></a></h2>
+<p>For each generated structure:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">POSCAR</span></code>: doped supercell structure</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">metadata.json</span></code>: provenance information, including:</p>
+<ul>
+<li><p>host species and number of host sites</p></li>
+<li><p>requested and effective compositions</p></li>
+<li><p>rounded substitution counts</p></li>
+<li><p>seed used for deterministic substitution</p></li>
+<li><p>composition tag and input file name</p></li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="notes-and-limitations">
+<h2>Notes and Limitations<a class="headerlink" href="#notes-and-limitations" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>This stage performs <strong>structure generation only</strong> and does not evaluate stability.</p></li>
+<li><p>Rounding is unavoidable for small supercells; larger supercells reduce rounding error.</p></li>
+<li><p>Enumerated composition counts can grow combinatorially with the number of dopants and levels;
+users should choose constraints accordingly.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="references.html" class="btn btn-neutral float-left" title="0. Reference Energy Construction" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="scanning.html" class="btn btn-neutral float-right" title="2. Symmetry-Reduced Energy Pre-screening (Scanning)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

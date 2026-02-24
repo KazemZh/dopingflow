@@ -1,0 +1,356 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>7. Database Collection &mdash; dopingflow 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Explicit Example — Single Target Composition" href="../examples/explicit_single.html" />
+    <link rel="prev" title="6. Formation Energy Evaluation" href="formation_energy.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            dopingflow
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../workflow_overview.html">Workflow Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation_and_usage.html">Installation, Usage, and Outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../required_inputs.html">Required Input Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file.html">Input File Specification (input.toml)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Stages</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="references.html">0. Reference Energy Construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generation.html">1. Structure Generation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scanning.html">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="filtering.html">4. Relaxed-Candidate Filtering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bandgap.html">5. Bandgap Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="formation_energy.html">6. Formation Energy Evaluation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">7. Database Collection</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#implementation">Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#purpose">Purpose</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#inputs">Inputs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#composition-level-folder-level">Composition-level (folder-level)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#candidate-level">Candidate-level</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#selection-policy">Selection Policy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#method-summary">Method Summary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#database-schema">Database Schema</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#composition-level-fields">Composition-level fields</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#candidate-level-identity">Candidate-level identity</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#relax-filtered-fields">Relax (filtered) fields</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#scan-fields">Scan fields</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#relax-meta-fields">Relax (meta) fields</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#bandgap-fields">Bandgap fields</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#formation-energy-fields">Formation-energy fields</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#outputs">Outputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#reproducibility-and-skipping">Reproducibility and Skipping</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#notes-and-limitations">Notes and Limitations</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Examples</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../api/modules.html">dopingflow</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">7. Database Collection</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/methods/database.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="database-collection">
+<h1>7. Database Collection<a class="headerlink" href="#database-collection" title="Link to this heading"></a></h1>
+<section id="implementation">
+<h2>Implementation<a class="headerlink" href="#implementation" title="Link to this heading"></a></h2>
+<p>This stage is implemented in:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">src</span><span class="o">/</span><span class="n">dopingflow</span><span class="o">/</span><span class="n">collect</span><span class="o">.</span><span class="n">py</span>
+</pre></div>
+</div>
+<p>The public entry point is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">run_collect</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="purpose">
+<h2>Purpose<a class="headerlink" href="#purpose" title="Link to this heading"></a></h2>
+<p>This stage consolidates results from previous workflow stages into a <strong>single flat CSV</strong>
+that can be used as a lightweight database for downstream analysis, plotting, and reporting.</p>
+<p>The database is written to the workflow root as:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">results_database</span><span class="o">.</span><span class="n">csv</span>
+</pre></div>
+</div>
+<p>Only <strong>filtered / selected candidates</strong> are included (strict policy), so the database
+represents the subset of structures that passed your selection criteria.</p>
+</section>
+<section id="inputs">
+<h2>Inputs<a class="headerlink" href="#inputs" title="Link to this heading"></a></h2>
+<p>This stage uses settings from two sections of <code class="docutils literal notranslate"><span class="pre">input.toml</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">[structure]</span></code>: provides the workflow output directory containing composition folders.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[database]</span></code>: controls skipping/overwriting of the database CSV.</p></li>
+</ul>
+<p>It expects the standard workflow outputs inside each composition folder (if present):</p>
+<section id="composition-level-folder-level">
+<h3>Composition-level (folder-level)<a class="headerlink" href="#composition-level-folder-level" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">metadata.json</span></code> (from Step 01 generation)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">selected_candidates.txt</span></code> (from Step 04 filtering) <strong>preferred</strong></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ranking_relax_filtered.csv</span></code> (from Step 04 filtering) <strong>fallback</strong></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ranking_scan.csv</span></code> (from Step 02 scanning)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">bandgap_alignn_summary.csv</span></code> (from Step 05 bandgap prediction)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">formation_energies.csv</span></code> (from Step 06 formation energies)</p></li>
+</ul>
+</section>
+<section id="candidate-level">
+<h3>Candidate-level<a class="headerlink" href="#candidate-level" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">candidate_*/02_relax/meta.json</span></code> (from Step 03 relaxation)</p></li>
+</ul>
+</section>
+</section>
+<section id="selection-policy">
+<h2>Selection Policy<a class="headerlink" href="#selection-policy" title="Link to this heading"></a></h2>
+<p>This stage follows a <strong>strict selection rule</strong>: it will never include unfiltered candidates.</p>
+<p>Selection priority within each composition folder:</p>
+<ol class="arabic simple">
+<li><p>If <code class="docutils literal notranslate"><span class="pre">selected_candidates.txt</span></code> exists:
+use exactly those candidate names (one per line).</p></li>
+<li><p>Else, if <code class="docutils literal notranslate"><span class="pre">ranking_relax_filtered.csv</span></code> exists:
+include the candidates listed there.</p></li>
+<li><p>Else:
+the folder is skipped (no candidates are collected).</p></li>
+</ol>
+<p>This ensures that the database represents only the candidates you explicitly kept
+after filtering.</p>
+</section>
+<section id="method-summary">
+<h2>Method Summary<a class="headerlink" href="#method-summary" title="Link to this heading"></a></h2>
+<p>For each composition folder inside <code class="docutils literal notranslate"><span class="pre">[structure].outdir</span></code>:</p>
+<ol class="arabic simple">
+<li><p>Determine the candidate list using the selection policy above.</p></li>
+<li><p>Load composition metadata from <code class="docutils literal notranslate"><span class="pre">metadata.json</span></code> (if available).</p></li>
+<li><p>Load per-stage summary tables (if available):</p>
+<ul class="simple">
+<li><p>scan ranking table</p></li>
+<li><p>filtered ranking table</p></li>
+<li><p>bandgap summary table</p></li>
+<li><p>formation energy table</p></li>
+</ul>
+</li>
+<li><p>For each selected candidate:</p>
+<ol class="loweralpha simple">
+<li><p>Read relaxed-energy metadata from <code class="docutils literal notranslate"><span class="pre">candidate_*/02_relax/meta.json</span></code> (if available).</p></li>
+<li><p>Combine composition-level and candidate-level information into one row.</p></li>
+</ol>
+</li>
+<li><p>Write all rows to:</p></li>
+</ol>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">results_database</span><span class="o">.</span><span class="n">csv</span>
+</pre></div>
+</div>
+</section>
+<section id="database-schema">
+<h2>Database Schema<a class="headerlink" href="#database-schema" title="Link to this heading"></a></h2>
+<p>The output database contains the following columns:</p>
+<section id="composition-level-fields">
+<h3>Composition-level fields<a class="headerlink" href="#composition-level-fields" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">composition_tag</span></code>:
+Folder name of the composition (effective tag used by the generator).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">requested_index</span></code>:
+Index of the composition in the generator loop (if available).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">requested_pct_json</span></code>:
+JSON string of requested dopant percentages (if available).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">effective_pct_json</span></code>:
+JSON string of effective dopant percentages after rounding (if available).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rounded_counts_json</span></code>:
+JSON string of rounded integer substitution counts (if available).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">host_species</span></code>:
+Host species used for substitution (from generation metadata).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">n_host</span></code>:
+Number of host sites in the supercell (from generation metadata).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">supercell_json</span></code>:
+JSON string of the supercell dimensions (if available).</p></li>
+</ul>
+</section>
+<section id="candidate-level-identity">
+<h3>Candidate-level identity<a class="headerlink" href="#candidate-level-identity" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">candidate</span></code>:
+Candidate folder name (e.g., <code class="docutils literal notranslate"><span class="pre">candidate_001</span></code>).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">candidate_path</span></code>:
+Absolute path to the candidate folder (useful for linking back to files).</p></li>
+</ul>
+</section>
+<section id="relax-filtered-fields">
+<h3>Relax (filtered) fields<a class="headerlink" href="#relax-filtered-fields" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">rank_relax_filtered</span></code>:
+Rank within the filtered set (if available).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">E_relaxed_eV_filtered</span></code>:
+Relaxed energy read from the filtered ranking table (if available).</p></li>
+</ul>
+</section>
+<section id="scan-fields">
+<h3>Scan fields<a class="headerlink" href="#scan-fields" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">rank_scan</span></code>:
+Single-point rank from scanning stage (if available).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">E_scan_eV</span></code>:
+Single-point energy from scanning stage (if available).</p></li>
+</ul>
+</section>
+<section id="relax-meta-fields">
+<h3>Relax (meta) fields<a class="headerlink" href="#relax-meta-fields" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">E_relaxed_eV</span></code>:
+Relaxed energy extracted from <code class="docutils literal notranslate"><span class="pre">candidate_*/02_relax/meta.json</span></code> (if available).</p></li>
+</ul>
+</section>
+<section id="bandgap-fields">
+<h3>Bandgap fields<a class="headerlink" href="#bandgap-fields" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">bandgap_eV</span></code>:
+Predicted bandgap value from the bandgap summary (if available).</p></li>
+</ul>
+</section>
+<section id="formation-energy-fields">
+<h3>Formation-energy fields<a class="headerlink" href="#formation-energy-fields" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">E_form_eV_total</span></code>:
+Total formation energy in eV (if available).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">E_form_norm</span></code>:
+Normalized formation energy (as written by Step 06, depends on your normalization mode).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">n_dopant_atoms</span></code>:
+Total dopant atoms used in the candidate (if available).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dopant_counts</span></code>:
+Compact dopant-count string from Step 06 (if available).</p></li>
+</ul>
+</section>
+</section>
+<section id="outputs">
+<h2>Outputs<a class="headerlink" href="#outputs" title="Link to this heading"></a></h2>
+<p>This stage writes one file in the workflow root:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">results_database</span><span class="o">.</span><span class="n">csv</span>
+</pre></div>
+</div>
+<p>Each row corresponds to <strong>one selected candidate</strong> in <strong>one composition folder</strong>.</p>
+</section>
+<section id="reproducibility-and-skipping">
+<h2>Reproducibility and Skipping<a class="headerlink" href="#reproducibility-and-skipping" title="Link to this heading"></a></h2>
+<p>If:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">database</span><span class="p">]</span><span class="o">.</span><span class="n">skip_if_done</span> <span class="o">=</span> <span class="n">true</span>
+</pre></div>
+</div>
+<p>and <code class="docutils literal notranslate"><span class="pre">results_database.csv</span></code> already exists, the stage is skipped.</p>
+<p>Set <code class="docutils literal notranslate"><span class="pre">skip_if_done</span> <span class="pre">=</span> <span class="pre">false</span></code> to overwrite and regenerate the database.</p>
+</section>
+<section id="notes-and-limitations">
+<h2>Notes and Limitations<a class="headerlink" href="#notes-and-limitations" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>The database is intentionally flat and file-based; it is designed for quick use
+in pandas, spreadsheets, or plotting scripts.</p></li>
+<li><p>Missing upstream files are handled gracefully: columns are left empty/<code class="docutils literal notranslate"><span class="pre">None</span></code>
+when a stage output is unavailable.</p></li>
+<li><p>Only the filtered/selected candidate subset is included by design.
+If you later want a “full database” including all candidates, the selection
+policy can be relaxed as an optional mode.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="formation_energy.html" class="btn btn-neutral float-left" title="6. Formation Energy Evaluation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../examples/explicit_single.html" class="btn btn-neutral float-right" title="Explicit Example — Single Target Composition" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
