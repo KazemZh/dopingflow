@@ -22,7 +22,7 @@ The full documentation is available in multiple formats:
   https://kazemzh.github.io/dopingflow/
 
 - 📄 **User Guide (PDF):**  
-  👉 [Download dopingflow User Guide](dopingflow-user-guide.pdf)
+  [Download dopingflow User Guide](dopingflow-user-guide.pdf)
 
 ------------------------------------------------------------------------
 
