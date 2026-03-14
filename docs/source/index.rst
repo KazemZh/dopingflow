@@ -1,29 +1,31 @@
-.. dopingflow documentation master file, created by
-   sphinx-quickstart on Thu Feb 12 21:28:19 2026.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
-dopingflow documentation
-========================
-
-Add your content using ``reStructuredText`` syntax. See the
-`reStructuredText <https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html>`_
-documentation for details.
+.. image:: _static/logo.png
+   :align: center
+   :width: 600px
 
 
-========================
-
-Add your content using ``reStructuredText`` syntax. See the
-`reStructuredText <https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html>`_
-documentation for details.
+dopingflow
+==========
 
 
-Welcome to dopingflow's documentation
-======================================
+ML-Driven High-Throughput Doping Workflow for Oxide Materials
+--------------------------------------------------------------
+
+The workflow integrates:
+
+- Structure generation and symmetry-aware enumeration
+- ML-based relaxation and screening (M3GNet, ALIGNN)
+- Formation energy calculations using configurable thermodynamic references
+- Automated database collection
+- Fully reproducible, stage-isolated execution
+
+All stages are controlled through a single ``input.toml`` file.
+
+
+User Guide
+==========
 
 .. toctree::
    :maxdepth: 2
-   :caption: User Guide
 
    workflow_overview
    installation_and_usage
@@ -31,9 +33,14 @@ Welcome to dopingflow's documentation
    input_file
 
 
+Workflow Stages
+===============
+
+The workflow is organized into modular stages.  
+Each stage can be executed independently.
+
 .. toctree::
    :maxdepth: 1
-   :caption: Stages
 
    methods/references
    methods/generation
@@ -45,9 +52,11 @@ Welcome to dopingflow's documentation
    methods/database
 
 
+Examples
+========
+
 .. toctree::
    :maxdepth: 1
-   :caption: Examples
 
    examples/explicit_single
    examples/explicit_batch
@@ -55,8 +64,12 @@ Welcome to dopingflow's documentation
    examples/smoke_test
 
 
+API Reference
+=============
+
 .. toctree::
    :maxdepth: 1
-   :caption: API Reference
 
    api/modules
+
+===== END =====

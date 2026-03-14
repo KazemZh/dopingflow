@@ -32,16 +32,23 @@ CHOICES = {
 
 DEFAULTS = {
     "structure": {
-        "base_poscar": "reference_structures/base.POSCAR",
-        "supercell": [3, 1, 1],
         "outdir": "random_structures",
     },
     "references": {
-        "source": "local",
-        "bulk_dir": "reference_structures/",
+        "reference_mode": "metal",
+        "host": "SnO2",
+        "host_dir": "reference_structures/oxides",
+        "supercell": [5, 2, 1],
+        "metal_ref": ["Sn", "Sb", "Ti", "Zr", "Nb"],
+        "metals_dir": "reference_structures/metals",
+        "oxides_ref": ["Sb2O5", "TiO2", "ZrO2", "Nb2O5"],
+        "oxides_dir": "reference_structures/oxides",
+        "gas_ref": "O2",
+        "gas_dir": "reference_structures/gas",
+        "oxygen_mode": "O-rich",
+        "muO_shift_ev": 0.0,
         "fmax": 0.02,
         "skip_if_done": True,
-        # "mp_ids": {},  # optional dict
     },
     "generate": {
         "poscar_order": ["Zr", "Ti", "Sb", "Sn", "O"],
@@ -75,6 +82,7 @@ DEFAULTS = {
         "tf_threads": 1,
         "omp_threads": 1,
         "skip_if_done": True,
+        "skip_candidate_if_done": True,
     },
     "filter": {
         "mode": "window",

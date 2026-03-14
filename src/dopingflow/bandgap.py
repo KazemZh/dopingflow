@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import time
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -210,29 +211,66 @@ def _run_folder(folder: Path, cfg: BandgapConfig, model, cfg_path: Path, ckpt_pa
         cand_dir = poscar_path.parents[1]  # candidate_XXX
         cand_name = cand_dir.name
 
-        jat = _poscar_to_jarvis_atoms(poscar_path)
+        meta_path = cand_dir / "03_band" / "meta.json"
 
-        t0 = time.time()
-        bg = _predict_bandgap(model, jat, cutoff=cfg.cutoff, max_neighbors=cfg.max_neighbors)
-        wall_s = time.time() - t0
+        # --- Candidate-level skip (and reuse existing bandgap if possible) ---
+        if cfg.skip_if_done and meta_path.exists():
+            try:
+                prev = json.loads(meta_path.read_text(encoding="utf-8"))
+                bg_prev = float(prev.get("bandgap_eV_ALIGNN_MBJ", float("nan")))
+                rows.append((cand_name, bg_prev))
+                log.info("%s/%s: SKIP bandgap (meta exists) bg=%.4f eV", folder.name, cand_name, bg_prev)
+                continue
+            except Exception:
+                log.info("%s/%s: meta exists but unreadable -> recompute", folder.name, cand_name)
 
-        log.info("%s/%s: bandgap = %.4f eV", folder.name, cand_name, bg)
+        # --- Compute bandgap with per-candidate error isolation ---
+        try:
+            jat = _poscar_to_jarvis_atoms(poscar_path)
 
-        extra = {
-            "model_key": "jv_mbj_bandgap_alignn (local)",
-            "model_dir": str(model_dir),
-            "config_json": str(cfg_path),
-            "checkpoint": str(ckpt_path),
-            "input_poscar": str(poscar_path),
-            "n_atoms": int(len(jat.elements)),
-            "composition": dict(jat.composition.to_dict()),
-            "graph_params": {"cutoff": float(cfg.cutoff), "max_neighbors": int(cfg.max_neighbors)},
-            "walltime_s": float(wall_s),
-        }
-        _write_band_meta(cand_dir, bg, extra)
-        rows.append((cand_name, bg))
+            t0 = time.time()
+            bg = _predict_bandgap(model, jat, cutoff=cfg.cutoff, max_neighbors=cfg.max_neighbors)
+            wall_s = time.time() - t0
 
-    rows_sorted = sorted(rows, key=lambda x: x[1])
+            log.info("%s/%s: bandgap = %.4f eV", folder.name, cand_name, bg)
+
+            extra = {
+                "status": "ok",
+                "model_key": "jv_mbj_bandgap_alignn (local)",
+                "model_dir": str(model_dir),
+                "config_json": str(cfg_path),
+                "checkpoint": str(ckpt_path),
+                "input_poscar": str(poscar_path),
+                "n_atoms": int(len(jat.elements)),
+                "composition": dict(jat.composition.to_dict()),
+                "graph_params": {"cutoff": float(cfg.cutoff), "max_neighbors": int(cfg.max_neighbors)},
+                "walltime_s": float(wall_s),
+            }
+            _write_band_meta(cand_dir, bg, extra)
+            rows.append((cand_name, bg))
+
+        except Exception as e:
+            log.warning("%s/%s: FAIL bandgap: %s", folder.name, cand_name, repr(e))
+
+            # write fail meta (keeps pipeline robust / debuggable)
+            _write_band_meta(
+                cand_dir,
+                float("nan"),
+                {
+                    "status": "fail",
+                    "error": repr(e),
+                    "input_poscar": str(poscar_path),
+                    "graph_params": {"cutoff": float(cfg.cutoff), "max_neighbors": int(cfg.max_neighbors)},
+                    "model_key": "jv_mbj_bandgap_alignn (local)",
+                    "model_dir": str(model_dir),
+                    "config_json": str(cfg_path),
+                    "checkpoint": str(ckpt_path),
+                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                },
+            )
+            rows.append((cand_name, float("nan")))
+
+    rows_sorted = sorted(rows, key=lambda x: (math.isnan(x[1]), x[1]))
     with out_csv.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["candidate", "bandgap_eV_ALIGNN_MBJ"])

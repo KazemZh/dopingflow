@@ -70,6 +70,145 @@ def _load_ref_json(root: Path) -> dict[str, Any]:
     return json.loads(p.read_text(encoding="utf-8"))
 
 
+def _get_pristine_energy_and_natoms(ref: dict[str, Any]) -> tuple[float, int]:
+    """
+    Supports:
+      - current refs-build schema: ref["host"]["E_supercell_total_eV"], ref["host"]["n_atoms_supercell"]
+      - optional future schema:   ref["pristine"]["E_pristine_eV"], ref["pristine"]["n_atoms_supercell"]
+    """
+    if isinstance(ref.get("pristine"), dict):
+        p = ref["pristine"]
+        E = float(p["E_pristine_eV"])
+        n = int(p["n_atoms_supercell"])
+        return E, n
+
+    if isinstance(ref.get("host"), dict):
+        h = ref["host"]
+        E = float(h["E_supercell_total_eV"])
+        n = int(h["n_atoms_supercell"])
+        return E, n
+
+    raise KeyError("reference_energies.json missing 'host' or 'pristine' block.")
+
+
+def _build_mu_from_refs(ref: dict[str, Any], *, host_formula: str) -> tuple[str, dict[str, float]]:
+    """
+    Build chemical potentials from reference_energies.json, depending on refs-build reference_mode.
+
+    metal:
+      mu[element] = E_per_atom_eV from ref["references"][element] where type=="metal"
+
+    oxide:
+      mu_O from O2:
+        mu_O = 0.5 * E_total_eV(O2) + muO_shift_ev
+      mu_cation from oxide M_a O_b:
+        mu_M = (E_per_formula_unit - b*mu_O)/a
+
+      mu_host (host species) is computed from host oxide (host_formula, e.g. SnO2) using
+      host unit-cell energy to derive E_per_formula_unit.
+    """
+    ref_mode = str(ref.get("reference_mode", "metal")).strip().lower()
+    if ref_mode not in {"metal", "oxide"}:
+        raise ValueError(f"Invalid reference_mode in reference JSON: {ref_mode!r}")
+
+    refs = ref.get("references", {}) or {}
+
+    # -----------------
+    # metal mode
+    # -----------------
+    if ref_mode == "metal":
+        mu: dict[str, float] = {}
+        for name, entry in refs.items():
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("type") != "metal":
+                continue
+            if "E_per_atom_eV" in entry:
+                mu[str(name)] = float(entry["E_per_atom_eV"])
+        return ref_mode, mu
+
+    # -----------------
+    # oxide mode
+    # -----------------
+    oxide_mode = ref.get("oxide_mode", {}) or {}
+
+    gas_ref_name = str(oxide_mode.get("gas_ref", "O2")).strip()
+    gas = refs.get(gas_ref_name, None)
+    if not isinstance(gas, dict) or "E_total_eV" not in gas:
+        raise KeyError(f"oxide mode: missing gas reference '{gas_ref_name}' with E_total_eV in references.")
+
+    muO_shift = float(oxide_mode.get("muO_shift_ev", 0.0))
+    # Your refs JSON stores E_total_eV for the molecule; O2 has 2 atoms.
+    mu_O = 0.5 * float(gas["E_total_eV"]) + muO_shift
+
+    def mu_from_oxide(oxide_entry: dict[str, Any]) -> tuple[str, float]:
+        if "E_per_formula_unit_eV" not in oxide_entry:
+            raise KeyError("oxide entry missing E_per_formula_unit_eV")
+        if "reduced_composition" not in oxide_entry:
+            raise KeyError("oxide entry missing reduced_composition")
+
+        comp = oxide_entry["reduced_composition"]
+        if not isinstance(comp, dict) or "O" not in comp:
+            raise KeyError("oxide entry reduced_composition must include O")
+
+        n_O = float(comp["O"])
+        cations = [k for k in comp.keys() if k != "O"]
+        if len(cations) != 1:
+            raise ValueError(f"Only simple binary oxides are supported, got: {comp}")
+
+        el = str(cations[0])
+        n_el = float(comp[el])
+        E_fu = float(oxide_entry["E_per_formula_unit_eV"])
+
+        mu_el = (E_fu - n_O * mu_O) / n_el
+        return el, float(mu_el)
+
+    mu: dict[str, float] = {"O": float(mu_O)}
+
+    # dopant cations from oxide references listed by refs-build
+    for ox_name in oxide_mode.get("oxides_ref", []) or []:
+        ox_name = str(ox_name).strip()
+        ox_entry = refs.get(ox_name, None)
+        if not isinstance(ox_entry, dict):
+            raise KeyError(f"Missing oxide reference entry: {ox_name}")
+        el, mu_el = mu_from_oxide(ox_entry)
+        mu[el] = mu_el
+
+    # host cation from host oxide formula + host unit-cell energy
+    from pymatgen.core.composition import Composition
+
+    host_comp = Composition(host_formula).reduced_composition.as_dict()
+    if "O" not in host_comp:
+        raise ValueError(f"Host formula must be an oxide containing O, got: {host_formula}")
+
+    host_block = ref.get("host", {}) or {}
+    if "E_unit_total_eV" not in host_block or "n_atoms_unit" not in host_block:
+        raise KeyError("reference JSON missing host.E_unit_total_eV or host.n_atoms_unit (needed for oxide mode).")
+
+    E_unit_total = float(host_block["E_unit_total_eV"])
+    n_atoms_unit = int(host_block["n_atoms_unit"])
+
+    atoms_per_fu = sum(float(v) for v in host_comp.values())
+    n_fu = float(n_atoms_unit) / float(atoms_per_fu)
+    if n_fu <= 0:
+        raise ValueError("Could not determine number of formula units in host unit cell.")
+
+    E_fu_host = E_unit_total / n_fu
+
+    n_O_host = float(host_comp["O"])
+    cations_host = [k for k in host_comp.keys() if k != "O"]
+    if len(cations_host) != 1:
+        raise ValueError(f"Host oxide must be binary in this model, got: {host_comp}")
+
+    host_el = str(cations_host[0])
+    n_host_el = float(host_comp[host_el])
+
+    mu_host = (E_fu_host - n_O_host * mu_O) / n_host_el
+    mu[host_el] = float(mu_host)
+
+    return ref_mode, mu
+
+
 def _read_selected_candidates(path: Path) -> List[str]:
     out: List[str] = []
     for ln in path.read_text(encoding="utf-8").splitlines():
@@ -126,7 +265,7 @@ def _compute_substitution_dopant_counts(
             continue
         if el in anions:
             continue
-        dopants[el] = int(n)
+        dopants[str(el)] = int(n)
     return dopants
 
 
@@ -142,7 +281,7 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
 
     Reads:
       - E_doped from candidate_*/02_relax/meta.json (energy_relaxed_eV)
-      - mu, E_pristine from reference_structures/reference_energies.json
+      - references from reference_structures/reference_energies.json
 
     Writes per composition folder:
       - formation_energies.csv
@@ -151,12 +290,22 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
     cfg = _parse_formation_config(raw_cfg, root)
     ref = _load_ref_json(root)
 
-    E_pristine = float(ref["pristine"]["E_pristine_eV"])
-    mu = {k: float(v) for k, v in (ref.get("mu_eV_per_atom", {}) or {}).items()}
+    # pristine host energy (supercell total) + natoms (for per_host normalization)
+    E_pristine, n_atoms_supercell = _get_pristine_energy_and_natoms(ref)
+
+    # Determine reference mode + build mu
+    host_formula = str((ref.get("host") or {}).get("name", "")).strip()
+    if not host_formula:
+        raise KeyError("reference JSON missing host.name (needed to build mu in oxide mode).")
+
+    ref_mode, mu = _build_mu_from_refs(ref, host_formula=host_formula)
+    log.info("Formation reference mode: %s", ref_mode)
+
     mu_host = mu.get(cfg.host_species, None)
     if mu_host is None:
         raise KeyError(
-            f"Reference mu missing for host_species='{cfg.host_species}' in {REF_JSON}."
+            f"Reference mu missing for host_species='{cfg.host_species}' in {REF_JSON} "
+            f"(reference_mode={ref_mode})."
         )
 
     if not cfg.outdir.exists():
@@ -194,7 +343,7 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
             dop_counts = _compute_substitution_dopant_counts(counts, cfg.host_species, cfg.anion_species)
             n_dop_total = sum(dop_counts.values())
 
-            # formation energy correction term
+            # formation energy correction term: sum_d n_d (mu_host - mu_d)
             corr = 0.0
             missing: List[str] = []
             for d, n in dop_counts.items():
@@ -213,12 +362,16 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
             if cfg.normalize == "total":
                 E_report = E_form_total
                 norm_tag = "total_eV"
+
             elif cfg.normalize == "per_host":
-                # NOTE: this is the *supercell total atoms* (as in your original script).
-                # If you later want exact host-sublattice size, we can store it in refs JSON.
-                n_atoms_supercell = int(ref["pristine"]["n_atoms_supercell"])
+                if n_atoms_supercell <= 0:
+                    raise KeyError(
+                        "reference JSON missing host/pristine n_atoms_supercell "
+                        "(needed for normalize='per_host')."
+                    )
                 E_report = E_form_total / float(n_atoms_supercell)
                 norm_tag = "eV_per_supercell_atom"
+
             else:
                 # per dopant atom
                 if n_dop_total <= 0:
@@ -228,15 +381,22 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
                     E_report = E_form_total / float(n_dop_total)
                     norm_tag = "eV_per_dopant_atom"
 
+            # Write candidate meta for collection stage
             payload: Dict[str, Any] = {
                 "stage": "04_formation",
                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "reference_mode": ref_mode,
                 "definition": ref.get("definition", ""),
+                "host_formula": host_formula,
                 "host_species": cfg.host_species,
                 "anion_species": cfg.anion_species,
                 "E_doped_eV": float(E_doped),
                 "E_pristine_eV": float(E_pristine),
-                "mu_eV_per_atom": {cfg.host_species: float(mu_host), **{k: float(mu[k]) for k in dop_counts.keys()}},
+                "n_atoms_supercell": int(n_atoms_supercell),
+                "mu_eV_per_atom_used": {
+                    cfg.host_species: float(mu_host),
+                    **{k: float(mu[k]) for k in dop_counts.keys()},
+                },
                 "dopant_counts": dop_counts,
                 "E_form_eV_total": float(E_form_total),
                 "reported": {"value": float(E_report), "unit": norm_tag},
@@ -263,10 +423,11 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
                     f"E_form_{cfg.normalize}",
                     "n_dopant_atoms",
                     "dopant_counts",
+                    "reference_mode",
                 ]
             )
             for cand, E_d, Eft, Erf, nd, dops in rows:
-                w.writerow([cand, f"{E_d:.8f}", f"{Eft:.8f}", f"{Erf:.8f}", nd, dops])
+                w.writerow([cand, f"{E_d:.8f}", f"{Eft:.8f}", f"{Erf:.8f}", nd, dops, ref_mode])
 
         log.info("OK   %s: wrote %s (rows=%d)", folder.name, OUT_CSV, len(rows))
 

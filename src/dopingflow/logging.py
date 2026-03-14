@@ -13,15 +13,11 @@ def _suppress_external_noise() -> None:
     Reduce noise from TensorFlow, DGL, etc.
     Must be called BEFORE importing heavy ML libs.
     """
-
     # TensorFlow suppression
     os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
     os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
-    os.environ.setdefault("OMP_NUM_THREADS", "1")
-    os.environ.setdefault("TF_NUM_INTRAOP_THREADS", "1")
-    os.environ.setdefault("TF_NUM_INTEROP_THREADS", "1")
 
-    # DGL backend
+    # DGL backend (safe default)
     os.environ.setdefault("DGLBACKEND", "pytorch")
 
     # Silence noisy loggers
@@ -38,7 +34,6 @@ def setup_logging(root: Path, *, verbose: bool = False) -> Path:
     - Per-run log file
     - Noise suppression
     """
-
     _suppress_external_noise()
 
     log_dir = root / "logs"
@@ -50,9 +45,16 @@ def setup_logging(root: Path, *, verbose: bool = False) -> Path:
     level = logging.DEBUG if verbose else logging.INFO
 
     root_logger = logging.getLogger()
-    root_logger.handlers.clear()
     root_logger.setLevel(level)
     root_logger.propagate = False
+
+    # Remove existing handlers cleanly (important for Streamlit reruns)
+    for h in list(root_logger.handlers):
+        root_logger.removeHandler(h)
+        try:
+            h.close()
+        except Exception:
+            pass
 
     fmt = logging.Formatter(
         "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",

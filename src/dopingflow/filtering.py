@@ -43,8 +43,8 @@ def _parse_filter_config(raw: dict[str, Any], root: Path) -> FilterConfig:
 
     if mode not in {"window", "topn"}:
         raise ValueError("[filter].mode must be 'window' or 'topn'")
-    if window_meV <= 0:
-        raise ValueError("[filter].window_meV must be > 0")
+    if window_meV < 0:
+        raise ValueError("[filter].window_meV must be >= 0")
     if max_candidates <= 0:
         raise ValueError("[filter].max_candidates must be > 0")
 
@@ -193,6 +193,9 @@ def _process_folder(
 
     rows = _read_ranking_relax(ranking_path)
     kept, emin, mode_desc = _filter_rows(rows, cfg, window_meV_override, topn_override)
+
+    if not kept:
+        raise RuntimeError(f"{folder.name}: filter produced 0 candidates ({mode_desc}).")
 
     _write_outputs(folder, kept, emin, mode_desc)
 

@@ -9,6 +9,8 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 import toml
+import re
+
 
 # Make sure gui/ is importable
 GUI_DIR = Path(__file__).resolve().parent
@@ -220,163 +222,158 @@ if tab == "Input Builder":
     if "cfg_edit" not in st.session_state:
         st.session_state["cfg_edit"] = cfg_full
     cfg_edit = st.session_state["cfg_edit"]
+    # ===== PATCH: ensure section dicts exist =====
+    for secname in ["references", "structure", "doping", "generate", "scan", "relax", "filter", "bandgap", "formation", "database"]:
+        cfg_edit.setdefault(secname, {})
+    # ===== END PATCH =====    
 
     # -----------------------------
     # STRUCTURE
     # -----------------------------
     
     with st.expander("Structure", expanded=True):
-        st.subheader("Base structure & output")
+        st.subheader("Output")
 
-        col1, col2 = st.columns([3, 2], vertical_alignment="bottom")
+        outdir_ui = st.text_input(
+            "Output directory",
+            value=cfg_edit["structure"].get("outdir", "random_structures"),
+            help="Folder where generated structures will be written.",
+        )
 
-        with col1:
-            base_poscar = st.text_input(
-                "Base structure (POSCAR)",
-                value=cfg_edit["structure"].get("base_poscar", DEFAULTS["structure"]["base_poscar"]),
-                placeholder="e.g. reference_structures/base.POSCAR",
-                help="Path to the pristine structure file (VASP POSCAR). Relative to project root or absolute.",
-            )
-
-        with col2:
-            outdir_ui = st.text_input(
-                "Output directory",
-                value=cfg_edit["structure"].get("outdir", DEFAULTS["structure"]["outdir"]),
-                placeholder="random_structures",
-                help="Folder where the workflow writes generated structures (relative to project root).",
-            )
-
-        # Resolve and validate base POSCAR
-        base_path = (project_root / base_poscar).resolve() if not Path(base_poscar).is_absolute() else Path(base_poscar)
-
-        if base_poscar.strip() == "":
-            st.warning("Please provide a POSCAR path.")
-        elif not base_path.exists():
-            st.error(f"Base POSCAR not found: `{base_path}`")
-        else:
-            st.success(f"Base POSCAR found: `{base_path}`")
-
-        cfg_edit["structure"]["base_poscar"] = base_poscar
         cfg_edit["structure"]["outdir"] = outdir_ui
-
-        st.divider()
-        st.subheader("Supercell")
-
-        current_supercell = cfg_edit["structure"].get("supercell", [1, 1, 1])
-        if not isinstance(current_supercell, list) or len(current_supercell) != 3:
-            current_supercell = [1, 1, 1]
-
-        col_a, col_b, col_c, col_info = st.columns([1, 1, 1, 2], vertical_alignment="bottom")
-
-        with col_a:
-            a = st.number_input("a", min_value=1, step=1, value=int(current_supercell[0]))
-        with col_b:
-            b = st.number_input("b", min_value=1, step=1, value=int(current_supercell[1]))
-        with col_c:
-            c = st.number_input("c", min_value=1, step=1, value=int(current_supercell[2]))
-
-        cfg_edit["structure"]["supercell"] = [int(a), int(b), int(c)]
-
-        with col_info:
-            vol_factor = int(a) * int(b) * int(c)
-            st.caption(f"Supercell: `{cfg_edit['structure']['supercell']}`  |  size factor: ×{vol_factor}")
 
 
 
     # -----------------------------
     # REFERENCES (Step 00)
     # -----------------------------
+
     with st.expander("References (refs-build)", expanded=False):
-        st.subheader("Reference source")
+        st.subheader("Common (always used)")
 
-        col1, col2 = st.columns([2, 3], vertical_alignment="bottom")
+        # Ensure dict exists
+        cfg_edit.setdefault("references", {})
 
-        with col1:
-            src = st.selectbox(
-                "Source",
-                CHOICES["references.source"],
-                index=CHOICES["references.source"].index(cfg_edit["references"].get("source", "local")),
-                help='Where to get elemental bulk references: local folder or Materials Project (mp).',
-            )
-            cfg_edit["references"]["source"] = src
+        # --- Common ---
+        cfg_edit["references"]["skip_if_done"] = st.checkbox(
+            "skip_if_done",
+            value=bool(cfg_edit["references"].get("skip_if_done", True)),
+        )
 
-        with col2:
-            bulk_dir = st.text_input(
-                "Reference folder",
-                value=cfg_edit["references"].get("bulk_dir", DEFAULTS["references"]["bulk_dir"]),
-                placeholder="reference_structures/",
-                help="Folder containing element POSCARs, e.g. Sn.POSCAR, Sb.POSCAR, Ti.POSCAR …",
-            )
-            cfg_edit["references"]["bulk_dir"] = bulk_dir
+        cfg_edit["references"]["fmax"] = st.number_input(
+            "fmax",
+            value=float(cfg_edit["references"].get("fmax", 0.02)),
+            min_value=0.001,
+            step=0.001,
+            format="%.3f",
+            help="Force convergence criterion (eV/Å).",
+        )
 
-        # Validate local folder
-        if src == "local":
-            bulk_path = (project_root / bulk_dir).resolve() if not Path(bulk_dir).is_absolute() else Path(bulk_dir)
-            if bulk_dir.strip() == "":
-                st.warning("Please provide a reference folder path.")
-            elif not bulk_path.exists():
-                st.error(f"Reference folder not found: `{bulk_path}`")
-            elif not bulk_path.is_dir():
-                st.error(f"Reference folder path is not a directory: `{bulk_path}`")
-            else:
-                # show how many references it contains
-                n_poscar = len(list(bulk_path.glob("*.POSCAR")))
-                st.success(f"Reference folder found: `{bulk_path}`  |  POSCAR files: {n_poscar}")
+        cfg_edit["references"]["host"] = st.text_input(
+            "host",
+            value=str(cfg_edit["references"].get("host", "SnO2")),
+            help='Host oxide formula, e.g. "SnO2".',
+        )
+
+        cfg_edit["references"]["host_dir"] = st.text_input(
+            "host_dir",
+            value=str(cfg_edit["references"].get("host_dir", "reference_structures/oxides")),
+            help="Directory containing <host>.POSCAR (e.g. SnO2.POSCAR).",
+        )
+
+        sc = cfg_edit["references"].get("supercell", [5, 2, 1])
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            sx = st.number_input("supercell nx", min_value=1, value=int(sc[0]), step=1)
+        with c2:
+            sy = st.number_input("supercell ny", min_value=1, value=int(sc[1]), step=1)
+        with c3:
+            sz = st.number_input("supercell nz", min_value=1, value=int(sc[2]), step=1)
+        cfg_edit["references"]["supercell"] = [int(sx), int(sy), int(sz)]
 
         st.divider()
-        st.subheader("Relaxation & caching")
 
-        colA, colB, colC = st.columns([1, 1, 2], vertical_alignment="bottom")
+        # --- Choice AFTER common section (radio / circle choice) ---
+        current_mode = str(cfg_edit["references"].get("reference_mode", "metal")).strip().lower()
+        if current_mode not in {"metal", "oxide"}:
+            current_mode = "metal"
 
-        with colA:
-            cfg_edit["references"]["fmax"] = st.number_input(
-                "fmax",
-                min_value=0.0,
-                value=float(cfg_edit["references"].get("fmax", DEFAULTS["references"]["fmax"])),
-                step=0.01,
-                help="Force threshold used when relaxing reference bulks with M3GNet+FIRE.",
+        chosen_mode = st.radio(
+            "Reference mode",
+            options=["metal", "oxide"],
+            index=0 if current_mode == "metal" else 1,
+            horizontal=True,
+            help="Choose the reference scheme used by refs-build.",
+        )
+        cfg_edit["references"]["reference_mode"] = chosen_mode
+
+        st.divider()
+
+        # --- Conditional fields ---
+        if chosen_mode == "metal":
+            st.subheader("Metal references")
+
+            cfg_edit["references"]["metals_dir"] = st.text_input(
+                "metals_dir",
+                value=str(cfg_edit["references"].get("metals_dir", "reference_structures/metals")),
+                help="Directory containing <Element>.POSCAR (e.g. Sn.POSCAR).",
             )
 
-        with colB:
-            cfg_edit["references"]["skip_if_done"] = st.checkbox(
-                "Skip if done",
-                value=bool(cfg_edit["references"].get("skip_if_done", True)),
-                help="If enabled, refs-build will not recompute if reference_energies.json already exists.",
+            metal_default = cfg_edit["references"].get("metal_ref", ["Sn", "Sb", "Ti", "Zr", "Nb"])
+            metal_csv = st.text_input(
+                "metal_ref (comma-separated)",
+                value=",".join(metal_default),
+                help='Example: "Sn,Sb,Ti,Zr,Nb"',
             )
+            cfg_edit["references"]["metal_ref"] = [x.strip() for x in metal_csv.split(",") if x.strip()]
 
-        with colC:
-            st.caption(
-                    "Maximum force (eV/Å) used to relax reference unit cells "
-                    "with M3GNet + FIRE. Relaxation stops below this threshold."
-            )
+            # Optional: keep oxide keys but they won't be used
+            # (No need to delete them; leaving them allows switching back later)
 
-        # Optional MP IDs dict editor
-        if src == "mp":
-            st.divider()
-            st.subheader("Materials Project IDs (optional)")
-
-            st.caption("One per line: `Element=mp-xxxx` (only needed for elements you want to fetch from MP).")
-
-            mp_ids_text = st.text_area(
-                "mp_ids",
-                value="\n".join(
-                    [f"{k}={v}" for k, v in (cfg_edit["references"].get("mp_ids", {}) or {}).items()]
-                ),
-                height=140,
-                placeholder="Sn=mp-xxxxx\nSb=mp-yyyyy\nTi=mp-zzzzz",
-            )
-
-            mp_ids = {}
-            for line in mp_ids_text.splitlines():
-                line = line.strip()
-                if not line or "=" not in line:
-                    continue
-                k, v = [x.strip() for x in line.split("=", 1)]
-                if k and v:
-                    mp_ids[k] = v
-            cfg_edit["references"]["mp_ids"] = mp_ids
         else:
-            cfg_edit["references"].pop("mp_ids", None)
+            st.subheader("Oxide references")
+
+            cfg_edit["references"]["oxides_dir"] = st.text_input(
+                "oxides_dir",
+                value=str(cfg_edit["references"].get("oxides_dir", "reference_structures/oxides")),
+                help="Directory containing <Oxide>.POSCAR (e.g. Sb2O5.POSCAR).",
+            )
+
+            ox_default = cfg_edit["references"].get("oxides_ref", ["Sb2O5", "TiO2", "ZrO2", "Nb2O5"])
+            ox_csv = st.text_input(
+                "oxides_ref (comma-separated)",
+                value=",".join(ox_default),
+                help='Example: "Sb2O5,TiO2,ZrO2,Nb2O5"',
+            )
+            cfg_edit["references"]["oxides_ref"] = [x.strip() for x in ox_csv.split(",") if x.strip()]
+
+            cfg_edit["references"]["gas_dir"] = st.text_input(
+                "gas_dir",
+                value=str(cfg_edit["references"].get("gas_dir", "reference_structures/gas")),
+                help="Directory containing <gas_ref>.POSCAR (e.g. O2.POSCAR).",
+            )
+
+            cfg_edit["references"]["gas_ref"] = st.text_input(
+                "gas_ref",
+                value=str(cfg_edit["references"].get("gas_ref", "O2")),
+                help='Typically "O2".',
+            )
+
+            cfg_edit["references"]["oxygen_mode"] = st.radio(
+                "oxygen_mode",
+                options=["O-rich", "O-poor"],
+                index=0 if str(cfg_edit["references"].get("oxygen_mode", "O-rich")) == "O-rich" else 1,
+                horizontal=True,
+            )
+
+            cfg_edit["references"]["muO_shift_ev"] = st.number_input(
+                "muO_shift_ev",
+                value=float(cfg_edit["references"].get("muO_shift_ev", 0.0)),
+                step=0.1,
+                format="%.3f",
+            )
+
+    # ===== END PATCH =====
 
 
     # -----------------------------
@@ -612,19 +609,81 @@ if tab == "Input Builder":
                 st.caption("Example: 2 means co-doping at most (two dopant species).")
 
             # Totals and levels as multiselect (clean)
-            cfg_edit["doping"]["allowed_totals"] = st.multiselect(
+            def parse_number_list(text: str) -> list[float]:
+                """
+                Parse a comma/space/semicolon-separated list of numbers into sorted unique floats.
+                Accepts: "5,10, 15;20 25" etc.
+                """
+                if text is None:
+                    return []
+                # split on commas/semicolons/whitespace
+                parts = re.split(r"[,\s;]+", str(text).strip())
+                out: list[float] = []
+                for p in parts:
+                    p = p.strip()
+                    if not p:
+                        continue
+                    try:
+                        out.append(float(p))
+                    except ValueError:
+                        raise ValueError(f"Invalid number: {p!r}")
+                # unique + sorted
+                out = sorted(set(out))
+                return out
+
+            def format_number_list(vals: list[float]) -> str:
+                if not vals:
+                    return ""
+                # Keep integers pretty
+                parts = []
+                for v in vals:
+                    if abs(v - round(v)) < 1e-12:
+                        parts.append(str(int(round(v))))
+                    else:
+                        parts.append(str(v))
+                return ", ".join(parts)
+
+            # --- Allowed total doping (%) : FREE TEXT ---
+            default_totals = cfg_edit["doping"].get("allowed_totals", DEFAULTS["doping"]["allowed_totals"])
+            totals_text_default = format_number_list(default_totals)
+
+            totals_text = st.text_input(
                 "Allowed total doping (%)",
-                options=[0, 5, 10, 15, 20, 25, 30],
-                default=cfg_edit["doping"].get("allowed_totals", DEFAULTS["doping"]["allowed_totals"]),
-                help="Total dopant percentage (sum of dopants) used to generate compositions.",
+                value=totals_text_default,
+                help="Enter any list of numbers (comma/space/semicolon separated). Example: 5, 10, 15, 20, 25, 30",
             )
 
-            cfg_edit["doping"]["levels"] = st.multiselect(
+            try:
+                allowed_totals = parse_number_list(totals_text)
+                # basic sanity (you can relax these if you truly want *anything*)
+                if any(t < 0 or t > 100 for t in allowed_totals):
+                    st.error("Allowed total doping values should be between 0 and 100.")
+                cfg_edit["doping"]["allowed_totals"] = allowed_totals
+                st.caption(f"Parsed totals: {allowed_totals}")
+            except ValueError as e:
+                st.error(str(e))
+                # keep previous valid values
+                cfg_edit["doping"]["allowed_totals"] = default_totals
+
+            # --- Allowed levels (%) per dopant : FREE TEXT ---
+            default_levels = cfg_edit["doping"].get("levels", DEFAULTS["doping"]["levels"])
+            levels_text_default = format_number_list(default_levels)
+
+            levels_text = st.text_input(
                 "Allowed levels (%) per dopant",
-                options=[1, 2, 3, 4, 5, 10, 15, 20],
-                default=cfg_edit["doping"].get("levels", DEFAULTS["doping"]["levels"]),
-                help="Discrete percentage values assigned to each dopant during enumeration.",
+                value=levels_text_default,
+                help="Enter any list of numbers (comma/space/semicolon separated). Example: 2.5, 5, 7.5, 10",
             )
+
+            try:
+                levels = parse_number_list(levels_text)
+                if any(x < 0 or x > 100 for x in levels):
+                    st.error("Allowed level values should be between 0 and 100.")
+                cfg_edit["doping"]["levels"] = levels
+                st.caption(f"Parsed levels: {levels}")
+            except ValueError as e:
+                st.error(str(e))
+                cfg_edit["doping"]["levels"] = default_levels            
 
             # compositions unused in enumerate mode
             cfg_edit["doping"].setdefault("compositions", [])
@@ -668,12 +727,12 @@ if tab == "Input Builder":
         with colA:
             cfg_edit["scan"]["symprec"] = st.number_input(
                 "Symmetry tolerance (symprec)",
-                min_value=0.0,
+                min_value=1e-6,
                 value=float(cfg_edit["scan"].get("symprec", DEFAULTS["scan"]["symprec"])),
                 step=1e-3,
                 format="%.6f",
                 help="Tolerance used when identifying symmetry-unique configurations.",
-            )
+            )            
 
         with colB:
             st.caption(
@@ -986,19 +1045,41 @@ if tab == "Input Builder":
         cfg_edit["formation"]["normalize"] = norm
 
         # Show explanation ONLY for the selected normalization
-        if norm == "per dopant":
+        if norm == "per_dopant":
             st.info("**per_dopant**: compares stability per dopant atom (useful across different dopant counts).")
             st.latex(r"\frac{E_{\mathrm{form}}}{N_{\mathrm{dopant}}}")
 
-        elif norm == "per host":
-            st.info("**per_host**: normalizes by the number of host sites in the pristine supercell.")
-            st.latex(r"\frac{E_{\mathrm{form}}}{N_{\mathrm{host}}}")
+        elif norm == "per_host":
+            st.info("**per_host**: normalizes by the number of atoms (or host-sites, depending on your definition).")
+            st.latex(r"\frac{E_{\mathrm{form}}}{N}")
 
         elif norm == "total":
             st.info("**total**: raw formation energy of the doped supercell (in eV).")
             st.latex(r"E_{\mathrm{form}} \; [\mathrm{eV}]")
 
+    st.divider()
+    st.subheader("Save input.toml")
 
+    # Optional preview
+    with st.expander("Preview TOML", expanded=False):
+        st.code(toml.dumps(cfg_edit), language="toml")
+
+    colS1, colS2 = st.columns([1, 2], vertical_alignment="center")
+
+    with colS1:
+        if st.button("💾 Save input.toml", use_container_width=True):
+            try:
+                save_toml(input_toml_path, cfg_edit)
+                st.success(f"Saved: {input_toml_path}")
+                st.session_state["cfg_edit"] = load_toml(input_toml_path)  # reload from disk
+                st.rerun()
+            except Exception as e:
+                st.error(f"Failed to save input.toml: {e}")
+
+    with colS2:
+        st.caption("After changing parameters above, click **Save input.toml** to write the file to disk.")
+
+# ===== END PATCH =====
 
 # -----------------------
 # Page: Run
@@ -1150,22 +1231,25 @@ elif tab == "Run":
 # Page: Results Explorer
 # -----------------------
 elif tab == "Results Explorer":
+    from pathlib import Path
+    from datetime import datetime
+    import json
+
     import numpy as np
+    import pandas as pd
     import plotly.express as px
+    import plotly.io as pio
+    import streamlit as st
 
     st.title("Results Explorer")
 
-    # -----------------------------
-    # Locate CSV
-    # -----------------------------
+    # ============================================================
+    # Load CSV
+    # ============================================================
     st.subheader("Data source")
 
     default_csv = project_root / "results_database.csv"
-    csv_path_str = st.text_input(
-        "Results CSV path",
-        value=str(default_csv),
-        help="Path to a CSV file produced by dopingflow (default: results_database.csv in project root).",
-    )
+    csv_path_str = st.text_input("Results CSV path", value=str(default_csv))
     csv_path = Path(csv_path_str).expanduser()
     if not csv_path.is_absolute():
         csv_path = (project_root / csv_path).resolve()
@@ -1174,9 +1258,6 @@ elif tab == "Results Explorer":
         st.error(f"CSV not found: `{csv_path}`")
         st.stop()
 
-    # -----------------------------
-    # Read CSV
-    # -----------------------------
     try:
         df = pd.read_csv(csv_path)
     except Exception as e:
@@ -1189,45 +1270,36 @@ elif tab == "Results Explorer":
 
     st.success(f"Loaded {len(df):,} rows × {len(df.columns)} columns from `{csv_path.name}`")
 
-    # -----------------------------
-    # Basic cleaning helpers
-    # -----------------------------
-    # Identify numeric columns
-    numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
-    non_numeric_cols = [c for c in df.columns if c not in numeric_cols]
+    # ============================================================
+    # Generic filters (optional)
+    # ============================================================
+    numeric_cols_all = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+    non_numeric_cols_all = [c for c in df.columns if c not in numeric_cols_all]
 
-    # -----------------------------
-    # Sidebar filters
-    # -----------------------------
     st.divider()
     st.subheader("Filters")
 
+    df_f = df.copy()
+
     with st.expander("Filter controls", expanded=True):
-        # Choose one categorical column to filter (optional)
         cat_col = st.selectbox(
             "Categorical filter column (optional)",
-            options=["(none)"] + non_numeric_cols,
+            options=["(none)"] + non_numeric_cols_all,
             index=0,
         )
-
-        df_f = df.copy()
-
         if cat_col != "(none)":
-            # limit unique values to keep UI snappy
-            values = df_f[cat_col].dropna().astype(str).unique().tolist()
-            values = sorted(values)[:500]
-            chosen = st.multiselect(f"Keep values in `{cat_col}`", options=values, default=values)
+            vals = df_f[cat_col].dropna().astype(str).unique().tolist()
+            vals = sorted(vals)[:1000]
+            chosen = st.multiselect(f"Keep values in `{cat_col}`", options=vals, default=vals)
             if chosen:
                 df_f = df_f[df_f[cat_col].astype(str).isin(set(chosen))]
 
-        # Numeric range filter (optional)
         num_col = st.selectbox(
             "Numeric range filter column (optional)",
-            options=["(none)"] + numeric_cols,
+            options=["(none)"] + numeric_cols_all,
             index=0,
         )
-
-        if num_col != "(none)":
+        if num_col != "(none)" and len(df_f) > 0:
             col_min = float(np.nanmin(df_f[num_col].values))
             col_max = float(np.nanmax(df_f[num_col].values))
             if np.isfinite(col_min) and np.isfinite(col_max) and col_min != col_max:
@@ -1243,13 +1315,9 @@ elif tab == "Results Explorer":
 
     st.caption(f"Filtered rows: **{len(df_f):,}**")
 
-    # -----------------------------
-    # Table view
-    # -----------------------------
+    # Table
     st.subheader("Table")
     st.dataframe(df_f, use_container_width=True, height=360)
-
-    # Optional download
     st.download_button(
         "⬇ Download filtered CSV",
         data=df_f.to_csv(index=False).encode("utf-8"),
@@ -1257,87 +1325,296 @@ elif tab == "Results Explorer":
         mime="text/csv",
     )
 
-    # -----------------------------
-    # Plot builder
-    # -----------------------------
+    # ============================================================
+    # Dopant parsing (based on your CSV)
+    # ============================================================
     st.divider()
-    st.subheader("Plot builder")
+    st.subheader("Dopant-set plot studio (correct filtering + full hover)")
 
-    plot_type = st.selectbox(
-        "Plot type",
-        options=["Scatter", "Line", "Histogram", "Box"],
-        index=0,
+    has_json = "dopant_counts_json" in df_f.columns
+    has_str = "dopant_counts" in df_f.columns
+
+    if not (has_json or has_str):
+        st.error("CSV must contain `dopant_counts_json` or `dopant_counts`.")
+        st.stop()
+
+    def parse_dopants_from_counts_json(s) -> dict:
+        """
+        s like: '{"Sb": 2, "Zr": 1}'  (as a string in CSV)
+        Returns dict[str,int]
+        """
+        if s is None or (isinstance(s, float) and np.isnan(s)):
+            return {}
+        try:
+            d = json.loads(str(s))
+            if isinstance(d, dict):
+                # keep only positive counts
+                out = {}
+                for k, v in d.items():
+                    try:
+                        vv = int(v)
+                    except Exception:
+                        continue
+                    if vv > 0:
+                        out[str(k)] = vv
+                return out
+        except Exception:
+            return {}
+        return {}
+
+    def parse_dopants_from_counts_str(s) -> dict:
+        """
+        s like: 'Sb:2;Zr:1'
+        Returns dict[str,int]
+        """
+        if s is None or (isinstance(s, float) and np.isnan(s)):
+            return {}
+        txt = str(s).strip()
+        if not txt:
+            return {}
+        out = {}
+        for part in txt.split(";"):
+            part = part.strip()
+            if not part:
+                continue
+            if ":" not in part:
+                # if someone writes "Sb" only
+                out[part] = max(out.get(part, 0), 1)
+                continue
+            el, cnt = part.split(":", 1)
+            el = el.strip()
+            try:
+                cnt_i = int(str(cnt).strip())
+            except Exception:
+                cnt_i = 1
+            if el:
+                out[el] = max(out.get(el, 0), cnt_i)
+        return out
+
+    def dopant_sig_from_dict(d: dict) -> str:
+        keys = sorted(d.keys())
+        return "+".join(keys) if keys else "Undoped"
+    
+    def to_float_or_none(value):
+        try:
+            value = str(value).strip()
+            if value == "":
+                return None
+            return float(value)
+        except Exception:
+            return None    
+
+    # Build parsing columns (JSON-safe strings only)
+    dfp = df_f.copy()
+
+    if has_json:
+        dfp["_dopant_dict"] = dfp["dopant_counts_json"].apply(parse_dopants_from_counts_json)
+        # fallback to dopant_counts if json empty
+        if has_str:
+            mask_empty = dfp["_dopant_dict"].apply(lambda d: len(d) == 0)
+            dfp.loc[mask_empty, "_dopant_dict"] = dfp.loc[mask_empty, "dopant_counts"].apply(parse_dopants_from_counts_str)
+    else:
+        dfp["_dopant_dict"] = dfp["dopant_counts"].apply(parse_dopants_from_counts_str)
+
+    dfp["dopant_sig"] = dfp["_dopant_dict"].apply(dopant_sig_from_dict)
+    dfp["n_dopants"] = dfp["_dopant_dict"].apply(lambda d: len(d.keys()))
+    dfp["dopant_list_str"] = dfp["_dopant_dict"].apply(lambda d: ", ".join(sorted(d.keys())) if d else "Undoped")
+
+    # Universe of dopants
+    all_elements = sorted({el for d in dfp["_dopant_dict"].values for el in d.keys()})
+
+    # ============================================================
+    # Correct filtering UI
+    # ============================================================
+    st.markdown("### Select structures")
+
+    selected_classes = st.multiselect(
+        "Dopant count class",
+        options=["0 (undoped)", "1 (single)", "2 (double)", "3 (triple)", "4+ (>=4)"],
+        default=["1 (single)", "2 (double)", "3 (triple)"],
     )
 
-    # Common aesthetics
-    color_col = st.selectbox("Color (optional)", options=["(none)"] + df_f.columns.tolist(), index=0)
-    hover_cols = st.multiselect(
-        "Hover columns",
-        options=df_f.columns.tolist(),
-        default=[c for c in ["composition", "candidate", "E_form_eV", "bandgap_eV"] if c in df_f.columns],
+    required = set(
+        st.multiselect(
+            "Required dopants (optional)",
+            options=all_elements,
+            default=[],
+            help=(
+                "Rules:\n"
+                "- For 1/2 dopants: EXACT match (only these dopants)\n"
+                "- For >=3 dopants: CONTAINS (must include these, plus others allowed)\n"
+                "- Leave empty: show ALL structures in the selected dopant-count class(es)"
+            ),
+        )
     )
 
-    if plot_type in ("Scatter", "Line"):
-        col1, col2, col3 = st.columns([1, 1, 1])
+    excluded = set(
+        st.multiselect(
+            "Exclude dopants (optional)",
+            options=all_elements,
+            default=[],
+        )
+    )
 
-        with col1:
-            x_col = st.selectbox("X axis", options=numeric_cols if numeric_cols else df_f.columns.tolist())
-        with col2:
-            y_col = st.selectbox("Y axis", options=numeric_cols if numeric_cols else df_f.columns.tolist())
-        with col3:
-            size_col = st.selectbox("Size (optional)", options=["(none)"] + numeric_cols, index=0)
+    def class_selected(n: int) -> bool:
+        if n == 0:
+            return "0 (undoped)" in selected_classes
+        if n == 1:
+            return "1 (single)" in selected_classes
+        if n == 2:
+            return "2 (double)" in selected_classes
+        if n == 3:
+            return "3 (triple)" in selected_classes
+        return "4+ (>=4)" in selected_classes
 
-        symbol_col = st.selectbox("Marker symbol (optional)", options=["(none)"] + non_numeric_cols, index=0)
+    def keep_row(d: dict, n: int) -> bool:
+        ds = set(d.keys())
 
-        fig = px.scatter(
-            df_f,
-            x=x_col,
-            y=y_col,
-            color=None if color_col == "(none)" else color_col,
-            size=None if size_col == "(none)" else size_col,
-            symbol=None if symbol_col == "(none)" else symbol_col,
-            hover_data=hover_cols if hover_cols else None,
-        ) if plot_type == "Scatter" else px.line(
-            df_f.sort_values(by=x_col),
-            x=x_col,
-            y=y_col,
-            color=None if color_col == "(none)" else color_col,
-            hover_data=hover_cols if hover_cols else None,
+        # class
+        if not class_selected(n):
+            return False
+
+        # exclude always
+        if excluded and (ds & excluded):
+            return False
+
+        # no required -> keep all in class
+        if not required:
+            return True
+
+        # exact for 1/2
+        if n in (1, 2):
+            return ds == required
+
+        # contains for >=3
+        if n >= 3:
+            return required.issubset(ds)
+
+        # undoped only if required empty (handled)
+        return False
+
+    df_sel = dfp[dfp.apply(lambda r: keep_row(r["_dopant_dict"], int(r["n_dopants"])), axis=1)].copy()
+
+    st.caption(f"Selected structures: **{len(df_sel):,}**")
+    if df_sel.empty:
+        st.warning("No matching structures.")
+        st.stop()
+
+    # ============================================================
+    # Plot builder with FULL hover
+    # ============================================================
+    st.divider()
+    st.subheader("Plot")
+
+    numeric_cols_sel = [c for c in df_sel.columns if pd.api.types.is_numeric_dtype(df_sel[c])]
+    if not numeric_cols_sel:
+        st.error("No numeric columns available to plot.")
+        st.stop()
+
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col1:
+        x_col = st.selectbox("X axis", options=numeric_cols_sel, index=0)
+    with col2:
+        y_col = st.selectbox("Y axis", options=numeric_cols_sel, index=min(1, len(numeric_cols_sel) - 1))
+    with col3:
+        color_by = st.selectbox("Color by", options=["dopant_sig", "n_dopants"] + [c for c in df_sel.columns if c not in numeric_cols_sel], index=0)
+
+    # Appearance
+    with st.expander("Appearance & axes", expanded=True):
+        cA, cB, cC = st.columns([1.2, 1, 1])
+        with cA:
+            template = st.selectbox("Template", ["plotly_white", "plotly_simple_white", "plotly", "ggplot2"], index=0)
+            opacity = st.slider("Opacity", 0.05, 1.0, 0.85, 0.05)
+        with cB:
+            x_min = st.text_input("X min (optional)", value="")
+            x_max = st.text_input("X max (optional)", value="")
+        with cC:
+            y_min = st.text_input("Y min (optional)", value="")
+            y_max = st.text_input("Y max (optional)", value="")
+
+        x_min_v = to_float_or_none(x_min)
+        x_max_v = to_float_or_none(x_max)
+        y_min_v = to_float_or_none(y_min)
+        y_max_v = to_float_or_none(y_max)
+
+    # FULL hover: include all columns EXCEPT non-serializable/internal ones
+    internal_cols = {"_dopant_dict"}  # <- dict is serializable, but can get large; keep it out of hover
+    hover_cols = [c for c in df_sel.columns.tolist() if c not in internal_cols]
+
+    fig = px.scatter(
+        df_sel,
+        x=x_col,
+        y=y_col,
+        color=color_by if color_by in df_sel.columns else "dopant_sig",
+        hover_name="candidate" if "candidate" in df_sel.columns else ("composition_tag" if "composition_tag" in df_sel.columns else None),
+        hover_data=hover_cols,  # ✅ everything safe
+        labels={x_col: x_col, y_col: y_col},
+    )
+    fig.update_layout(template=template, height=700)
+    fig.update_traces(opacity=float(opacity), marker=dict(size=12))
+
+    if x_min_v is not None or x_max_v is not None:
+        fig.update_xaxes(range=[x_min_v if x_min_v is not None else None, x_max_v if x_max_v is not None else None], autorange=False)
+    if y_min_v is not None or y_max_v is not None:
+        fig.update_yaxes(range=[y_min_v if y_min_v is not None else None, y_max_v if y_max_v is not None else None], autorange=False)
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ============================================================
+    # Export
+    # ============================================================
+    st.divider()
+    st.subheader("Export plot")
+
+    base = sanitize_filename(st.text_input("Base filename", value="dopant_plot"))
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    cE1, cE2, cE3, cE4 = st.columns(4)
+
+    with cE1:
+        st.download_button(
+            "⬇ JSON",
+            data=fig.to_json().encode("utf-8"),
+            file_name=f"{base}_{ts}.json",
+            mime="application/json",
         )
 
-        st.plotly_chart(fig, use_container_width=True)
-
-    elif plot_type == "Histogram":
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            x_col = st.selectbox("Column", options=numeric_cols if numeric_cols else df_f.columns.tolist())
-        with col2:
-            nbins = st.number_input("Bins", min_value=5, max_value=300, value=40, step=5)
-
-        fig = px.histogram(
-            df_f,
-            x=x_col,
-            color=None if color_col == "(none)" else color_col,
-            nbins=int(nbins),
-            hover_data=hover_cols if hover_cols else None,
+    with cE2:
+        st.download_button(
+            "⬇ HTML",
+            data=fig.to_html(include_plotlyjs="cdn").encode("utf-8"),
+            file_name=f"{base}_{ts}.html",
+            mime="text/html",
         )
-        st.plotly_chart(fig, use_container_width=True)
 
-    else:  # Box
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            y_col = st.selectbox("Y (numeric)", options=numeric_cols if numeric_cols else df_f.columns.tolist())
-        with col2:
-            x_col = st.selectbox("Group by (optional)", options=["(none)"] + non_numeric_cols, index=0)
+    export_scale = st.number_input("Export scale (PNG/PDF)", min_value=1, max_value=6, value=2, step=1)
 
-        fig = px.box(
-            df_f,
-            y=y_col,
-            x=None if x_col == "(none)" else x_col,
-            color=None if color_col == "(none)" else color_col,
-            hover_data=hover_cols if hover_cols else None,
+    def to_image_bytes(fmt: str):
+        try:
+            return pio.to_image(fig, format=fmt, scale=int(export_scale))
+        except Exception as e:
+            st.warning(f"{fmt.upper()} export needs `kaleido`. Error: {e}")
+            return None
+
+    with cE3:
+        png = to_image_bytes("png")
+        st.download_button(
+            "⬇ PNG",
+            data=png if png is not None else b"",
+            file_name=f"{base}_{ts}.png",
+            mime="image/png",
+            disabled=(png is None),
         )
-        st.plotly_chart(fig, use_container_width=True)
+
+    with cE4:
+        pdf = to_image_bytes("pdf")
+        st.download_button(
+            "⬇ PDF",
+            data=pdf if pdf is not None else b"",
+            file_name=f"{base}_{ts}.pdf",
+            mime="application/pdf",
+            disabled=(pdf is None),
+        )
 
 
 # -----------------------

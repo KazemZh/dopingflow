@@ -59,8 +59,6 @@ def _parse_relax_config(raw: dict[str, Any], root: Path) -> RelaxConfig:
     skip_if_done = bool(rel.get("skip_if_done", True))
     skip_candidate_if_done = bool(rel.get("skip_candidate_if_done", True))
 
-    if not order:
-        raise ValueError("[generate].poscar_order must be defined and non-empty")
     if fmax <= 0:
         raise ValueError("[relax].fmax must be > 0")
     if n_workers <= 0:
@@ -106,7 +104,7 @@ def _reorder_sites(struct: Structure, order: List[str]) -> Structure:
 
 
 def _safe_write_poscar(struct: Structure, path: Path, order: List[str]) -> None:
-    s2 = _reorder_sites(struct, order)
+    s2 = _reorder_sites(struct, order) if order else struct
     Poscar(s2).write_file(str(path), vasp4_compatible=False)
 
 

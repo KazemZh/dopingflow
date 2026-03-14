@@ -78,8 +78,6 @@ def _parse_scan_config(raw: dict[str, Any]) -> ScanConfig:
         raise ValueError("[scan].nproc must be > 0")
     if chunksize <= 0:
         raise ValueError("[scan].chunksize must be > 0")
-    if not order:
-        raise ValueError("[generate].poscar_order must be defined and non-empty")
     if not host_species:
         raise ValueError("[doping].host_species is required")
     if not anion_species:

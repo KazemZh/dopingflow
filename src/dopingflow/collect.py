@@ -22,6 +22,7 @@ FORMATION_CSV = "formation_energies.csv"
 
 # candidate-level
 RELAX_META = Path("02_relax") / "meta.json"
+FORMATION_META = Path("04_formation") / "meta.json"
 
 
 @dataclass(frozen=True)
@@ -33,7 +34,10 @@ class DBConfig:
 def read_json(path: Path) -> Optional[dict]:
     if not path.exists():
         return None
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
 
 
 def safe_get(d: Optional[dict], *keys, default=None):
@@ -47,14 +51,20 @@ def safe_get(d: Optional[dict], *keys, default=None):
 
 def _to_int(x: Any) -> Optional[int]:
     try:
-        return int(str(x).strip())
+        s = str(x).strip()
+        if s == "":
+            return None
+        return int(float(s))
     except Exception:
         return None
 
 
 def _to_float(x: Any) -> Optional[float]:
     try:
-        return float(str(x).strip())
+        s = str(x).strip()
+        if s == "":
+            return None
+        return float(s)
     except Exception:
         return None
 
@@ -83,8 +93,11 @@ def read_selected_txt(path: Path) -> List[str]:
 
 def read_filtered_table(path: Path) -> Dict[str, Dict[str, Any]]:
     """
-    Parse ranking_relax_filtered.csv (fallback) into:
-      candidate -> {"rank_relax_filtered": int, "E_relaxed_eV_filtered": float}
+    Parse ranking_relax_filtered.csv into:
+      candidate -> {"rank_relax_filtered": int, "E_relaxed_eV_filtered": float, "delta_e_eV": float, "filter_mode": str}
+
+    Expected columns written by filtering.py:
+      rank_filtered, candidate, energy_relaxed_eV, delta_e_eV, ..., filter_mode
     """
     out: Dict[str, Dict[str, Any]] = {}
     if not path.exists():
@@ -93,21 +106,15 @@ def read_filtered_table(path: Path) -> Dict[str, Dict[str, Any]]:
     with open(path, "r", encoding="utf-8") as f:
         r = csv.DictReader(f)
         for row in r:
-            cand = (row.get("candidate") or row.get("candidate_id") or row.get("name") or "").strip()
+            cand = (row.get("candidate") or "").strip()
             if not cand:
                 continue
 
-            E_rel = (
-                row.get("E_relaxed_eV")
-                or row.get("energy_relaxed_eV")
-                or row.get("E_eV")
-                or row.get("energy")
-            )
-            rank_rel = row.get("rank_relax") or row.get("rank")
-
             out[cand] = {
-                "rank_relax_filtered": _to_int(rank_rel),
-                "E_relaxed_eV_filtered": _to_float(E_rel),
+                "rank_relax_filtered": _to_int(row.get("rank_filtered")),
+                "E_relaxed_eV_filtered": _to_float(row.get("energy_relaxed_eV")),
+                "delta_e_eV": _to_float(row.get("delta_e_eV")),
+                "filter_mode": (row.get("filter_mode") or "").strip(),
             }
 
     return out
@@ -132,7 +139,7 @@ def read_scan_ranking(path: Path) -> Dict[str, Dict[str, Any]]:
                 continue
 
             rank = _to_int(row.get("rank") or row.get("rank_scan"))
-            E = _to_float(row.get("E_eV") or row.get("energy_eV") or row.get("E_scan_eV") or row.get("energy"))
+            E = _to_float(row.get("E_eV") or row.get("energy_eV") or row.get("E_scan_eV") or row.get("energy_sp_eV") or row.get("energy"))
 
             out[cand] = {"rank_scan": rank, "E_scan_eV": E}
     return out
@@ -162,6 +169,11 @@ def read_bandgap_summary(path: Path) -> Dict[str, Dict[str, Any]]:
 
 
 def read_formation_csv(path: Path) -> Dict[str, Dict[str, Any]]:
+    """
+    formation_energies.csv written by formation.py.
+
+    We keep it as a fallback, but prefer candidate_*/04_formation/meta.json for rich info.
+    """
     out: Dict[str, Dict[str, Any]] = {}
     if not path.exists():
         return out
@@ -174,7 +186,8 @@ def read_formation_csv(path: Path) -> Dict[str, Dict[str, Any]]:
                 continue
 
             out[cand] = {
-                "E_form_eV_total": _to_float(row.get("E_form_eV_total")),
+                "reference_mode": (row.get("reference_mode") or "").strip(),
+                "E_form_eV_total": _to_float(row.get("E_form_eV_total") or row.get("E_form_total") or row.get("E_form_total_eV")),
                 "E_form_norm": _to_float(
                     row.get("E_form_per_dopant")
                     or row.get("E_form_per_host")
@@ -185,6 +198,22 @@ def read_formation_csv(path: Path) -> Dict[str, Dict[str, Any]]:
                 "dopant_counts": (row.get("dopant_counts") or "").strip(),
             }
     return out
+
+
+def read_formation_meta(path: Path) -> Dict[str, Any]:
+    """
+    candidate_*/04_formation/meta.json written by formation.py.
+    """
+    d = read_json(path) or {}
+    return {
+        "reference_mode": d.get("reference_mode"),
+        "E_form_eV_total": d.get("E_form_eV_total"),
+        "E_form_norm": safe_get(d, "reported", "value", default=None),
+        "E_form_norm_unit": safe_get(d, "reported", "unit", default=""),
+        "dopant_counts_dict": d.get("dopant_counts", None),
+        # If you ever add it later:
+        "n_atoms_supercell": safe_get(d, "pristine", "n_atoms_supercell", default=None),
+    }
 
 
 def run_collect(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None = None) -> Path:
@@ -223,9 +252,11 @@ def run_collect(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None
         # candidate-level
         "candidate",
         "candidate_path",
-        # relax filtered (from ranking_relax_filtered.csv if available)
+        # relax filtered
         "rank_relax_filtered",
         "E_relaxed_eV_filtered",
+        "delta_e_eV",
+        "filter_mode",
         # scan
         "rank_scan",
         "E_scan_eV",
@@ -233,10 +264,14 @@ def run_collect(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None
         "E_relaxed_eV",
         # bandgap
         "bandgap_eV",
-        # formation
+        # formation (prefer meta.json)
+        "reference_mode",
         "E_form_eV_total",
         "E_form_norm",
+        "E_form_norm_unit",
         "n_dopant_atoms",
+        "dopant_counts_json",
+        # legacy string (optional; can be empty)
         "dopant_counts",
     ]
 
@@ -260,7 +295,7 @@ def run_collect(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None
         comp_meta = read_json(folder / META_COMP) or {}
         scan_map = read_scan_ranking(folder / RANK_SCAN)
         bg_map = read_bandgap_summary(folder / BANDGAP_SUMMARY)
-        form_map = read_formation_csv(folder / FORMATION_CSV)
+        form_csv_map = read_formation_csv(folder / FORMATION_CSV)
 
         requested_pct = safe_get(comp_meta, "requested_pct", default=None)
         effective_pct = safe_get(comp_meta, "effective_pct", default=None)
@@ -270,6 +305,26 @@ def run_collect(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None
         for cand in candidate_names:
             cand_dir = folder / cand
             relax_meta = read_json(cand_dir / RELAX_META) or {}
+
+            # formation: prefer candidate meta
+            fmeta = read_formation_meta(cand_dir / FORMATION_META)
+            fcsv = form_csv_map.get(cand, {}) if isinstance(form_csv_map, dict) else {}
+
+            reference_mode = fmeta.get("reference_mode") or fcsv.get("reference_mode") or ""
+            E_form_total = fmeta.get("E_form_eV_total")
+            E_form_norm = fmeta.get("E_form_norm")
+            E_form_unit = fmeta.get("E_form_norm_unit") or ""
+
+            # fallback to CSV if meta missing
+            if E_form_total is None:
+                E_form_total = fcsv.get("E_form_eV_total")
+            if E_form_norm is None:
+                E_form_norm = fcsv.get("E_form_norm")
+
+            # dopant counts
+            dop_counts_dict = fmeta.get("dopant_counts_dict")
+            dop_counts_json = json.dumps(dop_counts_dict) if isinstance(dop_counts_dict, dict) else ""
+            dop_counts_legacy = fcsv.get("dopant_counts", "") if isinstance(fcsv, dict) else ""
 
             row = {
                 "composition_tag": comp_tag,
@@ -282,9 +337,11 @@ def run_collect(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None
                 "supercell_json": json.dumps(supercell) if supercell is not None else "",
                 "candidate": cand,
                 "candidate_path": str(cand_dir.resolve()),
-                # filtered relax info (if file exists)
+                # filtered relax info
                 "rank_relax_filtered": filtered_map.get(cand, {}).get("rank_relax_filtered", None),
                 "E_relaxed_eV_filtered": filtered_map.get(cand, {}).get("E_relaxed_eV_filtered", None),
+                "delta_e_eV": filtered_map.get(cand, {}).get("delta_e_eV", None),
+                "filter_mode": filtered_map.get(cand, {}).get("filter_mode", ""),
                 # scan
                 "rank_scan": scan_map.get(cand, {}).get("rank_scan", None),
                 "E_scan_eV": scan_map.get(cand, {}).get("E_scan_eV", None),
@@ -293,10 +350,13 @@ def run_collect(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None
                 # bandgap
                 "bandgap_eV": bg_map.get(cand, {}).get("bandgap_eV", None),
                 # formation
-                "E_form_eV_total": form_map.get(cand, {}).get("E_form_eV_total", None),
-                "E_form_norm": form_map.get(cand, {}).get("E_form_norm", None),
-                "n_dopant_atoms": form_map.get(cand, {}).get("n_dopant_atoms", None),
-                "dopant_counts": form_map.get(cand, {}).get("dopant_counts", ""),
+                "reference_mode": reference_mode,
+                "E_form_eV_total": _to_float(E_form_total),
+                "E_form_norm": _to_float(E_form_norm),
+                "E_form_norm_unit": str(E_form_unit or ""),
+                "n_dopant_atoms": _to_int(fcsv.get("n_dopant_atoms")) if isinstance(fcsv, dict) else None,
+                "dopant_counts_json": dop_counts_json,
+                "dopant_counts": dop_counts_legacy,
             }
 
             rows_out.append(row)
