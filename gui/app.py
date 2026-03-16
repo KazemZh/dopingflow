@@ -24,6 +24,13 @@ from view_structure import show_structure
 
 st.set_page_config(page_title="dopingflow GUI", layout="wide")
 
+def sanitize_filename(name: str) -> str:
+    """
+    Make a safe filename by replacing problematic characters with underscores.
+    """
+    name = name.strip()
+    name = re.sub(r"[^\w\-\.]+", "_", name)
+    return name or "output"
 
 def load_toml(path: Path) -> dict:
     if not path.exists():
@@ -164,8 +171,6 @@ tab = st.sidebar.radio("Pages", ["Input Builder", "Run", "Results Explorer", "St
 # -----------------------
 # Page: Input Builder
 # -----------------------
-
-from gui_config import DEFAULTS, CHOICES  # add this import
 
 
 def deep_merge(base: dict, override: dict) -> dict:
@@ -696,9 +701,47 @@ if tab == "Input Builder":
         st.subheader("Screen candidates (Single-point energy)")
 
         st.caption(
-            "Enumerates symmetry-unique doped configurations and ranks them using M3GNet single-point energies. "
-            "The best candidates are kept for relaxation."
+            "Ranks doped configurations using M3GNet single-point energies. "
+            "In auto mode, the workflow uses exact symmetry-unique enumeration for manageable cases "
+            "and switches to random symmetry-unique sampling for large configuration spaces."
         )
+
+        st.divider()
+        st.subheader("Scan strategy")
+
+        colM1, colM2 = st.columns([1, 2], vertical_alignment="bottom")
+
+        with colM1:
+            scan_mode_choices = CHOICES.get("scan.mode", ["auto", "exact", "sample"])
+            current_scan_mode = str(cfg_edit["scan"].get("mode", DEFAULTS["scan"]["mode"]))
+            if current_scan_mode not in scan_mode_choices:
+                current_scan_mode = DEFAULTS["scan"]["mode"]
+
+            cfg_edit["scan"]["mode"] = st.selectbox(
+                "Scan mode",
+                options=scan_mode_choices,
+                index=scan_mode_choices.index(current_scan_mode),
+                help=(
+                    "auto: use exact enumeration when manageable, otherwise sampling. "
+                    "exact: force symmetry-unique enumeration. "
+                    "sample: force random symmetry-unique sampling."
+                ),
+            )
+
+        with colM2:
+            if cfg_edit["scan"]["mode"] == "auto":
+                st.info(
+                    "Auto mode is recommended for most cases. It stays exact for small problems "
+                    "and automatically switches to sampling when the configuration space becomes too large."
+                )
+            elif cfg_edit["scan"]["mode"] == "exact":
+                st.warning(
+                    "Exact mode can become very expensive for large supercells or many dopants."
+                )
+            else:
+                st.info(
+                    "Sample mode is more memory-friendly and is recommended for large supercells."
+                )
 
         st.divider()
         st.subheader("Input & selection")
@@ -711,7 +754,7 @@ if tab == "Input Builder":
                 min_value=1,
                 value=int(cfg_edit["scan"].get("topk", DEFAULTS["scan"]["topk"])),
                 step=1,
-                help="Number of lowest-energy configurations retained after M3GNet single-point scan.",
+                help="Number of lowest-energy configurations retained after the scan.",
             )
 
         with col2:
@@ -731,13 +774,13 @@ if tab == "Input Builder":
                 value=float(cfg_edit["scan"].get("symprec", DEFAULTS["scan"]["symprec"])),
                 step=1e-3,
                 format="%.6f",
-                help="Tolerance used when identifying symmetry-unique configurations.",
-            )            
+                help="Tolerance used when identifying symmetry-equivalent configurations.",
+            )
 
         with colB:
             st.caption(
-                "Smaller values are stricter (more unique structures, slower). "
-                "Typical: 1e-3 to 1e-2."
+                "Smaller values are stricter and usually produce more unique structures, "
+                "which can increase runtime."
             )
 
         st.divider()
@@ -760,33 +803,90 @@ if tab == "Input Builder":
                 min_value=1,
                 value=int(cfg_edit["scan"].get("chunksize", DEFAULTS["scan"]["chunksize"])),
                 step=1,
-                help="Work chunk size per process. Larger chunks reduce overhead; too large can increase memory spikes.",
+                help="Work chunk size per process. Larger chunks reduce overhead; too large can increase memory usage.",
             )
 
         with colP3:
-            st.caption("Rule of thumb: start with chunksize 50–200, then tune for your machine.")
+            st.caption(
+                "If memory is limited, reduce nproc and chunksize first."
+            )
 
         st.divider()
-        st.subheader("Safety limits")
+        st.subheader("Exact-mode limits")
 
         colS1, colS2 = st.columns(2, vertical_alignment="bottom")
 
         with colS1:
             cfg_edit["scan"]["max_enum"] = st.number_input(
-                "Max enumerated configs",
+                "Max exact raw configs",
                 min_value=1,
                 value=int(cfg_edit["scan"].get("max_enum", DEFAULTS["scan"]["max_enum"])),
                 step=1000,
-                help="Hard cap on how many raw configurations may be generated before aborting.",
+                help=(
+                    "Hard limit for raw configuration count in exact mode. "
+                    "In auto mode, larger cases switch to sampling."
+                ),
             )
 
         with colS2:
             cfg_edit["scan"]["max_unique"] = st.number_input(
-                "Max symmetry-unique configs",
+                "Max exact symmetry-unique configs",
                 min_value=1,
                 value=int(cfg_edit["scan"].get("max_unique", DEFAULTS["scan"]["max_unique"])),
                 step=1000,
-                help="Hard cap on symmetry-unique configurations (prevents exploding output size).",
+                help="Hard cap on the number of symmetry-unique configurations kept in exact mode.",
+            )
+
+        st.divider()
+        st.subheader("Sampling controls")
+
+        colSM1, colSM2, colSM3 = st.columns(3, vertical_alignment="bottom")
+
+        with colSM1:
+            cfg_edit["scan"]["sample_budget"] = st.number_input(
+                "Sample budget",
+                min_value=1,
+                value=int(cfg_edit["scan"].get("sample_budget", DEFAULTS["scan"]["sample_budget"])),
+                step=100,
+                help="Maximum number of random attempts in sampling mode.",
+            )
+
+        with colSM2:
+            cfg_edit["scan"]["sample_batch_size"] = st.number_input(
+                "Sample batch size",
+                min_value=1,
+                value=int(cfg_edit["scan"].get("sample_batch_size", DEFAULTS["scan"]["sample_batch_size"])),
+                step=1,
+                help="Number of new unique sampled configurations evaluated per batch.",
+            )
+
+        with colSM3:
+            cfg_edit["scan"]["sample_patience"] = st.number_input(
+                "Sample patience",
+                min_value=1,
+                value=int(cfg_edit["scan"].get("sample_patience", DEFAULTS["scan"]["sample_patience"])),
+                step=100,
+                help="Stop sampling after this many non-improving sampled candidates.",
+            )
+
+        colSM4, colSM5 = st.columns(2, vertical_alignment="bottom")
+
+        with colSM4:
+            cfg_edit["scan"]["sample_seed"] = st.number_input(
+                "Sample seed",
+                min_value=0,
+                value=int(cfg_edit["scan"].get("sample_seed", DEFAULTS["scan"]["sample_seed"])),
+                step=1,
+                help="Random seed used in sampling mode.",
+            )
+
+        with colSM5:
+            cfg_edit["scan"]["sample_max_saved"] = st.number_input(
+                "Sample max saved",
+                min_value=1,
+                value=int(cfg_edit["scan"].get("sample_max_saved", DEFAULTS["scan"]["sample_max_saved"])),
+                step=1000,
+                help="Maximum number of sampled canonical configurations remembered to avoid duplicates.",
             )
 
         st.divider()
@@ -799,7 +899,7 @@ if tab == "Input Builder":
         anion_text = st.text_input(
             "Anion species (comma-separated)",
             value=",".join(anions),
-            help="Elements treated as anions (excluded from substitution). Example for oxides: O",
+            help="Elements treated as anions and excluded from substitution. Example for oxides: O",
             placeholder="e.g. O",
         )
         cfg_edit["scan"]["anion_species"] = [x.strip() for x in anion_text.split(",") if x.strip()]
@@ -810,9 +910,8 @@ if tab == "Input Builder":
         cfg_edit["scan"]["skip_if_done"] = st.checkbox(
             "Skip scan if results already exist",
             value=bool(cfg_edit["scan"].get("skip_if_done", True)),
-            help="If enabled, scan is skipped when ranking_scan.csv already exists in the folder.",
+            help="If enabled, scan is skipped when ranking_scan.csv already exists in the structure folder.",
         )
-
 
 
     # -----------------------------

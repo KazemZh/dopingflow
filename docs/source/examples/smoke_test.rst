@@ -1,5 +1,5 @@
 Smoke Test — Minimal Fast Run
-=============================
+==============================
 
 Purpose
 -------
@@ -27,46 +27,73 @@ Example input.toml
 ::
 
    [structure]
-   base_poscar = "reference_structures/base.POSCAR"
-   supercell = [3, 1, 1]
    outdir = "random_structures"
+
+   [references]
+   reference_mode = "metal"
+   host = "SnO2"
+   host_dir = "reference_structures/"
+   supercell = [ 5, 2, 1]
+   metals_ref = [ "Ti","Zr","Nb","Sb","Sn"]
+   oxides_dir = "reference_structures/"
+   fmax = 0.02
+   skip_if_done = false
+
+   [generate]
+   poscar_order = ["Ti","Zr","Nb","Sb","Sn","O"]
+   seed_base = 2026
+   clean_outdir = true
+
+   [scan]
+   poscar_in = "POSCAR"
+   topk = 10
+   symprec = 1e-3
+   max_enum = 10
+   nproc = 4
+   chunksize = 10
+   anion_species = ["O"]
+   max_unique = 50000
+   skip_if_done = false
+   mode = "auto"
+   sample_budget = 5000
+   sample_batch_size = 64
+   sample_patience = 1000
+   sample_seed = 42
+   sample_max_saved = 10000
 
    [doping]
    mode = "explicit"
    host_species = "Sn"
    compositions = [
-     { Sb = 5.0, Ti = 5.0 },
-     { Sb = 5.0, Zr = 5.0 }
+   { Sb = 5.0, Ti = 5.0 },
+   { Sb = 5.0, Zr = 5.0 },
+   { Sb = 10.0, Nb = 5.0 }
    ]
 
-   [generate]
-   poscar_order = ["Ti","Zr","Sb","Sn","O"]
-   seed_base = 1
-   clean_outdir = true
-
-   [scan]
-   topk = 5
-   nproc = 4
-   anion_species = ["O"]
-   skip_if_done = false
-
    [relax]
-   fmax = 0.08
-   n_workers = 2
-   skip_if_done = false
-   skip_candidate_if_done = false
+   fmax = 0.05
+   n_workers = 6
+   tf_threads = 1
+   omp_threads = 1
+   skip_if_done = true
+   skip_candidate_if_done = true
 
    [filter]
-   mode = "topn"
-   max_candidates = 3
-   skip_if_done = false
+   mode = "window"
+   window_meV = 50.0
+   max_candidates = 12
+   skip_if_done = true
 
-   [references]
-   source = "local"
-   bulk_dir = "reference_structures/"
-   pristine_poscar = "reference_structures/base.POSCAR"
-   fmax = 0.03
-   skip_if_done = false
+   [bandgap]
+   skip_if_done = true
+   cutoff = 8.0
+   max_neighbors = 12
+
+   [formation]
+   skip_if_done = true
+   normalize = "per_dopant"
+
+   [database]
 
 
 Expected Result

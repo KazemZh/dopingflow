@@ -28,8 +28,9 @@ potential.
 For each generated structure folder, the method:
 
 - infers the substitutional sublattice and dopant counts from the input structure
-- enumerates symmetry-unique dopant permutations on that sublattice
-- predicts a single-point energy for each unique configuration
+- generates dopant configurations either by **exact enumeration** or **random sampling**
+- removes symmetry-equivalent configurations
+- predicts a single-point energy for each configuration using M3GNet
 - keeps the **top-k lowest-energy** candidates for downstream relaxation
 
 
@@ -55,10 +56,23 @@ For each structure subdirectory in ``[structure].outdir``:
    - dopant species counts on the sublattice
 3. Estimate the total number of raw (non-symmetry-reduced) configurations.
 4. Construct a parent structure and compute symmetry operations acting on the sublattice.
-5. Enumerate dopant labelings and reduce them to **symmetry-unique** configurations.
-6. Evaluate a single-point energy for each unique configuration in parallel (multiprocessing).
-7. Select the lowest-energy ``topk`` candidates and write them to ``candidate_*/01_scan``.
-8. Write a CSV ranking file and a human-readable summary.
+5. Decide the scan strategy according to ``[scan].mode``:
+
+   - ``exact``: perform full symmetry-unique enumeration
+   - ``sample``: generate configurations using random symmetry-unique sampling
+   - ``auto``: use enumeration when feasible, otherwise switch to sampling
+
+6. Generate configurations:
+
+   - enumeration: iterate over all dopant permutations
+   - sampling: randomly generate dopant arrangements and filter duplicates
+
+7. Reduce configurations to symmetry-unique representations.
+
+8. Evaluate single-point energies in parallel using M3GNet.
+
+9. Select the lowest-energy ``topk`` candidates and write them to ``candidate_*/01_scan``.
+10. Write a CSV ranking file and a human-readable summary.
 
 
 Enumeration Sublattice Definition
@@ -91,7 +105,12 @@ To avoid runaway enumeration, the workflow:
 - estimates the raw count and enforces ``[scan].max_enum``
 - enforces a hard limit on symmetry-unique configurations via ``[scan].max_unique``
 
-If either limit is exceeded, the scan stops for that structure and reports an error.
+If ``mode = "auto"`` and the estimated configuration count exceeds
+``[scan].max_enum``, the scan automatically switches to sampling mode.
+
+If ``mode = "exact"``, exceeding these limits stops the scan to prevent
+infeasible enumeration.
+
 This protects against infeasible compositions and/or large supercells.
 
 
@@ -122,6 +141,32 @@ To avoid evaluating symmetry-equivalent configurations, the scan:
 5. Keeps only labelings with unique canonical keys.
 
 This yields the set of symmetry-unique dopant configurations.
+
+Sampling Mode
+-------------
+
+When ``mode = "sample"`` (or when ``mode = "auto"`` switches to sampling),
+the workflow generates configurations by random sampling instead of full
+combinatorial enumeration.
+
+The algorithm:
+
+1. randomly assigns dopants to sublattice sites
+2. converts the labeling to a canonical symmetry representation
+3. discards duplicates already encountered
+4. accumulates unique configurations until a batch is formed
+5. evaluates the batch using M3GNet
+
+Sampling is controlled by the parameters:
+
+- ``sample_budget`` — maximum number of sampling attempts
+- ``sample_batch_size`` — number of unique structures evaluated per batch
+- ``sample_patience`` — early stopping when no better structures are found
+- ``sample_seed`` — random seed for reproducibility
+- ``sample_max_saved`` — maximum stored canonical keys to avoid duplicates
+
+Sampling allows the scan to explore large configuration spaces that would
+otherwise be infeasible to enumerate.
 
 
 Energy Model and Parallel Evaluation
@@ -168,12 +213,15 @@ The ranking CSV contains:
 Reproducibility
 ---------------
 
-For a fixed input structure and scan settings, the result is deterministic with respect to:
+For a fixed input structure and scan settings:
 
+- enumeration mode produces deterministic results
+- sampling mode is stochastic but reproducible when ``sample_seed`` is fixed
 - inferred dopant counts
 - symmetry analysis (controlled by ``symprec``)
 - enumeration ordering
 - the ML model used for prediction
+
 
 Parallel evaluation does not affect the final ranking, since candidates are
 selected based on energy values.
@@ -201,3 +249,5 @@ Notes and Limitations
 - The current label enumerator supports up to **three distinct dopant species**.
 - Predicted single-point energies are surrogate ML values and should be interpreted
   as a ranking heuristic rather than absolute thermodynamic energies.
+- Sampling mode does not guarantee discovery of the global minimum but
+  efficiently identifies low-energy candidates for subsequent relaxation.

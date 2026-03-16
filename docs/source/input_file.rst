@@ -284,15 +284,21 @@ For each composition:
 [scan]
 ------
 
-Step 02 — Symmetry-unique dopant enumeration and single-point prescreening.
+Step 02 — Dopant configuration prescreening using M3GNet.
 
 For each generated structure folder inside ``[structure].outdir``:
 
-1. Enumerates all dopant permutations on the cation sublattice
-2. Reduces them to symmetry-unique configurations
+1. Generates doped configurations on the cation sublattice
+2. Identifies symmetry-unique configurations
 3. Evaluates single-point energies using M3GNet
-4. Keeps the lowest-energy ``topk`` configurations
-5. Writes candidate folders and ranking files
+4. Ranks configurations by energy
+5. Keeps the lowest-energy ``topk`` candidates
+6. Writes candidate folders and ranking files
+
+Depending on the scan mode, configurations are obtained either by:
+
+- exact symmetry-unique enumeration
+- random symmetry-unique sampling
 
 This step operates only on subfolders created in Step 01.
 
@@ -307,34 +313,54 @@ Filename inside each composition folder used as input.
 topk (integer)
 ~~~~~~~~~~~~~~
 
-Number of lowest-energy symmetry-unique configurations retained.
+Number of lowest-energy configurations retained.
 
 symprec (float)
 ~~~~~~~~~~~~~~~
 
 Tolerance used for symmetry detection in ``SpacegroupAnalyzer``.
 
+mode (string, default: "auto")
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Scan strategy.
+
+Possible values:
+
+- ``auto``  
+  Automatically chooses exact enumeration for manageable problems and switches
+  to sampling when the configuration space becomes too large.
+
+- ``exact``  
+  Forces full symmetry-unique enumeration of all configurations.
+
+- ``sample``  
+  Uses random symmetry-unique sampling instead of full enumeration.
+
 max_enum (integer)
 ~~~~~~~~~~~~~~~~~~
 
-Maximum allowed number of raw combinatorial configurations.
-Prevents runaway combinatorics.
+Maximum allowed number of raw combinatorial configurations in exact mode.
+
+If this limit is exceeded and ``mode = "auto"``, the scan automatically switches
+to sampling mode.
 
 max_unique (integer)
 ~~~~~~~~~~~~~~~~~~~~
 
-Maximum allowed number of symmetry-unique configurations.
-If exceeded, the run stops to prevent memory explosion.
+Maximum allowed number of symmetry-unique configurations in exact mode.
+
+Prevents excessive memory usage for very large configuration spaces.
 
 nproc (integer)
 ~~~~~~~~~~~~~~~
 
-Number of parallel worker processes used for energy evaluation.
+Number of parallel worker processes used for M3GNet energy evaluation.
 
 chunksize (integer)
 ~~~~~~~~~~~~~~~~~~~
 
-Chunk size used in multiprocessing pool.
+Chunk size used in the multiprocessing pool.
 
 anion_species (array of strings)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -347,7 +373,7 @@ Typically contains oxygen:
    anion_species = ["O"]
 
 host_species (from [doping])
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Used to define the cation sublattice.
 Must match the host element defined in ``[doping]``.
@@ -356,6 +382,37 @@ skip_if_done (boolean, default: true)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If true, skip a structure folder if ``ranking_scan.csv`` already exists.
+
+Sampling parameters
+~~~~~~~~~~~~~~~~~~~
+
+Used only when ``mode = "sample"`` or when ``mode = "auto"`` switches to sampling.
+
+sample_budget (integer)
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Maximum number of random sampling attempts.
+
+sample_batch_size (integer)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Number of new symmetry-unique sampled configurations evaluated per batch.
+
+sample_patience (integer)
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Sampling stops after this many sampled configurations fail to improve the
+current best candidate.
+
+sample_seed (integer)
+~~~~~~~~~~~~~~~~~~~~~
+
+Random seed used for reproducible sampling.
+
+sample_max_saved (integer)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Maximum number of sampled canonical configurations stored to avoid duplicates.
 
 Output
 ~~~~~~
@@ -372,12 +429,10 @@ For each composition folder:
 
 Each candidate folder contains:
 
-- Symmetry-unique configuration
-- Single-point M3GNet energy
-- Dopant site signature
-- Enumeration metadata
-
----------------------------------------------------------------------
+- symmetry-unique configuration
+- single-point M3GNet energy
+- dopant site signature
+- scan metadata
 
 [relax]
 -------
@@ -483,11 +538,9 @@ skip_if_done (bool)
 If true, previously computed bandgap results are reused.
 
 Behavior:
-- If ``candidate_*/03_band/meta.json`` already exists, the stored bandgap
-  value is reused and prediction is skipped for that candidate.
+- If ``candidate_*/03_band/meta.json`` already exists, the stored bandgap value is reused and prediction is skipped for that candidate.
 - The summary CSV is rebuilt from existing metadata.
-- This allows safe re-running of the workflow without recomputing
-  already processed candidates.
+- This allows safe re-running of the workflow without recomputing already processed candidates.
 
 If a candidate prediction fails:
 - The error is recorded in ``candidate_*/03_band/meta.json``.

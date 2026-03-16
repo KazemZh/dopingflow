@@ -1,5 +1,5 @@
 Enumerate Example — Systematic Dopant Screening
-==============================================
+================================================
 
 Purpose
 -------
@@ -36,9 +36,22 @@ Example input.toml
 ::
 
    [structure]
-   base_poscar = "reference_structures/base.POSCAR"
-   supercell = [5, 2, 1]
    outdir = "random_structures"
+
+   [references]
+   reference_mode = "metal"
+   host = "SnO2"
+   host_dir = "reference_structures/"
+   supercell = [ 5, 2, 1]
+   metals_ref = [ "Ti","Zr","Nb","Sb","Sn"]
+   oxides_dir = "reference_structures/"
+   fmax = 0.02
+   skip_if_done = false
+
+   [generate]
+   poscar_order = ["Ti","Zr","Nb","Sb","Sn","O"]
+   seed_base = 12345
+   clean_outdir = true
 
    [doping]
    mode = "enumerate"
@@ -49,12 +62,7 @@ Example input.toml
    allowed_totals = [5.0, 10.0, 15.0]
    levels = [5.0, 10.0, 15.0]
 
-   [generate]
-   poscar_order = ["Ti","Zr","Nb","Sb","Sn","O"]
-   seed_base = 12345
-   clean_outdir = true
-
-   # other sections identical to previous examples
+   # Other sections identical to previous example
 
 
 Result

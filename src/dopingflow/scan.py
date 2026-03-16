@@ -48,6 +48,14 @@ class ScanConfig:
     max_unique: int
     skip_if_done: bool
 
+    # New auto/sample controls
+    mode: str  # auto | exact | sample
+    sample_budget: int
+    sample_batch_size: int
+    sample_patience: int
+    sample_seed: int
+    sample_max_saved: int
+
 
 def _parse_scan_config(raw: dict[str, Any]) -> ScanConfig:
     scan = raw.get("scan", {}) or {}
@@ -57,16 +65,24 @@ def _parse_scan_config(raw: dict[str, Any]) -> ScanConfig:
     poscar_in = str(scan.get("poscar_in", "POSCAR"))
     topk = int(scan.get("topk", 15))
     symprec = float(scan.get("symprec", 1e-3))
-    max_enum = int(scan.get("max_enum", 50_000_000))
+    max_enum = int(scan.get("max_enum", 300_000))
     nproc = int(scan.get("nproc", 12))
     chunksize = int(scan.get("chunksize", 50))
     anion_species = [str(x) for x in (scan.get("anion_species", ["O"]) or [])]
     host_species = str(dop.get("host_species", "")).strip()
-    max_unique = int(scan.get("max_unique", 200_000))
+    max_unique = int(scan.get("max_unique", 100_000))
     skip_if_done = bool(scan.get("skip_if_done", True))
 
     # Order comes from [generate] ONLY (single source of truth)
     order = [str(x) for x in (gen.get("poscar_order", []) or [])]
+
+    # New controls
+    mode = str(scan.get("mode", "auto")).strip().lower()
+    sample_budget = int(scan.get("sample_budget", 20_000))
+    sample_batch_size = int(scan.get("sample_batch_size", 256))
+    sample_patience = int(scan.get("sample_patience", 4_000))
+    sample_seed = int(scan.get("sample_seed", 42))
+    sample_max_saved = int(scan.get("sample_max_saved", 50_000))
 
     if topk <= 0:
         raise ValueError("[scan].topk must be > 0")
@@ -85,6 +101,17 @@ def _parse_scan_config(raw: dict[str, Any]) -> ScanConfig:
     if max_unique <= 0:
         raise ValueError("[scan].max_unique must be > 0")
 
+    if mode not in {"auto", "exact", "sample"}:
+        raise ValueError("[scan].mode must be one of: auto, exact, sample")
+    if sample_budget <= 0:
+        raise ValueError("[scan].sample_budget must be > 0")
+    if sample_batch_size <= 0:
+        raise ValueError("[scan].sample_batch_size must be > 0")
+    if sample_patience <= 0:
+        raise ValueError("[scan].sample_patience must be > 0")
+    if sample_max_saved <= 0:
+        raise ValueError("[scan].sample_max_saved must be > 0")
+
     return ScanConfig(
         poscar_in=poscar_in,
         topk=topk,
@@ -97,6 +124,12 @@ def _parse_scan_config(raw: dict[str, Any]) -> ScanConfig:
         host_species=host_species,
         max_unique=max_unique,
         skip_if_done=skip_if_done,
+        mode=mode,
+        sample_budget=sample_budget,
+        sample_batch_size=sample_batch_size,
+        sample_patience=sample_patience,
+        sample_seed=sample_seed,
+        sample_max_saved=sample_max_saved,
     )
 
 
@@ -224,6 +257,7 @@ def _canonical_key(labels: np.ndarray, perms: List[np.ndarray]) -> bytes:
 
 def _enumerate_label_configs(N: int, dopant_label_counts: Dict[int, int]):
     """
+    Exact enumerator.
     Supports up to 3 dopants total.
     labels are int array length N:
       0 -> host
@@ -247,7 +281,8 @@ def _enumerate_label_configs(N: int, dopant_label_counts: Dict[int, int]):
     if len(items) == 2:
         (l1, c1), (l2, c2) = items
         for A in combinations(allpos, c1):
-            rem1 = [p for p in allpos if p not in A]
+            Aset = set(A)
+            rem1 = [p for p in allpos if p not in Aset]
             for B in combinations(rem1, c2):
                 labels = np.zeros(N, dtype=np.int8)
                 labels[list(A)] = l1
@@ -258,9 +293,11 @@ def _enumerate_label_configs(N: int, dopant_label_counts: Dict[int, int]):
     if len(items) == 3:
         (l1, c1), (l2, c2), (l3, c3) = items
         for A in combinations(allpos, c1):
-            rem1 = [p for p in allpos if p not in A]
+            Aset = set(A)
+            rem1 = [p for p in allpos if p not in Aset]
             for B in combinations(rem1, c2):
-                rem2 = [p for p in rem1 if p not in B]
+                Bset = set(B)
+                rem2 = [p for p in rem1 if p not in Bset]
                 for C in combinations(rem2, c3):
                     labels = np.zeros(N, dtype=np.int8)
                     labels[list(A)] = l1
@@ -269,7 +306,28 @@ def _enumerate_label_configs(N: int, dopant_label_counts: Dict[int, int]):
                     yield labels
         return
 
-    raise ValueError("This enumerator supports up to 3 dopants total.")
+    raise ValueError("Exact enumerator supports up to 3 dopants total. Use mode='sample' for more.")
+
+
+def _random_labels(
+    N: int,
+    dopant_label_counts: Dict[int, int],
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """
+    Random valid labeling with exact dopant counts.
+    Works for any number of dopants.
+    """
+    labels = np.zeros(N, dtype=np.int8)
+    available = np.arange(N)
+
+    for lab, cnt in sorted(dopant_label_counts.items()):
+        chosen = rng.choice(available, size=cnt, replace=False)
+        labels[chosen] = lab
+        keep_mask = ~np.isin(available, chosen)
+        available = available[keep_mask]
+
+    return labels
 
 
 def _dopant_signature_from_labels(labels: np.ndarray, label_to_el: Dict[int, str]) -> str:
@@ -282,6 +340,49 @@ def _dopant_signature_from_labels(labels: np.ndarray, label_to_el: Dict[int, str
     return "_".join(parts) if parts else "pristine"
 
 
+def _choose_scan_mode(raw_ncfg: int, cfg: ScanConfig, n_dopants: int) -> str:
+    """
+    Auto selection:
+      - exact if manageable and <=3 dopants
+      - sample otherwise
+    """
+    if cfg.mode == "exact":
+        if n_dopants > 3:
+            raise RuntimeError("mode='exact' requested, but exact enumerator supports only up to 3 dopants.")
+        return "exact"
+
+    if cfg.mode == "sample":
+        return "sample"
+
+    # auto
+    if n_dopants > 3:
+        return "sample"
+
+    if raw_ncfg <= cfg.max_enum:
+        return "exact"
+
+    return "sample"
+
+
+def _update_best_heap(best, E: float, labels: np.ndarray, idx: int, topk: int) -> bool:
+    """
+    Keep the best top-k lowest energies.
+    Returns True if the heap improved.
+    """
+    item = (-E, idx, labels.copy())
+
+    if len(best) < topk:
+        heapq.heappush(best, item)
+        return True
+
+    worst_E = -best[0][0]
+    if E < worst_E:
+        heapq.heapreplace(best, item)
+        return True
+
+    return False
+
+
 # -----------------------------
 # Multiprocessing worker (top-level)
 # -----------------------------
@@ -290,8 +391,8 @@ _MODEL = None
 
 def _init_worker():
     # --- suppress TF warnings inside each worker process ---
-    import os
     import logging
+    import os
     import warnings
 
     os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
@@ -311,7 +412,7 @@ def _init_worker():
             pass
     except Exception:
         pass
-    
+
     global _MODEL
     from m3gnet.models import M3GNet
 
@@ -336,6 +437,175 @@ def _energy_worker_with_labels(args):
 
 
 # -----------------------------
+# Exact mode
+# -----------------------------
+def _enumerate_unique_configs_exact(
+    *,
+    N: int,
+    perms: List[np.ndarray],
+    dopant_label_counts: Dict[int, int],
+    cfg: ScanConfig,
+) -> Tuple[List[np.ndarray], int]:
+    seen = set()
+    unique_labels: List[np.ndarray] = []
+    checked_raw = 0
+
+    for labels in _enumerate_label_configs(N, dopant_label_counts):
+        checked_raw += 1
+        key = _canonical_key(labels, perms)
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+        unique_labels.append(labels.copy())
+
+        if len(unique_labels) >= cfg.max_unique:
+            raise RuntimeError(
+                f"Unique(sym) configs reached max_unique={cfg.max_unique}. "
+                "This composition is too large for full enumeration."
+            )
+
+    log.info("Done exact generation: raw=%d, unique(sym)=%d", checked_raw, len(unique_labels))
+    return unique_labels, checked_raw
+
+
+def _evaluate_exact_configs(
+    *,
+    base: Structure,
+    sub_idx: List[int],
+    unique_labels: List[np.ndarray],
+    label_to_el: Dict[int, str],
+    cfg: ScanConfig,
+) -> Tuple[List[Tuple[float, int, np.ndarray]], Dict[str, int]]:
+    base_dict = base.as_dict()
+    jobs = [(base_dict, sub_idx, lab, label_to_el) for lab in unique_labels]
+
+    ctx = get_context("spawn")
+    best = []
+    t0 = time.time()
+
+    with ctx.Pool(processes=cfg.nproc, initializer=_init_worker) as pool:
+        for done, (E, labels) in enumerate(
+            pool.imap_unordered(_energy_worker_with_labels, jobs, chunksize=cfg.chunksize),
+            start=1,
+        ):
+            _update_best_heap(best, E, labels, done, cfg.topk)
+
+            if done % 2000 == 0 or done == len(jobs):
+                current = sorted([-x[0] for x in best])
+                log.info("%d/%d evaluated | best energies: %s", done, len(jobs), current)
+
+    log.info("Exact evaluation walltime: %.1f s", time.time() - t0)
+
+    best_sorted = sorted([(-E, idx, lab) for (E, idx, lab) in best], key=lambda x: x[0])
+    stats = {
+        "attempted_samples": 0,
+        "unique_sym_samples": len(unique_labels),
+        "evaluated_samples": len(unique_labels),
+        "stopped_by_patience": 0,
+    }
+    return best_sorted, stats
+
+
+# -----------------------------
+# Sampling mode
+# -----------------------------
+def _sample_unique_configs_and_rank(
+    *,
+    base: Structure,
+    sub_idx: List[int],
+    perms: List[np.ndarray],
+    label_to_el: Dict[int, str],
+    dopant_label_counts: Dict[int, int],
+    cfg: ScanConfig,
+) -> Tuple[List[Tuple[float, int, np.ndarray]], Dict[str, int]]:
+    rng = np.random.default_rng(cfg.sample_seed)
+    base_dict = base.as_dict()
+
+    seen = set()
+    best = []
+
+    attempted = 0
+    no_improve_counter = 0
+    eval_counter = 0
+
+    ctx = get_context("spawn")
+    t0 = time.time()
+
+    with ctx.Pool(processes=cfg.nproc, initializer=_init_worker) as pool:
+        while attempted < cfg.sample_budget and no_improve_counter < cfg.sample_patience:
+            batch_labels = []
+            batch_keys = set()
+
+            # Build a batch of new symmetry-unique samples
+            while len(batch_labels) < cfg.sample_batch_size and attempted < cfg.sample_budget:
+                attempted += 1
+                labels = _random_labels(len(sub_idx), dopant_label_counts, rng)
+                key = _canonical_key(labels, perms)
+
+                if key in seen or key in batch_keys:
+                    continue
+
+                seen.add(key)
+                batch_keys.add(key)
+                batch_labels.append(labels)
+
+                if len(seen) >= cfg.sample_max_saved:
+                    log.warning(
+                        "Reached sample_max_saved=%d canonical keys; stopping sampling.",
+                        cfg.sample_max_saved,
+                    )
+                    attempted = cfg.sample_budget
+                    break
+
+            if not batch_labels:
+                break
+
+            jobs = [(base_dict, sub_idx, lab, label_to_el) for lab in batch_labels]
+
+            improved_in_batch = False
+            for E, labels in pool.imap_unordered(
+                _energy_worker_with_labels,
+                jobs,
+                chunksize=cfg.chunksize,
+            ):
+                eval_counter += 1
+                improved = _update_best_heap(best, E, labels, eval_counter, cfg.topk)
+                if improved:
+                    improved_in_batch = True
+
+            if improved_in_batch:
+                no_improve_counter = 0
+            else:
+                no_improve_counter += len(batch_labels)
+
+            if eval_counter % 500 == 0 or attempted >= cfg.sample_budget:
+                current = sorted([-x[0] for x in best])
+                log.info(
+                    "sampled attempts=%d | unique=%d | evaluated=%d | best=%s | no_improve=%d",
+                    attempted,
+                    len(seen),
+                    eval_counter,
+                    current,
+                    no_improve_counter,
+                )
+
+    log.info("Sampling evaluation walltime: %.1f s", time.time() - t0)
+
+    best_sorted = sorted([(-E, idx, lab) for (E, idx, lab) in best], key=lambda x: x[0])
+
+    stats = {
+        "attempted_samples": attempted,
+        "unique_sym_samples": len(seen),
+        "evaluated_samples": eval_counter,
+        "stopped_by_patience": int(no_improve_counter >= cfg.sample_patience),
+    }
+
+    return best_sorted, stats
+
+
+# -----------------------------
 # Core: scan one structure folder
 # -----------------------------
 def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
@@ -357,12 +627,6 @@ def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
     log.info("Dopant counts inferred on sublattice: %s", dopant_counts)
     log.info("Estimated raw configurations: %d", raw_ncfg)
 
-    if raw_ncfg > cfg.max_enum:
-        raise RuntimeError(
-            f"Too many raw configs ({raw_ncfg}) > max_enum ({cfg.max_enum}). "
-            "Reduce dopant counts / use sampling, or increase max_enum carefully."
-        )
-
     if host_count + sum(dopant_counts.values()) != N:
         raise RuntimeError("Counts inconsistent with sublattice size.")
 
@@ -381,57 +645,49 @@ def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
     log.info("Label map: %s", label_to_el)
     log.info("Label counts: %s", dopant_label_counts)
 
-    # Generate symmetry-unique configs
-    seen = set()
-    unique_labels: List[np.ndarray] = []
-    checked_raw = 0
+    selected_mode = _choose_scan_mode(raw_ncfg, cfg, n_dopants=len(dopant_label_counts))
+    log.info("Selected scan mode: %s", selected_mode)
 
-    for labels in _enumerate_label_configs(N, dopant_label_counts):
-        checked_raw += 1
-        key = _canonical_key(labels, perms)
-        if key in seen:
-            continue
-        seen.add(key)
-        unique_labels.append(labels.copy())
-
-        if len(unique_labels) >= cfg.max_unique:
+    if selected_mode == "exact":
+        if raw_ncfg > cfg.max_enum:
             raise RuntimeError(
-                f"Unique(sym) configs reached max_unique={cfg.max_unique}. "
-                "This composition is too large for full enumeration."
+                f"Exact mode selected but raw configs ({raw_ncfg}) > max_enum ({cfg.max_enum})."
             )
 
-    log.info("Done generating: raw=%d, unique(sym)=%d", checked_raw, len(unique_labels))
+        unique_labels, checked_raw = _enumerate_unique_configs_exact(
+            N=N,
+            perms=perms,
+            dopant_label_counts=dopant_label_counts,
+            cfg=cfg,
+        )
 
-    # Parallel energy evaluation
-    base_dict = base.as_dict()
-    jobs = [(base_dict, sub_idx, lab, label_to_el) for lab in unique_labels]
+        best_sorted, stats = _evaluate_exact_configs(
+            base=base,
+            sub_idx=sub_idx,
+            unique_labels=unique_labels,
+            label_to_el=label_to_el,
+            cfg=cfg,
+        )
 
-    ctx = get_context("spawn")  # safest with TF
-    best = []  # heap: (-E, idx, labels)
+        unique_count = len(unique_labels)
 
-    t0 = time.time()
-    with ctx.Pool(processes=cfg.nproc, initializer=_init_worker) as pool:
-        for done, (E, labels) in enumerate(
-            pool.imap_unordered(_energy_worker_with_labels, jobs, chunksize=cfg.chunksize),
-            start=1,
-        ):
-            item = (-E, done, labels.copy())
-            if len(best) < cfg.topk:
-                heapq.heappush(best, item)
-            else:
-                worst_E = -best[0][0]
-                if E < worst_E:
-                    heapq.heapreplace(best, item)
+    elif selected_mode == "sample":
+        best_sorted, stats = _sample_unique_configs_and_rank(
+            base=base,
+            sub_idx=sub_idx,
+            perms=perms,
+            label_to_el=label_to_el,
+            dopant_label_counts=dopant_label_counts,
+            cfg=cfg,
+        )
 
-            if done % 2000 == 0 or done == len(jobs):
-                current = sorted([-x[0] for x in best])
-                log.info("%d/%d evaluated | best energies: %s", done, len(jobs), current)
+        checked_raw = stats["attempted_samples"]
+        unique_count = stats["unique_sym_samples"]
 
-    log.info("Evaluation walltime: %.1f s", time.time() - t0)
+    else:
+        raise RuntimeError(f"Unknown scan mode: {selected_mode}")
 
     # Write outputs
-    best_sorted = sorted([(-E, idx, lab) for (E, idx, lab) in best], key=lambda x: x[0])
-
     ranking_rows = []
     for rank, (E, eval_idx, labels) in enumerate(best_sorted, start=1):
         s = base.copy()
@@ -448,7 +704,7 @@ def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
 
         meta = {
             "stage": "01_scan",
-            "method": "M3GNet-singlepoint (sym-unique enumeration)",
+            "method": f"M3GNet-singlepoint ({selected_mode})",
             "rank_sp": rank,
             "energy_sp_eV": float(E),
             "signature": sig,
@@ -464,14 +720,22 @@ def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
                 "anion_species": cfg.anion_species,
                 "host_species": cfg.host_species,
                 "max_unique": cfg.max_unique,
+                "mode": cfg.mode,
+                "selected_mode": selected_mode,
+                "sample_budget": cfg.sample_budget,
+                "sample_batch_size": cfg.sample_batch_size,
+                "sample_patience": cfg.sample_patience,
+                "sample_seed": cfg.sample_seed,
+                "sample_max_saved": cfg.sample_max_saved,
             },
             "counts": {
                 "sublattice_sites": int(N),
                 "host_count_on_sublattice": int(host_count),
                 "dopant_counts_on_sublattice": {k: int(v) for k, v in dopant_counts.items()},
                 "raw_configs_checked": int(checked_raw),
-                "unique_sym_configs": int(len(unique_labels)),
+                "unique_sym_configs": int(unique_count),
                 "n_sym_perms": int(len(perms)),
+                **stats,
             },
             "labels": [int(x) for x in labels.tolist()],
             "label_to_el": {str(k): v for k, v in label_to_el.items()},
@@ -511,10 +775,15 @@ def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
         f.write(f"CHUNKSIZE: {cfg.chunksize}\n")
         f.write(f"Host: {cfg.host_species}\n")
         f.write(f"Anions: {cfg.anion_species}\n")
+        f.write(f"Mode requested: {cfg.mode}\n")
+        f.write(f"Mode selected: {selected_mode}\n")
         f.write(f"Sublattice sites: {N}\n")
         f.write(f"Dopant counts: {dopant_counts}\n")
+        f.write(f"Estimated raw configs: {raw_ncfg}\n")
         f.write(f"Raw checked: {checked_raw}\n")
-        f.write(f"Unique(sym): {len(unique_labels)}\n")
+        f.write(f"Unique(sym): {unique_count}\n")
+        for k, v in stats.items():
+            f.write(f"{k}: {v}\n")
         f.write("Best energies (eV):\n")
         for r in ranking_rows:
             f.write(f"  {r['candidate']}: {r['energy_sp_eV']:.10f} | {r['signature']}\n")
@@ -528,7 +797,8 @@ def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
 def run_scan(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None = None) -> None:
     """
     Step 02: For each structure folder in [structure].outdir:
-      - enumerate symmetry-unique dopant permutations on the cation sublattice
+      - exact mode: enumerate symmetry-unique dopant permutations on the cation sublattice
+      - sample mode: randomly sample symmetry-unique dopant arrangements
       - evaluate single-point energy using M3GNet in parallel
       - keep top-k lowest energies
     """
@@ -559,7 +829,7 @@ def run_scan(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None = 
     log.info("DONE Step 02 scan for all structure folders.")
 
 
-# TOML wrapper (like your other steps)
+# TOML wrapper
 try:
     import tomllib  # py3.11+
 except ModuleNotFoundError:  # pragma: no cover

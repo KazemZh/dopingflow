@@ -6,7 +6,7 @@ SUPER_CELL_PRESETS = {
     "Larger (5,1,1)": (5, 1, 1),
 }
 
-DOPING_MODE_CHOICES = ["explicit"]  # extend later if you add modes
+DOPING_MODE_CHOICES = ["explicit", "enumerate"]
 
 # Keep these as *allowed dopants* for dropdowns
 ALLOWED_DOPANTS = ["Sb", "Ti", "Zr", "Nb", "Zn", "Ni", "Mn", "Ba", "W"]
@@ -19,8 +19,6 @@ RUN_PRESETS = {
     "Filter only (recompute)": {"from": "filter", "until": "filter"},
 }
 
-# gui/gui_config.py
-
 STEP_KEYS = ["refs", "generate", "scan", "relax", "filter", "bandgap", "formation", "collect"]
 
 CHOICES = {
@@ -28,6 +26,7 @@ CHOICES = {
     "doping.mode": ["explicit", "enumerate"],
     "filter.mode": ["window", "topn"],
     "formation.normalize": ["total", "per_dopant", "per_host"],
+    "scan.mode": ["auto", "exact", "sample"],
 }
 
 DEFAULTS = {
@@ -69,16 +68,22 @@ DEFAULTS = {
         "poscar_in": "POSCAR",
         "topk": 15,
         "symprec": 1e-3,
-        "nproc": 12,
+        "nproc": 4,
         "chunksize": 50,
-        "max_enum": 50_000_000,
-        "max_unique": 200_000,
+        "max_enum": 300_000,
+        "max_unique": 100_000,
         "anion_species": ["O"],
         "skip_if_done": True,
+        "mode": "auto",
+        "sample_budget": 20000,
+        "sample_batch_size": 256,
+        "sample_patience": 4000,
+        "sample_seed": 42,
+        "sample_max_saved": 50000,
     },
     "relax": {
         "fmax": 0.05,
-        "n_workers": 6,
+        "n_workers": 4,
         "tf_threads": 1,
         "omp_threads": 1,
         "skip_if_done": True,

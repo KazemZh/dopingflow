@@ -63,7 +63,7 @@ Composition Handling
 --------------------
 
 Requested vs effective composition
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Doping levels are provided as percentages *relative to the number of host sites*
 in the generated supercell. Since the number of sites is discrete, requested

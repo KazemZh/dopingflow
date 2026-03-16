@@ -59,6 +59,7 @@ Examples
    :maxdepth: 1
 
    examples/explicit_single
+   examples/explicit_single_oxides
    examples/explicit_batch
    examples/enumerate_screening
    examples/smoke_test

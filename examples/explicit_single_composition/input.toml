@@ -1,7 +1,15 @@
 [structure]
-base_poscar = "reference_structures/base.POSCAR"
-supercell = [5, 2, 1]
 outdir = "random_structures"
+
+[references]
+reference_mode = "metal"
+host = "SnO2"
+host_dir = "reference_structures/"
+supercell = [ 5, 2, 1]
+metals_ref = [ "Zr","Sb","Sn"]
+oxides_dir = "reference_structures/"
+fmax = 0.02
+skip_if_done = false
 
 [doping]
 mode = "explicit"
@@ -16,14 +24,21 @@ seed_base = 12345
 clean_outdir = true
 
 [scan]
-topk = 15
+poscar_in = "POSCAR"
+topk = 10
 symprec = 1e-3
-max_enum = 50000000
-nproc = 12
-chunksize = 50
+max_enum = 10
+nproc = 4
+chunksize = 10
 anion_species = ["O"]
-max_unique = 200000
-skip_if_done = true
+max_unique = 50000
+skip_if_done = false
+mode = "auto"
+sample_budget = 5000
+sample_batch_size = 64
+sample_patience = 1000
+sample_seed = 42
+sample_max_saved = 10000
 
 [relax]
 fmax = 0.05
@@ -48,9 +63,4 @@ max_neighbors = 12
 skip_if_done = true
 normalize = "per_dopant"
 
-[references]
-source = "local"
-bulk_dir = "reference_structures/"
-pristine_poscar = "reference_structures/base.POSCAR"
-fmax = 0.02
-skip_if_done = true
+[database]

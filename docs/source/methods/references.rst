@@ -1,5 +1,5 @@
 0. Reference Energy Construction
-=================================
+================================
 
 Implementation
 --------------
@@ -20,22 +20,21 @@ The public entry point is:
 Purpose
 -------
 
-This stage constructs the reference energies required for
-formation energy evaluation of doped structures.
+This stage prepares all thermodynamic reference quantities required for
+formation energy evaluation of substitutionally doped structures.
 
-The following quantities are computed:
+The stage performs the following tasks:
 
-- The relaxed total energy of the pristine supercell
-- The elemental chemical potentials of all species involved
-  (host + dopants)
-
-All reference data are written to:
+- Relax the host oxide unit cell
+- Build and relax the host supercell
+- Relax reference structures according to the selected reference scheme
+- Store all relevant energies and metadata in:
 
 ::
 
    reference_structures/reference_energies.json
 
-These references are later used for formation energy evaluation.
+The resulting reference data are later used by the formation-energy stage.
 
 
 Inputs
@@ -43,29 +42,107 @@ Inputs
 
 This stage uses settings from:
 
-- ``[structure]``: provides the pristine structure and supercell.
-- ``[doping]``: defines the host species and dopant set.
-- ``[references]``: controls reference source, relaxation settings, and caching behavior.
+- ``[references]``: reference mode, host structure, reference directories,
+  relaxation settings, oxygen settings, and caching behavior
+- ``[doping]``: defines the host species and the dopant set used in later steps
+
+The host supercell is defined in ``[references].supercell`` and is constructed
+at this stage.
+
+
+Reference Modes
+---------------
+
+Two thermodynamic reference schemes are supported.
+
+
+Metal reference mode
+~~~~~~~~~~~~~~~~~~~~
+
+In metal mode, elemental chemical potentials are taken from relaxed elemental
+reference phases.
+
+For each relevant element :math:`i`, the workflow relaxes the corresponding
+metal structure and computes:
+
+.. math::
+
+   \mu_i = \frac{E_{\mathrm{metal}}}{N_{\mathrm{atoms}}}
+
+where:
+
+- :math:`E_{\mathrm{metal}}` is the relaxed total energy of the elemental
+  reference structure
+- :math:`N_{\mathrm{atoms}}` is the number of atoms in that structure
+
+This mode corresponds to equilibrium with elemental reservoirs.
+
+
+Oxide reference mode
+~~~~~~~~~~~~~~~~~~~~
+
+In oxide mode, dopant chemical potentials are derived from oxide reference
+phases together with the oxygen chemical potential.
+
+For a binary oxide :math:`M_xO_y`, the chemical potential satisfies:
+
+.. math::
+
+   x\mu_M + y\mu_O = E_{M_xO_y}
+
+which gives:
+
+.. math::
+
+   \mu_M = \frac{E_{M_xO_y} - y\mu_O}{x}
+
+The oxygen chemical potential is obtained from the gas reference
+(typically :math:`O_2`):
+
+.. math::
+
+   \mu_O = \frac{1}{2}E_{O_2} + \Delta\mu_O
+
+where:
+
+- :math:`E_{O_2}` is the relaxed total energy of the oxygen molecule
+- :math:`\Delta\mu_O` is the optional shift defined by ``muO_shift_ev``
+
+The setting ``oxygen_mode`` is stored for traceability.
+For example, ``O-rich`` usually corresponds to:
+
+.. math::
+
+   \Delta\mu_O = 0
+
+while more oxygen-poor conditions may be represented by a negative shift.
 
 
 Method Summary
 --------------
 
-1. Read the pristine unit-cell structure.
-2. Apply the workflow supercell expansion.
-3. Relax the pristine supercell.
-4. Identify all elements involved (host + dopants).
-5. For each element:
-   a. Obtain a bulk structure (local or external source).
-   b. Relax the bulk structure.
-   c. Compute per-atom chemical potential.
-6. Store all reference quantities in a JSON file.
+1. Read the host oxide unit-cell structure
+2. Relax the host unit cell
+3. Build and relax the host supercell
+4. Determine the selected reference mode
+
+Metal mode:
+    a. Relax elemental metal references
+    b. Compute per-atom elemental chemical potentials
+
+Oxide mode:
+    a. Relax oxide reference structures
+    b. Relax the oxygen gas reference
+    c. Compute :math:`\mu_O`
+    d. Derive cation chemical potentials from oxide thermodynamics
+
+5. Write all results and metadata to ``reference_energies.json``
 
 
 Formation Energy Framework
 --------------------------
 
-The workflow assumes substitutional doping.
+The workflow assumes substitutional doping on host sites.
 
 The formation energy is defined as:
 
@@ -79,68 +156,66 @@ The formation energy is defined as:
 where:
 
 - :math:`E_{\mathrm{doped}}` is the relaxed total energy of the doped supercell
-- :math:`E_{\mathrm{pristine}}` is the relaxed total energy of the pristine supercell
+- :math:`E_{\mathrm{pristine}}` is the relaxed total energy of the pristine host supercell
 - :math:`\mu_i` is the chemical potential of dopant species :math:`i`
 - :math:`\mu_{\mathrm{host}}` is the chemical potential of the substituted host species
 - :math:`n_i` is the number of substituted atoms of species :math:`i`
 
-This corresponds to removing host atoms and inserting dopant atoms
-while preserving total lattice size.
+This corresponds to removing host atoms and inserting dopant atoms while
+keeping the total lattice size fixed.
+
+The same formal expression is used in both reference modes; only the way
+the chemical potentials are constructed differs.
 
 
-Pristine Supercell Energy
--------------------------
+Host Reference Energy
+---------------------
 
-The pristine reference energy is computed by:
+The pristine host reference energy is computed by:
 
-1. Reading the unit-cell structure defined in the input.
-2. Applying the supercell defined in ``[structure].supercell``.
-3. Performing full structural relaxation.
-4. Extracting the final total energy.
+1. Reading the host oxide unit cell
+2. Relaxing the unit cell
+3. Building the requested supercell
+4. Relaxing the supercell
+5. Extracting the final total energy
+
+The relaxed host supercell is reused by later workflow stages as the
+starting point for structure generation.
 
 Both atomic positions and lattice vectors are allowed to relax.
 
 
-Elemental Chemical Potentials
------------------------------
+Metal Chemical Potentials
+-------------------------
 
-For each relevant element, a bulk structure is:
-
-- Obtained either from a local file or an external database.
-- Fully relaxed.
-- Used to compute a per-atom chemical potential:
+For each relevant elemental reference phase, the workflow computes:
 
 .. math::
 
-   \mu_i = \frac{E_{\mathrm{bulk}}}{N_{\mathrm{atoms}}}
+   \mu_i = \frac{E_{\mathrm{metal}}}{N_{\mathrm{atoms}}}
 
-where:
-
-- :math:`E_{\mathrm{bulk}}` is the relaxed total energy of the bulk structure.
-- :math:`N_{\mathrm{atoms}}` is the number of atoms in the bulk cell.
+These values are used directly in formation-energy evaluation when
+``reference_mode = "metal"``.
 
 
-Reference Sources
------------------
+Oxide-Derived Chemical Potentials
+---------------------------------
 
-Two reference sources are supported.
+When ``reference_mode = "oxide"``, the workflow stores relaxed oxide
+reference energies and the oxygen gas reference energy.
 
+The oxygen chemical potential is computed from the gas reference and
+the optional oxygen shift. The cation chemical potentials are then
+derived from the oxide stoichiometry.
 
-Local bulk structures
-~~~~~~~~~~~~~~~~~~~~~
+For a reduced oxide composition :math:`M_xO_y`:
 
-Bulk structures are read from a user-specified directory.
-Each element must have a corresponding structure file.
+.. math::
 
+   \mu_M = \frac{E_{M_xO_y}^{\mathrm{(f.u.)}} - y\mu_O}{x}
 
-External database
-~~~~~~~~~~~~~~~~~
-
-Bulk structures may be retrieved programmatically from
-an external materials database using provided identifiers
-and API credentials.
-
-Downloaded structures are cached locally to ensure reproducibility.
+where :math:`E_{M_xO_y}^{\mathrm{(f.u.)}}` is the relaxed energy per
+formula unit of the oxide reference.
 
 
 Relaxation Method
@@ -165,8 +240,7 @@ If:
 
    skip_if_done = true
 
-and the reference JSON already exists,
-this stage is skipped.
+and ``reference_energies.json`` already exists, this stage is skipped.
 
 This ensures deterministic behavior and avoids unnecessary recomputation.
 
@@ -174,24 +248,48 @@ This ensures deterministic behavior and avoids unnecessary recomputation.
 Outputs
 -------
 
-The file ``reference_energies.json`` contains:
+The file ``reference_energies.json`` contains metadata and energies needed
+for later stages.
 
-- Timestamp
-- Host species
-- Supercell definition
-- Relaxed pristine supercell energy
-- Chemical potentials per element
-- Metadata describing bulk relaxation conditions
-- Reference source information
+Typical top-level fields include:
+
+- ``timestamp``
+- ``reference_mode``
+- ``host``
+- ``references``
+- ``oxide_mode`` (only relevant in oxide mode)
+- ``supercell``
+- ``config_path``
+
+The ``host`` block typically contains:
+
+- host formula
+- source POSCAR path
+- relaxed unit-cell POSCAR path
+- relaxed supercell POSCAR path
+- number of atoms in unit cell and supercell
+- total and per-atom energies
+
+The ``references`` block contains one entry per relaxed reference phase,
+for example metals, oxides, or gas references.
+
+For oxide mode, the JSON also stores the oxygen reference settings such as:
+
+- ``oxides_ref``
+- ``gas_ref``
+- ``oxygen_mode``
+- ``muO_shift_ev``
 
 
 Notes and Limitations
 ---------------------
 
-- This stage does not evaluate doped structures.
-- Energies are ML-predicted (not DFT-level total energies).
-- Reference phase selection affects chemical potentials.
-- No finite-size corrections are applied.
-- No charge-state corrections are included.
-- No entropy or temperature effects are considered.
-- No competing phase stability analysis is performed.
+- This stage does not evaluate doped structures
+- Energies are ML-predicted, not DFT total energies
+- Reference phase selection strongly affects the resulting chemical potentials
+- The workflow currently assumes substitutional doping
+- Oxide-mode derivation assumes simple oxide reference chemistry
+- No finite-size corrections are applied
+- No charge-state corrections are included
+- No entropy or temperature effects are considered
+- No competing phase stability analysis is performed

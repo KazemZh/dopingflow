@@ -1,10 +1,10 @@
-Explicit Example — Single Target Composition
-=============================================
+Explicit Example — Single Target Composition using Oxide References
+====================================================================
 
 Purpose
 -------
 
-This example generates and evaluates **one explicit co-doped composition**.
+This example generates and evaluates **one explicit co-doped composition using oxides references**.
 
 Use this mode when:
 - You already know the exact dopant percentages.
@@ -30,13 +30,13 @@ The working directory must contain:
 
    input.toml
    reference_structures/
-       base.POSCAR
-       Sn.POSCAR
-       Sb.POSCAR
-       Zr.POSCAR
+       SnO2.POSCAR
+       Sb2O3.POSCAR
+       ZrO2.POSCAR
+       O2.POSCAR
 
-- ``base.POSCAR``: pristine unit cell.
-- Elemental ``*.POSCAR``: bulk reference structures for chemical potentials.
+- ``SnO2.POSCAR``: pristine unit cell for Host strucutre.
+- Elemental ``*.POSCAR``: bulk oxide reference structures for chemical potentials.
 
 
 Example input.toml
@@ -48,12 +48,16 @@ Example input.toml
    outdir = "random_structures"
 
    [references]
-   reference_mode = "metal"
+   reference_mode = "oxide"
    host = "SnO2"
    host_dir = "reference_structures/"
    supercell = [ 5, 2, 1]
-   metals_ref = [ "Zr","Sb","Sn"]
+   oxides_ref = [ "Sb2O3", "ZrO2"]
    oxides_dir = "reference_structures/"
+   gas_ref = "O2"
+   gas_dir = "reference_structures/"
+   oxygen_mode = "O-rich"
+   muO_shift_ev = 0.0
    fmax = 0.02
    skip_if_done = false
 
