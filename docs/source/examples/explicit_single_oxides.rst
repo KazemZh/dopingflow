@@ -78,7 +78,7 @@ Example input.toml
    topk = 10
    symprec = 1e-3
    max_enum = 10
-   nproc = 4
+   n_workers = 4
    chunksize = 10
    anion_species = ["O"]
    max_unique = 50000
@@ -89,25 +89,29 @@ Example input.toml
    sample_patience = 1000
    sample_seed = 42
    sample_max_saved = 10000
+   device = "cpu"
 
    [relax]
    fmax = 0.05
-   n_workers = 6
+   n_workers = 4
    tf_threads = 1
    omp_threads = 1
    skip_if_done = true
    skip_candidate_if_done = true
+   device = "cpu"
 
    [filter]
    mode = "window"
    window_meV = 50.0
    max_candidates = 12
-   skip_if_done = true
+   skip_if_done = false
 
    [bandgap]
-   skip_if_done = true
+   skip_if_done = false
    cutoff = 8.0
    max_neighbors = 12
+   n_workers = 4
+   device = "cpu"
 
    [formation]
    skip_if_done = true

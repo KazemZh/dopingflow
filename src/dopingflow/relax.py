@@ -39,6 +39,8 @@ class RelaxConfig:
     outdir: Path             # from [structure].outdir
     skip_if_done: bool       # folder-level skip if ranking_relax exists
     skip_candidate_if_done: bool  # candidate-level skip if 02_relax/meta exists
+    device: str              # from [relax].device
+    gpu_id: int              # from [relax].gpu_id
 
 
 def _parse_relax_config(raw: dict[str, Any], root: Path) -> RelaxConfig:
@@ -58,6 +60,8 @@ def _parse_relax_config(raw: dict[str, Any], root: Path) -> RelaxConfig:
     omp_threads = int(rel.get("omp_threads", 1))
     skip_if_done = bool(rel.get("skip_if_done", True))
     skip_candidate_if_done = bool(rel.get("skip_candidate_if_done", True))
+    device = str(rel.get("device", "cpu")).lower()
+    gpu_id = int(rel.get("gpu_id", 0))
 
     if fmax <= 0:
         raise ValueError("[relax].fmax must be > 0")
@@ -67,8 +71,11 @@ def _parse_relax_config(raw: dict[str, Any], root: Path) -> RelaxConfig:
         raise ValueError("[relax].tf_threads must be > 0")
     if omp_threads <= 0:
         raise ValueError("[relax].omp_threads must be > 0")
+    if device not in {"cpu", "cuda"}:
+        raise ValueError('[relax].device must be either "cpu" or "cuda"')
+    if gpu_id < 0:
+        raise ValueError("[relax].gpu_id must be >= 0")
 
-    # host_species is not strictly required for relaxation, but helps catch mis-configs
     _ = str(dop.get("host_species", "")).strip()
 
     return RelaxConfig(
@@ -80,6 +87,8 @@ def _parse_relax_config(raw: dict[str, Any], root: Path) -> RelaxConfig:
         outdir=outdir,
         skip_if_done=skip_if_done,
         skip_candidate_if_done=skip_candidate_if_done,
+        device=device,
+        gpu_id=gpu_id,
     )
 
 
@@ -136,10 +145,10 @@ def _trajectory_last_energy(result: Dict[str, Any]) -> float:
 _RELAXER = None
 
 
-def _init_worker(tf_threads: int, omp_threads: int) -> None:
+def _init_worker(tf_threads: int, omp_threads: int, device: str, gpu_id: int) -> None:
     """
-    Runs once per worker process (spawned).
-    Must set env vars and silence TF warnings *inside* the worker.
+    Runs once per worker process.
+    Sets env vars and initializes TensorFlow / M3GNet backend.
     """
     import warnings
     import logging as _logging
@@ -157,13 +166,34 @@ def _init_worker(tf_threads: int, omp_threads: int) -> None:
 
     try:
         import tensorflow as tf
+
         tf.get_logger().setLevel("ERROR")
         try:
             tf.autograph.set_verbosity(0)
         except Exception:
             pass
+
+        gpus = tf.config.list_physical_devices("GPU")
+
+        if device == "cpu":
+            try:
+                tf.config.set_visible_devices([], "GPU")
+            except Exception:
+                pass
+        else:
+            if not gpus:
+                raise RuntimeError('CUDA requested for relax, but TensorFlow sees no GPU.')
+            if gpu_id >= len(gpus):
+                raise RuntimeError(f"Requested gpu_id={gpu_id}, but only {len(gpus)} GPU(s) are visible.")
+            try:
+                tf.config.set_visible_devices(gpus[gpu_id], "GPU")
+                tf.config.experimental.set_memory_growth(gpus[gpu_id], True)
+            except Exception:
+                pass
+
     except Exception:
-        pass
+        if device == "cuda":
+            raise
 
     global _RELAXER
     from m3gnet.models import Relaxer
@@ -171,10 +201,11 @@ def _init_worker(tf_threads: int, omp_threads: int) -> None:
     _RELAXER = Relaxer()
 
 
-def _relax_one_candidate(job: Tuple[str, float, int, int, List[str], bool]) -> Dict[str, Any]:
+def _relax_one_candidate(job: Tuple[str, float, int, int, List[str], bool, str, int]) -> Dict[str, Any]:
     """
     job:
-      (candidate_dir_str, fmax, tf_threads, omp_threads, order, skip_candidate_if_done)
+      (candidate_dir_str, fmax, tf_threads, omp_threads, order,
+       skip_candidate_if_done, device, gpu_id)
     """
     cand_path = Path(job[0])
     fmax = float(job[1])
@@ -182,6 +213,8 @@ def _relax_one_candidate(job: Tuple[str, float, int, int, List[str], bool]) -> D
     omp_threads = int(job[3])
     order = job[4]
     skip_candidate_if_done = bool(job[5])
+    device = str(job[6])
+    gpu_id = int(job[7])
 
     scan_dir = cand_path / "01_scan"
     poscar_in = scan_dir / "POSCAR"
@@ -192,7 +225,6 @@ def _relax_one_candidate(job: Tuple[str, float, int, int, List[str], bool]) -> D
 
     meta_out = out_dir / "meta.json"
     if skip_candidate_if_done and meta_out.exists() and (out_dir / "POSCAR").exists():
-        # Candidate already done
         meta_prev = _load_json(meta_out) or {}
         return {
             "candidate": cand_path.name,
@@ -209,10 +241,9 @@ def _relax_one_candidate(job: Tuple[str, float, int, int, List[str], bool]) -> D
     if not poscar_in.exists():
         return {"candidate": cand_path.name, "status": "skip", "error": f"missing {poscar_in}"}
 
-    # Ensure worker init happened
     global _RELAXER
     if _RELAXER is None:
-        _init_worker(tf_threads=tf_threads, omp_threads=omp_threads)
+        _init_worker(tf_threads=tf_threads, omp_threads=omp_threads, device=device, gpu_id=gpu_id)
 
     t0 = time.time()
     try:
@@ -226,7 +257,9 @@ def _relax_one_candidate(job: Tuple[str, float, int, int, List[str], bool]) -> D
 
         meta_relax = {
             "stage": "02_relax",
-            "method": "m3gnet Relaxer (pretrained), parallel over candidates",
+            "method": "m3gnet Relaxer (pretrained)",
+            "device": device,
+            "gpu_id": gpu_id if device == "cuda" else None,
             "fmax_target_eV_per_A": float(fmax),
             "walltime_s": float(time.time() - t0),
             "energy_relaxed_eV": float(E_rel),
@@ -254,7 +287,9 @@ def _relax_one_candidate(job: Tuple[str, float, int, int, List[str], bool]) -> D
     except Exception as e:
         meta_fail = {
             "stage": "02_relax",
-            "method": "m3gnet Relaxer (pretrained), parallel over candidates",
+            "method": "m3gnet Relaxer (pretrained)",
+            "device": device,
+            "gpu_id": gpu_id if device == "cuda" else None,
             "status": "fail",
             "error": repr(e),
             "traceback": traceback.format_exc(),
@@ -283,7 +318,6 @@ def _write_ranking_csv(folder: Path, rows: List[Dict[str, Any]]) -> Path:
     with open(ranking_path, "w", encoding="utf-8") as f:
         f.write("candidate,rank_relax,energy_relaxed_eV,rank_sp,energy_sp_eV,signature,status,walltime_s,error\n")
 
-        # OK rows first (ranked)
         for r in ok_rows_sorted:
             f.write(
                 f"{r.get('candidate','')},{r.get('rank_relax','')},{r.get('energy_relaxed_eV','')},"
@@ -291,7 +325,6 @@ def _write_ranking_csv(folder: Path, rows: List[Dict[str, Any]]) -> Path:
                 f"{r.get('status','')},{r.get('walltime_s','')},\n"
             )
 
-        # non-ok rows
         for r in rows:
             if r.get("status") == "ok":
                 continue
@@ -315,26 +348,42 @@ def _run_folder(folder: Path, cfg: RelaxConfig) -> None:
         log.info("SKIP %s: ranking_relax.csv already exists", folder.name)
         return
 
-    log.info("%s: found %d candidates", folder.name, len(candidates))
-    log.info("Relax settings: n_workers=%d fmax=%s tf_threads=%d omp_threads=%d",
-             cfg.n_workers, cfg.fmax, cfg.tf_threads, cfg.omp_threads)
+    effective_n_workers = 1 if cfg.device == "cuda" else cfg.n_workers
 
-    # spawn is safest with TF
+    log.info("%s: found %d candidates", folder.name, len(candidates))
+    log.info(
+        "Relax settings: device=%s gpu_id=%d n_workers=%d effective_n_workers=%d fmax=%s tf_threads=%d omp_threads=%d",
+        cfg.device, cfg.gpu_id, cfg.n_workers, effective_n_workers, cfg.fmax, cfg.tf_threads, cfg.omp_threads
+    )
+
     import multiprocessing as mp
     from concurrent.futures import ProcessPoolExecutor, as_completed
 
     ctx = mp.get_context("spawn")
 
     jobs = [
-        (str(c), cfg.fmax, cfg.tf_threads, cfg.omp_threads, cfg.order, cfg.skip_candidate_if_done)
+        (
+            str(c),
+            cfg.fmax,
+            cfg.tf_threads,
+            cfg.omp_threads,
+            cfg.order,
+            cfg.skip_candidate_if_done,
+            cfg.device,
+            cfg.gpu_id,
+        )
         for c in candidates
     ]
 
     rows: List[Dict[str, Any]] = []
     t0 = time.time()
 
-    with ProcessPoolExecutor(max_workers=cfg.n_workers, mp_context=ctx,
-                             initializer=_init_worker, initargs=(cfg.tf_threads, cfg.omp_threads)) as ex:
+    with ProcessPoolExecutor(
+        max_workers=effective_n_workers,
+        mp_context=ctx,
+        initializer=_init_worker,
+        initargs=(cfg.tf_threads, cfg.omp_threads, cfg.device, cfg.gpu_id),
+    ) as ex:
         futures = [ex.submit(_relax_one_candidate, j) for j in jobs]
 
         for fut in as_completed(futures):
@@ -342,15 +391,19 @@ def _run_folder(folder: Path, cfg: RelaxConfig) -> None:
             rows.append(r)
 
             if r.get("status") == "ok":
-                log.info("OK   %s/%s  E_rel=%.6f eV  wall=%.1fs",
-                         folder.name, r["candidate"], r["energy_relaxed_eV"], float(r.get("walltime_s", 0.0)))
+                log.info(
+                    "OK   %s/%s  E_rel=%.6f eV  wall=%.1fs",
+                    folder.name, r["candidate"], r["energy_relaxed_eV"], float(r.get("walltime_s", 0.0))
+                )
             elif r.get("status") == "skip":
                 log.info("SKIP %s/%s  %s", folder.name, r.get("candidate", "?"), r.get("note", ""))
             else:
-                log.warning("%s %s/%s  %s",
-                            str(r.get("status", "?")).upper(),
-                            folder.name, r.get("candidate", "?"),
-                            r.get("error", ""))
+                log.warning(
+                    "%s %s/%s  %s",
+                    str(r.get("status", "?")).upper(),
+                    folder.name, r.get("candidate", "?"),
+                    r.get("error", "")
+                )
 
     ranking_path = _write_ranking_csv(folder, rows)
     n_ok = sum(1 for r in rows if r.get("status") == "ok")
@@ -369,7 +422,7 @@ def run_relax(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None =
     """
     Step 03: Relax candidates produced by Step 02.
       For each structure folder in [structure].outdir:
-        - relax candidate_*/01_scan/POSCAR in parallel
+        - relax candidate_*/01_scan/POSCAR
         - write candidate_*/02_relax/POSCAR and meta.json
         - write ranking_relax.csv per structure folder
     """
@@ -381,6 +434,9 @@ def run_relax(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None =
     folders = sorted([p for p in cfg.outdir.iterdir() if p.is_dir()])
 
     log.info("Step 03 relax: %d structure folders in: %s", len(folders), cfg.outdir)
+    log.info("Relax backend: device=%s gpu_id=%d", cfg.device, cfg.gpu_id)
+    if cfg.device == "cuda":
+        log.info("CUDA mode: forcing effective_n_workers=1 for safe TensorFlow GPU usage.")
     log.info("NOTE: main-directory POSCAR is ignored; only subfolders are processed.")
 
     for i, folder in enumerate(folders, start=1):
@@ -390,7 +446,7 @@ def run_relax(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None =
     log.info("DONE Step 03 relax for all structure folders.")
 
 
-# TOML wrapper (like your other steps)
+# TOML wrapper
 try:
     import tomllib  # py3.11+
 except ModuleNotFoundError:  # pragma: no cover

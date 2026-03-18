@@ -228,7 +228,7 @@ if tab == "Input Builder":
         st.session_state["cfg_edit"] = cfg_full
     cfg_edit = st.session_state["cfg_edit"]
     # ===== PATCH: ensure section dicts exist =====
-    for secname in ["references", "structure", "doping", "generate", "scan", "relax", "filter", "bandgap", "formation", "database"]:
+    for secname in ["hardware", "references", "structure", "doping", "generate", "scan", "relax", "filter", "bandgap", "formation", "database"]:
         cfg_edit.setdefault(secname, {})
     # ===== END PATCH =====    
 
@@ -706,6 +706,8 @@ if tab == "Input Builder":
             "and switches to random symmetry-unique sampling for large configuration spaces."
         )
 
+        cfg_edit.setdefault("scan", {})
+
         st.divider()
         st.subheader("Scan strategy")
 
@@ -726,21 +728,180 @@ if tab == "Input Builder":
                     "exact: force symmetry-unique enumeration. "
                     "sample: force random symmetry-unique sampling."
                 ),
+                key="scan_mode",
             )
 
+        scan_mode = cfg_edit["scan"]["mode"]
+
         with colM2:
-            if cfg_edit["scan"]["mode"] == "auto":
+            if scan_mode == "auto":
                 st.info(
                     "Auto mode is recommended for most cases. It stays exact for small problems "
                     "and automatically switches to sampling when the configuration space becomes too large."
                 )
-            elif cfg_edit["scan"]["mode"] == "exact":
+            elif scan_mode == "exact":
                 st.warning(
                     "Exact mode can become very expensive for large supercells or many dopants."
                 )
             else:
                 st.info(
                     "Sample mode is more memory-friendly and is recommended for large supercells."
+                )
+
+        # Mode-dependent controls directly here
+        if scan_mode == "exact":
+            colE1, colE2 = st.columns(2, vertical_alignment="bottom")
+
+            with colE1:
+                cfg_edit["scan"]["max_enum"] = st.number_input(
+                    "Max exact raw configs",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("max_enum", DEFAULTS["scan"]["max_enum"])),
+                    step=1000,
+                    help="Hard limit for raw configuration count in exact mode.",
+                    key="scan_max_enum",
+                )
+
+            with colE2:
+                cfg_edit["scan"]["max_unique"] = st.number_input(
+                    "Max exact symmetry-unique configs",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("max_unique", DEFAULTS["scan"]["max_unique"])),
+                    step=1000,
+                    help="Hard cap on the number of symmetry-unique configurations kept in exact mode.",
+                    key="scan_max_unique",
+                )
+
+        elif scan_mode == "sample":
+            colS1, colS2, colS3 = st.columns(3, vertical_alignment="bottom")
+
+            with colS1:
+                cfg_edit["scan"]["sample_budget"] = st.number_input(
+                    "Sample budget",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("sample_budget", DEFAULTS["scan"]["sample_budget"])),
+                    step=100,
+                    help="Maximum number of random attempts in sampling mode.",
+                    key="scan_sample_budget",
+                )
+
+            with colS2:
+                cfg_edit["scan"]["sample_batch_size"] = st.number_input(
+                    "Sample batch size",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("sample_batch_size", DEFAULTS["scan"]["sample_batch_size"])),
+                    step=1,
+                    help="Number of new unique sampled configurations evaluated per batch.",
+                    key="scan_sample_batch_size",
+                )
+
+            with colS3:
+                cfg_edit["scan"]["sample_patience"] = st.number_input(
+                    "Sample patience",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("sample_patience", DEFAULTS["scan"]["sample_patience"])),
+                    step=100,
+                    help="Stop sampling after this many non-improving sampled candidates.",
+                    key="scan_sample_patience",
+                )
+
+            colS4, colS5 = st.columns(2, vertical_alignment="bottom")
+
+            with colS4:
+                cfg_edit["scan"]["sample_seed"] = st.number_input(
+                    "Sample seed",
+                    min_value=0,
+                    value=int(cfg_edit["scan"].get("sample_seed", DEFAULTS["scan"]["sample_seed"])),
+                    step=1,
+                    help="Random seed used in sampling mode.",
+                    key="scan_sample_seed",
+                )
+
+            with colS5:
+                cfg_edit["scan"]["sample_max_saved"] = st.number_input(
+                    "Sample max saved",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("sample_max_saved", DEFAULTS["scan"]["sample_max_saved"])),
+                    step=1000,
+                    help="Maximum number of sampled canonical configurations remembered to avoid duplicates.",
+                    key="scan_sample_max_saved",
+                )
+
+        else:  # auto
+            colA1, colA2 = st.columns(2, vertical_alignment="bottom")
+
+            with colA1:
+                cfg_edit["scan"]["max_enum"] = st.number_input(
+                    "Max exact raw configs",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("max_enum", DEFAULTS["scan"]["max_enum"])),
+                    step=1000,
+                    help="If exceeded in auto mode, the workflow switches to sampling.",
+                    key="scan_max_enum",
+                )
+
+            with colA2:
+                cfg_edit["scan"]["max_unique"] = st.number_input(
+                    "Max exact symmetry-unique configs",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("max_unique", DEFAULTS["scan"]["max_unique"])),
+                    step=1000,
+                    help="Hard cap on the number of symmetry-unique configurations in exact mode.",
+                    key="scan_max_unique",
+                )
+
+            colA3, colA4, colA5 = st.columns(3, vertical_alignment="bottom")
+
+            with colA3:
+                cfg_edit["scan"]["sample_budget"] = st.number_input(
+                    "Sample budget",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("sample_budget", DEFAULTS["scan"]["sample_budget"])),
+                    step=100,
+                    help="Maximum number of random attempts if auto mode switches to sampling.",
+                    key="scan_sample_budget",
+                )
+
+            with colA4:
+                cfg_edit["scan"]["sample_batch_size"] = st.number_input(
+                    "Sample batch size",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("sample_batch_size", DEFAULTS["scan"]["sample_batch_size"])),
+                    step=1,
+                    help="Batch size used if auto mode switches to sampling.",
+                    key="scan_sample_batch_size",
+                )
+
+            with colA5:
+                cfg_edit["scan"]["sample_patience"] = st.number_input(
+                    "Sample patience",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("sample_patience", DEFAULTS["scan"]["sample_patience"])),
+                    step=100,
+                    help="Stop criterion used if auto mode switches to sampling.",
+                    key="scan_sample_patience",
+                )
+
+            colA6, colA7 = st.columns(2, vertical_alignment="bottom")
+
+            with colA6:
+                cfg_edit["scan"]["sample_seed"] = st.number_input(
+                    "Sample seed",
+                    min_value=0,
+                    value=int(cfg_edit["scan"].get("sample_seed", DEFAULTS["scan"]["sample_seed"])),
+                    step=1,
+                    help="Random seed used if auto mode switches to sampling.",
+                    key="scan_sample_seed",
+                )
+
+            with colA7:
+                cfg_edit["scan"]["sample_max_saved"] = st.number_input(
+                    "Sample max saved",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("sample_max_saved", DEFAULTS["scan"]["sample_max_saved"])),
+                    step=1000,
+                    help="Maximum number of sampled canonical configurations remembered to avoid duplicates.",
+                    key="scan_sample_max_saved",
                 )
 
         st.divider()
@@ -755,6 +916,7 @@ if tab == "Input Builder":
                 value=int(cfg_edit["scan"].get("topk", DEFAULTS["scan"]["topk"])),
                 step=1,
                 help="Number of lowest-energy configurations retained after the scan.",
+                key="scan_topk",
             )
 
         with col2:
@@ -775,118 +937,13 @@ if tab == "Input Builder":
                 step=1e-3,
                 format="%.6f",
                 help="Tolerance used when identifying symmetry-equivalent configurations.",
+                key="scan_symprec",
             )
 
         with colB:
             st.caption(
                 "Smaller values are stricter and usually produce more unique structures, "
                 "which can increase runtime."
-            )
-
-        st.divider()
-        st.subheader("Parallel execution")
-
-        colP1, colP2, colP3 = st.columns([1, 1, 2], vertical_alignment="bottom")
-
-        with colP1:
-            cfg_edit["scan"]["nproc"] = st.number_input(
-                "Processes (nproc)",
-                min_value=1,
-                value=int(cfg_edit["scan"].get("nproc", DEFAULTS["scan"]["nproc"])),
-                step=1,
-                help="Number of parallel processes used for M3GNet energy evaluation.",
-            )
-
-        with colP2:
-            cfg_edit["scan"]["chunksize"] = st.number_input(
-                "Chunk size",
-                min_value=1,
-                value=int(cfg_edit["scan"].get("chunksize", DEFAULTS["scan"]["chunksize"])),
-                step=1,
-                help="Work chunk size per process. Larger chunks reduce overhead; too large can increase memory usage.",
-            )
-
-        with colP3:
-            st.caption(
-                "If memory is limited, reduce nproc and chunksize first."
-            )
-
-        st.divider()
-        st.subheader("Exact-mode limits")
-
-        colS1, colS2 = st.columns(2, vertical_alignment="bottom")
-
-        with colS1:
-            cfg_edit["scan"]["max_enum"] = st.number_input(
-                "Max exact raw configs",
-                min_value=1,
-                value=int(cfg_edit["scan"].get("max_enum", DEFAULTS["scan"]["max_enum"])),
-                step=1000,
-                help=(
-                    "Hard limit for raw configuration count in exact mode. "
-                    "In auto mode, larger cases switch to sampling."
-                ),
-            )
-
-        with colS2:
-            cfg_edit["scan"]["max_unique"] = st.number_input(
-                "Max exact symmetry-unique configs",
-                min_value=1,
-                value=int(cfg_edit["scan"].get("max_unique", DEFAULTS["scan"]["max_unique"])),
-                step=1000,
-                help="Hard cap on the number of symmetry-unique configurations kept in exact mode.",
-            )
-
-        st.divider()
-        st.subheader("Sampling controls")
-
-        colSM1, colSM2, colSM3 = st.columns(3, vertical_alignment="bottom")
-
-        with colSM1:
-            cfg_edit["scan"]["sample_budget"] = st.number_input(
-                "Sample budget",
-                min_value=1,
-                value=int(cfg_edit["scan"].get("sample_budget", DEFAULTS["scan"]["sample_budget"])),
-                step=100,
-                help="Maximum number of random attempts in sampling mode.",
-            )
-
-        with colSM2:
-            cfg_edit["scan"]["sample_batch_size"] = st.number_input(
-                "Sample batch size",
-                min_value=1,
-                value=int(cfg_edit["scan"].get("sample_batch_size", DEFAULTS["scan"]["sample_batch_size"])),
-                step=1,
-                help="Number of new unique sampled configurations evaluated per batch.",
-            )
-
-        with colSM3:
-            cfg_edit["scan"]["sample_patience"] = st.number_input(
-                "Sample patience",
-                min_value=1,
-                value=int(cfg_edit["scan"].get("sample_patience", DEFAULTS["scan"]["sample_patience"])),
-                step=100,
-                help="Stop sampling after this many non-improving sampled candidates.",
-            )
-
-        colSM4, colSM5 = st.columns(2, vertical_alignment="bottom")
-
-        with colSM4:
-            cfg_edit["scan"]["sample_seed"] = st.number_input(
-                "Sample seed",
-                min_value=0,
-                value=int(cfg_edit["scan"].get("sample_seed", DEFAULTS["scan"]["sample_seed"])),
-                step=1,
-                help="Random seed used in sampling mode.",
-            )
-
-        with colSM5:
-            cfg_edit["scan"]["sample_max_saved"] = st.number_input(
-                "Sample max saved",
-                min_value=1,
-                value=int(cfg_edit["scan"].get("sample_max_saved", DEFAULTS["scan"]["sample_max_saved"])),
-                step=1000,
-                help="Maximum number of sampled canonical configurations remembered to avoid duplicates.",
             )
 
         st.divider()
@@ -901,6 +958,7 @@ if tab == "Input Builder":
             value=",".join(anions),
             help="Elements treated as anions and excluded from substitution. Example for oxides: O",
             placeholder="e.g. O",
+            key="scan_anion_species",
         )
         cfg_edit["scan"]["anion_species"] = [x.strip() for x in anion_text.split(",") if x.strip()]
 
@@ -911,8 +969,8 @@ if tab == "Input Builder":
             "Skip scan if results already exist",
             value=bool(cfg_edit["scan"].get("skip_if_done", True)),
             help="If enabled, scan is skipped when ranking_scan.csv already exists in the structure folder.",
+            key="scan_skip_if_done",
         )
-
 
     # -----------------------------
     # RELAX
@@ -922,8 +980,10 @@ if tab == "Input Builder":
 
         st.caption(
             "Relaxes the selected candidates using the M3GNet potential. "
-            "You can control the force convergence threshold and parallel execution."
+            "You can control the force convergence threshold and execution mode."
         )
+
+        cfg_edit.setdefault("relax", {})
 
         st.divider()
         st.subheader("Convergence")
@@ -938,50 +998,93 @@ if tab == "Input Builder":
                 help="Relaxation stops when the maximum atomic force drops below this threshold.",
             )
         with col2:
-            st.caption(
-                "Typical values: 0.05 eV/Å (fast screening) to 0.02 eV/Å (tighter relaxation)."
-            )
+            st.caption("Typical values: 0.05 eV/Å (fast screening) to 0.02 eV/Å (tighter relaxation).")
 
         st.divider()
-        st.subheader("Parallelism & performance")
+        st.subheader("Execution mode")
 
-        colA, colB, colC = st.columns(3, vertical_alignment="bottom")
+        relax_device_options = ["cpu", "cuda"]
+        current_relax_device = str(cfg_edit["relax"].get("device", DEFAULTS["relax"]["device"])).lower()
+        if current_relax_device not in relax_device_options:
+            current_relax_device = "cpu"
 
-        with colA:
-            cfg_edit["relax"]["n_workers"] = st.number_input(
-                "Workers",
-                min_value=1,
-                value=int(cfg_edit["relax"].get("n_workers", DEFAULTS["relax"]["n_workers"])),
-                step=1,
-                help="Number of parallel relaxation processes (one candidate per worker).",
-            )
+        cfg_edit["relax"]["device"] = st.selectbox(
+            "Device",
+            relax_device_options,
+            index=relax_device_options.index(current_relax_device),
+            help="Choose CPU parallel execution or CUDA GPU execution.",
+            key="relax_device",
+        )
 
-        with colB:
-            cfg_edit["relax"]["tf_threads"] = st.number_input(
-                "TensorFlow threads / worker",
-                min_value=1,
-                value=int(cfg_edit["relax"].get("tf_threads", DEFAULTS["relax"]["tf_threads"])),
-                step=1,
-                help="TensorFlow threads per worker. Keep small (often 1) when using multiple workers.",
-            )
+        relax_device = cfg_edit["relax"]["device"]
 
-        with colC:
-            cfg_edit["relax"]["omp_threads"] = st.number_input(
-                "OpenMP threads / worker",
-                min_value=1,
-                value=int(cfg_edit["relax"].get("omp_threads", DEFAULTS["relax"]["omp_threads"])),
-                step=1,
-                help="OpenMP threads per worker. Keep small to avoid CPU oversubscription.",
-            )
+        if relax_device == "cpu":
+            st.divider()
+            st.subheader("Parallelism & performance")
 
-        # Quick computed hint
-        try:
-            total_threads = int(cfg_edit["relax"]["n_workers"]) * max(
-                int(cfg_edit["relax"]["tf_threads"]), int(cfg_edit["relax"]["omp_threads"])
-            )
-            st.caption(f"Rule of thumb: total CPU load ~ workers × threads ≈ **{total_threads}**")
-        except Exception:
-            pass
+            colA, colB, colC = st.columns(3, vertical_alignment="bottom")
+
+            with colA:
+                cfg_edit["relax"]["n_workers"] = int(
+                    st.number_input(
+                        "Workers",
+                        min_value=1,
+                        value=int(cfg_edit["relax"].get("n_workers", DEFAULTS["relax"]["n_workers"])),
+                        step=1,
+                        help="Number of parallel relaxation processes (one candidate per worker).",
+                        key="relax_n_workers",
+                    )
+                )
+
+            with colB:
+                cfg_edit["relax"]["tf_threads"] = int(
+                    st.number_input(
+                        "TensorFlow threads / worker",
+                        min_value=1,
+                        value=int(cfg_edit["relax"].get("tf_threads", DEFAULTS["relax"]["tf_threads"])),
+                        step=1,
+                        help="TensorFlow threads per worker. Keep small when using multiple workers.",
+                        key="relax_tf_threads",
+                    )
+                )
+
+            with colC:
+                cfg_edit["relax"]["omp_threads"] = int(
+                    st.number_input(
+                        "OpenMP threads / worker",
+                        min_value=1,
+                        value=int(cfg_edit["relax"].get("omp_threads", DEFAULTS["relax"]["omp_threads"])),
+                        step=1,
+                        help="OpenMP threads per worker. Keep small to avoid CPU oversubscription.",
+                        key="relax_omp_threads",
+                    )
+                )
+
+            try:
+                total_threads = int(cfg_edit["relax"]["n_workers"]) * max(
+                    int(cfg_edit["relax"]["tf_threads"]),
+                    int(cfg_edit["relax"]["omp_threads"]),
+                )
+                st.caption(f"Rule of thumb: total CPU load ~ workers × threads ≈ **{total_threads}**")
+            except Exception:
+                pass
+
+        else:
+            col1, col2 = st.columns(2, vertical_alignment="bottom")
+
+            with col1:
+                cfg_edit["relax"]["gpu_id"] = int(
+                    st.number_input(
+                        "GPU ID",
+                        min_value=0,
+                        value=int(cfg_edit["relax"].get("gpu_id", DEFAULTS["relax"]["gpu_id"])),
+                        step=1,
+                        key="relax_gpu_id",
+                    )
+                )
+
+            with col2:
+                st.info("CUDA mode uses a single effective worker internally.")
 
         st.divider()
         st.subheader("Caching")
@@ -990,6 +1093,14 @@ if tab == "Input Builder":
             "Skip relaxation if results already exist",
             value=bool(cfg_edit["relax"].get("skip_if_done", True)),
             help="If enabled, relaxation is skipped when ranking_relax.csv already exists in the folder.",
+            key="relax_skip_if_done",
+        )
+
+        cfg_edit["relax"]["skip_candidate_if_done"] = st.checkbox(
+            "Skip individual candidates already relaxed",
+            value=bool(cfg_edit["relax"].get("skip_candidate_if_done", True)),
+            help="If enabled, candidates with existing 02_relax/POSCAR and meta.json are skipped.",
+            key="relax_skip_candidate_if_done",
         )
 
     # -----------------------------
@@ -1096,15 +1207,67 @@ if tab == "Input Builder":
             )
 
         st.divider()
-        st.subheader("Caching")
+        st.subheader("Execution mode")
 
-        cfg_edit["bandgap"]["skip_if_done"] = st.checkbox(
-            "Skip bandgap prediction if results already exist",
-            value=bool(cfg_edit["bandgap"].get("skip_if_done", True)),
-            help="If enabled, bandgap prediction is skipped when output files already exist.",
+        cfg_edit.setdefault("bandgap", {})
+
+        bandgap_device_options = ["cpu", "cuda"]
+        current_device = str(cfg_edit["bandgap"].get("device", DEFAULTS["bandgap"]["device"])).lower()
+        if current_device not in bandgap_device_options:
+            current_device = "cpu"
+
+        cfg_edit["bandgap"]["device"] = st.selectbox(
+            "Device",
+            bandgap_device_options,
+            index=bandgap_device_options.index(current_device),
+            help="Choose CPU parallel execution or CUDA GPU execution.",
+            key="bandgap_device",
         )
 
+        device = cfg_edit["bandgap"]["device"]
 
+        if device == "cpu":
+            cfg_edit["bandgap"]["n_workers"] = int(
+                st.number_input(
+                    "CPU workers",
+                    min_value=1,
+                    value=int(cfg_edit["bandgap"].get("n_workers", DEFAULTS["bandgap"]["n_workers"])),
+                    step=1,
+                    help="Number of parallel CPU processes for bandgap prediction.",
+                    key="bandgap_n_workers",
+                )
+            )
+            st.info("CPU mode uses parallel workers.")
+
+        elif device == "cuda":
+            col1, col2 = st.columns(2)
+
+            with col1:
+                cfg_edit["bandgap"]["gpu_id"] = int(
+                    st.number_input(
+                        "GPU ID",
+                        min_value=0,
+                        value=int(cfg_edit["bandgap"].get("gpu_id", DEFAULTS["bandgap"]["gpu_id"])),
+                        step=1,
+                        key="bandgap_gpu_id",
+                    )
+                )
+
+            with col2:
+                cfg_edit["bandgap"]["batch_size"] = int(
+                    st.number_input(
+                        "Batch size",
+                        min_value=1,
+                        value=int(cfg_edit["bandgap"].get("batch_size", DEFAULTS["bandgap"]["batch_size"])),
+                        step=1,
+                        help="Batch size for GPU inference.",
+                        key="bandgap_batch_size",
+                    )
+                )
+
+            cfg_edit["bandgap"]["n_workers"] = 1
+            st.info("CUDA mode uses batched GPU inference.")
+            
     # -----------------------------
     # FORMATION
     # -----------------------------

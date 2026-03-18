@@ -40,13 +40,17 @@ class ScanConfig:
     topk: int
     symprec: float
     max_enum: int
-    nproc: int
+    n_workers: int
     chunksize: int
     order: List[str]  # from [generate].poscar_order
     anion_species: List[str]
     host_species: str
     max_unique: int
     skip_if_done: bool
+
+    # stage-local execution
+    device: str   # cpu | cuda
+    gpu_id: int
 
     # New auto/sample controls
     mode: str  # auto | exact | sample
@@ -66,12 +70,15 @@ def _parse_scan_config(raw: dict[str, Any]) -> ScanConfig:
     topk = int(scan.get("topk", 15))
     symprec = float(scan.get("symprec", 1e-3))
     max_enum = int(scan.get("max_enum", 300_000))
-    nproc = int(scan.get("nproc", 12))
+    n_workers = int(scan.get("n_workers", 12))
     chunksize = int(scan.get("chunksize", 50))
     anion_species = [str(x) for x in (scan.get("anion_species", ["O"]) or [])]
     host_species = str(dop.get("host_species", "")).strip()
     max_unique = int(scan.get("max_unique", 100_000))
     skip_if_done = bool(scan.get("skip_if_done", True))
+
+    device = str(scan.get("device", "cpu")).strip().lower()
+    gpu_id = int(scan.get("gpu_id", 0))
 
     # Order comes from [generate] ONLY (single source of truth)
     order = [str(x) for x in (gen.get("poscar_order", []) or [])]
@@ -90,8 +97,8 @@ def _parse_scan_config(raw: dict[str, Any]) -> ScanConfig:
         raise ValueError("[scan].symprec must be > 0")
     if max_enum <= 0:
         raise ValueError("[scan].max_enum must be > 0")
-    if nproc <= 0:
-        raise ValueError("[scan].nproc must be > 0")
+    if n_workers <= 0:
+        raise ValueError("[scan].n_workers must be > 0")
     if chunksize <= 0:
         raise ValueError("[scan].chunksize must be > 0")
     if not host_species:
@@ -100,6 +107,10 @@ def _parse_scan_config(raw: dict[str, Any]) -> ScanConfig:
         raise ValueError("[scan].anion_species must be non-empty")
     if max_unique <= 0:
         raise ValueError("[scan].max_unique must be > 0")
+    if device not in {"cpu", "cuda"}:
+        raise ValueError('[scan].device must be either "cpu" or "cuda"')
+    if gpu_id < 0:
+        raise ValueError("[scan].gpu_id must be >= 0")
 
     if mode not in {"auto", "exact", "sample"}:
         raise ValueError("[scan].mode must be one of: auto, exact, sample")
@@ -117,13 +128,15 @@ def _parse_scan_config(raw: dict[str, Any]) -> ScanConfig:
         topk=topk,
         symprec=symprec,
         max_enum=max_enum,
-        nproc=nproc,
+        n_workers=n_workers,
         chunksize=chunksize,
         order=order,
         anion_species=anion_species,
         host_species=host_species,
         max_unique=max_unique,
         skip_if_done=skip_if_done,
+        device=device,
+        gpu_id=gpu_id,
         mode=mode,
         sample_budget=sample_budget,
         sample_batch_size=sample_batch_size,
@@ -234,7 +247,6 @@ def _build_symmetry_permutations(parent: Structure, sublattice_indices: List[int
             perm[i] = match_index(r_new)
         perms.append(perm)
 
-    # unique perms
     uniq, seen = [], set()
     for p in perms:
         b = p.tobytes()
@@ -354,7 +366,6 @@ def _choose_scan_mode(raw_ncfg: int, cfg: ScanConfig, n_dopants: int) -> str:
     if cfg.mode == "sample":
         return "sample"
 
-    # auto
     if n_dopants > 3:
         return "sample"
 
@@ -389,8 +400,7 @@ def _update_best_heap(best, E: float, labels: np.ndarray, idx: int, topk: int) -
 _MODEL = None
 
 
-def _init_worker():
-    # --- suppress TF warnings inside each worker process ---
+def _init_worker(device: str, gpu_id: int):
     import logging
     import os
     import warnings
@@ -405,13 +415,34 @@ def _init_worker():
     logging.getLogger("tensorflow").setLevel(logging.ERROR)
     try:
         import tensorflow as tf
+
         tf.get_logger().setLevel("ERROR")
         try:
             tf.autograph.set_verbosity(0)
         except Exception:
             pass
+
+        gpus = tf.config.list_physical_devices("GPU")
+
+        if device == "cpu":
+            try:
+                tf.config.set_visible_devices([], "GPU")
+            except Exception:
+                pass
+        else:
+            if not gpus:
+                raise RuntimeError("CUDA requested for scan, but TensorFlow sees no GPU.")
+            if gpu_id >= len(gpus):
+                raise RuntimeError(f"Requested gpu_id={gpu_id}, but only {len(gpus)} GPU(s) are visible.")
+            try:
+                tf.config.set_visible_devices(gpus[gpu_id], "GPU")
+                tf.config.experimental.set_memory_growth(gpus[gpu_id], True)
+            except Exception:
+                pass
+
     except Exception:
-        pass
+        if device == "cuda":
+            raise
 
     global _MODEL
     from m3gnet.models import M3GNet
@@ -439,37 +470,6 @@ def _energy_worker_with_labels(args):
 # -----------------------------
 # Exact mode
 # -----------------------------
-def _enumerate_unique_configs_exact(
-    *,
-    N: int,
-    perms: List[np.ndarray],
-    dopant_label_counts: Dict[int, int],
-    cfg: ScanConfig,
-) -> Tuple[List[np.ndarray], int]:
-    seen = set()
-    unique_labels: List[np.ndarray] = []
-    checked_raw = 0
-
-    for labels in _enumerate_label_configs(N, dopant_label_counts):
-        checked_raw += 1
-        key = _canonical_key(labels, perms)
-
-        if key in seen:
-            continue
-
-        seen.add(key)
-        unique_labels.append(labels.copy())
-
-        if len(unique_labels) >= cfg.max_unique:
-            raise RuntimeError(
-                f"Unique(sym) configs reached max_unique={cfg.max_unique}. "
-                "This composition is too large for full enumeration."
-            )
-
-    log.info("Done exact generation: raw=%d, unique(sym)=%d", checked_raw, len(unique_labels))
-    return unique_labels, checked_raw
-
-
 def _evaluate_exact_configs(
     *,
     base: Structure,
@@ -484,8 +484,13 @@ def _evaluate_exact_configs(
     ctx = get_context("spawn")
     best = []
     t0 = time.time()
+    effective_n_workers = 1 if cfg.device == "cuda" else cfg.n_workers
 
-    with ctx.Pool(processes=cfg.nproc, initializer=_init_worker) as pool:
+    with ctx.Pool(
+        processes=effective_n_workers,
+        initializer=_init_worker,
+        initargs=(cfg.device, cfg.gpu_id),
+    ) as pool:
         for done, (E, labels) in enumerate(
             pool.imap_unordered(_energy_worker_with_labels, jobs, chunksize=cfg.chunksize),
             start=1,
@@ -532,13 +537,17 @@ def _sample_unique_configs_and_rank(
 
     ctx = get_context("spawn")
     t0 = time.time()
+    effective_n_workers = 1 if cfg.device == "cuda" else cfg.n_workers
 
-    with ctx.Pool(processes=cfg.nproc, initializer=_init_worker) as pool:
+    with ctx.Pool(
+        processes=effective_n_workers,
+        initializer=_init_worker,
+        initargs=(cfg.device, cfg.gpu_id),
+    ) as pool:
         while attempted < cfg.sample_budget and no_improve_counter < cfg.sample_patience:
             batch_labels = []
             batch_keys = set()
 
-            # Build a batch of new symmetry-unique samples
             while len(batch_labels) < cfg.sample_batch_size and attempted < cfg.sample_budget:
                 attempted += 1
                 labels = _random_labels(len(sub_idx), dopant_label_counts, rng)
@@ -606,6 +615,40 @@ def _sample_unique_configs_and_rank(
 
 
 # -----------------------------
+# Exact unique generation
+# -----------------------------
+def _enumerate_unique_configs_exact(
+    *,
+    N: int,
+    perms: List[np.ndarray],
+    dopant_label_counts: Dict[int, int],
+    cfg: ScanConfig,
+) -> Tuple[List[np.ndarray], int]:
+    seen = set()
+    unique_labels: List[np.ndarray] = []
+    checked_raw = 0
+
+    for labels in _enumerate_label_configs(N, dopant_label_counts):
+        checked_raw += 1
+        key = _canonical_key(labels, perms)
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+        unique_labels.append(labels.copy())
+
+        if len(unique_labels) >= cfg.max_unique:
+            raise RuntimeError(
+                f"Unique(sym) configs reached max_unique={cfg.max_unique}. "
+                "This composition is too large for full enumeration."
+            )
+
+    log.info("Done exact generation: raw=%d, unique(sym)=%d", checked_raw, len(unique_labels))
+    return unique_labels, checked_raw
+
+
+# -----------------------------
 # Core: scan one structure folder
 # -----------------------------
 def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
@@ -634,7 +677,6 @@ def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
     perms = _build_symmetry_permutations(parent, sub_idx, symprec=cfg.symprec)
     log.info("Symmetry operations (unique permutations on sublattice): %d", len(perms))
 
-    # Label mapping (stable)
     dopants_sorted = sorted(dopant_counts.items())
     label_to_el: Dict[int, str] = {0: cfg.host_species}
     dopant_label_counts: Dict[int, int] = {}
@@ -687,7 +729,6 @@ def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
     else:
         raise RuntimeError(f"Unknown scan mode: {selected_mode}")
 
-    # Write outputs
     ranking_rows = []
     for rank, (E, eval_idx, labels) in enumerate(best_sorted, start=1):
         s = base.copy()
@@ -714,12 +755,14 @@ def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
                 "topk": cfg.topk,
                 "symprec": cfg.symprec,
                 "max_enum": cfg.max_enum,
-                "nproc": cfg.nproc,
+                "n_workers": cfg.n_workers,
                 "chunksize": cfg.chunksize,
                 "order": cfg.order,
                 "anion_species": cfg.anion_species,
                 "host_species": cfg.host_species,
                 "max_unique": cfg.max_unique,
+                "device": cfg.device,
+                "gpu_id": cfg.gpu_id,
                 "mode": cfg.mode,
                 "selected_mode": selected_mode,
                 "sample_budget": cfg.sample_budget,
@@ -754,7 +797,6 @@ def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
 
         log.info("SAVE %s | rank %d | E=%.6f eV | %s", cand_dir / "POSCAR", rank, E, sig)
 
-    # CSV
     (struct_dir / "ranking_scan.csv").write_text(
         "candidate,rank_sp,energy_sp_eV,signature\n"
         + "\n".join(
@@ -765,14 +807,15 @@ def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
         encoding="utf-8",
     )
 
-    # Summary
     with open(struct_dir / "scan_summary.txt", "w", encoding="utf-8") as f:
         f.write(f"CWD: {struct_dir}\n")
         f.write(f"POSCAR_IN: {cfg.poscar_in}\n")
         f.write(f"TOPK: {cfg.topk}\n")
         f.write(f"SYMPREC: {cfg.symprec}\n")
-        f.write(f"NPROC: {cfg.nproc}\n")
+        f.write(f"n_workers: {cfg.n_workers}\n")
         f.write(f"CHUNKSIZE: {cfg.chunksize}\n")
+        f.write(f"device: {cfg.device}\n")
+        f.write(f"gpu_id: {cfg.gpu_id}\n")
         f.write(f"Host: {cfg.host_species}\n")
         f.write(f"Anions: {cfg.anion_species}\n")
         f.write(f"Mode requested: {cfg.mode}\n")
@@ -799,7 +842,7 @@ def run_scan(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None = 
     Step 02: For each structure folder in [structure].outdir:
       - exact mode: enumerate symmetry-unique dopant permutations on the cation sublattice
       - sample mode: randomly sample symmetry-unique dopant arrangements
-      - evaluate single-point energy using M3GNet in parallel
+      - evaluate single-point energy using M3GNet
       - keep top-k lowest energies
     """
     cfg = _parse_scan_config(raw_cfg)
@@ -811,6 +854,9 @@ def run_scan(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None = 
     subdirs = sorted([p for p in outdir.iterdir() if p.is_dir()])
 
     log.info("Step 02 scan: %d structure folders in: %s", len(subdirs), outdir)
+    log.info("Scan backend: device=%s gpu_id=%d", cfg.device, cfg.gpu_id)
+    if cfg.device == "cuda":
+        log.info("CUDA mode: forcing effective_n_workers=1 for safe TensorFlow GPU usage.")
     log.info("NOTE: only subfolders are processed (main-directory POSCAR is ignored).")
 
     for i, sdir in enumerate(subdirs, start=1):

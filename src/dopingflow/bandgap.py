@@ -4,12 +4,15 @@ from __future__ import annotations
 import csv
 import json
 import logging
+import math
 import os
 import time
-import math
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
+
+from dopingflow.hardware import resolve_torch_device
 
 log = logging.getLogger(__name__)
 
@@ -32,6 +35,10 @@ class BandgapConfig:
     skip_if_done: bool
     cutoff: float
     max_neighbors: int
+    n_workers: int
+    device: str
+    gpu_id: int
+    batch_size: int
 
 
 def _parse_bandgap_config(raw: dict[str, Any], root: Path) -> BandgapConfig:
@@ -44,26 +51,42 @@ def _parse_bandgap_config(raw: dict[str, Any], root: Path) -> BandgapConfig:
     skip_if_done = bool(bg.get("skip_if_done", True))
     cutoff = float(bg.get("cutoff", 8.0))
     max_neighbors = int(bg.get("max_neighbors", 12))
+    n_workers = int(bg.get("n_workers", 1))
+    device = str(bg.get("device", "cpu")).lower()
+    gpu_id = int(bg.get("gpu_id", 0))
+    batch_size = int(bg.get("batch_size", 32))
 
     if cutoff <= 0:
         raise ValueError("[bandgap].cutoff must be > 0")
     if max_neighbors <= 0:
         raise ValueError("[bandgap].max_neighbors must be > 0")
+    if n_workers <= 0:
+        raise ValueError("[bandgap].n_workers must be >= 1")
+    if device not in {"cpu", "cuda"}:
+        raise ValueError('[bandgap].device must be either "cpu" or "cuda"')
+    if gpu_id < 0:
+        raise ValueError("[bandgap].gpu_id must be >= 0")
+    if batch_size <= 0:
+        raise ValueError("[bandgap].batch_size must be >= 1")
 
     return BandgapConfig(
         outdir=outdir,
         skip_if_done=skip_if_done,
         cutoff=cutoff,
         max_neighbors=max_neighbors,
+        n_workers=n_workers,
+        device=device,
+        gpu_id=gpu_id,
+        batch_size=batch_size,
     )
 
 
 # -----------------------------
-# ALIGNN helpers (ported)
+# ALIGNN helpers
 # -----------------------------
 def _poscar_to_jarvis_atoms(poscar_path: Path):
-    from pymatgen.core import Structure
     from jarvis.core.atoms import Atoms
+    from pymatgen.core import Structure
 
     s = Structure.from_file(str(poscar_path))
     return Atoms(
@@ -91,10 +114,10 @@ def _find_model_dir(root: Path) -> Path:
     return cfgs[0].parent
 
 
-def _load_local_alignn_model(model_dir: Path):
+def _load_local_alignn_model(model_dir: Path, device_str: str):
     import torch
-    from alignn.models.alignn import ALIGNN
     from alignn.config import ALIGNNConfig
+    from alignn.models.alignn import ALIGNN
 
     cfg_path = model_dir / "config.json"
     if not cfg_path.exists():
@@ -115,24 +138,34 @@ def _load_local_alignn_model(model_dir: Path):
         raise RuntimeError(f"No checkpoint_*.pt or *.pt found in {model_dir}")
     ckpt = ckpts[-1]
 
-    log.info("ALIGNN config: %s", cfg_path)
-    log.info("ALIGNN ckpt  : %s", ckpt)
+    device = torch.device(device_str)
+
+    log.info("ALIGNN config : %s", cfg_path)
+    log.info("ALIGNN ckpt   : %s", ckpt)
+    log.info("ALIGNN device : %s", device)
 
     model = ALIGNN(cfg)
-    state = torch.load(str(ckpt), map_location="cpu")
+    state = torch.load(str(ckpt), map_location=device)
     if isinstance(state, dict) and "state_dict" in state:
         state = state["state_dict"]
     state = {k.replace("module.", ""): v for k, v in state.items()}
+
     model.load_state_dict(state, strict=False)
+    model.to(device)
     model.eval()
-    return model, cfg_path, ckpt
+
+    return model, cfg_path, ckpt, device
 
 
-def _predict_bandgap(model, jarvis_atoms, cutoff: float, max_neighbors: int) -> float:
+def _build_alignn_inputs(jarvis_atoms, cutoff: float, max_neighbors: int):
     import torch
     from alignn.graphs import Graph
 
-    out_graph = Graph.atom_dgl_multigraph(jarvis_atoms, cutoff=cutoff, max_neighbors=max_neighbors)
+    out_graph = Graph.atom_dgl_multigraph(
+        jarvis_atoms,
+        cutoff=cutoff,
+        max_neighbors=max_neighbors,
+    )
 
     if isinstance(out_graph, (list, tuple)) and len(out_graph) == 3:
         g, lg, lat = out_graph
@@ -142,6 +175,14 @@ def _predict_bandgap(model, jarvis_atoms, cutoff: float, max_neighbors: int) -> 
     else:
         raise RuntimeError(f"Unexpected graph return type/length: {type(out_graph)}")
 
+    return g, lg, lat
+
+
+def _predict_bandgap(model, jarvis_atoms, cutoff: float, max_neighbors: int) -> float:
+    import torch
+
+    g, lg, lat = _build_alignn_inputs(jarvis_atoms, cutoff=cutoff, max_neighbors=max_neighbors)
+
     device = next(model.parameters()).device
     g = g.to(device)
     lg = lg.to(device)
@@ -150,7 +191,24 @@ def _predict_bandgap(model, jarvis_atoms, cutoff: float, max_neighbors: int) -> 
     with torch.no_grad():
         pred = model((g, lg, lat))
 
-    return float(pred.detach().cpu().numpy().reshape(-1)[0])
+    return float(torch.as_tensor(pred).detach().cpu().reshape(-1)[0])
+
+
+def _predict_bandgap_batch(model, items):
+    import dgl
+    import torch
+
+    device = next(model.parameters()).device
+
+    gs, lgs, lats = zip(*items)
+    bg = dgl.batch(gs).to(device)
+    blg = dgl.batch(lgs).to(device)
+    blat = torch.cat(lats, dim=0).to(device)
+
+    with torch.no_grad():
+        pred = model((bg, blg, blat))
+
+    return torch.as_tensor(pred).detach().cpu().reshape(-1).tolist()
 
 
 def _load_selected_candidates(path: Path) -> List[str]:
@@ -163,8 +221,8 @@ def _load_selected_candidates(path: Path) -> List[str]:
 
 
 def _write_band_meta(candidate_dir: Path, bandgap_eV: float, extra: Dict[str, Any]) -> None:
-    out_dir = candidate_dir / "03_band"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    meta_path = candidate_dir / BAND_META_REL
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
 
     meta = {
         "stage": "03_band",
@@ -173,7 +231,67 @@ def _write_band_meta(candidate_dir: Path, bandgap_eV: float, extra: Dict[str, An
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         **extra,
     }
-    (out_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+
+
+# -----------------------------
+# Worker for CPU parallel mode
+# -----------------------------
+def _cpu_predict_one(
+    poscar_path_str: str,
+    cutoff: float,
+    max_neighbors: int,
+    model_dir_str: str,
+) -> Dict[str, Any]:
+    poscar_path = Path(poscar_path_str)
+    cand_dir = poscar_path.parents[1]
+    cand_name = cand_dir.name
+
+    try:
+        jat = _poscar_to_jarvis_atoms(poscar_path)
+        t0 = time.time()
+
+        model, cfg_path, ckpt_path, _device = _load_local_alignn_model(Path(model_dir_str), "cpu")
+        bg = _predict_bandgap(model, jat, cutoff=cutoff, max_neighbors=max_neighbors)
+        wall_s = time.time() - t0
+
+        return {
+            "candidate": cand_name,
+            "bandgap": float(bg),
+            "status": "ok",
+            "extra": {
+                "status": "ok",
+                "model_key": "jv_mbj_bandgap_alignn (local)",
+                "model_dir": str(model_dir_str),
+                "config_json": str(cfg_path),
+                "checkpoint": str(ckpt_path),
+                "input_poscar": str(poscar_path),
+                "n_atoms": int(len(jat.elements)),
+                "composition": dict(jat.composition.to_dict()),
+                "graph_params": {
+                    "cutoff": float(cutoff),
+                    "max_neighbors": int(max_neighbors),
+                },
+                "walltime_s": float(wall_s),
+            },
+        }
+    except Exception as e:
+        return {
+            "candidate": cand_name,
+            "bandgap": float("nan"),
+            "status": "fail",
+            "extra": {
+                "status": "fail",
+                "error": repr(e),
+                "input_poscar": str(poscar_path),
+                "graph_params": {
+                    "cutoff": float(cutoff),
+                    "max_neighbors": int(max_neighbors),
+                },
+                "model_key": "jv_mbj_bandgap_alignn (local)",
+                "model_dir": str(model_dir_str),
+            },
+        }
 
 
 # -----------------------------
@@ -193,7 +311,16 @@ def _get_relaxed_poscars(folder: Path) -> List[Path]:
     return poscars
 
 
-def _run_folder(folder: Path, cfg: BandgapConfig, model, cfg_path: Path, ckpt_path: Path, model_dir: Path) -> None:
+def _write_summary_csv(out_csv: Path, rows: List[Tuple[str, float]]) -> None:
+    rows_sorted = sorted(rows, key=lambda x: (math.isnan(x[1]), x[1]))
+    with out_csv.open("w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["candidate", "bandgap_eV_ALIGNN_MBJ"])
+        for cand, bg in rows_sorted:
+            w.writerow([cand, f"{bg:.6f}"])
+
+
+def _run_folder(folder: Path, cfg: BandgapConfig, model, cfg_path: Path | None, ckpt_path: Path | None, model_dir: Path) -> None:
     out_csv = folder / OUT_CSV_NAME
 
     if cfg.skip_if_done and out_csv.exists():
@@ -206,14 +333,13 @@ def _run_folder(folder: Path, cfg: BandgapConfig, model, cfg_path: Path, ckpt_pa
         return
 
     rows: List[Tuple[str, float]] = []
+    todo_poscars: List[Path] = []
 
     for poscar_path in poscars:
-        cand_dir = poscar_path.parents[1]  # candidate_XXX
+        cand_dir = poscar_path.parents[1]
         cand_name = cand_dir.name
+        meta_path = cand_dir / BAND_META_REL
 
-        meta_path = cand_dir / "03_band" / "meta.json"
-
-        # --- Candidate-level skip (and reuse existing bandgap if possible) ---
         if cfg.skip_if_done and meta_path.exists():
             try:
                 prev = json.loads(meta_path.read_text(encoding="utf-8"))
@@ -224,59 +350,251 @@ def _run_folder(folder: Path, cfg: BandgapConfig, model, cfg_path: Path, ckpt_pa
             except Exception:
                 log.info("%s/%s: meta exists but unreadable -> recompute", folder.name, cand_name)
 
-        # --- Compute bandgap with per-candidate error isolation ---
-        try:
-            jat = _poscar_to_jarvis_atoms(poscar_path)
+        todo_poscars.append(poscar_path)
 
-            t0 = time.time()
-            bg = _predict_bandgap(model, jat, cutoff=cfg.cutoff, max_neighbors=cfg.max_neighbors)
-            wall_s = time.time() - t0
+    if not todo_poscars:
+        _write_summary_csv(out_csv, rows)
+        log.info("OK   %s: wrote %s and candidate_*/03_band/meta.json", folder.name, OUT_CSV_NAME)
+        return
 
-            log.info("%s/%s: bandgap = %.4f eV", folder.name, cand_name, bg)
+    # -------------------------
+    # CPU parallel mode
+    # -------------------------
+    if cfg.device == "cpu" and cfg.n_workers > 1 and len(todo_poscars) > 1:
+        log.info("%s: running CPU parallel bandgap with %d workers", folder.name, cfg.n_workers)
 
-            extra = {
-                "status": "ok",
-                "model_key": "jv_mbj_bandgap_alignn (local)",
-                "model_dir": str(model_dir),
-                "config_json": str(cfg_path),
-                "checkpoint": str(ckpt_path),
-                "input_poscar": str(poscar_path),
-                "n_atoms": int(len(jat.elements)),
-                "composition": dict(jat.composition.to_dict()),
-                "graph_params": {"cutoff": float(cfg.cutoff), "max_neighbors": int(cfg.max_neighbors)},
-                "walltime_s": float(wall_s),
-            }
-            _write_band_meta(cand_dir, bg, extra)
-            rows.append((cand_name, bg))
+        futures = []
+        with ProcessPoolExecutor(max_workers=cfg.n_workers) as ex:
+            for poscar_path in todo_poscars:
+                futures.append(
+                    ex.submit(
+                        _cpu_predict_one,
+                        str(poscar_path),
+                        cfg.cutoff,
+                        cfg.max_neighbors,
+                        str(model_dir),
+                    )
+                )
 
-        except Exception as e:
-            log.warning("%s/%s: FAIL bandgap: %s", folder.name, cand_name, repr(e))
+            for fut in as_completed(futures):
+                res = fut.result()
+                cand_name = res["candidate"]
+                bg = float(res["bandgap"])
+                status = res["status"]
+                extra = res["extra"]
 
-            # write fail meta (keeps pipeline robust / debuggable)
-            _write_band_meta(
-                cand_dir,
-                float("nan"),
-                {
-                    "status": "fail",
-                    "error": repr(e),
-                    "input_poscar": str(poscar_path),
-                    "graph_params": {"cutoff": float(cfg.cutoff), "max_neighbors": int(cfg.max_neighbors)},
+                cand_dir = folder / cand_name
+
+                if status == "ok":
+                    log.info("%s/%s: bandgap = %.4f eV", folder.name, cand_name, bg)
+                else:
+                    log.warning("%s/%s: FAIL bandgap: %s", folder.name, cand_name, extra.get("error", "unknown"))
+
+                _write_band_meta(cand_dir, bg, extra)
+                rows.append((cand_name, bg))
+
+    # -------------------------
+    # CUDA batched mode
+    # -------------------------
+    elif cfg.device == "cuda":
+        log.info("%s: running CUDA batched bandgap (batch_size=%d)", folder.name, cfg.batch_size)
+
+        batch_items: List[Tuple[Any, Any, Any]] = []
+        batch_meta: List[Tuple[Path, Any]] = []
+
+        for poscar_path in todo_poscars:
+            try:
+                jat = _poscar_to_jarvis_atoms(poscar_path)
+                g, lg, lat = _build_alignn_inputs(jat, cutoff=cfg.cutoff, max_neighbors=cfg.max_neighbors)
+                batch_items.append((g, lg, lat))
+                batch_meta.append((poscar_path, jat))
+            except Exception as e:
+                cand_dir = poscar_path.parents[1]
+                cand_name = cand_dir.name
+                log.warning("%s/%s: FAIL bandgap input build: %s", folder.name, cand_name, repr(e))
+                _write_band_meta(
+                    cand_dir,
+                    float("nan"),
+                    {
+                        "status": "fail",
+                        "error": repr(e),
+                        "input_poscar": str(poscar_path),
+                        "graph_params": {
+                            "cutoff": float(cfg.cutoff),
+                            "max_neighbors": int(cfg.max_neighbors),
+                        },
+                        "model_key": "jv_mbj_bandgap_alignn (local)",
+                        "model_dir": str(model_dir),
+                        "config_json": str(cfg_path) if cfg_path else "",
+                        "checkpoint": str(ckpt_path) if ckpt_path else "",
+                    },
+                )
+                rows.append((cand_name, float("nan")))
+                continue
+
+            if len(batch_items) == cfg.batch_size:
+                try:
+                    preds = _predict_bandgap_batch(model, batch_items)
+
+                    for (poscar_path_i, jat_i), bg in zip(batch_meta, preds):
+                        cand_dir = poscar_path_i.parents[1]
+                        cand_name = cand_dir.name
+
+                        log.info("%s/%s: bandgap = %.4f eV", folder.name, cand_name, bg)
+
+                        extra = {
+                            "status": "ok",
+                            "model_key": "jv_mbj_bandgap_alignn (local)",
+                            "model_dir": str(model_dir),
+                            "config_json": str(cfg_path) if cfg_path else "",
+                            "checkpoint": str(ckpt_path) if ckpt_path else "",
+                            "input_poscar": str(poscar_path_i),
+                            "n_atoms": int(len(jat_i.elements)),
+                            "composition": dict(jat_i.composition.to_dict()),
+                            "graph_params": {
+                                "cutoff": float(cfg.cutoff),
+                                "max_neighbors": int(cfg.max_neighbors),
+                            },
+                        }
+                        _write_band_meta(cand_dir, float(bg), extra)
+                        rows.append((cand_name, float(bg)))
+
+                except Exception as e:
+                    for poscar_path_i, _jat_i in batch_meta:
+                        cand_dir = poscar_path_i.parents[1]
+                        cand_name = cand_dir.name
+                        log.warning("%s/%s: FAIL bandgap batch: %s", folder.name, cand_name, repr(e))
+                        _write_band_meta(
+                            cand_dir,
+                            float("nan"),
+                            {
+                                "status": "fail",
+                                "error": repr(e),
+                                "input_poscar": str(poscar_path_i),
+                                "graph_params": {
+                                    "cutoff": float(cfg.cutoff),
+                                    "max_neighbors": int(cfg.max_neighbors),
+                                },
+                                "model_key": "jv_mbj_bandgap_alignn (local)",
+                                "model_dir": str(model_dir),
+                                "config_json": str(cfg_path) if cfg_path else "",
+                                "checkpoint": str(ckpt_path) if ckpt_path else "",
+                            },
+                        )
+                        rows.append((cand_name, float("nan")))
+
+                batch_items = []
+                batch_meta = []
+
+        # Flush remaining batch
+        if batch_items:
+            try:
+                preds = _predict_bandgap_batch(model, batch_items)
+
+                for (poscar_path_i, jat_i), bg in zip(batch_meta, preds):
+                    cand_dir = poscar_path_i.parents[1]
+                    cand_name = cand_dir.name
+
+                    log.info("%s/%s: bandgap = %.4f eV", folder.name, cand_name, bg)
+
+                    extra = {
+                        "status": "ok",
+                        "model_key": "jv_mbj_bandgap_alignn (local)",
+                        "model_dir": str(model_dir),
+                        "config_json": str(cfg_path) if cfg_path else "",
+                        "checkpoint": str(ckpt_path) if ckpt_path else "",
+                        "input_poscar": str(poscar_path_i),
+                        "n_atoms": int(len(jat_i.elements)),
+                        "composition": dict(jat_i.composition.to_dict()),
+                        "graph_params": {
+                            "cutoff": float(cfg.cutoff),
+                            "max_neighbors": int(cfg.max_neighbors),
+                        },
+                    }
+                    _write_band_meta(cand_dir, float(bg), extra)
+                    rows.append((cand_name, float(bg)))
+
+            except Exception as e:
+                for poscar_path_i, _jat_i in batch_meta:
+                    cand_dir = poscar_path_i.parents[1]
+                    cand_name = cand_dir.name
+                    log.warning("%s/%s: FAIL bandgap batch: %s", folder.name, cand_name, repr(e))
+                    _write_band_meta(
+                        cand_dir,
+                        float("nan"),
+                        {
+                            "status": "fail",
+                            "error": repr(e),
+                            "input_poscar": str(poscar_path_i),
+                            "graph_params": {
+                                "cutoff": float(cfg.cutoff),
+                                "max_neighbors": int(cfg.max_neighbors),
+                            },
+                            "model_key": "jv_mbj_bandgap_alignn (local)",
+                            "model_dir": str(model_dir),
+                            "config_json": str(cfg_path) if cfg_path else "",
+                            "checkpoint": str(ckpt_path) if ckpt_path else "",
+                        },
+                    )
+                    rows.append((cand_name, float("nan")))
+
+    # -------------------------
+    # CPU serial mode
+    # -------------------------
+    else:
+        for poscar_path in todo_poscars:
+            cand_dir = poscar_path.parents[1]
+            cand_name = cand_dir.name
+
+            try:
+                jat = _poscar_to_jarvis_atoms(poscar_path)
+
+                t0 = time.time()
+                bg = _predict_bandgap(model, jat, cutoff=cfg.cutoff, max_neighbors=cfg.max_neighbors)
+                wall_s = time.time() - t0
+
+                log.info("%s/%s: bandgap = %.4f eV", folder.name, cand_name, bg)
+
+                extra = {
+                    "status": "ok",
                     "model_key": "jv_mbj_bandgap_alignn (local)",
                     "model_dir": str(model_dir),
-                    "config_json": str(cfg_path),
-                    "checkpoint": str(ckpt_path),
-                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-                },
-            )
-            rows.append((cand_name, float("nan")))
+                    "config_json": str(cfg_path) if cfg_path else "",
+                    "checkpoint": str(ckpt_path) if ckpt_path else "",
+                    "input_poscar": str(poscar_path),
+                    "n_atoms": int(len(jat.elements)),
+                    "composition": dict(jat.composition.to_dict()),
+                    "graph_params": {
+                        "cutoff": float(cfg.cutoff),
+                        "max_neighbors": int(cfg.max_neighbors),
+                    },
+                    "walltime_s": float(wall_s),
+                }
+                _write_band_meta(cand_dir, bg, extra)
+                rows.append((cand_name, bg))
 
-    rows_sorted = sorted(rows, key=lambda x: (math.isnan(x[1]), x[1]))
-    with out_csv.open("w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f)
-        w.writerow(["candidate", "bandgap_eV_ALIGNN_MBJ"])
-        for cand, bg in rows_sorted:
-            w.writerow([cand, f"{bg:.6f}"])
+            except Exception as e:
+                log.warning("%s/%s: FAIL bandgap: %s", folder.name, cand_name, repr(e))
+                _write_band_meta(
+                    cand_dir,
+                    float("nan"),
+                    {
+                        "status": "fail",
+                        "error": repr(e),
+                        "input_poscar": str(poscar_path),
+                        "graph_params": {
+                            "cutoff": float(cfg.cutoff),
+                            "max_neighbors": int(cfg.max_neighbors),
+                        },
+                        "model_key": "jv_mbj_bandgap_alignn (local)",
+                        "model_dir": str(model_dir),
+                        "config_json": str(cfg_path) if cfg_path else "",
+                        "checkpoint": str(ckpt_path) if ckpt_path else "",
+                    },
+                )
+                rows.append((cand_name, float("nan")))
 
+    _write_summary_csv(out_csv, rows)
     log.info("OK   %s: wrote %s and candidate_*/03_band/meta.json", folder.name, OUT_CSV_NAME)
 
 
@@ -296,6 +614,7 @@ def run_bandgap(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None
       - candidate_*/03_band/meta.json
     """
     cfg = _parse_bandgap_config(raw_cfg, root)
+    device_str = resolve_torch_device(cfg.device, cfg.gpu_id)
 
     model_root_env = os.environ.get("ALIGNN_MODEL_DIR", "").strip()
     if not model_root_env:
@@ -303,7 +622,15 @@ def run_bandgap(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None
 
     model_root = Path(model_root_env)
     model_dir = _find_model_dir(model_root)
-    model, cfg_path, ckpt_path = _load_local_alignn_model(model_dir)
+
+    # Load model once only for CPU serial / CUDA mode
+    model = None
+    cfg_path = None
+    ckpt_path = None
+    device = cfg.device
+
+    if cfg.device == "cuda" or cfg.n_workers == 1:
+        model, cfg_path, ckpt_path, device = _load_local_alignn_model(model_dir, device_str)
 
     if not cfg.outdir.exists():
         raise FileNotFoundError(f"Output directory not found: {cfg.outdir} (did you run Step 01?)")
@@ -311,6 +638,9 @@ def run_bandgap(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None
     folders = sorted([p for p in cfg.outdir.iterdir() if p.is_dir()])
 
     log.info("Step 05 bandgap: scanning %d structure folders in: %s", len(folders), cfg.outdir)
+    log.info("Bandgap device: %s", cfg.device)
+    log.info("Bandgap CPU workers: %d", cfg.n_workers)
+    log.info("Bandgap batch size: %d", cfg.batch_size)
     log.info("Output per folder: %s", OUT_CSV_NAME)
     log.info("NOTE: main-directory files are ignored; only subfolders are processed.")
 
@@ -321,9 +651,9 @@ def run_bandgap(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None
     log.info("DONE Step 05 bandgap for all structure folders.")
 
 
-# TOML wrapper (like your other steps)
+# TOML wrapper
 try:
-    import tomllib  # py3.11+
+    import tomllib
 except ModuleNotFoundError:  # pragma: no cover
     import tomli as tomllib
 

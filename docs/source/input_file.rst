@@ -6,6 +6,46 @@ Input File Specification (input.toml)
 The workflow is fully controlled through a single TOML configuration file.
 
 Each stage reads only the parameters relevant to it.
+
+Execution Model
+---------------
+
+Each stage defines both:
+
+- **what it does** (physics / workflow logic)
+- **how it runs** (CPU / GPU / parallelization)
+
+There is **no global hardware section**. Instead:
+
+- ``[scan]`` controls screening
+- ``[relax]`` controls structural relaxation
+- ``[bandgap]`` controls band gap prediction
+
+Each stage independently defines:
+
+- ``device`` (cpu or cuda)
+- ``gpu_id`` (for GPU execution)
+
+This design gives full flexibility and avoids cross-stage conflicts.
+
+Execution Behavior
+------------------
+
++-----------+-------------------+--------------------------+
+| Stage     | Device            | Strategy                 |
++===========+===================+==========================+
+| scan      | CPU               | multiprocessing          |
++-----------+-------------------+--------------------------+
+| relax     | CPU / GPU         | workers or single GPU    |
++-----------+-------------------+--------------------------+
+| bandgap   | CPU               | multiprocessing          |
++-----------+-------------------+--------------------------+
+| bandgap   | GPU               | batched inference        |
++-----------+-------------------+--------------------------+
+
+This design allows each stage to control its own parallelization strategy
+while sharing a consistent hardware configuration.
+
 All paths are interpreted relative to the directory containing ``input.toml``.
 
 The following sections are supported:
@@ -352,15 +392,35 @@ Maximum allowed number of symmetry-unique configurations in exact mode.
 
 Prevents excessive memory usage for very large configuration spaces.
 
-nproc (integer)
-~~~~~~~~~~~~~~~
+device (string, default: "cpu")
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Number of parallel worker processes used for M3GNet energy evaluation.
+Execution device:
+
+- ``"cpu"``
+- ``"cuda"``
+
+Controls how M3GNet energies are evaluated.
+
+n_workers (integer)
+~~~~~~~~~~~~~~~~~~~
+
+Number of parallel worker processes.
+
+- Used only when ``device = "cpu"``
+- Ignored when ``device = "cuda"`` (GPU mode uses a single worker)
 
 chunksize (integer)
 ~~~~~~~~~~~~~~~~~~~
 
 Chunk size used in the multiprocessing pool.
+
+Relevant only when ``device = "cpu"``.
+
+gpu_id (integer, default: 0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+GPU index used when ``device = "cuda"``.
 
 anion_species (array of strings)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -386,10 +446,10 @@ If true, skip a structure folder if ``ranking_scan.csv`` already exists.
 Sampling parameters
 ~~~~~~~~~~~~~~~~~~~
 
-Used only when ``mode = "sample"`` or when ``mode = "auto"`` switches to sampling.
+Used when:
 
-sample_budget (integer)
-~~~~~~~~~~~~~~~~~~~~~~~
+- ``mode = "sample"``
+- or ``mode = "auto"`` selects sampling for large configuration spaces
 
 Maximum number of random sampling attempts.
 
@@ -413,6 +473,13 @@ sample_max_saved (integer)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Maximum number of sampled canonical configurations stored to avoid duplicates.
+
+Notes
+~~~~~
+
+- If ``device = "cuda"``, scan runs on a single GPU and ``n_workers`` is ignored.
+- If ``device = "cpu"``, parallelization is controlled via ``n_workers`` and ``chunksize``.
+- GPU mode is recommended for faster single-structure evaluation, while CPU mode scales better across many configurations.
 
 Output
 ~~~~~~
@@ -449,6 +516,19 @@ fmax (float)
 Maximum force convergence criterion (eV/Å).
 Relaxation stops when the maximum atomic force falls below this threshold.
 
+device (string, default: "cpu")
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Execution device:
+
+- ``"cpu"``
+- ``"cuda"``
+
+gpu_id (integer, default: 0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+GPU index used when ``device = "cuda"``.
+
 n_workers (integer)
 ~~~~~~~~~~~~~~~~~~~
 
@@ -477,12 +557,15 @@ skip_candidate_if_done (boolean)
 Skip an individual candidate if
 ``candidate_*/02_relax/meta.json`` and ``POSCAR`` already exist.
 
+
 Notes
 ~~~~~
 
+- If ``device = "cuda"``, relaxation runs on a single GPU and ``n_workers`` is ignored.
+- If ``device = "cpu"``, parallelization is controlled via ``n_workers``.
 - Species ordering in the relaxed ``POSCAR`` follows
   ``[generate].poscar_order``.
-  If ``poscar_order`` is empty, the default pymatgen ordering is used.
+- If ``poscar_order`` is empty, the default pymatgen ordering is used.
 
 ---------------------------------------------------------------------
 
@@ -558,6 +641,36 @@ max_neighbors (int)
 
 Maximum number of neighbors retained per atom when building the graph.
 Must be > 0.
+
+device (string, default: "cpu")
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Execution device:
+
+- ``"cpu"``
+- ``"cuda"``
+
+gpu_id (integer, default: 0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+GPU index used when ``device = "cuda"``.
+
+batch_size (integer, default: 32)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Batch size used for GPU inference.
+
+n_workers (integer)
+~~~~~~~~~~~~~~~~~~~
+
+Number of CPU workers used for parallel bandgap prediction.
+
+Notes
+~~~~~
+
+- CPU mode → multiprocessing over structures using ``n_workers``
+- GPU mode → batched inference using ``batch_size``
+- ``n_workers`` is ignored when using GPU
 
 ---------------------------------------------------------------------
 
