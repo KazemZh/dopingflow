@@ -18,17 +18,19 @@ from pymatgen.core import Structure
 from pymatgen.io.vasp import Poscar
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
+from dopingflow.ml_backends import (
+    check_backend_dependency,
+    normalize_backend_config,
+    prepare_backend_runtime,
+    set_default_runtime_env,
+    build_ase_calculator,
+)
+from dopingflow.ml_relaxation import structure_energy_with_calculator
+
 log = logging.getLogger(__name__)
 
-# -----------------------------
-# TF/M3GNet noise suppression
-# (must be set before importing TF/m3gnet in this process)
-# -----------------------------
-os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
-os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
-os.environ.setdefault("OMP_NUM_THREADS", "1")
-os.environ.setdefault("TF_NUM_INTRAOP_THREADS", "1")
-os.environ.setdefault("TF_NUM_INTEROP_THREADS", "1")
+# conservative defaults in this process
+set_default_runtime_env(tf_threads=1, omp_threads=1)
 
 
 # -----------------------------
@@ -42,18 +44,20 @@ class ScanConfig:
     max_enum: int
     n_workers: int
     chunksize: int
-    order: List[str]  # from [generate].poscar_order
+    order: List[str]
     anion_species: List[str]
     host_species: str
     max_unique: int
     skip_if_done: bool
 
-    # stage-local execution
-    device: str   # cpu | cuda
+    device: str
     gpu_id: int
 
-    # New auto/sample controls
-    mode: str  # auto | exact | sample
+    backend: str
+    model: str
+    task: str
+
+    mode: str
     sample_budget: int
     sample_batch_size: int
     sample_patience: int
@@ -77,13 +81,15 @@ def _parse_scan_config(raw: dict[str, Any]) -> ScanConfig:
     max_unique = int(scan.get("max_unique", 100_000))
     skip_if_done = bool(scan.get("skip_if_done", True))
 
+    backend = str(scan.get("backend", "m3gnet")).strip().lower()
+    model = str(scan.get("model", "default")).strip()
+    task = str(scan.get("task", "")).strip()
+
     device = str(scan.get("device", "cpu")).strip().lower()
     gpu_id = int(scan.get("gpu_id", 0))
 
-    # Order comes from [generate] ONLY (single source of truth)
     order = [str(x) for x in (gen.get("poscar_order", []) or [])]
 
-    # New controls
     mode = str(scan.get("mode", "auto")).strip().lower()
     sample_budget = int(scan.get("sample_budget", 20_000))
     sample_batch_size = int(scan.get("sample_batch_size", 256))
@@ -111,7 +117,6 @@ def _parse_scan_config(raw: dict[str, Any]) -> ScanConfig:
         raise ValueError('[scan].device must be either "cpu" or "cuda"')
     if gpu_id < 0:
         raise ValueError("[scan].gpu_id must be >= 0")
-
     if mode not in {"auto", "exact", "sample"}:
         raise ValueError("[scan].mode must be one of: auto, exact, sample")
     if sample_budget <= 0:
@@ -122,6 +127,13 @@ def _parse_scan_config(raw: dict[str, Any]) -> ScanConfig:
         raise ValueError("[scan].sample_patience must be > 0")
     if sample_max_saved <= 0:
         raise ValueError("[scan].sample_max_saved must be > 0")
+
+    backend, model, task = normalize_backend_config(
+        backend=backend,
+        model=model,
+        task=task,
+        section_name="scan",
+    )
 
     return ScanConfig(
         poscar_in=poscar_in,
@@ -137,6 +149,9 @@ def _parse_scan_config(raw: dict[str, Any]) -> ScanConfig:
         skip_if_done=skip_if_done,
         device=device,
         gpu_id=gpu_id,
+        backend=backend,
+        model=model,
+        task=task,
         mode=mode,
         sample_budget=sample_budget,
         sample_batch_size=sample_batch_size,
@@ -181,10 +196,6 @@ def _infer_enumeration_sublattice(
     host: str,
     anions: List[str],
 ) -> Tuple[List[int], Dict[str, int], int]:
-    """
-    Enumerated sublattice = all sites whose species_string NOT in anions.
-    Infer dopant counts from the input POSCAR in each structure folder.
-    """
     sub_idx: List[int] = []
     counts = Counter()
 
@@ -196,7 +207,9 @@ def _infer_enumeration_sublattice(
         counts[el] += 1
 
     if host not in counts:
-        raise ValueError(f"Host '{host}' not found on enumerated sublattice. Found: {dict(counts)}")
+        raise ValueError(
+            f"Host '{host}' not found on enumerated sublattice. Found: {dict(counts)}"
+        )
 
     dopant_counts = {el: c for el, c in counts.items() if el != host}
     host_count = counts[host]
@@ -219,7 +232,9 @@ def _make_parent_structure(base: Structure, sublattice_indices: List[int], host:
     return parent
 
 
-def _build_symmetry_permutations(parent: Structure, sublattice_indices: List[int], symprec: float) -> List[np.ndarray]:
+def _build_symmetry_permutations(
+    parent: Structure, sublattice_indices: List[int], symprec: float
+) -> List[np.ndarray]:
     sga = SpacegroupAnalyzer(parent, symprec=symprec)
     ops = sga.get_symmetry_operations(cartesian=False)
 
@@ -233,7 +248,9 @@ def _build_symmetry_permutations(parent: Structure, sublattice_indices: List[int
         dist2 = np.sum(d * d, axis=1)
         j = int(np.argmin(dist2))
         if dist2[j] > (symprec * 10) ** 2:
-            raise RuntimeError(f"Failed to match symmetry-mapped site (min dist^2={dist2[j]}).")
+            raise RuntimeError(
+                f"Failed to match symmetry-mapped site (min dist^2={dist2[j]})."
+            )
         return j
 
     perms = []
@@ -268,13 +285,6 @@ def _canonical_key(labels: np.ndarray, perms: List[np.ndarray]) -> bytes:
 
 
 def _enumerate_label_configs(N: int, dopant_label_counts: Dict[int, int]):
-    """
-    Exact enumerator.
-    Supports up to 3 dopants total.
-    labels are int array length N:
-      0 -> host
-      1.. -> dopants
-    """
     items = list(dopant_label_counts.items())
     allpos = list(range(N))
 
@@ -326,10 +336,6 @@ def _random_labels(
     dopant_label_counts: Dict[int, int],
     rng: np.random.Generator,
 ) -> np.ndarray:
-    """
-    Random valid labeling with exact dopant counts.
-    Works for any number of dopants.
-    """
     labels = np.zeros(N, dtype=np.int8)
     available = np.arange(N)
 
@@ -353,14 +359,11 @@ def _dopant_signature_from_labels(labels: np.ndarray, label_to_el: Dict[int, str
 
 
 def _choose_scan_mode(raw_ncfg: int, cfg: ScanConfig, n_dopants: int) -> str:
-    """
-    Auto selection:
-      - exact if manageable and <=3 dopants
-      - sample otherwise
-    """
     if cfg.mode == "exact":
         if n_dopants > 3:
-            raise RuntimeError("mode='exact' requested, but exact enumerator supports only up to 3 dopants.")
+            raise RuntimeError(
+                "mode='exact' requested, but exact enumerator supports only up to 3 dopants."
+            )
         return "exact"
 
     if cfg.mode == "sample":
@@ -376,10 +379,6 @@ def _choose_scan_mode(raw_ncfg: int, cfg: ScanConfig, n_dopants: int) -> str:
 
 
 def _update_best_heap(best, E: float, labels: np.ndarray, idx: int, topk: int) -> bool:
-    """
-    Keep the best top-k lowest energies.
-    Returns True if the heap improved.
-    """
     item = (-E, idx, labels.copy())
 
     if len(best) < topk:
@@ -395,67 +394,96 @@ def _update_best_heap(best, E: float, labels: np.ndarray, idx: int, topk: int) -
 
 
 # -----------------------------
-# Multiprocessing worker (top-level)
+# Backend state
 # -----------------------------
-_MODEL = None
+_CALCULATOR = None
+_CALCULATOR_BACKEND = None
+_CALCULATOR_MODEL = None
+_CALCULATOR_TASK = None
+_CALCULATOR_DEVICE = None
 
 
-def _init_worker(device: str, gpu_id: int):
-    import logging
-    import os
-    import warnings
+def _init_calculator(
+    *,
+    backend: str,
+    model: str,
+    task: str,
+    device: str,
+    gpu_id: int,
+    tf_threads: int = 1,
+    omp_threads: int = 1,
+) -> None:
+    global _CALCULATOR, _CALCULATOR_BACKEND, _CALCULATOR_MODEL, _CALCULATOR_TASK, _CALCULATOR_DEVICE
 
-    os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
-    os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
+    prepare_backend_runtime(
+        backend=backend,
+        device=device,
+        gpu_id=gpu_id,
+        tf_threads=tf_threads,
+        omp_threads=omp_threads,
+    )
 
-    warnings.filterwarnings("ignore", category=DeprecationWarning)
-    warnings.filterwarnings("ignore", message=".*experimental_relax_shapes.*")
-    warnings.filterwarnings("ignore", message=".*casting an input of type complex64.*")
+    _CALCULATOR = build_ase_calculator(
+        backend=backend,
+        model=model,
+        task=task,
+        device=device,
+    )
+    _CALCULATOR_BACKEND = backend
+    _CALCULATOR_MODEL = model
+    _CALCULATOR_TASK = task
+    _CALCULATOR_DEVICE = device
 
-    logging.getLogger("tensorflow").setLevel(logging.ERROR)
-    try:
-        import tensorflow as tf
 
-        tf.get_logger().setLevel("ERROR")
-        try:
-            tf.autograph.set_verbosity(0)
-        except Exception:
-            pass
+def _ensure_calculator(
+    *,
+    backend: str,
+    model: str,
+    task: str,
+    device: str,
+    gpu_id: int,
+    tf_threads: int = 1,
+    omp_threads: int = 1,
+) -> None:
+    if (
+        _CALCULATOR is not None
+        and _CALCULATOR_BACKEND == backend
+        and _CALCULATOR_MODEL == model
+        and _CALCULATOR_TASK == task
+        and _CALCULATOR_DEVICE == device
+    ):
+        return
 
-        gpus = tf.config.list_physical_devices("GPU")
+    _init_calculator(
+        backend=backend,
+        model=model,
+        task=task,
+        device=device,
+        gpu_id=gpu_id,
+        tf_threads=tf_threads,
+        omp_threads=omp_threads,
+    )
 
-        if device == "cpu":
-            try:
-                tf.config.set_visible_devices([], "GPU")
-            except Exception:
-                pass
-        else:
-            if not gpus:
-                raise RuntimeError("CUDA requested for scan, but TensorFlow sees no GPU.")
-            if gpu_id >= len(gpus):
-                raise RuntimeError(f"Requested gpu_id={gpu_id}, but only {len(gpus)} GPU(s) are visible.")
-            try:
-                tf.config.set_visible_devices(gpus[gpu_id], "GPU")
-                tf.config.experimental.set_memory_growth(gpus[gpu_id], True)
-            except Exception:
-                pass
 
-    except Exception:
-        if device == "cuda":
-            raise
-
-    global _MODEL
-    from m3gnet.models import M3GNet
-
-    _MODEL = M3GNet.load()
+def _worker_initializer(
+    backend: str,
+    model: str,
+    task: str,
+    device: str,
+    gpu_id: int,
+):
+    _init_calculator(
+        backend=backend,
+        model=model,
+        task=task,
+        device=device,
+        gpu_id=gpu_id,
+        tf_threads=1,
+        omp_threads=1,
+    )
 
 
 def _energy_worker_with_labels(args):
-    """
-    args: (base_dict, sublattice_indices, labels, label_to_el)
-    returns: (E, labels)
-    """
-    global _MODEL
     base_dict, sublattice_indices, labels, label_to_el = args
     base_local = Structure.from_dict(base_dict)
 
@@ -463,8 +491,13 @@ def _energy_worker_with_labels(args):
     for pos, site_index in enumerate(sublattice_indices):
         s[site_index] = label_to_el[int(labels[pos])]
 
-    E = float(_MODEL.predict_structure(s))
+    E = structure_energy_with_calculator(s, _CALCULATOR)
     return (E, labels)
+
+
+def _energy_jobs_serial(jobs):
+    for job in jobs:
+        yield _energy_worker_with_labels(job)
 
 
 # -----------------------------
@@ -481,25 +514,44 @@ def _evaluate_exact_configs(
     base_dict = base.as_dict()
     jobs = [(base_dict, sub_idx, lab, label_to_el) for lab in unique_labels]
 
-    ctx = get_context("spawn")
     best = []
     t0 = time.time()
     effective_n_workers = 1 if cfg.device == "cuda" else cfg.n_workers
 
-    with ctx.Pool(
-        processes=effective_n_workers,
-        initializer=_init_worker,
-        initargs=(cfg.device, cfg.gpu_id),
-    ) as pool:
-        for done, (E, labels) in enumerate(
-            pool.imap_unordered(_energy_worker_with_labels, jobs, chunksize=cfg.chunksize),
-            start=1,
-        ):
+    if effective_n_workers == 1:
+        _ensure_calculator(
+            backend=cfg.backend,
+            model=cfg.model,
+            task=cfg.task,
+            device=cfg.device,
+            gpu_id=cfg.gpu_id,
+            tf_threads=1,
+            omp_threads=1,
+        )
+
+        for done, (E, labels) in enumerate(_energy_jobs_serial(jobs), start=1):
             _update_best_heap(best, E, labels, done, cfg.topk)
 
             if done % 2000 == 0 or done == len(jobs):
                 current = sorted([-x[0] for x in best])
                 log.info("%d/%d evaluated | best energies: %s", done, len(jobs), current)
+
+    else:
+        ctx = get_context("spawn")
+        with ctx.Pool(
+            processes=effective_n_workers,
+            initializer=_worker_initializer,
+            initargs=(cfg.backend, cfg.model, cfg.task, cfg.device, cfg.gpu_id),
+        ) as pool:
+            for done, (E, labels) in enumerate(
+                pool.imap_unordered(_energy_worker_with_labels, jobs, chunksize=cfg.chunksize),
+                start=1,
+            ):
+                _update_best_heap(best, E, labels, done, cfg.topk)
+
+                if done % 2000 == 0 or done == len(jobs):
+                    current = sorted([-x[0] for x in best])
+                    log.info("%d/%d evaluated | best energies: %s", done, len(jobs), current)
 
     log.info("Exact evaluation walltime: %.1f s", time.time() - t0)
 
@@ -534,16 +586,21 @@ def _sample_unique_configs_and_rank(
     attempted = 0
     no_improve_counter = 0
     eval_counter = 0
-
-    ctx = get_context("spawn")
     t0 = time.time()
+
     effective_n_workers = 1 if cfg.device == "cuda" else cfg.n_workers
 
-    with ctx.Pool(
-        processes=effective_n_workers,
-        initializer=_init_worker,
-        initargs=(cfg.device, cfg.gpu_id),
-    ) as pool:
+    if effective_n_workers == 1:
+        _ensure_calculator(
+            backend=cfg.backend,
+            model=cfg.model,
+            task=cfg.task,
+            device=cfg.device,
+            gpu_id=cfg.gpu_id,
+            tf_threads=1,
+            omp_threads=1,
+        )
+
         while attempted < cfg.sample_budget and no_improve_counter < cfg.sample_patience:
             batch_labels = []
             batch_keys = set()
@@ -574,11 +631,7 @@ def _sample_unique_configs_and_rank(
             jobs = [(base_dict, sub_idx, lab, label_to_el) for lab in batch_labels]
 
             improved_in_batch = False
-            for E, labels in pool.imap_unordered(
-                _energy_worker_with_labels,
-                jobs,
-                chunksize=cfg.chunksize,
-            ):
+            for E, labels in _energy_jobs_serial(jobs):
                 eval_counter += 1
                 improved = _update_best_heap(best, E, labels, eval_counter, cfg.topk)
                 if improved:
@@ -600,17 +653,78 @@ def _sample_unique_configs_and_rank(
                     no_improve_counter,
                 )
 
+    else:
+        ctx = get_context("spawn")
+        with ctx.Pool(
+            processes=effective_n_workers,
+            initializer=_worker_initializer,
+            initargs=(cfg.backend, cfg.model, cfg.task, cfg.device, cfg.gpu_id),
+        ) as pool:
+            while attempted < cfg.sample_budget and no_improve_counter < cfg.sample_patience:
+                batch_labels = []
+                batch_keys = set()
+
+                while len(batch_labels) < cfg.sample_batch_size and attempted < cfg.sample_budget:
+                    attempted += 1
+                    labels = _random_labels(len(sub_idx), dopant_label_counts, rng)
+                    key = _canonical_key(labels, perms)
+
+                    if key in seen or key in batch_keys:
+                        continue
+
+                    seen.add(key)
+                    batch_keys.add(key)
+                    batch_labels.append(labels)
+
+                    if len(seen) >= cfg.sample_max_saved:
+                        log.warning(
+                            "Reached sample_max_saved=%d canonical keys; stopping sampling.",
+                            cfg.sample_max_saved,
+                        )
+                        attempted = cfg.sample_budget
+                        break
+
+                if not batch_labels:
+                    break
+
+                jobs = [(base_dict, sub_idx, lab, label_to_el) for lab in batch_labels]
+
+                improved_in_batch = False
+                for E, labels in pool.imap_unordered(
+                    _energy_worker_with_labels,
+                    jobs,
+                    chunksize=cfg.chunksize,
+                ):
+                    eval_counter += 1
+                    improved = _update_best_heap(best, E, labels, eval_counter, cfg.topk)
+                    if improved:
+                        improved_in_batch = True
+
+                if improved_in_batch:
+                    no_improve_counter = 0
+                else:
+                    no_improve_counter += len(batch_labels)
+
+                if eval_counter % 500 == 0 or attempted >= cfg.sample_budget:
+                    current = sorted([-x[0] for x in best])
+                    log.info(
+                        "sampled attempts=%d | unique=%d | evaluated=%d | best=%s | no_improve=%d",
+                        attempted,
+                        len(seen),
+                        eval_counter,
+                        current,
+                        no_improve_counter,
+                    )
+
     log.info("Sampling evaluation walltime: %.1f s", time.time() - t0)
 
     best_sorted = sorted([(-E, idx, lab) for (E, idx, lab) in best], key=lambda x: x[0])
-
     stats = {
         "attempted_samples": attempted,
         "unique_sym_samples": len(seen),
         "evaluated_samples": eval_counter,
         "stopped_by_patience": int(no_improve_counter >= cfg.sample_patience),
     }
-
     return best_sorted, stats
 
 
@@ -649,7 +763,7 @@ def _enumerate_unique_configs_exact(
 
 
 # -----------------------------
-# Core: scan one structure folder
+# Core
 # -----------------------------
 def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
     poscar_path = struct_dir / cfg.poscar_in
@@ -666,7 +780,12 @@ def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
     raw_ncfg = _estimate_num_configs(N, dopant_counts)
 
     log.info("CWD: %s", struct_dir)
-    log.info("Enumerated sublattice size: %d (host=%s, anions=%s)", N, cfg.host_species, cfg.anion_species)
+    log.info(
+        "Enumerated sublattice size: %d (host=%s, anions=%s)",
+        N,
+        cfg.host_species,
+        cfg.anion_species,
+    )
     log.info("Dopant counts inferred on sublattice: %s", dopant_counts)
     log.info("Estimated raw configurations: %d", raw_ncfg)
 
@@ -745,12 +864,18 @@ def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
 
         meta = {
             "stage": "01_scan",
-            "method": f"M3GNet-singlepoint ({selected_mode})",
+            "method": f"{cfg.backend}-singlepoint ({selected_mode})",
+            "backend": cfg.backend,
+            "model": cfg.model,
+            "task": cfg.task,
             "rank_sp": rank,
             "energy_sp_eV": float(E),
             "signature": sig,
             "eval_order_index": int(eval_idx),
             "config": {
+                "backend": cfg.backend,
+                "model": cfg.model,
+                "task": cfg.task,
                 "poscar_in": cfg.poscar_in,
                 "topk": cfg.topk,
                 "symprec": cfg.symprec,
@@ -788,6 +913,9 @@ def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
 
         ranking_rows.append(
             {
+                "backend": cfg.backend,
+                "model": cfg.model,
+                "task": cfg.task,
                 "candidate": f"candidate_{rank:03d}",
                 "rank_sp": rank,
                 "energy_sp_eV": float(E),
@@ -798,9 +926,9 @@ def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
         log.info("SAVE %s | rank %d | E=%.6f eV | %s", cand_dir / "POSCAR", rank, E, sig)
 
     (struct_dir / "ranking_scan.csv").write_text(
-        "candidate,rank_sp,energy_sp_eV,signature\n"
+        "candidate,rank_sp,energy_sp_eV,signature,backend,model,task\n"
         + "\n".join(
-            f"{r['candidate']},{r['rank_sp']},{r['energy_sp_eV']:.10f},{r['signature']}"
+            f"{r['candidate']},{r['rank_sp']},{r['energy_sp_eV']:.10f},{r['signature']},{r['backend']},{r['model']},{r['task']}"
             for r in ranking_rows
         )
         + "\n",
@@ -816,6 +944,9 @@ def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
         f.write(f"CHUNKSIZE: {cfg.chunksize}\n")
         f.write(f"device: {cfg.device}\n")
         f.write(f"gpu_id: {cfg.gpu_id}\n")
+        f.write(f"backend: {cfg.backend}\n")
+        f.write(f"model: {cfg.model}\n")
+        f.write(f"task: {cfg.task}\n")
         f.write(f"Host: {cfg.host_species}\n")
         f.write(f"Anions: {cfg.anion_species}\n")
         f.write(f"Mode requested: {cfg.mode}\n")
@@ -839,13 +970,14 @@ def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
 # -----------------------------
 def run_scan(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None = None) -> None:
     """
-    Step 02: For each structure folder in [structure].outdir:
-      - exact mode: enumerate symmetry-unique dopant permutations on the cation sublattice
-      - sample mode: randomly sample symmetry-unique dopant arrangements
-      - evaluate single-point energy using M3GNet
+    Step 02:
+      - enumerate / sample symmetry-unique dopant arrangements
+      - evaluate single-point energies using selected ML backend via ASE calculator
       - keep top-k lowest energies
     """
     cfg = _parse_scan_config(raw_cfg)
+    check_backend_dependency(cfg.backend, stage_name="Scan")
+
     outdir = _get_outdir(raw_cfg, root)
 
     if not outdir.exists():
@@ -854,9 +986,16 @@ def run_scan(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None = 
     subdirs = sorted([p for p in outdir.iterdir() if p.is_dir()])
 
     log.info("Step 02 scan: %d structure folders in: %s", len(subdirs), outdir)
-    log.info("Scan backend: device=%s gpu_id=%d", cfg.device, cfg.gpu_id)
+    log.info(
+        "Scan backend: backend=%s model=%s task=%s device=%s gpu_id=%d",
+        cfg.backend,
+        cfg.model,
+        cfg.task,
+        cfg.device,
+        cfg.gpu_id,
+    )
     if cfg.device == "cuda":
-        log.info("CUDA mode: forcing effective_n_workers=1 for safe TensorFlow GPU usage.")
+        log.info("CUDA mode: forcing effective_n_workers=1 for safe GPU usage.")
     log.info("NOTE: only subfolders are processed (main-directory POSCAR is ignored).")
 
     for i, sdir in enumerate(subdirs, start=1):
@@ -869,6 +1008,23 @@ def run_scan(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None = 
             log.info("SKIP (%d/%d) %s: ranking_scan.csv already exists", i, len(subdirs), sdir.name)
             continue
 
+        if cfg.device == "cpu" and _CALCULATOR is None:
+            log.info(
+                "Loading %s calculator in main process: model=%s device=%s",
+                cfg.backend.upper(),
+                cfg.model,
+                cfg.device,
+            )
+            _ensure_calculator(
+                backend=cfg.backend,
+                model=cfg.model,
+                task=cfg.task,
+                device=cfg.device,
+                gpu_id=cfg.gpu_id,
+                tf_threads=1,
+                omp_threads=1,
+            )
+
         log.info("RUN (%d/%d) %s", i, len(subdirs), sdir.name)
         _scan_one_folder(sdir, cfg)
 
@@ -877,7 +1033,7 @@ def run_scan(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None = 
 
 # TOML wrapper
 try:
-    import tomllib  # py3.11+
+    import tomllib
 except ModuleNotFoundError:  # pragma: no cover
     import tomli as tomllib
 

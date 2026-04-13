@@ -30,7 +30,7 @@ For each generated structure folder, the method:
 - infers the substitutional sublattice and dopant counts from the input structure
 - generates dopant configurations either by **exact enumeration** or **random sampling**
 - removes symmetry-equivalent configurations
-- predicts a single-point energy for each configuration using M3GNet
+- predicts a single-point energy for each configuration using the selected machine-learning backend
 - keeps the **top-k lowest-energy** candidates for downstream relaxation
 
 
@@ -69,10 +69,66 @@ For each structure subdirectory in ``[structure].outdir``:
 
 7. Reduce configurations to symmetry-unique representations.
 
-8. Evaluate single-point energies in parallel using M3GNet.
+8. Evaluate single-point energies in parallel using the selected machine-learning backend.
 
 9. Select the lowest-energy ``topk`` candidates and write them to ``candidate_*/01_scan``.
 10. Write a CSV ranking file and a human-readable summary.
+
+Backend and Model Selection
+---------------------------
+
+The scan stage supports multiple machine-learning backends for energy evaluation.
+
+The backend is selected via ``[scan].backend`` and controls how energies are computed.
+
+Supported backends include:
+
+- ``m3gnet``:
+  - TensorFlow-based universal interatomic potential
+  - robust and general-purpose
+
+- ``uma``:
+  - FAIR-Chem universal models (via Hugging Face)
+  - requires authentication and model access permissions
+
+- ``mace``:
+  - foundation models trained on Materials Project / OMAT / MPA datasets
+  - fast and efficient, especially for large-scale screening
+
+- ``grace``:
+  - graph neural network models for atomistic simulations (if installed)
+  - experimental integration
+
+Model selection is controlled via ``[scan].model``.
+
+Examples:
+
+::
+
+   backend = "mace"
+   model = "small"
+
+   backend = "uma"
+   model = "uma-s-1p2"
+   task  = "omat"
+
+Notes:
+
+- ``task`` is required only for the UMA backend.
+- For other backends, ``task`` is ignored.
+- Models are typically downloaded and cached automatically on first use.
+
++----------+-----------+--------+----------------------+------------------+
+| Backend  | Framework | GPU    | Strength             | Notes            |
++==========+===========+========+======================+==================+
+| m3gnet   | TensorFlow| Yes    | Stable, general      | Slower on CPU    |
++----------+-----------+--------+----------------------+------------------+
+| uma      | PyTorch   | Yes    | High accuracy        | Needs HF access  |
++----------+-----------+--------+----------------------+------------------+
+| mace     | PyTorch   | Yes    | Fast, scalable       | Best for scan    |
++----------+-----------+--------+----------------------+------------------+
+| grace    | PyTorch   | Yes    | Advanced GNN         | Experimental     |
++----------+-----------+--------+----------------------+------------------+
 
 
 Enumeration Sublattice Definition
@@ -155,7 +211,7 @@ The algorithm:
 2. converts the labeling to a canonical symmetry representation
 3. discards duplicates already encountered
 4. accumulates unique configurations until a batch is formed
-5. evaluates the batch using M3GNet
+5. evaluates the batch using the selected machine-learning backend
 
 Sampling is controlled by the parameters:
 
@@ -169,20 +225,42 @@ Sampling allows the scan to explore large configuration spaces that would
 otherwise be infeasible to enumerate.
 
 
-Energy Model and Parallel Evaluation
-------------------------------------
+Energy Evaluation and Parallel Execution
+----------------------------------------
 
 Each symmetry-unique configuration is evaluated using a **single-point**
-energy prediction with M3GNet.
+energy prediction with the selected ML backend.
 
 Key points:
 
-- the structure is not relaxed in this stage
-- only the energy is predicted (fast screening)
-- energies are computed in parallel using multiprocessing
+- structures are not relaxed at this stage
+- only energies are predicted (fast screening)
+- predictions are backend-dependent
 
-To improve robustness when using TensorFlow-based models, worker processes are
-created using the ``spawn`` start method.
+Backend-specific behavior:
+
+- ``m3gnet``:
+  - TensorFlow-based
+  - GPU mode uses a single worker for stability
+
+- ``uma``:
+  - PyTorch-based
+  - supports CPU and GPU execution
+
+- ``mace``:
+  - PyTorch-based foundation model
+  - typically executed efficiently in single-process mode
+  - model is loaded once and reused across all configurations
+
+- ``grace``:
+  - PyTorch-based (if available)
+  - performance depends on model implementation
+
+Parallel execution:
+
+- CPU mode uses multiprocessing (``n_workers``)
+- GPU mode may restrict parallelism depending on backend
+- worker processes are created using the ``spawn`` method for robustness
 
 
 Selection of Top-k Candidates
@@ -247,7 +325,14 @@ Notes and Limitations
 - Enumeration can become infeasible for large sublattices and/or high dopant counts;
   limits ``max_enum`` and ``max_unique`` are enforced to prevent runaway runtime/memory.
 - The current label enumerator supports up to **three distinct dopant species**.
-- Predicted single-point energies are surrogate ML values and should be interpreted
+- Predicted energies are surrogate ML values and should be interpreted
   as a ranking heuristic rather than absolute thermodynamic energies.
+- Different backends provide different accuracy/speed trade-offs:
+
+  - ``m3gnet``: robust general-purpose model
+  - ``uma``: high-quality FAIR-Chem models (requires access permissions)
+  - ``mace``: fast foundation models suitable for large-scale screening
+  - ``grace``: experimental GNN-based models
+
 - Sampling mode does not guarantee discovery of the global minimum but
   efficiently identifies low-energy candidates for subsequent relaxation.

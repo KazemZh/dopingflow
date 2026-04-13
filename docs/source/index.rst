@@ -13,12 +13,16 @@ ML-Driven High-Throughput Doping Workflow for Oxide Materials
 The workflow integrates:
 
 - Structure generation and symmetry-aware enumeration
-- ML-based relaxation and screening (M3GNet, ALIGNN)
-- Formation energy calculations using configurable thermodynamic references
+- ML-based screening and relaxation using configurable backends (M3GNet, UMA, MACE, GRACE)
+- Formation energy calculations using configurable thermodynamic reference schemes
+- Bandgap prediction using ALIGNN
 - Automated database collection
 - Fully reproducible, stage-isolated execution
 
 All stages are controlled through a single ``input.toml`` file.
+
+The workflow is modular: each stage can be executed independently or combined
+into a full pipeline using the ``run-all`` command.
 
 
 User Guide
@@ -36,8 +40,8 @@ User Guide
 Workflow Stages
 ===============
 
-The workflow is organized into modular stages.  
-Each stage can be executed independently.
+The workflow is organized into modular stages.
+Each stage can be executed independently and uses its own configuration block.
 
 .. toctree::
    :maxdepth: 1

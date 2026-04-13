@@ -20,19 +20,19 @@ The public entry point is:
 Purpose
 -------
 
-This stage performs **full structural relaxation** of the low-energy candidates
+This stage performs **structural relaxation** of the low-energy candidates
 selected during the scanning stage.
 
 For each candidate structure:
 
 - atomic positions are relaxed
-- lattice vectors are relaxed
+- lattice vectors are optimized together with atomic positions
 - the final total energy is extracted
 - relaxed structures are written to disk
 - a relaxation ranking is generated
 
 This stage refines the single-point screening results by allowing full geometry
-optimization.
+optimization with the selected machine-learning interatomic potential backend.
 
 
 Inputs
@@ -40,9 +40,9 @@ Inputs
 
 This stage uses settings from the following sections of ``input.toml``:
 
-- ``[structure]``: provides the output directory containing structure folders.
-- ``[generate]``: provides the species ordering used when writing POSCAR files.
-- ``[relax]``: controls convergence tolerance, parallelism, and skipping logic.
+- ``[structure]``: provides the output directory containing structure folders
+- ``[generate]``: provides the species ordering used when writing POSCAR files
+- ``[relax]``: controls backend, model, optimizer, convergence, execution mode, and skipping logic
 
 The relaxation stage processes:
 
@@ -59,9 +59,10 @@ For each structure folder inside ``[structure].outdir``:
 1. Detect all ``candidate_*`` subfolders.
 2. For each candidate:
    a. Read ``01_scan/POSCAR``.
-   b. Perform full structural relaxation.
-   c. Write relaxed structure to ``02_relax/POSCAR``.
-   d. Write relaxation metadata.
+   b. Initialize the selected ML backend.
+   c. Relax the structure with the selected ASE optimizer.
+   d. Write the relaxed structure to ``02_relax/POSCAR``.
+   e. Write relaxation metadata to ``02_relax/meta.json``.
 3. Rank candidates by relaxed total energy.
 4. Write ``ranking_relax.csv`` per structure folder.
 
@@ -69,11 +70,30 @@ For each structure folder inside ``[structure].outdir``:
 Relaxation Model
 ----------------
 
-Structural relaxation is performed using:
+Structural relaxation is performed using a selectable machine-learning backend.
 
-- Interatomic potential: **M3GNet (pretrained)**
-- Optimizer: internal Relaxer (FIRE-based)
-- Convergence criterion: maximum force below ``[relax].fmax``
+Supported backends:
+
+- **M3GNet**
+- **UMA**
+- **MACE**
+- **GRACE**
+
+The backend is used as an ASE calculator, and relaxation is carried out using
+an ASE optimizer.
+
+Supported optimizers:
+
+- **BFGS**
+- **LBFGS**
+- **FIRE**
+- **MDMin**
+- **QuasiNewton**
+
+The stopping criteria are:
+
+- maximum atomic force below ``[relax].fmax``
+- or optimizer step count reaching ``[relax].max_steps``
 
 Both:
 
@@ -83,6 +103,38 @@ Both:
 are allowed to relax.
 
 
+Backend-Specific Notes
+----------------------
+
+M3GNet
+~~~~~~
+
+- Uses the pretrained M3GNet model through an ASE calculator
+- Supports CPU and CUDA execution
+- On GPU, the workflow uses a single effective worker for safe TensorFlow usage
+
+UMA
+~~~
+
+- Uses FAIR-Chem pretrained models
+- Requires both a selected ``model`` and a ``task``
+- Supports CPU and GPU execution depending on the environment
+
+MACE
+~~~~
+
+- Uses pretrained MACE foundation models
+- Integrated through the ASE calculator interface
+- Supports CPU and GPU execution
+
+GRACE
+~~~~~
+
+- Uses GRACE foundation models through the tensorpotential interface
+- Integrated through the ASE calculator interface
+- Availability depends on the installed GRACE/tensorpotential environment
+
+
 Parallel Execution
 ------------------
 
@@ -90,9 +142,9 @@ Relaxation is parallelized **over candidates** using multiprocessing.
 
 Each worker process:
 
-- initializes its own M3GNet Relaxer instance
-- sets thread limits to control TensorFlow and OpenMP usage
-- runs independently
+- initializes its own backend model or calculator
+- applies thread limits where relevant
+- relaxes one candidate at a time
 
 The number of parallel workers is controlled by:
 
@@ -108,7 +160,8 @@ Additional thread control parameters:
    tf_threads
    omp_threads
 
-These settings allow tuning CPU usage on workstations or HPC systems.
+These settings are mainly relevant in CPU mode.
+When ``device = "cuda"``, the workflow uses a single effective worker.
 
 
 Ranking Logic
@@ -135,6 +188,9 @@ contains:
 - signature
 - status
 - walltime
+- convergence status
+- final maximum force
+- optimizer step count
 - error message (if any)
 
 
@@ -191,10 +247,18 @@ For each candidate:
 
 The relaxation metadata includes:
 
+- backend
+- model
+- task
+- optimizer
 - relaxed total energy
 - walltime
 - species counts
 - convergence target (fmax)
+- maximum allowed optimizer steps
+- actual optimizer step count
+- final maximum force
+- convergence status
 - link to original scan metadata
 
 For each structure folder:
@@ -221,9 +285,9 @@ Failures do not abort the entire structure folder.
 Notes and Limitations
 ---------------------
 
-- Relaxation uses a pretrained ML potential (not DFT-level relaxation).
-- No charge states or external fields are included.
+- Relaxation uses pretrained ML interatomic potentials rather than DFT.
+- No charge states or external electric fields are included.
 - No temperature or vibrational effects are considered.
-- Energies are total energies from the ML model.
-- Convergence depends on the chosen ``fmax`` threshold.
-- Parallel performance depends on CPU availability and thread configuration.
+- Energies are total energies predicted by the selected ML backend.
+- Convergence depends on both the chosen ``fmax`` threshold and ``max_steps``.
+- Parallel performance depends on backend, hardware, and thread configuration.

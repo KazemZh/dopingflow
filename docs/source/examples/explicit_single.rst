@@ -55,6 +55,15 @@ Example input.toml
    metals_ref = [ "Zr","Sb","Sn"]
    oxides_dir = "reference_structures/"
    fmax = 0.02
+   max_steps = 300
+   tf_threads = 1
+   omp_threads = 1
+   device = "cpu"
+   gpu_id = 0
+   backend = "m3gnet"
+   model = "default"
+   task = ""
+   optimizer = "bfgs"   
    skip_if_done = false
 
    [doping]
@@ -70,6 +79,9 @@ Example input.toml
    clean_outdir = true
 
    [scan]
+   backend = "m3gnet"
+   model = "default"    
+   task = "" 
    poscar_in = "POSCAR"
    topk = 10
    symprec = 1e-3
@@ -88,13 +100,19 @@ Example input.toml
    device = "cpu"
 
    [relax]
+   backend = "m3gnet"
+   model = "default"
+   task = ""      
+   optimizer = "bfgs"
    fmax = 0.05
-   n_workers = 4
+   max_steps = 300
+   n_workers = 6
    tf_threads = 1
    omp_threads = 1
-   skip_if_done = true
-   skip_candidate_if_done = true
+   skip_if_done = false
+   skip_candidate_if_done = false
    device = "cpu"
+   gpu_id = 0
 
    [filter]
    mode = "window"

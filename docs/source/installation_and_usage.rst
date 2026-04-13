@@ -30,6 +30,7 @@ Required Inputs
 
 Refer to :ref:`Required Input Files <input_file_req>` page.
 
+
 Running the Workflow
 --------------------
 
@@ -106,7 +107,7 @@ The filter stage supports optional overrides (passed through by ``run-all``):
 Step-by-step execution
 ~~~~~~~~~~~~~~~~~~~~~~
 
-Step 00: reference energies:
+Step 00: build and relax thermodynamic reference structures:
 
 ::
 
@@ -118,13 +119,13 @@ Step 01: structure generation:
 
    dopingflow generate -c input.toml
 
-Step 02: scan (symmetry-unique enumeration + M3GNet single-point energies):
+Step 02: scan (symmetry-unique enumeration / sampling + ML-based single-point energies):
 
 ::
 
    dopingflow scan -c input.toml
 
-Step 03: relax scanned candidates (M3GNet Relaxer):
+Step 03: relax scanned candidates (ML backend + ASE optimizer):
 
 ::
 
@@ -172,9 +173,17 @@ Writes:
 
 This file contains:
 
-- the relaxed pristine supercell energy
-- per-atom chemical potentials for host and dopant species
-- metadata about reference structures and relaxation settings
+- relaxed host unit-cell and supercell energies
+- relaxed reference structure energies
+- metadata about backend, optimizer, device, and convergence settings
+- reference information used for formation energy evaluation
+
+Additional outputs:
+
+- ``reference_structures/relaxed/host_unit_relaxed.POSCAR``
+- ``reference_structures/relaxed/host_supercell_<a>x<b>x<c>_relaxed.POSCAR``
+- ``reference_structures/relaxed/refs/<name>_relaxed.POSCAR``
+
 
 Step 01 (generate)
 ~~~~~~~~~~~~~~~~~~
@@ -184,6 +193,7 @@ Writes a structure folder per composition under ``[structure].outdir`` (default:
 - ``<outdir>/<composition_tag>/POSCAR``
 - ``<outdir>/<composition_tag>/metadata.json``
 
+
 Step 02 (scan)
 ~~~~~~~~~~~~~~
 
@@ -191,12 +201,17 @@ Inside each ``<composition_tag>/`` folder, writes:
 
 - ``ranking_scan.csv`` (top-k single-point energies)
 - ``scan_summary.txt`` (human-readable summary)
-- candidate structures:
 
-  ::
+Candidate structures:
 
-     <composition_tag>/candidate_###/01_scan/POSCAR
-     <composition_tag>/candidate_###/01_scan/meta.json
+::
+
+   <composition_tag>/candidate_###/01_scan/POSCAR
+   <composition_tag>/candidate_###/01_scan/meta.json
+
+The scan stage evaluates structures using a selected ML backend
+(e.g. M3GNet, UMA, MACE, GRACE).
+
 
 Step 03 (relax)
 ~~~~~~~~~~~~~~~
@@ -210,6 +225,12 @@ Also writes per composition folder:
 
 - ``ranking_relax.csv``
 
+The relaxation stage uses:
+
+- ML interatomic potentials for forces
+- ASE optimizers for structural relaxation
+
+
 Step 04 (filter)
 ~~~~~~~~~~~~~~~~
 
@@ -217,6 +238,7 @@ Writes per composition folder:
 
 - ``ranking_relax_filtered.csv`` (filtered candidate table)
 - ``selected_candidates.txt`` (names of kept candidates)
+
 
 Step 05 (bandgap)
 ~~~~~~~~~~~~~~~~~
@@ -229,6 +251,7 @@ Writes per candidate:
 
 - ``candidate_###/03_band/meta.json``
 
+
 Step 06 (formation)
 ~~~~~~~~~~~~~~~~~~~
 
@@ -239,6 +262,7 @@ Writes per composition folder:
 Writes per candidate:
 
 - ``candidate_###/04_formation/meta.json``
+
 
 Step 07 (collect)
 ~~~~~~~~~~~~~~~~~

@@ -33,6 +33,15 @@ Example input.toml
    metals_ref = [ "Ti","Zr","Nb","Sb","Sn"]
    oxides_dir = "reference_structures/"
    fmax = 0.02
+   max_steps = 300
+   tf_threads = 1
+   omp_threads = 1
+   device = "cpu"
+   gpu_id = 0
+   backend = "m3gnet"
+   model = "default"
+   task = ""
+   optimizer = "bfgs"   
    skip_if_done = false
 
    [generate]

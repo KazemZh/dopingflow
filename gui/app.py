@@ -248,45 +248,280 @@ if tab == "Input Builder":
         cfg_edit["structure"]["outdir"] = outdir_ui
 
 
-
     # -----------------------------
     # REFERENCES (Step 00)
     # -----------------------------
-
     with st.expander("References (refs-build)", expanded=False):
-        st.subheader("Common (always used)")
-
-        # Ensure dict exists
         cfg_edit.setdefault("references", {})
 
-        # --- Common ---
-        cfg_edit["references"]["skip_if_done"] = st.checkbox(
-            "skip_if_done",
-            value=bool(cfg_edit["references"].get("skip_if_done", True)),
-        )
+        st.subheader("Common settings")
 
-        cfg_edit["references"]["fmax"] = st.number_input(
-            "fmax",
-            value=float(cfg_edit["references"].get("fmax", 0.02)),
-            min_value=0.001,
-            step=0.001,
-            format="%.3f",
-            help="Force convergence criterion (eV/Å).",
-        )
+        # -----------------------------
+        # Basic execution controls
+        # -----------------------------
+        colA1, colA2 = st.columns(2)
+
+        with colA1:
+            cfg_edit["references"]["skip_if_done"] = st.checkbox(
+                "skip_if_done",
+                value=bool(cfg_edit["references"].get("skip_if_done", True)),
+                help="Skip refs-build if reference_energies.json already exists.",
+            )
+
+        with colA2:
+            current_mode = str(
+                cfg_edit["references"].get("reference_mode", "metal")
+            ).strip().lower()
+            if current_mode not in {"metal", "oxide"}:
+                current_mode = "metal"
+
+            cfg_edit["references"]["reference_mode"] = st.radio(
+                "Reference mode",
+                options=["metal", "oxide"],
+                index=0 if current_mode == "metal" else 1,
+                horizontal=True,
+                help="Choose the reference construction scheme used for formation energies.",
+            )
+
+        colB1, colB2, colB3 = st.columns(3)
+
+        with colB1:
+            cfg_edit["references"]["fmax"] = st.number_input(
+                "fmax",
+                value=float(cfg_edit["references"].get("fmax", 0.02)),
+                min_value=0.001,
+                step=0.001,
+                format="%.3f",
+                help="Force convergence criterion in eV/Å.",
+            )
+
+        with colB2:
+            cfg_edit["references"]["max_steps"] = st.number_input(
+                "max_steps",
+                value=int(cfg_edit["references"].get("max_steps", 300)),
+                min_value=1,
+                step=10,
+                help="Maximum number of optimizer steps for each reference relaxation.",
+            )
+
+        with colB3:
+            optimizer_choices = ["bfgs", "lbfgs", "fire", "mdmin", "quasinewton"]
+            current_optimizer = str(
+                cfg_edit["references"].get("optimizer", "bfgs")
+            ).strip().lower()
+            if current_optimizer not in optimizer_choices:
+                current_optimizer = "bfgs"
+
+            cfg_edit["references"]["optimizer"] = st.selectbox(
+                "optimizer",
+                options=optimizer_choices,
+                index=optimizer_choices.index(current_optimizer),
+                help="ASE optimizer used to relax host and reference structures.",
+            )
+
+        st.divider()
+        st.subheader("Backend and device")
+
+        backend_choices = ["m3gnet", "uma", "mace", "grace"]
+        current_backend = str(
+            cfg_edit["references"].get("backend", "m3gnet")
+        ).strip().lower()
+        if current_backend not in backend_choices:
+            current_backend = "m3gnet"
+
+        colC1, colC2, colC3 = st.columns(3)
+
+        with colC1:
+            cfg_edit["references"]["backend"] = st.selectbox(
+                "backend",
+                options=backend_choices,
+                index=backend_choices.index(current_backend),
+                help="ML backend used for refs-build structural relaxations.",
+            )
+
+        with colC2:
+            device_choices = ["cpu", "cuda"]
+            current_device = str(
+                cfg_edit["references"].get("device", "cpu")
+            ).strip().lower()
+            if current_device not in device_choices:
+                current_device = "cpu"
+
+            cfg_edit["references"]["device"] = st.selectbox(
+                "device",
+                options=device_choices,
+                index=device_choices.index(current_device),
+                help="Execution device for the selected backend.",
+            )
+
+        with colC3:
+            cfg_edit["references"]["gpu_id"] = st.number_input(
+                "gpu_id",
+                value=int(cfg_edit["references"].get("gpu_id", 0)),
+                min_value=0,
+                step=1,
+                help="GPU index used when device='cuda'.",
+            )
+
+        selected_backend = cfg_edit["references"]["backend"]
+
+        # Backend-dependent model/task controls
+        uma_models = ["uma-s-1p2", "uma-s-1p1", "uma-m-1p1"]
+        uma_tasks = ["omat", "oc20", "oc22", "oc25", "omol", "odac", "omc"]
+
+        mace_models = [
+            "small",
+            "medium",
+            "large",
+            "small-mpa-0",
+            "medium-mpa-0",
+            "large-mpa-0",
+            "small-omat-0",
+            "medium-omat-0",
+        ]
+
+        grace_models = [
+            "GRACE-1L-OMAT",
+            "GRACE-1L-OMAT-M-base",
+            "GRACE-1L-OMAT-M",
+            "GRACE-1L-OMAT-L-base",
+            "GRACE-1L-OMAT-L",
+            "GRACE-2L-OMAT",
+            "GRACE-2L-OMAT-M-base",
+            "GRACE-2L-OMAT-M",
+            "GRACE-2L-OMAT-L-base",
+            "GRACE-2L-OMAT-L",
+            "GRACE-1L-OAM",
+            "GRACE-1L-OAM-M",
+            "GRACE-1L-OAM-L",
+            "GRACE-2L-OAM",
+            "GRACE-2L-OAM-M",
+            "GRACE-2L-OAM-L",
+            "GRACE-1L-SMAX-L",
+            "GRACE-1L-SMAX-OMAT-L",
+            "GRACE-2L-SMAX-M",
+            "GRACE-2L-SMAX-L",
+            "GRACE-2L-SMAX-OMAT-M",
+            "GRACE-2L-SMAX-OMAT-L",
+        ]
+
+        colD1, colD2 = st.columns(2)
+
+        with colD1:
+            if selected_backend == "m3gnet":
+                cfg_edit["references"]["model"] = st.text_input(
+                    "model",
+                    value=str(cfg_edit["references"].get("model", "default")),
+                    disabled=True,
+                    help="M3GNet currently uses the default model.",
+                )
+                cfg_edit["references"]["task"] = ""
+
+            elif selected_backend == "uma":
+                current_model = str(
+                    cfg_edit["references"].get("model", "uma-s-1p2")
+                ).strip()
+                if current_model not in uma_models:
+                    current_model = "uma-s-1p2"
+
+                cfg_edit["references"]["model"] = st.selectbox(
+                    "model",
+                    options=uma_models,
+                    index=uma_models.index(current_model),
+                    help="Pretrained UMA model.",
+                )
+
+            elif selected_backend == "mace":
+                current_model = str(
+                    cfg_edit["references"].get("model", "small")
+                ).strip()
+                if current_model not in mace_models:
+                    current_model = "small"
+
+                cfg_edit["references"]["model"] = st.selectbox(
+                    "model",
+                    options=mace_models,
+                    index=mace_models.index(current_model),
+                    help="Pretrained MACE model.",
+                )
+                cfg_edit["references"]["task"] = ""
+
+            elif selected_backend == "grace":
+                current_model = str(
+                    cfg_edit["references"].get("model", "GRACE-1L-OMAT")
+                ).strip()
+                if current_model not in grace_models:
+                    current_model = "GRACE-1L-OMAT"
+
+                cfg_edit["references"]["model"] = st.selectbox(
+                    "model",
+                    options=grace_models,
+                    index=grace_models.index(current_model),
+                    help="Pretrained GRACE model.",
+                )
+                cfg_edit["references"]["task"] = ""
+
+        with colD2:
+            if selected_backend == "uma":
+                current_task = str(
+                    cfg_edit["references"].get("task", "omat")
+                ).strip()
+                if current_task not in uma_tasks:
+                    current_task = "omat"
+
+                cfg_edit["references"]["task"] = st.selectbox(
+                    "task",
+                    options=uma_tasks,
+                    index=uma_tasks.index(current_task),
+                    help="Task family used by the UMA calculator.",
+                )
+            else:
+                cfg_edit["references"]["task"] = st.text_input(
+                    "task",
+                    value="",
+                    disabled=True,
+                    help="Task is only used for the UMA backend.",
+                )
+
+        colE1, colE2 = st.columns(2)
+
+        with colE1:
+            cfg_edit["references"]["tf_threads"] = st.number_input(
+                "tf_threads",
+                value=int(cfg_edit["references"].get("tf_threads", 1)),
+                min_value=1,
+                step=1,
+                help="TensorFlow intra/inter-op thread count.",
+            )
+
+        with colE2:
+            cfg_edit["references"]["omp_threads"] = st.number_input(
+                "omp_threads",
+                value=int(cfg_edit["references"].get("omp_threads", 1)),
+                min_value=1,
+                step=1,
+                help="OMP thread count.",
+            )
+
+        st.divider()
+        st.subheader("Host structure")
 
         cfg_edit["references"]["host"] = st.text_input(
             "host",
             value=str(cfg_edit["references"].get("host", "SnO2")),
-            help='Host oxide formula, e.g. "SnO2".',
+            help='Host formula, e.g. "SnO2".',
         )
 
         cfg_edit["references"]["host_dir"] = st.text_input(
             "host_dir",
             value=str(cfg_edit["references"].get("host_dir", "reference_structures/oxides")),
-            help="Directory containing <host>.POSCAR (e.g. SnO2.POSCAR).",
+            help="Directory containing <host>.POSCAR.",
         )
 
         sc = cfg_edit["references"].get("supercell", [5, 2, 1])
+        if not isinstance(sc, list) or len(sc) != 3:
+            sc = [5, 2, 1]
+
         c1, c2, c3 = st.columns(3)
         with c1:
             sx = st.number_input("supercell nx", min_value=1, value=int(sc[0]), step=1)
@@ -298,64 +533,56 @@ if tab == "Input Builder":
 
         st.divider()
 
-        # --- Choice AFTER common section (radio / circle choice) ---
-        current_mode = str(cfg_edit["references"].get("reference_mode", "metal")).strip().lower()
-        if current_mode not in {"metal", "oxide"}:
-            current_mode = "metal"
+        chosen_mode = cfg_edit["references"]["reference_mode"]
 
-        chosen_mode = st.radio(
-            "Reference mode",
-            options=["metal", "oxide"],
-            index=0 if current_mode == "metal" else 1,
-            horizontal=True,
-            help="Choose the reference scheme used by refs-build.",
-        )
-        cfg_edit["references"]["reference_mode"] = chosen_mode
-
-        st.divider()
-
-        # --- Conditional fields ---
         if chosen_mode == "metal":
             st.subheader("Metal references")
 
             cfg_edit["references"]["metals_dir"] = st.text_input(
                 "metals_dir",
                 value=str(cfg_edit["references"].get("metals_dir", "reference_structures/metals")),
-                help="Directory containing <Element>.POSCAR (e.g. Sn.POSCAR).",
+                help="Directory containing <Element>.POSCAR files.",
             )
 
-            metal_default = cfg_edit["references"].get("metal_ref", ["Sn", "Sb", "Ti", "Zr", "Nb"])
+            metal_default = cfg_edit["references"].get(
+                "metal_ref",
+                ["Sn", "Sb", "Ti", "Zr", "Nb"],
+            )
             metal_csv = st.text_input(
                 "metal_ref (comma-separated)",
                 value=",".join(metal_default),
                 help='Example: "Sn,Sb,Ti,Zr,Nb"',
             )
-            cfg_edit["references"]["metal_ref"] = [x.strip() for x in metal_csv.split(",") if x.strip()]
-
-            # Optional: keep oxide keys but they won't be used
-            # (No need to delete them; leaving them allows switching back later)
+            cfg_edit["references"]["metal_ref"] = [
+                x.strip() for x in metal_csv.split(",") if x.strip()
+            ]
 
         else:
-            st.subheader("Oxide references")
+            st.subheader("Oxide and gas references")
 
             cfg_edit["references"]["oxides_dir"] = st.text_input(
                 "oxides_dir",
                 value=str(cfg_edit["references"].get("oxides_dir", "reference_structures/oxides")),
-                help="Directory containing <Oxide>.POSCAR (e.g. Sb2O5.POSCAR).",
+                help="Directory containing <Oxide>.POSCAR files.",
             )
 
-            ox_default = cfg_edit["references"].get("oxides_ref", ["Sb2O5", "TiO2", "ZrO2", "Nb2O5"])
+            ox_default = cfg_edit["references"].get(
+                "oxides_ref",
+                ["Sb2O5", "TiO2", "ZrO2", "Nb2O5"],
+            )
             ox_csv = st.text_input(
                 "oxides_ref (comma-separated)",
                 value=",".join(ox_default),
                 help='Example: "Sb2O5,TiO2,ZrO2,Nb2O5"',
             )
-            cfg_edit["references"]["oxides_ref"] = [x.strip() for x in ox_csv.split(",") if x.strip()]
+            cfg_edit["references"]["oxides_ref"] = [
+                x.strip() for x in ox_csv.split(",") if x.strip()
+            ]
 
             cfg_edit["references"]["gas_dir"] = st.text_input(
                 "gas_dir",
                 value=str(cfg_edit["references"].get("gas_dir", "reference_structures/gas")),
-                help="Directory containing <gas_ref>.POSCAR (e.g. O2.POSCAR).",
+                help="Directory containing the gas reference POSCAR, typically O2.",
             )
 
             cfg_edit["references"]["gas_ref"] = st.text_input(
@@ -364,10 +591,17 @@ if tab == "Input Builder":
                 help='Typically "O2".',
             )
 
+            oxygen_choices = ["O-rich", "O-poor"]
+            current_oxygen_mode = str(
+                cfg_edit["references"].get("oxygen_mode", "O-rich")
+            ).strip()
+            if current_oxygen_mode not in oxygen_choices:
+                current_oxygen_mode = "O-rich"
+
             cfg_edit["references"]["oxygen_mode"] = st.radio(
                 "oxygen_mode",
-                options=["O-rich", "O-poor"],
-                index=0 if str(cfg_edit["references"].get("oxygen_mode", "O-rich")) == "O-rich" else 1,
+                options=oxygen_choices,
+                index=oxygen_choices.index(current_oxygen_mode),
                 horizontal=True,
             )
 
@@ -376,9 +610,9 @@ if tab == "Input Builder":
                 value=float(cfg_edit["references"].get("muO_shift_ev", 0.0)),
                 step=0.1,
                 format="%.3f",
+                help="Optional oxygen chemical potential shift in eV.",
             )
 
-    # ===== END PATCH =====
 
 
     # -----------------------------
@@ -693,7 +927,6 @@ if tab == "Input Builder":
             # compositions unused in enumerate mode
             cfg_edit["doping"].setdefault("compositions", [])
 
-
     # -----------------------------
     # SCAN
     # -----------------------------
@@ -701,13 +934,176 @@ if tab == "Input Builder":
         st.subheader("Screen candidates (Single-point energy)")
 
         st.caption(
-            "Ranks doped configurations using M3GNet single-point energies. "
+            "Ranks doped configurations using the selected ML backend. "
             "In auto mode, the workflow uses exact symmetry-unique enumeration for manageable cases "
             "and switches to random symmetry-unique sampling for large configuration spaces."
         )
 
         cfg_edit.setdefault("scan", {})
 
+        # -----------------------------
+        # BACKEND
+        # -----------------------------
+        st.divider()
+        st.subheader("Backend")
+
+        backend_choices = ["m3gnet", "uma", "mace", "grace"]
+        current_backend = str(cfg_edit["scan"].get("backend", DEFAULTS["scan"].get("backend", "m3gnet")))
+        if current_backend not in backend_choices:
+            current_backend = "m3gnet"
+
+        colB1, colB2 = st.columns([1, 2], vertical_alignment="bottom")
+
+        with colB1:
+            cfg_edit["scan"]["backend"] = st.selectbox(
+                "Scan backend",
+                options=backend_choices,
+                index=backend_choices.index(current_backend),
+                help="ML backend used for single-point energy evaluation.",
+                key="scan_backend",
+            )
+
+        scan_backend = cfg_edit["scan"]["backend"]
+
+        with colB2:
+            if scan_backend == "m3gnet":
+                st.info("Stable general-purpose backend. Uses model='default' and ignores task.")
+            elif scan_backend == "uma":
+                st.info("Requires FAIR-Chem installation, Hugging Face login, and access to the gated UMA repository.")
+            elif scan_backend == "mace":
+                st.info("Uses MACE foundation models. The model is loaded once and reused during scan.")
+            else:
+                st.info("Uses GRACE foundation models. Task is not used.")
+
+        # Model / task
+        colBM, colBT = st.columns(2, vertical_alignment="bottom")
+
+        if scan_backend == "m3gnet":
+            cfg_edit["scan"]["model"] = "default"
+            cfg_edit["scan"]["task"] = ""
+
+            with colBM:
+                st.text_input(
+                    "Model",
+                    value="default",
+                    disabled=True,
+                    key="scan_model_disabled_m3gnet",
+                )
+            with colBT:
+                st.text_input(
+                    "Task",
+                    value="",
+                    disabled=True,
+                    key="scan_task_disabled_m3gnet",
+                )
+
+        elif scan_backend == "uma":
+            uma_models = ["uma-s-1p2", "uma-s-1p1", "uma-m-1p1"]
+            current_model = str(cfg_edit["scan"].get("model", "uma-s-1p2"))
+            if current_model not in uma_models:
+                current_model = "uma-s-1p2"
+
+            uma_tasks = ["omat", "oc20", "oc22", "oc25", "omol", "odac", "omc"]
+            current_task = str(cfg_edit["scan"].get("task", "omat"))
+            if current_task not in uma_tasks:
+                current_task = "omat"
+
+            with colBM:
+                cfg_edit["scan"]["model"] = st.selectbox(
+                    "UMA model",
+                    options=uma_models,
+                    index=uma_models.index(current_model),
+                    key="scan_model_uma",
+                )
+            with colBT:
+                cfg_edit["scan"]["task"] = st.selectbox(
+                    "UMA task",
+                    options=uma_tasks,
+                    index=uma_tasks.index(current_task),
+                    key="scan_task_uma",
+                )
+
+        elif scan_backend == "mace":
+            mace_models = [
+                "small",
+                "medium",
+                "large",
+                "small-mpa-0",
+                "medium-mpa-0",
+                "large-mpa-0",
+                "small-omat-0",
+                "medium-omat-0",
+            ]
+            current_model = str(cfg_edit["scan"].get("model", "small"))
+            if current_model not in mace_models:
+                current_model = "small"
+
+            cfg_edit["scan"]["task"] = ""
+
+            with colBM:
+                cfg_edit["scan"]["model"] = st.selectbox(
+                    "MACE model",
+                    options=mace_models,
+                    index=mace_models.index(current_model),
+                    key="scan_model_mace",
+                )
+            with colBT:
+                st.text_input(
+                    "Task",
+                    value="",
+                    disabled=True,
+                    key="scan_task_disabled_mace",
+                )
+
+        else:  # grace
+            grace_models = [
+                "GRACE-1L-OMAT",
+                "GRACE-1L-OMAT-M-base",
+                "GRACE-1L-OMAT-M",
+                "GRACE-1L-OMAT-L-base",
+                "GRACE-1L-OMAT-L",
+                "GRACE-2L-OMAT",
+                "GRACE-2L-OMAT-M-base",
+                "GRACE-2L-OMAT-M",
+                "GRACE-2L-OMAT-L-base",
+                "GRACE-2L-OMAT-L",
+                "GRACE-1L-OAM",
+                "GRACE-1L-OAM-M",
+                "GRACE-1L-OAM-L",
+                "GRACE-2L-OAM",
+                "GRACE-2L-OAM-M",
+                "GRACE-2L-OAM-L",
+                "GRACE-1L-SMAX-L",
+                "GRACE-1L-SMAX-OMAT-L",
+                "GRACE-2L-SMAX-M",
+                "GRACE-2L-SMAX-L",
+                "GRACE-2L-SMAX-OMAT-M",
+                "GRACE-2L-SMAX-OMAT-L",
+            ]
+            current_model = str(cfg_edit["scan"].get("model", "GRACE-2L-OAM"))
+            if current_model not in grace_models:
+                current_model = "GRACE-2L-OAM"
+
+            cfg_edit["scan"]["task"] = ""
+
+            with colBM:
+                cfg_edit["scan"]["model"] = st.selectbox(
+                    "GRACE model",
+                    options=grace_models,
+                    index=grace_models.index(current_model),
+                    key="scan_model_grace",
+                )
+            with colBT:
+                st.text_input(
+                    "Task",
+                    value="",
+                    disabled=True,
+                    key="scan_task_disabled_grace",
+                )
+
+        # -----------------------------
+        # STRATEGY
+        # -----------------------------
         st.divider()
         st.subheader("Scan strategy")
 
@@ -748,7 +1144,6 @@ if tab == "Input Builder":
                     "Sample mode is more memory-friendly and is recommended for large supercells."
                 )
 
-        # Mode-dependent controls directly here
         if scan_mode == "exact":
             colE1, colE2 = st.columns(2, vertical_alignment="bottom")
 
@@ -947,6 +1342,51 @@ if tab == "Input Builder":
             )
 
         st.divider()
+        st.subheader("Execution")
+
+        colX1, colX2, colX3 = st.columns(3, vertical_alignment="bottom")
+
+        with colX1:
+            device_choices = ["cpu", "cuda"]
+            current_device = str(cfg_edit["scan"].get("device", DEFAULTS["scan"].get("device", "cpu")))
+            if current_device not in device_choices:
+                current_device = "cpu"
+
+            cfg_edit["scan"]["device"] = st.selectbox(
+                "Device",
+                options=device_choices,
+                index=device_choices.index(current_device),
+                key="scan_device",
+            )
+
+        with colX2:
+            cfg_edit["scan"]["n_workers"] = st.number_input(
+                "Workers",
+                min_value=1,
+                value=int(cfg_edit["scan"].get("n_workers", DEFAULTS["scan"]["n_workers"])),
+                step=1,
+                key="scan_n_workers",
+            )
+
+        with colX3:
+            cfg_edit["scan"]["gpu_id"] = st.number_input(
+                "GPU ID",
+                min_value=0,
+                value=int(cfg_edit["scan"].get("gpu_id", DEFAULTS["scan"].get("gpu_id", 0))),
+                step=1,
+                key="scan_gpu_id",
+            )
+
+        cfg_edit["scan"]["chunksize"] = st.number_input(
+            "Chunksize",
+            min_value=1,
+            value=int(cfg_edit["scan"].get("chunksize", DEFAULTS["scan"]["chunksize"])),
+            step=1,
+            help="Multiprocessing chunk size.",
+            key="scan_chunksize",
+        )
+
+        st.divider()
         st.subheader("Sublattice definition")
 
         anions = cfg_edit["scan"].get("anion_species", DEFAULTS["scan"]["anion_species"])
@@ -976,35 +1416,213 @@ if tab == "Input Builder":
     # RELAX
     # -----------------------------
     with st.expander("Relax", expanded=False):
-        st.subheader("Doped Structure relaxation")
+        st.subheader("Doped structure relaxation")
 
         st.caption(
-            "Relaxes the selected candidates using the M3GNet potential. "
-            "You can control the force convergence threshold and execution mode."
+            "Relaxes the selected candidates using the chosen ML interatomic potential backend. "
+            "You can select the backend, model, optimizer, convergence threshold, and maximum number of relaxation steps."
         )
 
         cfg_edit.setdefault("relax", {})
 
+        # -----------------------------
+        # Backend
+        # -----------------------------
         st.divider()
-        st.subheader("Convergence")
+        st.subheader("Backend")
 
-        col1, col2 = st.columns([1, 2], vertical_alignment="bottom")
+        relax_backend_choices = ["m3gnet", "uma", "mace", "grace"]
+        current_relax_backend = str(
+            cfg_edit["relax"].get("backend", DEFAULTS["relax"].get("backend", "m3gnet"))
+        ).strip().lower()
+        if current_relax_backend not in relax_backend_choices:
+            current_relax_backend = "m3gnet"
+
+        cfg_edit["relax"]["backend"] = st.selectbox(
+            "Relaxation backend",
+            options=relax_backend_choices,
+            index=relax_backend_choices.index(current_relax_backend),
+            help="Choose the ML potential backend used for structural relaxation.",
+            key="relax_backend",
+        )
+
+        relax_backend = cfg_edit["relax"]["backend"]
+
+        # Model/task choices
+        uma_model_choices = ["uma-s-1p2", "uma-s-1p1", "uma-m-1p1"]
+        uma_task_choices = ["omat", "oc20", "oc22", "oc25", "omol", "odac", "omc"]
+
+        mace_model_choices = [
+            "small",
+            "medium",
+            "large",
+            "small-mpa-0",
+            "medium-mpa-0",
+            "large-mpa-0",
+            "small-omat-0",
+            "medium-omat-0",
+        ]
+
+        grace_model_choices = [
+            "GRACE-1L-OMAT",
+            "GRACE-1L-OMAT-M-base",
+            "GRACE-1L-OMAT-M",
+            "GRACE-1L-OMAT-L-base",
+            "GRACE-1L-OMAT-L",
+            "GRACE-2L-OMAT",
+            "GRACE-2L-OMAT-M-base",
+            "GRACE-2L-OMAT-M",
+            "GRACE-2L-OMAT-L-base",
+            "GRACE-2L-OMAT-L",
+            "GRACE-1L-OAM",
+            "GRACE-1L-OAM-M",
+            "GRACE-1L-OAM-L",
+            "GRACE-2L-OAM",
+            "GRACE-2L-OAM-M",
+            "GRACE-2L-OAM-L",
+            "GRACE-1L-SMAX-L",
+            "GRACE-1L-SMAX-OMAT-L",
+            "GRACE-2L-SMAX-M",
+            "GRACE-2L-SMAX-L",
+            "GRACE-2L-SMAX-OMAT-M",
+            "GRACE-2L-SMAX-OMAT-L",
+        ]
+
+        colB1, colB2 = st.columns(2, vertical_alignment="bottom")
+
+        with colB1:
+            if relax_backend == "m3gnet":
+                cfg_edit["relax"]["model"] = "default"
+                st.text_input(
+                    "Model",
+                    value="default",
+                    disabled=True,
+                    help="M3GNet currently uses the default pretrained model.",
+                    key="relax_model_m3gnet_display",
+                )
+
+            elif relax_backend == "uma":
+                current_model = str(cfg_edit["relax"].get("model", "uma-s-1p2")).strip()
+                if current_model in {"", "default"} or current_model not in uma_model_choices:
+                    current_model = "uma-s-1p2"
+
+                cfg_edit["relax"]["model"] = st.selectbox(
+                    "UMA model",
+                    options=uma_model_choices,
+                    index=uma_model_choices.index(current_model),
+                    help="Choose the pretrained UMA model.",
+                    key="relax_model_uma",
+                )
+
+            elif relax_backend == "mace":
+                current_model = str(cfg_edit["relax"].get("model", "small")).strip()
+                if current_model in {"", "default"} or current_model not in mace_model_choices:
+                    current_model = "small"
+
+                cfg_edit["relax"]["model"] = st.selectbox(
+                    "MACE model",
+                    options=mace_model_choices,
+                    index=mace_model_choices.index(current_model),
+                    help="Choose the pretrained MACE model.",
+                    key="relax_model_mace",
+                )
+
+            elif relax_backend == "grace":
+                current_model = str(cfg_edit["relax"].get("model", "GRACE-1L-OMAT")).strip()
+                if current_model in {"", "default"} or current_model not in grace_model_choices:
+                    current_model = "GRACE-1L-OMAT"
+
+                cfg_edit["relax"]["model"] = st.selectbox(
+                    "GRACE model",
+                    options=grace_model_choices,
+                    index=grace_model_choices.index(current_model),
+                    help="Choose the pretrained GRACE model.",
+                    key="relax_model_grace",
+                )
+
+        with colB2:
+            if relax_backend == "uma":
+                current_task = str(cfg_edit["relax"].get("task", "omat")).strip()
+                if current_task == "" or current_task not in uma_task_choices:
+                    current_task = "omat"
+
+                cfg_edit["relax"]["task"] = st.selectbox(
+                    "UMA task",
+                    options=uma_task_choices,
+                    index=uma_task_choices.index(current_task),
+                    help="Task/domain used by the UMA predictor.",
+                    key="relax_task_uma",
+                )
+            else:
+                cfg_edit["relax"]["task"] = ""
+                st.text_input(
+                    "Task",
+                    value="not used for this backend",
+                    disabled=True,
+                    key="relax_task_unused_display",
+                )
+
+        # -----------------------------
+        # Optimizer & convergence
+        # -----------------------------
+        st.divider()
+        st.subheader("Optimizer & convergence")
+
+        optimizer_choices = ["bfgs", "lbfgs", "fire", "mdmin", "quasinewton"]
+        current_optimizer = str(
+            cfg_edit["relax"].get("optimizer", DEFAULTS["relax"].get("optimizer", "bfgs"))
+        ).strip().lower()
+        if current_optimizer not in optimizer_choices:
+            current_optimizer = "bfgs"
+
+        col1, col2, col3 = st.columns(3, vertical_alignment="bottom")
+
         with col1:
+            cfg_edit["relax"]["optimizer"] = st.selectbox(
+                "Optimizer",
+                options=optimizer_choices,
+                index=optimizer_choices.index(current_optimizer),
+                help="ASE optimizer used to move the atoms during relaxation.",
+                key="relax_optimizer",
+            )
+
+        with col2:
             cfg_edit["relax"]["fmax"] = st.number_input(
                 "Max force (fmax) [eV/Å]",
                 min_value=0.0,
                 value=float(cfg_edit["relax"].get("fmax", DEFAULTS["relax"]["fmax"])),
                 step=0.01,
                 help="Relaxation stops when the maximum atomic force drops below this threshold.",
+                key="relax_fmax",
             )
-        with col2:
-            st.caption("Typical values: 0.05 eV/Å (fast screening) to 0.02 eV/Å (tighter relaxation).")
 
+        with col3:
+            cfg_edit["relax"]["max_steps"] = int(
+                st.number_input(
+                    "Maximum steps",
+                    min_value=1,
+                    value=int(cfg_edit["relax"].get("max_steps", DEFAULTS["relax"].get("max_steps", 300))),
+                    step=10,
+                    help="Maximum number of optimizer steps before stopping the relaxation.",
+                    key="relax_max_steps",
+                )
+            )
+
+        st.caption(
+            "Typical screening setup: **fmax = 0.05 eV/Å** and **100-300 steps**. "
+            "Tighter relaxations may use **fmax = 0.02 eV/Å**."
+        )
+
+        # -----------------------------
+        # Execution mode
+        # -----------------------------
         st.divider()
         st.subheader("Execution mode")
 
         relax_device_options = ["cpu", "cuda"]
-        current_relax_device = str(cfg_edit["relax"].get("device", DEFAULTS["relax"]["device"])).lower()
+        current_relax_device = str(
+            cfg_edit["relax"].get("device", DEFAULTS["relax"]["device"])
+        ).lower()
         if current_relax_device not in relax_device_options:
             current_relax_device = "cpu"
 
@@ -1043,7 +1661,7 @@ if tab == "Input Builder":
                         min_value=1,
                         value=int(cfg_edit["relax"].get("tf_threads", DEFAULTS["relax"]["tf_threads"])),
                         step=1,
-                        help="TensorFlow threads per worker. Keep small when using multiple workers.",
+                        help="TensorFlow threads per worker. Mainly relevant for M3GNet.",
                         key="relax_tf_threads",
                     )
                 )
@@ -1086,6 +1704,14 @@ if tab == "Input Builder":
             with col2:
                 st.info("CUDA mode uses a single effective worker internally.")
 
+            # keep these present in config even when hidden
+            cfg_edit["relax"].setdefault("n_workers", DEFAULTS["relax"]["n_workers"])
+            cfg_edit["relax"].setdefault("tf_threads", DEFAULTS["relax"]["tf_threads"])
+            cfg_edit["relax"].setdefault("omp_threads", DEFAULTS["relax"]["omp_threads"])
+
+        # -----------------------------
+        # Caching
+        # -----------------------------
         st.divider()
         st.subheader("Caching")
 

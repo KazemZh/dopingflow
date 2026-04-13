@@ -42,21 +42,70 @@ conda create -n dopingflow python=3.11
 conda activate dopingflow
 ```
 
-### Install
+### Install Packages
 
-Full ML stack:
+> ⚠️ Choose only one backend between **M3GNet** and **UMA**. They require incompatible versions of `numpy` and `ase`. Do not install both in the same environment!
 
-``` bash
-pip install -e ".[m3gnet,alignn,mp,gui]"
-```
-
-Core package:
+#### MACE backend:
 
 ``` bash
-pip install -e .
+pip install -e ".[mace]"
 ```
 
-Development tools:
+#### GRACE backend:
+
+``` bash
+pip install -e ".[grace]"
+```
+
+#### M3GNet backend:
+
+``` bash
+pip install -e ".[m3gnet]"
+```
+
+#### UMA backend:
+
+``` bash
+pip install -e ".[uma]"
+```
+
+Requires Hugging Face access (see setup below).
+
+##### UMA Backend Setup
+
+The UMA backend is provided through FAIR-Chem and requires access to the pretrained UMA models hosted on Hugging Face.
+
+1. Request access to the UMA model repository  
+   https://huggingface.co/facebook/UMA
+
+2. Log in to Hugging Face
+
+After access is granted, authenticate in your UMA environment:
+
+```bash
+hf auth login
+```
+
+#### ALIGNN Backend:
+
+``` bash
+pip install -e ".[alignn]"
+```
+
+#### GUI:
+
+``` bash
+pip install -e ".[gui]"
+```
+
+#### Material Project API:
+
+``` bash
+pip install -e ".[mp]"
+```
+
+#### Development tools:
 
 ``` bash
 pip install -e ".[dev]"

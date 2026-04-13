@@ -1,9 +1,7 @@
-# src/dopingflow/relax.py
 from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 import traceback
 from collections import Counter
@@ -14,16 +12,18 @@ from typing import Any, Dict, List, Optional, Tuple
 from pymatgen.core import Structure
 from pymatgen.io.vasp import Poscar
 
+from dopingflow.ml_backends import (
+    build_ase_calculator,
+    check_backend_dependency,
+    normalize_backend_config,
+    prepare_backend_runtime,
+    set_default_runtime_env,
+)
+from dopingflow.ml_relaxation import relax_structure_with_calculator
+
 log = logging.getLogger(__name__)
 
-# ----------------------------------------------------------------------
-# Keep TF noise low in *this* process (workers also set it again).
-# ----------------------------------------------------------------------
-os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
-os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
-os.environ.setdefault("OMP_NUM_THREADS", "1")
-os.environ.setdefault("TF_NUM_INTRAOP_THREADS", "1")
-os.environ.setdefault("TF_NUM_INTEROP_THREADS", "1")
+set_default_runtime_env(tf_threads=1, omp_threads=1)
 
 
 # -----------------------------
@@ -32,22 +32,27 @@ os.environ.setdefault("TF_NUM_INTEROP_THREADS", "1")
 @dataclass(frozen=True)
 class RelaxConfig:
     fmax: float
+    max_steps: int
     n_workers: int
     tf_threads: int
     omp_threads: int
-    order: List[str]         # from [generate].poscar_order
-    outdir: Path             # from [structure].outdir
-    skip_if_done: bool       # folder-level skip if ranking_relax exists
-    skip_candidate_if_done: bool  # candidate-level skip if 02_relax/meta exists
-    device: str              # from [relax].device
-    gpu_id: int              # from [relax].gpu_id
+    order: List[str]
+    outdir: Path
+    skip_if_done: bool
+    skip_candidate_if_done: bool
+    device: str
+    gpu_id: int
+
+    backend: str
+    model: str
+    task: str
+    optimizer: str
 
 
 def _parse_relax_config(raw: dict[str, Any], root: Path) -> RelaxConfig:
     st = raw.get("structure", {}) or {}
     gen = raw.get("generate", {}) or {}
     rel = raw.get("relax", {}) or {}
-    dop = raw.get("doping", {}) or {}
 
     outdir_name = str(st.get("outdir", "random_structures"))
     outdir = (root / outdir_name).resolve()
@@ -55,6 +60,7 @@ def _parse_relax_config(raw: dict[str, Any], root: Path) -> RelaxConfig:
     order = [str(x) for x in (gen.get("poscar_order", []) or [])]
 
     fmax = float(rel.get("fmax", 0.05))
+    max_steps = int(rel.get("max_steps", 300))
     n_workers = int(rel.get("n_workers", 6))
     tf_threads = int(rel.get("tf_threads", 1))
     omp_threads = int(rel.get("omp_threads", 1))
@@ -63,8 +69,15 @@ def _parse_relax_config(raw: dict[str, Any], root: Path) -> RelaxConfig:
     device = str(rel.get("device", "cpu")).lower()
     gpu_id = int(rel.get("gpu_id", 0))
 
+    backend = str(rel.get("backend", "m3gnet")).strip().lower()
+    model = str(rel.get("model", "default")).strip()
+    task = str(rel.get("task", "")).strip()
+    optimizer = str(rel.get("optimizer", "bfgs")).strip().lower()
+
     if fmax <= 0:
         raise ValueError("[relax].fmax must be > 0")
+    if max_steps <= 0:
+        raise ValueError("[relax].max_steps must be > 0")
     if n_workers <= 0:
         raise ValueError("[relax].n_workers must be > 0")
     if tf_threads <= 0:
@@ -75,11 +88,21 @@ def _parse_relax_config(raw: dict[str, Any], root: Path) -> RelaxConfig:
         raise ValueError('[relax].device must be either "cpu" or "cuda"')
     if gpu_id < 0:
         raise ValueError("[relax].gpu_id must be >= 0")
+    if optimizer not in {"bfgs", "lbfgs", "fire", "mdmin", "quasinewton"}:
+        raise ValueError(
+            '[relax].optimizer must be one of: "bfgs", "lbfgs", "fire", "mdmin", "quasinewton"'
+        )
 
-    _ = str(dop.get("host_species", "")).strip()
+    backend, model, task = normalize_backend_config(
+        backend=backend,
+        model=model,
+        task=task,
+        section_name="relax",
+    )
 
     return RelaxConfig(
         fmax=fmax,
+        max_steps=max_steps,
         n_workers=n_workers,
         tf_threads=tf_threads,
         omp_threads=omp_threads,
@@ -89,6 +112,10 @@ def _parse_relax_config(raw: dict[str, Any], root: Path) -> RelaxConfig:
         skip_candidate_if_done=skip_candidate_if_done,
         device=device,
         gpu_id=gpu_id,
+        backend=backend,
+        model=model,
+        task=task,
+        optimizer=optimizer,
     )
 
 
@@ -109,7 +136,11 @@ def _reorder_sites(struct: Structure, order: List[str]) -> Structure:
         )
 
     sites_sorted = sorted(struct.sites, key=key)
-    return Structure(struct.lattice, [s.species for s in sites_sorted], [s.frac_coords for s in sites_sorted])
+    return Structure(
+        struct.lattice,
+        [s.species for s in sites_sorted],
+        [s.frac_coords for s in sites_sorted],
+    )
 
 
 def _safe_write_poscar(struct: Structure, path: Path, order: List[str]) -> None:
@@ -130,91 +161,84 @@ def _load_json(path: Path) -> Optional[Dict[str, Any]]:
         return None
 
 
-def _trajectory_last_energy(result: Dict[str, Any]) -> float:
-    traj = result.get("trajectory", None)
-    if traj is None:
-        raise KeyError("Relaxer result has no 'trajectory'.")
-    if hasattr(traj, "energies") and len(traj.energies) > 0:
-        return float(traj.energies[-1])
-    raise KeyError("trajectory has no energies or it is empty.")
+# -----------------------------
+# Worker globals
+# -----------------------------
+_CALCULATOR = None
+_CALCULATOR_BACKEND = None
+_CALCULATOR_MODEL = None
+_CALCULATOR_TASK = None
+_CALCULATOR_DEVICE = None
+
+
+def _init_worker(
+    backend: str,
+    model: str,
+    task: str,
+    device: str,
+    gpu_id: int,
+    tf_threads: int,
+    omp_threads: int,
+):
+    global _CALCULATOR, _CALCULATOR_BACKEND, _CALCULATOR_MODEL, _CALCULATOR_TASK, _CALCULATOR_DEVICE
+
+    prepare_backend_runtime(
+        backend=backend,
+        device=device,
+        gpu_id=gpu_id,
+        tf_threads=tf_threads,
+        omp_threads=omp_threads,
+    )
+
+    _CALCULATOR = build_ase_calculator(
+        backend=backend,
+        model=model,
+        task=task,
+        device=device,
+    )
+    _CALCULATOR_BACKEND = backend
+    _CALCULATOR_MODEL = model
+    _CALCULATOR_TASK = task
+    _CALCULATOR_DEVICE = device
 
 
 # -----------------------------
 # Worker
 # -----------------------------
-_RELAXER = None
+def _relax_one_candidate(
+    job: Tuple[
+        str,
+        float,
+        int,
+        int,
+        int,
+        List[str],
+        bool,
+        str,
+        int,
+        str,
+        str,
+        str,
+        str,
+    ]
+) -> Dict[str, Any]:
+    (
+        candidate_dir_str,
+        fmax,
+        max_steps,
+        tf_threads,
+        omp_threads,
+        order,
+        skip_candidate_if_done,
+        device,
+        gpu_id,
+        backend,
+        model,
+        task,
+        optimizer,
+    ) = job
 
-
-def _init_worker(tf_threads: int, omp_threads: int, device: str, gpu_id: int) -> None:
-    """
-    Runs once per worker process.
-    Sets env vars and initializes TensorFlow / M3GNet backend.
-    """
-    import warnings
-    import logging as _logging
-
-    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-    os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
-    os.environ["OMP_NUM_THREADS"] = str(omp_threads)
-    os.environ["TF_NUM_INTRAOP_THREADS"] = str(tf_threads)
-    os.environ["TF_NUM_INTEROP_THREADS"] = str(tf_threads)
-
-    warnings.filterwarnings("ignore", category=DeprecationWarning)
-    warnings.filterwarnings("ignore", message=".*experimental_relax_shapes.*")
-    warnings.filterwarnings("ignore", message=".*casting an input of type complex64.*")
-    _logging.getLogger("tensorflow").setLevel(_logging.ERROR)
-
-    try:
-        import tensorflow as tf
-
-        tf.get_logger().setLevel("ERROR")
-        try:
-            tf.autograph.set_verbosity(0)
-        except Exception:
-            pass
-
-        gpus = tf.config.list_physical_devices("GPU")
-
-        if device == "cpu":
-            try:
-                tf.config.set_visible_devices([], "GPU")
-            except Exception:
-                pass
-        else:
-            if not gpus:
-                raise RuntimeError('CUDA requested for relax, but TensorFlow sees no GPU.')
-            if gpu_id >= len(gpus):
-                raise RuntimeError(f"Requested gpu_id={gpu_id}, but only {len(gpus)} GPU(s) are visible.")
-            try:
-                tf.config.set_visible_devices(gpus[gpu_id], "GPU")
-                tf.config.experimental.set_memory_growth(gpus[gpu_id], True)
-            except Exception:
-                pass
-
-    except Exception:
-        if device == "cuda":
-            raise
-
-    global _RELAXER
-    from m3gnet.models import Relaxer
-
-    _RELAXER = Relaxer()
-
-
-def _relax_one_candidate(job: Tuple[str, float, int, int, List[str], bool, str, int]) -> Dict[str, Any]:
-    """
-    job:
-      (candidate_dir_str, fmax, tf_threads, omp_threads, order,
-       skip_candidate_if_done, device, gpu_id)
-    """
-    cand_path = Path(job[0])
-    fmax = float(job[1])
-    tf_threads = int(job[2])
-    omp_threads = int(job[3])
-    order = job[4]
-    skip_candidate_if_done = bool(job[5])
-    device = str(job[6])
-    gpu_id = int(job[7])
+    cand_path = Path(candidate_dir_str)
 
     scan_dir = cand_path / "01_scan"
     poscar_in = scan_dir / "POSCAR"
@@ -224,15 +248,17 @@ def _relax_one_candidate(job: Tuple[str, float, int, int, List[str], bool, str, 
     out_dir.mkdir(parents=True, exist_ok=True)
 
     meta_out = out_dir / "meta.json"
+
     if skip_candidate_if_done and meta_out.exists() and (out_dir / "POSCAR").exists():
         meta_prev = _load_json(meta_out) or {}
+        src = meta_prev.get("source_scan") or {}
         return {
             "candidate": cand_path.name,
             "status": "skip",
             "energy_relaxed_eV": meta_prev.get("energy_relaxed_eV", ""),
-            "rank_sp": (meta_prev.get("source_scan") or {}).get("rank_sp", ""),
-            "energy_sp_eV": (meta_prev.get("source_scan") or {}).get("energy_sp_eV", ""),
-            "signature": (meta_prev.get("source_scan") or {}).get("signature", ""),
+            "rank_sp": src.get("rank_sp", ""),
+            "energy_sp_eV": src.get("energy_sp_eV", ""),
+            "signature": src.get("signature", ""),
             "walltime_s": meta_prev.get("walltime_s", ""),
             "note": "already exists",
         }
@@ -241,28 +267,48 @@ def _relax_one_candidate(job: Tuple[str, float, int, int, List[str], bool, str, 
     if not poscar_in.exists():
         return {"candidate": cand_path.name, "status": "skip", "error": f"missing {poscar_in}"}
 
-    global _RELAXER
-    if _RELAXER is None:
-        _init_worker(tf_threads=tf_threads, omp_threads=omp_threads, device=device, gpu_id=gpu_id)
+    global _CALCULATOR
+    if _CALCULATOR is None:
+        _init_worker(
+            backend=backend,
+            model=model,
+            task=task,
+            device=device,
+            gpu_id=gpu_id,
+            tf_threads=tf_threads,
+            omp_threads=omp_threads,
+        )
 
     t0 = time.time()
     try:
         s0 = Structure.from_file(str(poscar_in))
 
-        res = _RELAXER.relax(s0, fmax=fmax, verbose=False)
-        s_rel = res["final_structure"]
-        E_rel = _trajectory_last_energy(res)
+        s_rel, e_rel, nsteps, fmax_final, converged = relax_structure_with_calculator(
+            s0,
+            calculator=_CALCULATOR,
+            optimizer_name=optimizer,
+            fmax=float(fmax),
+            max_steps=int(max_steps),
+        )
 
         _safe_write_poscar(s_rel, out_dir / "POSCAR", order=order)
 
         meta_relax = {
             "stage": "02_relax",
-            "method": "m3gnet Relaxer (pretrained)",
+            "method": f"{backend} + ASE optimizer",
+            "backend": backend,
+            "model": model,
+            "task": task,
+            "optimizer": optimizer,
             "device": device,
             "gpu_id": gpu_id if device == "cuda" else None,
             "fmax_target_eV_per_A": float(fmax),
+            "max_steps": int(max_steps),
+            "optimizer_steps": int(nsteps),
+            "final_fmax_eV_per_A": float(fmax_final),
+            "converged": bool(converged),
             "walltime_s": float(time.time() - t0),
-            "energy_relaxed_eV": float(E_rel),
+            "energy_relaxed_eV": float(e_rel),
             "species_counts_total": _species_counts(s_rel),
             "source_scan": {
                 "rank_sp": meta_scan.get("rank_sp"),
@@ -277,17 +323,24 @@ def _relax_one_candidate(job: Tuple[str, float, int, int, List[str], bool, str, 
         return {
             "candidate": cand_path.name,
             "status": "ok",
-            "energy_relaxed_eV": float(E_rel),
+            "energy_relaxed_eV": float(e_rel),
             "rank_sp": meta_scan.get("rank_sp"),
             "energy_sp_eV": meta_scan.get("energy_sp_eV"),
             "signature": meta_scan.get("signature"),
             "walltime_s": meta_relax["walltime_s"],
+            "converged": converged,
+            "final_fmax_eV_per_A": fmax_final,
+            "optimizer_steps": nsteps,
         }
 
     except Exception as e:
         meta_fail = {
             "stage": "02_relax",
-            "method": "m3gnet Relaxer (pretrained)",
+            "method": f"{backend} + ASE optimizer",
+            "backend": backend,
+            "model": model,
+            "task": task,
+            "optimizer": optimizer,
             "device": device,
             "gpu_id": gpu_id if device == "cuda" else None,
             "status": "fail",
@@ -316,13 +369,17 @@ def _write_ranking_csv(folder: Path, rows: List[Dict[str, Any]]) -> Path:
 
     ranking_path = folder / "ranking_relax.csv"
     with open(ranking_path, "w", encoding="utf-8") as f:
-        f.write("candidate,rank_relax,energy_relaxed_eV,rank_sp,energy_sp_eV,signature,status,walltime_s,error\n")
+        f.write(
+            "candidate,rank_relax,energy_relaxed_eV,rank_sp,energy_sp_eV,signature,"
+            "status,walltime_s,converged,final_fmax_eV_per_A,optimizer_steps,error\n"
+        )
 
         for r in ok_rows_sorted:
             f.write(
                 f"{r.get('candidate','')},{r.get('rank_relax','')},{r.get('energy_relaxed_eV','')},"
                 f"{r.get('rank_sp','')},{r.get('energy_sp_eV','')},{r.get('signature','')},"
-                f"{r.get('status','')},{r.get('walltime_s','')},\n"
+                f"{r.get('status','')},{r.get('walltime_s','')},{r.get('converged','')},"
+                f"{r.get('final_fmax_eV_per_A','')},{r.get('optimizer_steps','')},\n"
             )
 
         for r in rows:
@@ -331,7 +388,7 @@ def _write_ranking_csv(folder: Path, rows: List[Dict[str, Any]]) -> Path:
             f.write(
                 f"{r.get('candidate','')},,{r.get('energy_relaxed_eV','')},"
                 f"{r.get('rank_sp','')},{r.get('energy_sp_eV','')},{r.get('signature','')},"
-                f"{r.get('status','')},{r.get('walltime_s','')},{r.get('error','')}\n"
+                f"{r.get('status','')},{r.get('walltime_s','')},,,,{r.get('error','')}\n"
             )
 
     return ranking_path
@@ -352,8 +409,20 @@ def _run_folder(folder: Path, cfg: RelaxConfig) -> None:
 
     log.info("%s: found %d candidates", folder.name, len(candidates))
     log.info(
-        "Relax settings: device=%s gpu_id=%d n_workers=%d effective_n_workers=%d fmax=%s tf_threads=%d omp_threads=%d",
-        cfg.device, cfg.gpu_id, cfg.n_workers, effective_n_workers, cfg.fmax, cfg.tf_threads, cfg.omp_threads
+        "Relax settings: backend=%s model=%s task=%s optimizer=%s device=%s gpu_id=%d "
+        "n_workers=%d effective_n_workers=%d fmax=%s max_steps=%d tf_threads=%d omp_threads=%d",
+        cfg.backend,
+        cfg.model,
+        cfg.task,
+        cfg.optimizer,
+        cfg.device,
+        cfg.gpu_id,
+        cfg.n_workers,
+        effective_n_workers,
+        cfg.fmax,
+        cfg.max_steps,
+        cfg.tf_threads,
+        cfg.omp_threads,
     )
 
     import multiprocessing as mp
@@ -365,12 +434,17 @@ def _run_folder(folder: Path, cfg: RelaxConfig) -> None:
         (
             str(c),
             cfg.fmax,
+            cfg.max_steps,
             cfg.tf_threads,
             cfg.omp_threads,
             cfg.order,
             cfg.skip_candidate_if_done,
             cfg.device,
             cfg.gpu_id,
+            cfg.backend,
+            cfg.model,
+            cfg.task,
+            cfg.optimizer,
         )
         for c in candidates
     ]
@@ -382,7 +456,15 @@ def _run_folder(folder: Path, cfg: RelaxConfig) -> None:
         max_workers=effective_n_workers,
         mp_context=ctx,
         initializer=_init_worker,
-        initargs=(cfg.tf_threads, cfg.omp_threads, cfg.device, cfg.gpu_id),
+        initargs=(
+            cfg.backend,
+            cfg.model,
+            cfg.task,
+            cfg.device,
+            cfg.gpu_id,
+            cfg.tf_threads,
+            cfg.omp_threads,
+        ),
     ) as ex:
         futures = [ex.submit(_relax_one_candidate, j) for j in jobs]
 
@@ -392,8 +474,14 @@ def _run_folder(folder: Path, cfg: RelaxConfig) -> None:
 
             if r.get("status") == "ok":
                 log.info(
-                    "OK   %s/%s  E_rel=%.6f eV  wall=%.1fs",
-                    folder.name, r["candidate"], r["energy_relaxed_eV"], float(r.get("walltime_s", 0.0))
+                    "OK   %s/%s  E_rel=%.6f eV  converged=%s  fmax_final=%.6f  steps=%s  wall=%.1fs",
+                    folder.name,
+                    r["candidate"],
+                    r["energy_relaxed_eV"],
+                    r.get("converged"),
+                    float(r.get("final_fmax_eV_per_A", 0.0)),
+                    r.get("optimizer_steps"),
+                    float(r.get("walltime_s", 0.0)),
                 )
             elif r.get("status") == "skip":
                 log.info("SKIP %s/%s  %s", folder.name, r.get("candidate", "?"), r.get("note", ""))
@@ -401,7 +489,8 @@ def _run_folder(folder: Path, cfg: RelaxConfig) -> None:
                 log.warning(
                     "%s %s/%s  %s",
                     str(r.get("status", "?")).upper(),
-                    folder.name, r.get("candidate", "?"),
+                    folder.name,
+                    r.get("candidate", "?"),
                     r.get("error", "")
                 )
 
@@ -410,8 +499,14 @@ def _run_folder(folder: Path, cfg: RelaxConfig) -> None:
     n_fail = sum(1 for r in rows if r.get("status") == "fail")
     n_skip = sum(1 for r in rows if r.get("status") == "skip")
 
-    log.info("%s: finished in %.1fs | OK=%d FAIL=%d SKIP=%d",
-             folder.name, time.time() - t0, n_ok, n_fail, n_skip)
+    log.info(
+        "%s: finished in %.1fs | OK=%d FAIL=%d SKIP=%d",
+        folder.name,
+        time.time() - t0,
+        n_ok,
+        n_fail,
+        n_skip,
+    )
     log.info("%s: wrote %s", folder.name, ranking_path)
 
 
@@ -420,13 +515,10 @@ def _run_folder(folder: Path, cfg: RelaxConfig) -> None:
 # -----------------------------
 def run_relax(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None = None) -> None:
     """
-    Step 03: Relax candidates produced by Step 02.
-      For each structure folder in [structure].outdir:
-        - relax candidate_*/01_scan/POSCAR
-        - write candidate_*/02_relax/POSCAR and meta.json
-        - write ranking_relax.csv per structure folder
+    Step 03: Relax candidates produced by Step 02 using a unified ASE backend layer.
     """
     cfg = _parse_relax_config(raw_cfg, root)
+    check_backend_dependency(cfg.backend, stage_name="Relax")
 
     if not cfg.outdir.exists():
         raise FileNotFoundError(f"Output directory not found: {cfg.outdir} (did you run step 01?)")
@@ -434,9 +526,17 @@ def run_relax(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None =
     folders = sorted([p for p in cfg.outdir.iterdir() if p.is_dir()])
 
     log.info("Step 03 relax: %d structure folders in: %s", len(folders), cfg.outdir)
-    log.info("Relax backend: device=%s gpu_id=%d", cfg.device, cfg.gpu_id)
+    log.info(
+        "Relax backend: backend=%s model=%s task=%s optimizer=%s device=%s gpu_id=%d",
+        cfg.backend,
+        cfg.model,
+        cfg.task,
+        cfg.optimizer,
+        cfg.device,
+        cfg.gpu_id,
+    )
     if cfg.device == "cuda":
-        log.info("CUDA mode: forcing effective_n_workers=1 for safe TensorFlow GPU usage.")
+        log.info("CUDA mode: forcing effective_n_workers=1 for safe GPU usage.")
     log.info("NOTE: main-directory POSCAR is ignored; only subfolders are processed.")
 
     for i, folder in enumerate(folders, start=1):
@@ -448,7 +548,7 @@ def run_relax(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None =
 
 # TOML wrapper
 try:
-    import tomllib  # py3.11+
+    import tomllib
 except ModuleNotFoundError:  # pragma: no cover
     import tomli as tomllib
 

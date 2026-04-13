@@ -52,10 +52,34 @@ dopingflow.generate module
    :show-inheritance:
    :undoc-members:
 
+dopingflow.hardware module
+--------------------------
+
+.. automodule:: dopingflow.hardware
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 dopingflow.logging module
 -------------------------
 
 .. automodule:: dopingflow.logging
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+dopingflow.ml_backends module
+-----------------------------
+
+.. automodule:: dopingflow.ml_backends
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+dopingflow.ml_relaxation module
+-------------------------------
+
+.. automodule:: dopingflow.ml_relaxation
    :members:
    :show-inheritance:
    :undoc-members:
@@ -80,6 +104,30 @@ dopingflow.scan module
 ----------------------
 
 .. automodule:: dopingflow.scan
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+dopingflow.utils.io module
+--------------------------
+
+.. automodule:: dopingflow.utils.io
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+dopingflow.utils.parallel module
+--------------------------------
+
+.. automodule:: dopingflow.utils.parallel
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+dopingflow.utils.pymatgen_helpers module
+----------------------------------------
+
+.. automodule:: dopingflow.utils.pymatgen_helpers
    :members:
    :show-inheritance:
    :undoc-members:

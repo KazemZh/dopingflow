@@ -2,14 +2,23 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List
 
-_RELAXER = None
+from dopingflow.ml_backends import (
+    build_ase_calculator,
+    check_backend_dependency,
+    normalize_backend_config,
+    prepare_backend_runtime,
+    set_default_runtime_env,
+)
+from dopingflow.ml_relaxation import relax_structure_with_calculator
+
 log = logging.getLogger(__name__)
+
+set_default_runtime_env(tf_threads=1, omp_threads=1)
 
 # Project convention
 REF_DIR = Path("reference_structures")
@@ -17,29 +26,43 @@ REF_JSON = REF_DIR / "reference_energies.json"
 RELAXED_DIR = REF_DIR / "relaxed"
 RELAXED_REFS_DIR = RELAXED_DIR / "refs"
 
+_CALCULATOR = None
+_CALCULATOR_BACKEND = None
+_CALCULATOR_MODEL = None
+_CALCULATOR_TASK = None
+_CALCULATOR_DEVICE = None
+
 
 # -----------------------------
-# Config model for this step
+# Config model
 # -----------------------------
 @dataclass(frozen=True)
 class RefConfig:
-    reference_mode: str  # "metal" or "oxide"
+    reference_mode: str
     skip_if_done: bool
+
     fmax: float
+    max_steps: int
+    tf_threads: int
+    omp_threads: int
+
+    device: str
+    gpu_id: int
+    backend: str
+    model: str
+    task: str
+    optimizer: str
 
     host: str
     host_dir: Path
     supercell: tuple[int, int, int]
 
-    # metal mode
     metal_ref: List[str]
     metals_dir: Path
 
-    # oxide mode
     oxides_ref: List[str]
     oxides_dir: Path
 
-    # gas (oxide mode)
     gas_ref: str
     gas_dir: Path
     oxygen_mode: str
@@ -49,31 +72,6 @@ class RefConfig:
 # -----------------------------
 # Utilities
 # -----------------------------
-def _silence_tensorflow_noise() -> None:
-    """Must run before importing tensorflow/m3gnet in this process."""
-    os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
-    os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
-
-    import warnings
-
-    warnings.filterwarnings("ignore", category=DeprecationWarning)
-    warnings.filterwarnings("ignore", message=".*experimental_relax_shapes.*")
-    warnings.filterwarnings("ignore", message=".*casting an input of type complex64.*")
-
-    logging.getLogger("tensorflow").setLevel(logging.ERROR)
-
-    try:
-        import tensorflow as tf  # noqa: F401
-
-        tf.get_logger().setLevel("ERROR")
-        try:
-            tf.autograph.set_verbosity(0)
-        except Exception:
-            pass
-    except Exception:
-        pass
-
-
 def _ensure_dirs(root: Path) -> None:
     (root / REF_DIR).mkdir(parents=True, exist_ok=True)
     (root / RELAXED_DIR).mkdir(parents=True, exist_ok=True)
@@ -90,8 +88,42 @@ def _parse_ref_config(raw: dict[str, Any], root: Path) -> RefConfig:
     skip_if_done = bool(refs.get("skip_if_done", True))
 
     fmax = float(refs.get("fmax", 0.02))
+    max_steps = int(refs.get("max_steps", 300))
+    tf_threads = int(refs.get("tf_threads", 1))
+    omp_threads = int(refs.get("omp_threads", 1))
+
     if fmax <= 0:
         raise ValueError("[references].fmax must be > 0")
+    if max_steps <= 0:
+        raise ValueError("[references].max_steps must be > 0")
+    if tf_threads <= 0:
+        raise ValueError("[references].tf_threads must be > 0")
+    if omp_threads <= 0:
+        raise ValueError("[references].omp_threads must be > 0")
+
+    device = str(refs.get("device", "cpu")).strip().lower()
+    gpu_id = int(refs.get("gpu_id", 0))
+    if device not in {"cpu", "cuda"}:
+        raise ValueError('[references].device must be either "cpu" or "cuda"')
+    if gpu_id < 0:
+        raise ValueError("[references].gpu_id must be >= 0")
+
+    backend = str(refs.get("backend", "m3gnet")).strip().lower()
+    model = str(refs.get("model", "default")).strip()
+    task = str(refs.get("task", "")).strip()
+    optimizer = str(refs.get("optimizer", "bfgs")).strip().lower()
+
+    if optimizer not in {"bfgs", "lbfgs", "fire", "mdmin", "quasinewton"}:
+        raise ValueError(
+            '[references].optimizer must be one of: "bfgs", "lbfgs", "fire", "mdmin", "quasinewton"'
+        )
+
+    backend, model, task = normalize_backend_config(
+        backend=backend,
+        model=model,
+        task=task,
+        section_name="references",
+    )
 
     host = str(refs.get("host", "")).strip()
     if not host:
@@ -125,7 +157,6 @@ def _parse_ref_config(raw: dict[str, Any], root: Path) -> RefConfig:
 
     muO_shift_ev = float(refs.get("muO_shift_ev", 0.0))
 
-    # minimal validation per mode
     if reference_mode == "metal":
         if not metal_ref:
             raise ValueError("reference_mode='metal' but [references].metal_ref is empty")
@@ -139,6 +170,15 @@ def _parse_ref_config(raw: dict[str, Any], root: Path) -> RefConfig:
         reference_mode=reference_mode,
         skip_if_done=skip_if_done,
         fmax=fmax,
+        max_steps=max_steps,
+        tf_threads=tf_threads,
+        omp_threads=omp_threads,
+        device=device,
+        gpu_id=gpu_id,
+        backend=backend,
+        model=model,
+        task=task,
+        optimizer=optimizer,
         host=host,
         host_dir=host_dir,
         supercell=supercell,
@@ -166,50 +206,55 @@ def _write_poscar(struct, path: Path) -> None:
     struct.to(fmt="poscar", filename=str(path))
 
 
-def _relax_structure_and_energy(struct, fmax: float):
+def _ensure_calculator(cfg: RefConfig) -> None:
+    global _CALCULATOR, _CALCULATOR_BACKEND, _CALCULATOR_MODEL, _CALCULATOR_TASK, _CALCULATOR_DEVICE
+
+    if (
+        _CALCULATOR is not None
+        and _CALCULATOR_BACKEND == cfg.backend
+        and _CALCULATOR_MODEL == cfg.model
+        and _CALCULATOR_TASK == cfg.task
+        and _CALCULATOR_DEVICE == cfg.device
+    ):
+        return
+
+    prepare_backend_runtime(
+        backend=cfg.backend,
+        device=cfg.device,
+        gpu_id=cfg.gpu_id,
+        tf_threads=cfg.tf_threads,
+        omp_threads=cfg.omp_threads,
+    )
+
+    _CALCULATOR = build_ase_calculator(
+        backend=cfg.backend,
+        model=cfg.model,
+        task=cfg.task,
+        device=cfg.device,
+    )
+    _CALCULATOR_BACKEND = cfg.backend
+    _CALCULATOR_MODEL = cfg.model
+    _CALCULATOR_TASK = cfg.task
+    _CALCULATOR_DEVICE = cfg.device
+
+
+def _relax_structure_and_energy(struct, cfg: RefConfig):
     """
-    Relax a structure with M3GNet Relaxer and return:
-      (relaxed_structure, final_energy_eV, n_steps)
+    Unified structural relaxation using the same ASE calculator/optimizer route as relax.py.
+    Returns:
+      (relaxed_structure, final_energy_eV, n_steps, final_fmax, converged)
     """
-    global _RELAXER
-    _silence_tensorflow_noise()
-    if _RELAXER is None:
-        from m3gnet.models import Relaxer
-
-        _RELAXER = Relaxer()
-
-    res = _RELAXER.relax(struct, fmax=fmax, verbose=False)
-
-    traj = res.get("trajectory", None)
-    if traj is None or not hasattr(traj, "energies") or len(traj.energies) == 0:
-        raise RuntimeError("Relaxer output has no trajectory energies.")
-
-    E_final = float(traj.energies[-1])
-
-    # Try to obtain relaxed structure robustly
-    s_final = res.get("final_structure", None)
-    if s_final is None:
-        if hasattr(traj, "structures") and len(traj.structures) > 0:
-            s_final = traj.structures[-1]
-        else:
-            raise RuntimeError("Relaxer output has no final structure.")
-
-    n_steps = 0
-    try:
-        n_steps = int(len(traj.energies))
-    except Exception:
-        n_steps = 0
-
-    return s_final, E_final, n_steps
+    _ensure_calculator(cfg)
+    return relax_structure_with_calculator(
+        struct,
+        calculator=_CALCULATOR,
+        optimizer_name=cfg.optimizer,
+        fmax=cfg.fmax,
+        max_steps=cfg.max_steps,
+    )
 
 
 def _per_formula_unit_energy(struct, E_total: float) -> tuple[float, dict[str, float], float]:
-    """
-    Return:
-      - E_per_fu
-      - reduced composition dict (element -> amount in reduced formula)
-      - n_fu (number of formula units in the structure)
-    """
     comp = struct.composition
     red = comp.reduced_composition
     red_dict = {str(el): float(amt) for el, amt in red.get_el_amt_dict().items()}
@@ -225,7 +270,6 @@ def _per_formula_unit_energy(struct, E_total: float) -> tuple[float, dict[str, f
 
 
 def _per_molecule_energy_O2(struct, E_total: float) -> float:
-    """Assume O2 structure contains only O atoms; molecules = n_O/2."""
     comp = struct.composition.get_el_amt_dict()
     nO = float(comp.get("O", 0.0))
     if nO <= 0 or abs(nO / 2 - round(nO / 2)) > 1e-6:
@@ -245,9 +289,11 @@ def run_refs_build(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | N
       - reference_structures/reference_energies.json
       - reference_structures/relaxed/host_unit_relaxed.POSCAR
       - reference_structures/relaxed/host_supercell_<a>x<b>x<c>_relaxed.POSCAR
-      - reference_structures/relaxed/refs/<name>_relaxed.POSCAR for each reference
+      - reference_structures/relaxed/refs/<name>_relaxed.POSCAR
     """
     cfg = _parse_ref_config(raw_cfg, root)
+    check_backend_dependency(cfg.backend, stage_name="References")
+
     out_json = root / REF_JSON
 
     if cfg.skip_if_done and out_json.exists():
@@ -257,33 +303,47 @@ def run_refs_build(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | N
 
     _ensure_dirs(root)
 
-    # --- 1) Host unit cell ---
     host_path = (cfg.host_dir / f"{cfg.host}.POSCAR").resolve()
     log.info("Host POSCAR: %s", host_path)
 
+    # --- 1) Host unit cell ---
     host_unit = _read_poscar(host_path)
     t0 = time.time()
-    host_unit_relaxed, E_host_unit, nsteps_unit = _relax_structure_and_energy(host_unit, fmax=cfg.fmax)
+    host_unit_relaxed, E_host_unit, nsteps_unit, fmax_unit, conv_unit = _relax_structure_and_energy(host_unit, cfg)
     t_unit = time.time() - t0
 
     host_unit_relaxed_path = (root / RELAXED_DIR / "host_unit_relaxed.POSCAR").resolve()
     _write_poscar(host_unit_relaxed, host_unit_relaxed_path)
 
-    log.info("HOST unit relaxed: E=%.6f eV (steps=%d, wall=%.1fs)", E_host_unit, nsteps_unit, t_unit)
+    log.info(
+        "HOST unit relaxed: E=%.6f eV (steps=%d, final_fmax=%.6f, converged=%s, wall=%.1fs)",
+        E_host_unit,
+        nsteps_unit,
+        fmax_unit,
+        conv_unit,
+        t_unit,
+    )
 
-    # --- 2) Host supercell (for later doping) ---
+    # --- 2) Host supercell ---
     host_super = host_unit_relaxed.copy()
     host_super.make_supercell(cfg.supercell)
 
     sc_tag = f"{cfg.supercell[0]}x{cfg.supercell[1]}x{cfg.supercell[2]}"
     t1 = time.time()
-    host_super_relaxed, E_host_super, nsteps_super = _relax_structure_and_energy(host_super, fmax=cfg.fmax)
+    host_super_relaxed, E_host_super, nsteps_super, fmax_super, conv_super = _relax_structure_and_energy(host_super, cfg)
     t_super = time.time() - t1
 
     host_super_relaxed_path = (root / RELAXED_DIR / f"host_supercell_{sc_tag}_relaxed.POSCAR").resolve()
     _write_poscar(host_super_relaxed, host_super_relaxed_path)
 
-    log.info("HOST supercell relaxed: E=%.6f eV (steps=%d, wall=%.1fs)", E_host_super, nsteps_super, t_super)
+    log.info(
+        "HOST supercell relaxed: E=%.6f eV (steps=%d, final_fmax=%.6f, converged=%s, wall=%.1fs)",
+        E_host_super,
+        nsteps_super,
+        fmax_super,
+        conv_super,
+        t_super,
+    )
     log.info("Saved relaxed host supercell for doping: %s", host_super_relaxed_path)
 
     # --- 3) Relax reference structures ---
@@ -292,25 +352,33 @@ def run_refs_build(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | N
     def relax_ref(name: str, poscar_path: Path, ref_type: str) -> None:
         s = _read_poscar(poscar_path)
         t = time.time()
-        s_relaxed, E, nsteps = _relax_structure_and_energy(s, fmax=cfg.fmax)
+        s_relaxed, E, nsteps, fmax_final, converged = _relax_structure_and_energy(s, cfg)
         wall = time.time() - t
 
         out_poscar = (root / RELAXED_REFS_DIR / f"{name}_relaxed.POSCAR").resolve()
         _write_poscar(s_relaxed, out_poscar)
 
         entry: dict[str, Any] = {
-            "type": ref_type,  # "metal" | "oxide" | "gas"
+            "type": ref_type,
             "source_poscar": str(poscar_path),
             "relaxed_poscar": str(out_poscar),
             "n_atoms": int(len(s_relaxed)),
             "E_total_eV": float(E),
             "E_per_atom_eV": float(E) / float(len(s_relaxed)),
-            "fmax": float(cfg.fmax),
+            "fmax_target_eV_per_A": float(cfg.fmax),
+            "final_fmax_eV_per_A": float(fmax_final),
+            "max_steps": int(cfg.max_steps),
+            "optimizer": cfg.optimizer,
             "n_steps": int(nsteps),
+            "converged": bool(converged),
             "walltime_s": float(wall),
+            "backend": cfg.backend,
+            "model": cfg.model,
+            "task": cfg.task,
+            "device": cfg.device,
+            "gpu_id": cfg.gpu_id if cfg.device == "cuda" else None,
         }
 
-        # If it’s an oxide (or any compound), also store per formula unit:
         try:
             E_fu, red_dict, n_fu = _per_formula_unit_energy(s_relaxed, E)
             entry["E_per_formula_unit_eV"] = float(E_fu)
@@ -319,7 +387,6 @@ def run_refs_build(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | N
         except Exception:
             pass
 
-        # If it’s O2, store per molecule energy
         if name == cfg.gas_ref:
             try:
                 entry["E_per_molecule_eV"] = float(_per_molecule_energy_O2(s_relaxed, E))
@@ -327,21 +394,24 @@ def run_refs_build(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | N
                 pass
 
         references[name] = entry
-        log.info("REF %s (%s): E=%.6f eV, saved=%s", name, ref_type, E, out_poscar)
+        log.info(
+            "REF %s (%s): E=%.6f eV, converged=%s, saved=%s",
+            name,
+            ref_type,
+            E,
+            converged,
+            out_poscar,
+        )
 
     if cfg.reference_mode == "metal":
-        # metals: metals_dir/<El>.POSCAR
         for el in cfg.metal_ref:
             p = (cfg.metals_dir / f"{el}.POSCAR").resolve()
             relax_ref(el, p, ref_type="metal")
-
     else:
-        # oxides: oxides_dir/<Oxide>.POSCAR
         for ox in cfg.oxides_ref:
             p = (cfg.oxides_dir / f"{ox}.POSCAR").resolve()
             relax_ref(ox, p, ref_type="oxide")
 
-        # gas: gas_dir/<gas_ref>.POSCAR (typically O2)
         p_g = (cfg.gas_dir / f"{cfg.gas_ref}.POSCAR").resolve()
         relax_ref(cfg.gas_ref, p_g, ref_type="gas")
 
@@ -350,7 +420,14 @@ def run_refs_build(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | N
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "reference_mode": cfg.reference_mode,
         "skip_if_done": cfg.skip_if_done,
+        "backend": cfg.backend,
+        "model": cfg.model,
+        "task": cfg.task,
+        "optimizer": cfg.optimizer,
+        "device": cfg.device,
+        "gpu_id": cfg.gpu_id if cfg.device == "cuda" else None,
         "fmax": cfg.fmax,
+        "max_steps": cfg.max_steps,
         "supercell": list(cfg.supercell),
         "host": {
             "name": cfg.host,
@@ -363,11 +440,16 @@ def run_refs_build(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | N
             "E_supercell_total_eV": float(E_host_super),
             "E_unit_per_atom_eV": float(E_host_unit) / float(len(host_unit_relaxed)),
             "E_supercell_per_atom_eV": float(E_host_super) / float(len(host_super_relaxed)),
+            "unit_optimizer_steps": int(nsteps_unit),
+            "supercell_optimizer_steps": int(nsteps_super),
+            "unit_final_fmax_eV_per_A": float(fmax_unit),
+            "supercell_final_fmax_eV_per_A": float(fmax_super),
+            "unit_converged": bool(conv_unit),
+            "supercell_converged": bool(conv_super),
         },
         "references": references,
     }
 
-    # Store oxide-mode gas settings (even if you don’t use them yet downstream)
     if cfg.reference_mode == "oxide":
         out["oxide_mode"] = {
             "oxides_ref": cfg.oxides_ref,
@@ -394,7 +476,7 @@ def run_refs_build(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | N
 
 # --- TOML loader wrapper used by CLI ---
 try:
-    import tomllib  # py3.11+
+    import tomllib
 except ModuleNotFoundError:  # pragma: no cover
     import tomli as tomllib
 

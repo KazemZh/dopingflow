@@ -43,11 +43,47 @@ Inputs
 This stage uses settings from:
 
 - ``[references]``: reference mode, host structure, reference directories,
-  relaxation settings, oxygen settings, and caching behavior
+  backend settings, relaxation settings, oxygen settings, and caching behavior
 - ``[doping]``: defines the host species and the dopant set used in later steps
 
 The host supercell is defined in ``[references].supercell`` and is constructed
 at this stage.
+
+
+Execution Model
+---------------
+
+The references stage uses the same backend abstraction as the main relaxation
+stage.
+
+For each structure to be optimized, the workflow:
+
+1. Loads the selected ML backend
+2. Builds an ASE-compatible calculator
+3. Applies the selected ASE optimizer
+4. Relaxes the structure until convergence or until ``max_steps`` is reached
+
+Supported backends include:
+
+- ``m3gnet``
+- ``uma``
+- ``mace``
+- ``grace``
+
+Supported optimizers include:
+
+- ``bfgs``
+- ``lbfgs``
+- ``fire``
+- ``mdmin``
+- ``quasinewton``
+
+The execution device is controlled through:
+
+- ``device`` (``cpu`` or ``cuda``)
+- ``gpu_id``
+
+This design keeps the references stage consistent with ``relax.py``.
 
 
 Reference Modes
@@ -223,9 +259,25 @@ Relaxation Method
 
 All reference relaxations use:
 
-- Interatomic potential: M3GNet
-- Optimizer: FIRE
-- Convergence criterion: maximum force below ``fmax``
+- a selected ML interatomic potential backend
+- an ASE-compatible calculator
+- a user-selected ASE optimizer
+- a force-based convergence criterion defined by ``fmax``
+
+The maximum number of optimization steps is controlled by ``max_steps``.
+
+The backend is selected through:
+
+- ``backend``
+- ``model``
+- ``task`` (used only for UMA)
+
+The runtime environment is controlled through:
+
+- ``device``
+- ``gpu_id``
+- ``tf_threads``
+- ``omp_threads``
 
 The relaxations are fully unconstrained
 (cell parameters and atomic positions).
@@ -255,6 +307,12 @@ Typical top-level fields include:
 
 - ``timestamp``
 - ``reference_mode``
+- ``backend``
+- ``model``
+- ``task``
+- ``optimizer``
+- ``device``
+- ``gpu_id``
 - ``host``
 - ``references``
 - ``oxide_mode`` (only relevant in oxide mode)
@@ -269,9 +327,26 @@ The ``host`` block typically contains:
 - relaxed supercell POSCAR path
 - number of atoms in unit cell and supercell
 - total and per-atom energies
+- optimizer step counts
+- final force values
+- convergence status
 
 The ``references`` block contains one entry per relaxed reference phase,
 for example metals, oxides, or gas references.
+
+Each reference entry may include:
+
+- source POSCAR path
+- relaxed POSCAR path
+- total energy
+- per-atom energy
+- per-formula-unit energy (when applicable)
+- per-molecule energy for O₂ (when applicable)
+- optimizer steps
+- final force value
+- convergence status
+- wall time
+- backend and optimizer metadata
 
 For oxide mode, the JSON also stores the oxygen reference settings such as:
 
