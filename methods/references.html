@@ -1,0 +1,457 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>0. Reference Energy Construction &mdash; dopingflow documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=dd1205ac"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="1. Structure Generation" href="generation.html" />
+    <link rel="prev" title="Input File Specification (input.toml)" href="../input_file.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html">
+            
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../workflow_overview.html">Workflow Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation_and_usage.html">Installation, Usage, and Outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../required_inputs.html">Required Input Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file.html">Input File Specification (input.toml)</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">0. Reference Energy Construction</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#implementation">Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#purpose">Purpose</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#inputs">Inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#execution-model">Execution Model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#reference-modes">Reference Modes</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#metal-reference-mode">Metal reference mode</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#oxide-reference-mode">Oxide reference mode</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#method-summary">Method Summary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#formation-energy-framework">Formation Energy Framework</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#host-reference-energy">Host Reference Energy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#metal-chemical-potentials">Metal Chemical Potentials</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#oxide-derived-chemical-potentials">Oxide-Derived Chemical Potentials</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#relaxation-method">Relaxation Method</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#caching-strategy">Caching Strategy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#outputs">Outputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#notes-and-limitations">Notes and Limitations</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="generation.html">1. Structure Generation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scanning.html">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="filtering.html">4. Relaxed-Candidate Filtering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bandgap.html">5. Bandgap Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="formation_energy.html">6. Formation Energy Evaluation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="database.html">7. Database Collection</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_single_oxides.html">Explicit Example — Single Target Composition using Oxide References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../api/modules.html">dopingflow</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">0. Reference Energy Construction</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/methods/references.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="reference-energy-construction">
+<h1>0. Reference Energy Construction<a class="headerlink" href="#reference-energy-construction" title="Link to this heading"></a></h1>
+<section id="implementation">
+<h2>Implementation<a class="headerlink" href="#implementation" title="Link to this heading"></a></h2>
+<p>This stage is implemented in:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">src</span><span class="o">/</span><span class="n">dopingflow</span><span class="o">/</span><span class="n">refs</span><span class="o">.</span><span class="n">py</span>
+</pre></div>
+</div>
+<p>The public entry point is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">run_refs_build</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="purpose">
+<h2>Purpose<a class="headerlink" href="#purpose" title="Link to this heading"></a></h2>
+<p>This stage prepares all thermodynamic reference quantities required for
+formation energy evaluation of substitutionally doped structures.</p>
+<p>The stage performs the following tasks:</p>
+<ul class="simple">
+<li><p>Relax the host oxide unit cell</p></li>
+<li><p>Build and relax the host supercell</p></li>
+<li><p>Relax reference structures according to the selected reference scheme</p></li>
+<li><p>Store all relevant energies and metadata in:</p></li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">reference_structures</span><span class="o">/</span><span class="n">reference_energies</span><span class="o">.</span><span class="n">json</span>
+</pre></div>
+</div>
+<p>The resulting reference data are later used by the formation-energy stage.</p>
+</section>
+<section id="inputs">
+<h2>Inputs<a class="headerlink" href="#inputs" title="Link to this heading"></a></h2>
+<p>This stage uses settings from:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">[references]</span></code>: reference mode, host structure, reference directories,
+backend settings, relaxation settings, oxygen settings, and caching behavior</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[doping]</span></code>: defines the host species and the dopant set used in later steps</p></li>
+</ul>
+<p>The host supercell is defined in <code class="docutils literal notranslate"><span class="pre">[references].supercell</span></code> and is constructed
+at this stage.</p>
+</section>
+<section id="execution-model">
+<h2>Execution Model<a class="headerlink" href="#execution-model" title="Link to this heading"></a></h2>
+<p>The references stage uses the same backend abstraction as the main relaxation
+stage.</p>
+<p>For each structure to be optimized, the workflow:</p>
+<ol class="arabic simple">
+<li><p>Loads the selected ML backend</p></li>
+<li><p>Builds an ASE-compatible calculator</p></li>
+<li><p>Applies the selected ASE optimizer</p></li>
+<li><p>Relaxes the structure until convergence or until <code class="docutils literal notranslate"><span class="pre">max_steps</span></code> is reached</p></li>
+</ol>
+<p>Supported backends include:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">m3gnet</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">uma</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mace</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">grace</span></code></p></li>
+</ul>
+<p>Supported optimizers include:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">bfgs</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">lbfgs</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fire</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mdmin</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">quasinewton</span></code></p></li>
+</ul>
+<p>The execution device is controlled through:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">device</span></code> (<code class="docutils literal notranslate"><span class="pre">cpu</span></code> or <code class="docutils literal notranslate"><span class="pre">cuda</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">gpu_id</span></code></p></li>
+</ul>
+<p>This design keeps the references stage consistent with <code class="docutils literal notranslate"><span class="pre">relax.py</span></code>.</p>
+</section>
+<section id="reference-modes">
+<h2>Reference Modes<a class="headerlink" href="#reference-modes" title="Link to this heading"></a></h2>
+<p>Two thermodynamic reference schemes are supported.</p>
+<section id="metal-reference-mode">
+<h3>Metal reference mode<a class="headerlink" href="#metal-reference-mode" title="Link to this heading"></a></h3>
+<p>In metal mode, elemental chemical potentials are taken from relaxed elemental
+reference phases.</p>
+<p>For each relevant element <span class="math notranslate nohighlight">\(i\)</span>, the workflow relaxes the corresponding
+metal structure and computes:</p>
+<div class="math notranslate nohighlight">
+\[\mu_i = \frac{E_{\mathrm{metal}}}{N_{\mathrm{atoms}}}\]</div>
+<p>where:</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(E_{\mathrm{metal}}\)</span> is the relaxed total energy of the elemental
+reference structure</p></li>
+<li><p><span class="math notranslate nohighlight">\(N_{\mathrm{atoms}}\)</span> is the number of atoms in that structure</p></li>
+</ul>
+<p>This mode corresponds to equilibrium with elemental reservoirs.</p>
+</section>
+<section id="oxide-reference-mode">
+<h3>Oxide reference mode<a class="headerlink" href="#oxide-reference-mode" title="Link to this heading"></a></h3>
+<p>In oxide mode, dopant chemical potentials are derived from oxide reference
+phases together with the oxygen chemical potential.</p>
+<p>For a binary oxide <span class="math notranslate nohighlight">\(M_xO_y\)</span>, the chemical potential satisfies:</p>
+<div class="math notranslate nohighlight">
+\[x\mu_M + y\mu_O = E_{M_xO_y}\]</div>
+<p>which gives:</p>
+<div class="math notranslate nohighlight">
+\[\mu_M = \frac{E_{M_xO_y} - y\mu_O}{x}\]</div>
+<p>The oxygen chemical potential is obtained from the gas reference
+(typically <span class="math notranslate nohighlight">\(O_2\)</span>):</p>
+<div class="math notranslate nohighlight">
+\[\mu_O = \frac{1}{2}E_{O_2} + \Delta\mu_O\]</div>
+<p>where:</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(E_{O_2}\)</span> is the relaxed total energy of the oxygen molecule</p></li>
+<li><p><span class="math notranslate nohighlight">\(\Delta\mu_O\)</span> is the optional shift defined by <code class="docutils literal notranslate"><span class="pre">muO_shift_ev</span></code></p></li>
+</ul>
+<p>The setting <code class="docutils literal notranslate"><span class="pre">oxygen_mode</span></code> is stored for traceability.
+For example, <code class="docutils literal notranslate"><span class="pre">O-rich</span></code> usually corresponds to:</p>
+<div class="math notranslate nohighlight">
+\[\Delta\mu_O = 0\]</div>
+<p>while more oxygen-poor conditions may be represented by a negative shift.</p>
+</section>
+</section>
+<section id="method-summary">
+<h2>Method Summary<a class="headerlink" href="#method-summary" title="Link to this heading"></a></h2>
+<ol class="arabic simple">
+<li><p>Read the host oxide unit-cell structure</p></li>
+<li><p>Relax the host unit cell</p></li>
+<li><p>Build and relax the host supercell</p></li>
+<li><p>Determine the selected reference mode</p></li>
+</ol>
+<dl class="simple">
+<dt>Metal mode:</dt><dd><ol class="loweralpha simple">
+<li><p>Relax elemental metal references</p></li>
+<li><p>Compute per-atom elemental chemical potentials</p></li>
+</ol>
+</dd>
+<dt>Oxide mode:</dt><dd><ol class="loweralpha simple">
+<li><p>Relax oxide reference structures</p></li>
+<li><p>Relax the oxygen gas reference</p></li>
+<li><p>Compute <span class="math notranslate nohighlight">\(\mu_O\)</span></p></li>
+<li><p>Derive cation chemical potentials from oxide thermodynamics</p></li>
+</ol>
+</dd>
+</dl>
+<ol class="arabic simple" start="5">
+<li><p>Write all results and metadata to <code class="docutils literal notranslate"><span class="pre">reference_energies.json</span></code></p></li>
+</ol>
+</section>
+<section id="formation-energy-framework">
+<h2>Formation Energy Framework<a class="headerlink" href="#formation-energy-framework" title="Link to this heading"></a></h2>
+<p>The workflow assumes substitutional doping on host sites.</p>
+<p>The formation energy is defined as:</p>
+<div class="math notranslate nohighlight">
+\[E_{\mathrm{form}} =
+E_{\mathrm{doped}}
+- E_{\mathrm{pristine}}
++ \sum_i n_i \left( \mu_{\mathrm{host}} - \mu_i \right)\]</div>
+<p>where:</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(E_{\mathrm{doped}}\)</span> is the relaxed total energy of the doped supercell</p></li>
+<li><p><span class="math notranslate nohighlight">\(E_{\mathrm{pristine}}\)</span> is the relaxed total energy of the pristine host supercell</p></li>
+<li><p><span class="math notranslate nohighlight">\(\mu_i\)</span> is the chemical potential of dopant species <span class="math notranslate nohighlight">\(i\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(\mu_{\mathrm{host}}\)</span> is the chemical potential of the substituted host species</p></li>
+<li><p><span class="math notranslate nohighlight">\(n_i\)</span> is the number of substituted atoms of species <span class="math notranslate nohighlight">\(i\)</span></p></li>
+</ul>
+<p>This corresponds to removing host atoms and inserting dopant atoms while
+keeping the total lattice size fixed.</p>
+<p>The same formal expression is used in both reference modes; only the way
+the chemical potentials are constructed differs.</p>
+</section>
+<section id="host-reference-energy">
+<h2>Host Reference Energy<a class="headerlink" href="#host-reference-energy" title="Link to this heading"></a></h2>
+<p>The pristine host reference energy is computed by:</p>
+<ol class="arabic simple">
+<li><p>Reading the host oxide unit cell</p></li>
+<li><p>Relaxing the unit cell</p></li>
+<li><p>Building the requested supercell</p></li>
+<li><p>Relaxing the supercell</p></li>
+<li><p>Extracting the final total energy</p></li>
+</ol>
+<p>The relaxed host supercell is reused by later workflow stages as the
+starting point for structure generation.</p>
+<p>Both atomic positions and lattice vectors are allowed to relax.</p>
+</section>
+<section id="metal-chemical-potentials">
+<h2>Metal Chemical Potentials<a class="headerlink" href="#metal-chemical-potentials" title="Link to this heading"></a></h2>
+<p>For each relevant elemental reference phase, the workflow computes:</p>
+<div class="math notranslate nohighlight">
+\[\mu_i = \frac{E_{\mathrm{metal}}}{N_{\mathrm{atoms}}}\]</div>
+<p>These values are used directly in formation-energy evaluation when
+<code class="docutils literal notranslate"><span class="pre">reference_mode</span> <span class="pre">=</span> <span class="pre">&quot;metal&quot;</span></code>.</p>
+</section>
+<section id="oxide-derived-chemical-potentials">
+<h2>Oxide-Derived Chemical Potentials<a class="headerlink" href="#oxide-derived-chemical-potentials" title="Link to this heading"></a></h2>
+<p>When <code class="docutils literal notranslate"><span class="pre">reference_mode</span> <span class="pre">=</span> <span class="pre">&quot;oxide&quot;</span></code>, the workflow stores relaxed oxide
+reference energies and the oxygen gas reference energy.</p>
+<p>The oxygen chemical potential is computed from the gas reference and
+the optional oxygen shift. The cation chemical potentials are then
+derived from the oxide stoichiometry.</p>
+<p>For a reduced oxide composition <span class="math notranslate nohighlight">\(M_xO_y\)</span>:</p>
+<div class="math notranslate nohighlight">
+\[\mu_M = \frac{E_{M_xO_y}^{\mathrm{(f.u.)}} - y\mu_O}{x}\]</div>
+<p>where <span class="math notranslate nohighlight">\(E_{M_xO_y}^{\mathrm{(f.u.)}}\)</span> is the relaxed energy per
+formula unit of the oxide reference.</p>
+</section>
+<section id="relaxation-method">
+<h2>Relaxation Method<a class="headerlink" href="#relaxation-method" title="Link to this heading"></a></h2>
+<p>All reference relaxations use:</p>
+<ul class="simple">
+<li><p>a selected ML interatomic potential backend</p></li>
+<li><p>an ASE-compatible calculator</p></li>
+<li><p>a user-selected ASE optimizer</p></li>
+<li><p>a force-based convergence criterion defined by <code class="docutils literal notranslate"><span class="pre">fmax</span></code></p></li>
+</ul>
+<p>The maximum number of optimization steps is controlled by <code class="docutils literal notranslate"><span class="pre">max_steps</span></code>.</p>
+<p>The backend is selected through:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">backend</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">model</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">task</span></code> (used only for UMA)</p></li>
+</ul>
+<p>The runtime environment is controlled through:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">device</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">gpu_id</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tf_threads</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">omp_threads</span></code></p></li>
+</ul>
+<p>The relaxations are fully unconstrained
+(cell parameters and atomic positions).</p>
+</section>
+<section id="caching-strategy">
+<h2>Caching Strategy<a class="headerlink" href="#caching-strategy" title="Link to this heading"></a></h2>
+<p>If:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">skip_if_done</span> <span class="o">=</span> <span class="n">true</span>
+</pre></div>
+</div>
+<p>and <code class="docutils literal notranslate"><span class="pre">reference_energies.json</span></code> already exists, this stage is skipped.</p>
+<p>This ensures deterministic behavior and avoids unnecessary recomputation.</p>
+</section>
+<section id="outputs">
+<h2>Outputs<a class="headerlink" href="#outputs" title="Link to this heading"></a></h2>
+<p>The file <code class="docutils literal notranslate"><span class="pre">reference_energies.json</span></code> contains metadata and energies needed
+for later stages.</p>
+<p>Typical top-level fields include:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">timestamp</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">reference_mode</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">backend</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">model</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">task</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">optimizer</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">device</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">gpu_id</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">host</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">references</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">oxide_mode</span></code> (only relevant in oxide mode)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">supercell</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">config_path</span></code></p></li>
+</ul>
+<p>The <code class="docutils literal notranslate"><span class="pre">host</span></code> block typically contains:</p>
+<ul class="simple">
+<li><p>host formula</p></li>
+<li><p>source POSCAR path</p></li>
+<li><p>relaxed unit-cell POSCAR path</p></li>
+<li><p>relaxed supercell POSCAR path</p></li>
+<li><p>number of atoms in unit cell and supercell</p></li>
+<li><p>total and per-atom energies</p></li>
+<li><p>optimizer step counts</p></li>
+<li><p>final force values</p></li>
+<li><p>convergence status</p></li>
+</ul>
+<p>The <code class="docutils literal notranslate"><span class="pre">references</span></code> block contains one entry per relaxed reference phase,
+for example metals, oxides, or gas references.</p>
+<p>Each reference entry may include:</p>
+<ul class="simple">
+<li><p>source POSCAR path</p></li>
+<li><p>relaxed POSCAR path</p></li>
+<li><p>total energy</p></li>
+<li><p>per-atom energy</p></li>
+<li><p>per-formula-unit energy (when applicable)</p></li>
+<li><p>per-molecule energy for O₂ (when applicable)</p></li>
+<li><p>optimizer steps</p></li>
+<li><p>final force value</p></li>
+<li><p>convergence status</p></li>
+<li><p>wall time</p></li>
+<li><p>backend and optimizer metadata</p></li>
+</ul>
+<p>For oxide mode, the JSON also stores the oxygen reference settings such as:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">oxides_ref</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">gas_ref</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">oxygen_mode</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">muO_shift_ev</span></code></p></li>
+</ul>
+</section>
+<section id="notes-and-limitations">
+<h2>Notes and Limitations<a class="headerlink" href="#notes-and-limitations" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>This stage does not evaluate doped structures</p></li>
+<li><p>Energies are ML-predicted, not DFT total energies</p></li>
+<li><p>Reference phase selection strongly affects the resulting chemical potentials</p></li>
+<li><p>The workflow currently assumes substitutional doping</p></li>
+<li><p>Oxide-mode derivation assumes simple oxide reference chemistry</p></li>
+<li><p>No finite-size corrections are applied</p></li>
+<li><p>No charge-state corrections are included</p></li>
+<li><p>No entropy or temperature effects are considered</p></li>
+<li><p>No competing phase stability analysis is performed</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../input_file.html" class="btn btn-neutral float-left" title="Input File Specification (input.toml)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="generation.html" class="btn btn-neutral float-right" title="1. Structure Generation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
