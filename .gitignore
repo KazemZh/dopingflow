@@ -22,7 +22,10 @@ input.toml
 random_structures/
 reference_structures/
 database/
+generated_surfaces/
 *.csv
+scaling_test.dat
+Sb2*/
 
 # IDE
 .vscode/

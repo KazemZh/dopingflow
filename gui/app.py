@@ -5,6 +5,7 @@ import sys
 import subprocess
 import time
 from pathlib import Path
+import json
 
 import pandas as pd
 import streamlit as st
@@ -228,7 +229,20 @@ if tab == "Input Builder":
         st.session_state["cfg_edit"] = cfg_full
     cfg_edit = st.session_state["cfg_edit"]
     # ===== PATCH: ensure section dicts exist =====
-    for secname in ["hardware", "references", "structure", "doping", "generate", "scan", "relax", "filter", "bandgap", "formation", "database"]:
+    for secname in [
+        "hardware",
+        "references",
+        "structure",
+        "doping",
+        "generate",
+        "scan",
+        "relax",
+        "filter",
+        "bandgap",
+        "formation",
+        "database",
+        "surface",
+    ]:
         cfg_edit.setdefault(secname, {})
     # ===== END PATCH =====    
 
@@ -1945,6 +1959,682 @@ if tab == "Input Builder":
             st.info("**total**: raw formation energy of the doped supercell (in eV).")
             st.latex(r"E_{\mathrm{form}} \; [\mathrm{eV}]")
 
+    # -----------------------------
+    # SURFACE
+    # -----------------------------
+    with st.expander("Surface", expanded=False):
+        st.subheader("Surface generation and optional relaxation")
+
+        st.caption(
+            "Generates slabs from selected relaxed bulk candidates in results_database.csv. "
+            "You can choose the composition, candidate selection mode, surface orientations, "
+            "fixed layers, and optional slab relaxation."
+        )
+
+        cfg_edit.setdefault("surface", {})
+
+        # -----------------------------
+        # Candidate selection
+        # -----------------------------
+        st.divider()
+        st.subheader("Candidate selection")
+
+        colS1, colS2, colS3 = st.columns(3, vertical_alignment="bottom")
+
+        with colS1:
+            cfg_edit["surface"]["enabled"] = st.checkbox(
+                "Enable surface stage",
+                value=bool(cfg_edit["surface"].get("enabled", False)),
+                help="Enable surface generation and optional slab relaxation.",
+            )
+
+        with colS2:
+            cfg_edit["surface"]["source_summary"] = st.text_input(
+                "Source summary CSV",
+                value=str(cfg_edit["surface"].get("source_summary", "results_database.csv")),
+                help="CSV database used to select bulk candidates for slab generation.",
+            )
+
+        with colS3:
+            cfg_edit["surface"]["outdir"] = st.text_input(
+                "Surface output directory",
+                value=str(cfg_edit["surface"].get("outdir", "generated_surfaces")),
+                help="Root folder where generated surface slabs will be written.",
+            )
+
+        colS4, colS5, colS6 = st.columns(3, vertical_alignment="bottom")
+
+        with colS4:
+            cfg_edit["surface"]["composition_tag"] = st.text_input(
+                "composition_tag",
+                value=str(cfg_edit["surface"].get("composition_tag", "")),
+                help='Restrict to one composition tag, e.g. "Sb50".',
+            )
+
+        with colS5:
+            selection_mode_choices = ["id", "ids", "rank_range", "top_n", "filters"]
+            current_sel_mode = str(cfg_edit["surface"].get("selection_mode", "filters")).strip().lower()
+            if current_sel_mode not in selection_mode_choices:
+                current_sel_mode = "filters"
+
+            cfg_edit["surface"]["selection_mode"] = st.selectbox(
+                "selection_mode",
+                options=selection_mode_choices,
+                index=selection_mode_choices.index(current_sel_mode),
+                help="Selection mode applied inside the chosen composition subset.",
+                key="surface_selection_mode",
+            )
+
+        with colS6:
+            cfg_edit["surface"]["candidate_id"] = int(
+                st.number_input(
+                    "candidate_id",
+                    min_value=1,
+                    value=int(cfg_edit["surface"].get("candidate_id", 1)),
+                    step=1,
+                    help="Used when selection_mode = 'id'. candidate_id=1 means candidate_001.",
+                    key="surface_candidate_id",
+                )
+            )
+
+        surf_mode = cfg_edit["surface"]["selection_mode"]
+
+        if surf_mode == "ids":
+            ids_default = cfg_edit["surface"].get("candidate_ids", [])
+            ids_text = st.text_input(
+                "candidate_ids (comma-separated)",
+                value=",".join(str(x) for x in ids_default),
+                help="Used when selection_mode = 'ids'. Example: 1,2,3",
+                key="surface_candidate_ids",
+            )
+            try:
+                cfg_edit["surface"]["candidate_ids"] = [
+                    int(x.strip()) for x in ids_text.split(",") if x.strip()
+                ]
+            except Exception:
+                st.error("candidate_ids must be a comma-separated list of integers.")
+
+        elif surf_mode == "rank_range":
+            colR1, colR2 = st.columns(2)
+            with colR1:
+                cfg_edit["surface"]["rank_start"] = int(
+                    st.number_input(
+                        "rank_start",
+                        min_value=1,
+                        value=int(cfg_edit["surface"].get("rank_start", 1)),
+                        step=1,
+                        key="surface_rank_start",
+                    )
+                )
+            with colR2:
+                cfg_edit["surface"]["rank_end"] = int(
+                    st.number_input(
+                        "rank_end",
+                        min_value=1,
+                        value=int(cfg_edit["surface"].get("rank_end", 10)),
+                        step=1,
+                        key="surface_rank_end",
+                    )
+                )
+
+        elif surf_mode == "top_n":
+            cfg_edit["surface"]["top_n"] = int(
+                st.number_input(
+                    "top_n",
+                    min_value=1,
+                    value=int(cfg_edit["surface"].get("top_n", 5)),
+                    step=1,
+                    key="surface_top_n",
+                )
+            )
+
+        elif surf_mode == "filters":
+            colF1, colF2, colF3, colF4 = st.columns(4)
+            with colF1:
+                cfg_edit["surface"]["formation_energy_min"] = st.number_input(
+                    "formation_energy_min",
+                    value=float(cfg_edit["surface"].get("formation_energy_min", -1.0e9)),
+                    step=1.0,
+                    key="surface_form_min",
+                )
+            with colF2:
+                cfg_edit["surface"]["formation_energy_max"] = st.number_input(
+                    "formation_energy_max",
+                    value=float(cfg_edit["surface"].get("formation_energy_max", 1.0e9)),
+                    step=1.0,
+                    key="surface_form_max",
+                )
+            with colF3:
+                cfg_edit["surface"]["bandgap_min"] = st.number_input(
+                    "bandgap_min",
+                    value=float(cfg_edit["surface"].get("bandgap_min", -1.0e9)),
+                    step=0.1,
+                    key="surface_bg_min",
+                )
+            with colF4:
+                cfg_edit["surface"]["bandgap_max"] = st.number_input(
+                    "bandgap_max",
+                    value=float(cfg_edit["surface"].get("bandgap_max", 1.0e9)),
+                    step=0.1,
+                    key="surface_bg_max",
+                )
+
+        colS7, colS8 = st.columns(2)
+        with colS7:
+            cfg_edit["surface"]["max_candidates"] = int(
+                st.number_input(
+                    "max_candidates",
+                    min_value=1,
+                    value=int(cfg_edit["surface"].get("max_candidates", 20)),
+                    step=1,
+                    key="surface_max_candidates",
+                )
+            )
+        with colS8:
+            cfg_edit["surface"]["max_total_surfaces"] = int(
+                st.number_input(
+                    "max_total_surfaces",
+                    min_value=1,
+                    value=int(cfg_edit["surface"].get("max_total_surfaces", 200)),
+                    step=1,
+                    key="surface_max_total_surfaces",
+                )
+            )
+
+        # -----------------------------
+        # Orientation and slab construction
+        # -----------------------------
+        st.divider()
+        st.subheader("Surface orientations and slab construction")
+
+        colO1, colO2 = st.columns(2, vertical_alignment="bottom")
+
+        with colO1:
+            orientation_mode_choices = ["explicit", "automatic"]
+            current_orientation_mode = str(
+                cfg_edit["surface"].get("orientation_mode", "explicit")
+            ).strip().lower()
+            if current_orientation_mode not in orientation_mode_choices:
+                current_orientation_mode = "explicit"
+
+            cfg_edit["surface"]["orientation_mode"] = st.selectbox(
+                "orientation_mode",
+                options=orientation_mode_choices,
+                index=orientation_mode_choices.index(current_orientation_mode),
+                key="surface_orientation_mode",
+            )
+
+        with colO2:
+            termination_mode_choices = ["all", "first"]
+            current_term_mode = str(
+                cfg_edit["surface"].get("termination_mode", "all")
+            ).strip().lower()
+            if current_term_mode not in termination_mode_choices:
+                current_term_mode = "all"
+
+            cfg_edit["surface"]["termination_mode"] = st.selectbox(
+                "termination_mode",
+                options=termination_mode_choices,
+                index=termination_mode_choices.index(current_term_mode),
+                key="surface_termination_mode",
+            )
+
+        if cfg_edit["surface"]["orientation_mode"] == "explicit":
+            miller_default = cfg_edit["surface"].get("miller_list", [[1, 0, 0]])
+            miller_default_str = "; ".join(
+                ",".join(str(v) for v in triplet) for triplet in miller_default
+            )
+            miller_text = st.text_input(
+                "miller_list",
+                value=miller_default_str,
+                help='Enter Miller indices separated by ";" and values separated by commas. Example: 1,0,0; 1,1,0; 1,1,1',
+                key="surface_miller_list",
+            )
+
+            parsed_millers = []
+            try:
+                for part in miller_text.split(";"):
+                    part = part.strip()
+                    if not part:
+                        continue
+                    nums = [int(x.strip()) for x in part.split(",")]
+                    if len(nums) != 3:
+                        raise ValueError
+                    parsed_millers.append(nums)
+                if not parsed_millers:
+                    parsed_millers = [[1, 0, 0]]
+                cfg_edit["surface"]["miller_list"] = parsed_millers
+            except Exception:
+                st.error("miller_list must look like: 1,0,0; 1,1,0; 1,1,1")
+
+        else:
+            colA1, colA2 = st.columns(2)
+            with colA1:
+                cfg_edit["surface"]["max_miller"] = int(
+                    st.number_input(
+                        "max_miller",
+                        min_value=1,
+                        value=int(cfg_edit["surface"].get("max_miller", 1)),
+                        step=1,
+                        key="surface_max_miller",
+                    )
+                )
+            with colA2:
+                cfg_edit["surface"]["max_orientations"] = int(
+                    st.number_input(
+                        "max_orientations",
+                        min_value=1,
+                        value=int(cfg_edit["surface"].get("max_orientations", 6)),
+                        step=1,
+                        key="surface_max_orientations",
+                    )
+                )
+
+        colSC1, colSC2, colSC3 = st.columns(3)
+        with colSC1:
+            cfg_edit["surface"]["min_slab_size"] = st.number_input(
+                "min_slab_size",
+                min_value=0.1,
+                value=float(cfg_edit["surface"].get("min_slab_size", 12.0)),
+                step=0.5,
+                key="surface_min_slab",
+            )
+        with colSC2:
+            cfg_edit["surface"]["min_vacuum_size"] = st.number_input(
+                "min_vacuum_size",
+                min_value=0.1,
+                value=float(cfg_edit["surface"].get("min_vacuum_size", 15.0)),
+                step=0.5,
+                key="surface_min_vacuum",
+            )
+        with colSC3:
+            cfg_edit["surface"]["max_terminations_per_orientation"] = int(
+                st.number_input(
+                    "max_terminations_per_orientation",
+                    min_value=1,
+                    value=int(cfg_edit["surface"].get("max_terminations_per_orientation", 20)),
+                    step=1,
+                    key="surface_max_terms",
+                )
+            )
+
+        colSC4, colSC5, colSC6, colSC7, colSC8 = st.columns(5)
+        with colSC4:
+            cfg_edit["surface"]["center_slab"] = st.checkbox(
+                "center_slab",
+                value=bool(cfg_edit["surface"].get("center_slab", True)),
+                key="surface_center_slab",
+            )
+        with colSC5:
+            cfg_edit["surface"]["in_unit_planes"] = st.checkbox(
+                "in_unit_planes",
+                value=bool(cfg_edit["surface"].get("in_unit_planes", False)),
+                key="surface_in_unit_planes",
+            )
+        with colSC6:
+            cfg_edit["surface"]["lll_reduce"] = st.checkbox(
+                "lll_reduce",
+                value=bool(cfg_edit["surface"].get("lll_reduce", False)),
+                key="surface_lll_reduce",
+            )
+        with colSC7:
+            cfg_edit["surface"]["primitive"] = st.checkbox(
+                "primitive",
+                value=bool(cfg_edit["surface"].get("primitive", False)),
+                key="surface_primitive",
+            )
+        with colSC8:
+            cfg_edit["surface"]["reorient_lattice"] = st.checkbox(
+                "reorient_lattice",
+                value=bool(cfg_edit["surface"].get("reorient_lattice", True)),
+                key="surface_reorient",
+            )
+
+        cfg_edit["surface"]["orthogonal_c"] = st.checkbox(
+            "orthogonal_c",
+            value=bool(cfg_edit["surface"].get("orthogonal_c", True)),
+            help="Enforce c perpendicular to the surface plane.",
+            key="surface_orthogonal_c",
+        )
+
+        # -----------------------------
+        # Fixed atoms
+        # -----------------------------
+        st.divider()
+        st.subheader("Fixed atoms")
+
+        colFX1, colFX2, colFX3 = st.columns(3)
+
+        with colFX1:
+            cfg_edit["surface"]["fix_atoms"] = st.checkbox(
+                "fix_atoms",
+                value=bool(cfg_edit["surface"].get("fix_atoms", False)),
+                key="surface_fix_atoms",
+            )
+
+        with colFX2:
+            fix_region_choices = ["bottom", "middle"]
+            current_fix_region = str(cfg_edit["surface"].get("fix_region", "bottom")).lower()
+            if current_fix_region not in fix_region_choices:
+                current_fix_region = "bottom"
+
+            cfg_edit["surface"]["fix_region"] = st.selectbox(
+                "fix_region",
+                options=fix_region_choices,
+                index=fix_region_choices.index(current_fix_region),
+                key="surface_fix_region",
+            )
+
+        with colFX3:
+            fix_method_choices = ["layers", "thickness"]
+            current_fix_method = str(cfg_edit["surface"].get("fix_method", "layers")).lower()
+            if current_fix_method not in fix_method_choices:
+                current_fix_method = "layers"
+
+            cfg_edit["surface"]["fix_method"] = st.selectbox(
+                "fix_method",
+                options=fix_method_choices,
+                index=fix_method_choices.index(current_fix_method),
+                key="surface_fix_method",
+            )
+
+        if cfg_edit["surface"]["fix_method"] == "layers":
+            colFL1, colFL2 = st.columns(2)
+            with colFL1:
+                cfg_edit["surface"]["fix_n_layers"] = int(
+                    st.number_input(
+                        "fix_n_layers",
+                        min_value=0,
+                        value=int(cfg_edit["surface"].get("fix_n_layers", 2)),
+                        step=1,
+                        key="surface_fix_n_layers",
+                    )
+                )
+            with colFL2:
+                cfg_edit["surface"]["fix_layer_tolerance_A"] = st.number_input(
+                    "fix_layer_tolerance_A",
+                    min_value=0.01,
+                    value=float(cfg_edit["surface"].get("fix_layer_tolerance_A", 0.6)),
+                    step=0.05,
+                    key="surface_fix_layer_tol",
+                )
+        else:
+            cfg_edit["surface"]["fix_thickness_A"] = st.number_input(
+                "fix_thickness_A",
+                min_value=0.0,
+                value=float(cfg_edit["surface"].get("fix_thickness_A", 4.0)),
+                step=0.1,
+                key="surface_fix_thickness",
+            )
+
+        # -----------------------------
+        # Surface relaxation
+        # -----------------------------
+        st.divider()
+        st.subheader("Surface relaxation")
+
+        cfg_edit["surface"]["relax_surface"] = st.checkbox(
+            "relax_surface",
+            value=bool(cfg_edit["surface"].get("relax_surface", False)),
+            help="Relax generated slabs after writing the initial POSCAR.",
+            key="surface_relax_surface",
+        )
+
+        if cfg_edit["surface"]["relax_surface"]:
+            surface_backend_choices = ["m3gnet", "uma", "mace", "grace"]
+            current_surface_backend = str(
+                cfg_edit["surface"].get("surface_backend", "m3gnet")
+            ).strip().lower()
+            if current_surface_backend not in surface_backend_choices:
+                current_surface_backend = "m3gnet"
+
+            colRB1, colRB2 = st.columns(2)
+            with colRB1:
+                cfg_edit["surface"]["surface_backend"] = st.selectbox(
+                    "surface_backend",
+                    options=surface_backend_choices,
+                    index=surface_backend_choices.index(current_surface_backend),
+                    key="surface_backend",
+                )
+
+            surface_backend = cfg_edit["surface"]["surface_backend"]
+
+            uma_model_choices = ["uma-s-1p2", "uma-s-1p1", "uma-m-1p1"]
+            uma_task_choices = ["omat", "oc20", "oc22", "oc25", "omol", "odac", "omc"]
+            mace_model_choices = [
+                "small", "medium", "large",
+                "small-mpa-0", "medium-mpa-0", "large-mpa-0",
+                "small-omat-0", "medium-omat-0",
+            ]
+            grace_model_choices = [
+                "GRACE-1L-OMAT",
+                "GRACE-1L-OMAT-M-base",
+                "GRACE-1L-OMAT-M",
+                "GRACE-1L-OMAT-L-base",
+                "GRACE-1L-OMAT-L",
+                "GRACE-2L-OMAT",
+                "GRACE-2L-OMAT-M-base",
+                "GRACE-2L-OMAT-M",
+                "GRACE-2L-OMAT-L-base",
+                "GRACE-2L-OMAT-L",
+                "GRACE-1L-OAM",
+                "GRACE-1L-OAM-M",
+                "GRACE-1L-OAM-L",
+                "GRACE-2L-OAM",
+                "GRACE-2L-OAM-M",
+                "GRACE-2L-OAM-L",
+                "GRACE-1L-SMAX-L",
+                "GRACE-1L-SMAX-OMAT-L",
+                "GRACE-2L-SMAX-M",
+                "GRACE-2L-SMAX-L",
+                "GRACE-2L-SMAX-OMAT-M",
+                "GRACE-2L-SMAX-OMAT-L",
+            ]
+
+            colRB3, colRB4 = st.columns(2)
+
+            with colRB3:
+                if surface_backend == "m3gnet":
+                    cfg_edit["surface"]["surface_model"] = "default"
+                    st.text_input(
+                        "surface_model",
+                        value="default",
+                        disabled=True,
+                        key="surface_model_m3gnet_display",
+                    )
+                elif surface_backend == "uma":
+                    current_model = str(cfg_edit["surface"].get("surface_model", "uma-s-1p2")).strip()
+                    if current_model not in uma_model_choices:
+                        current_model = "uma-s-1p2"
+                    cfg_edit["surface"]["surface_model"] = st.selectbox(
+                        "surface_model",
+                        options=uma_model_choices,
+                        index=uma_model_choices.index(current_model),
+                        key="surface_model_uma",
+                    )
+                elif surface_backend == "mace":
+                    current_model = str(cfg_edit["surface"].get("surface_model", "small")).strip()
+                    if current_model not in mace_model_choices:
+                        current_model = "small"
+                    cfg_edit["surface"]["surface_model"] = st.selectbox(
+                        "surface_model",
+                        options=mace_model_choices,
+                        index=mace_model_choices.index(current_model),
+                        key="surface_model_mace",
+                    )
+                else:
+                    current_model = str(cfg_edit["surface"].get("surface_model", "GRACE-1L-OMAT")).strip()
+                    if current_model not in grace_model_choices:
+                        current_model = "GRACE-1L-OMAT"
+                    cfg_edit["surface"]["surface_model"] = st.selectbox(
+                        "surface_model",
+                        options=grace_model_choices,
+                        index=grace_model_choices.index(current_model),
+                        key="surface_model_grace",
+                    )
+
+            with colRB4:
+                if surface_backend == "uma":
+                    current_task = str(cfg_edit["surface"].get("surface_task", "omat")).strip()
+                    if current_task not in uma_task_choices:
+                        current_task = "omat"
+                    cfg_edit["surface"]["surface_task"] = st.selectbox(
+                        "surface_task",
+                        options=uma_task_choices,
+                        index=uma_task_choices.index(current_task),
+                        key="surface_task_uma",
+                    )
+                else:
+                    cfg_edit["surface"]["surface_task"] = ""
+                    st.text_input(
+                        "surface_task",
+                        value="not used for this backend",
+                        disabled=True,
+                        key="surface_task_unused_display",
+                    )
+
+            optimizer_choices = ["bfgs", "lbfgs", "fire", "mdmin", "quasinewton"]
+            current_surface_optimizer = str(
+                cfg_edit["surface"].get("surface_optimizer", "bfgs")
+            ).strip().lower()
+            if current_surface_optimizer not in optimizer_choices:
+                current_surface_optimizer = "bfgs"
+
+            colRO1, colRO2, colRO3 = st.columns(3)
+            with colRO1:
+                cfg_edit["surface"]["surface_optimizer"] = st.selectbox(
+                    "surface_optimizer",
+                    options=optimizer_choices,
+                    index=optimizer_choices.index(current_surface_optimizer),
+                    key="surface_optimizer",
+                )
+            with colRO2:
+                cfg_edit["surface"]["surface_fmax"] = st.number_input(
+                    "surface_fmax",
+                    min_value=0.0,
+                    value=float(cfg_edit["surface"].get("surface_fmax", 0.05)),
+                    step=0.01,
+                    key="surface_fmax",
+                )
+            with colRO3:
+                cfg_edit["surface"]["surface_max_steps"] = int(
+                    st.number_input(
+                        "surface_max_steps",
+                        min_value=1,
+                        value=int(cfg_edit["surface"].get("surface_max_steps", 300)),
+                        step=10,
+                        key="surface_max_steps",
+                    )
+                )
+
+            colRD1, colRD2, colRD3, colRD4 = st.columns(4)
+            with colRD1:
+                surface_device_choices = ["cpu", "cuda"]
+                current_surface_device = str(
+                    cfg_edit["surface"].get("surface_device", "cpu")
+                ).lower()
+                if current_surface_device not in surface_device_choices:
+                    current_surface_device = "cpu"
+                cfg_edit["surface"]["surface_device"] = st.selectbox(
+                    "surface_device",
+                    options=surface_device_choices,
+                    index=surface_device_choices.index(current_surface_device),
+                    key="surface_device",
+                )
+            with colRD2:
+                cfg_edit["surface"]["surface_gpu_id"] = int(
+                    st.number_input(
+                        "surface_gpu_id",
+                        min_value=0,
+                        value=int(cfg_edit["surface"].get("surface_gpu_id", 0)),
+                        step=1,
+                        key="surface_gpu_id",
+                    )
+                )
+            with colRD3:
+                cfg_edit["surface"]["surface_tf_threads"] = int(
+                    st.number_input(
+                        "surface_tf_threads",
+                        min_value=1,
+                        value=int(cfg_edit["surface"].get("surface_tf_threads", 1)),
+                        step=1,
+                        key="surface_tf_threads",
+                    )
+                )
+            with colRD4:
+                cfg_edit["surface"]["surface_omp_threads"] = int(
+                    st.number_input(
+                        "surface_omp_threads",
+                        min_value=1,
+                        value=int(cfg_edit["surface"].get("surface_omp_threads", 1)),
+                        step=1,
+                        key="surface_omp_threads",
+                    )
+                )
+
+            colRF1, colRF2, colRF3, colRF4 = st.columns(4)
+            with colRF1:
+                cfg_edit["surface"]["surface_relaxed_filename"] = st.text_input(
+                    "surface_relaxed_filename",
+                    value=str(cfg_edit["surface"].get("surface_relaxed_filename", "CONTCAR")),
+                    key="surface_relaxed_filename",
+                )
+            with colRF2:
+                cfg_edit["surface"]["surface_relax_log_filename"] = st.text_input(
+                    "surface_relax_log_filename",
+                    value=str(cfg_edit["surface"].get("surface_relax_log_filename", "surface_relax.log")),
+                    key="surface_relax_log_filename",
+                )
+            with colRF3:
+                cfg_edit["surface"]["surface_relax_traj_filename"] = st.text_input(
+                    "surface_relax_traj_filename",
+                    value=str(cfg_edit["surface"].get("surface_relax_traj_filename", "surface_relax.traj")),
+                    key="surface_relax_traj_filename",
+                )
+            with colRF4:
+                cfg_edit["surface"]["surface_relax_meta_filename"] = st.text_input(
+                    "surface_relax_meta_filename",
+                    value=str(cfg_edit["surface"].get("surface_relax_meta_filename", "surface_relax.json")),
+                    key="surface_relax_meta_filename",
+                )
+
+        # -----------------------------
+        # Output switches
+        # -----------------------------
+        st.divider()
+        st.subheader("Output switches")
+
+        colSW1, colSW2, colSW3 = st.columns(3)
+        with colSW1:
+            cfg_edit["surface"]["write_poscar"] = st.checkbox(
+                "write_poscar",
+                value=bool(cfg_edit["surface"].get("write_poscar", True)),
+                key="surface_write_poscar",
+            )
+        with colSW2:
+            cfg_edit["surface"]["write_cif"] = st.checkbox(
+                "write_cif",
+                value=bool(cfg_edit["surface"].get("write_cif", False)),
+                key="surface_write_cif",
+            )
+        with colSW3:
+            cfg_edit["surface"]["write_metadata_json"] = st.checkbox(
+                "write_metadata_json",
+                value=bool(cfg_edit["surface"].get("write_metadata_json", True)),
+                key="surface_write_metadata_json",
+            )
+
+        cfg_edit["surface"]["summary_csv"] = st.text_input(
+            "summary_csv",
+            value=str(cfg_edit["surface"].get("summary_csv", "surface_summary.csv")),
+            key="surface_summary_csv",
+        )
+
+
+    # -------------------------
+    # Save Input File
+    # -------------------------
+
     st.divider()
     st.subheader("Save input.toml")
 
@@ -1981,7 +2671,9 @@ elif tab == "Run":
 **Config file:** `{input_toml_path}`
 """)
 
-    STEP_KEYS = ["refs", "generate", "scan", "relax", "filter", "bandgap", "formation", "collect"]
+    # Surface is a separate CLI command, not part of run-all
+    BULK_STEP_KEYS = ["refs", "generate", "scan", "relax", "filter", "bandgap", "formation", "collect"]
+    STEP_KEYS = BULK_STEP_KEYS + ["surface"]
 
     st.divider()
 
@@ -1995,19 +2687,19 @@ elif tab == "Run":
         options=["Full workflow", "Stage range", "Single stage"],
         horizontal=True,
         help=(
-            "Full workflow runs everything. "
+            "Full workflow runs the bulk pipeline. "
             "Stage range runs from a start stage to an end stage. "
-            "Single stage runs exactly one chosen stage."
+            "Single stage runs exactly one chosen stage, including surface."
         ),
     )
 
     # Defaults
     step_from = "refs"
     step_until = "collect"
-    only_steps = []
+    only_steps: list[str] = []
 
     if run_mode == "Full workflow":
-        st.success("Will run: refs → collect (all stages).")
+        st.success("Will run: refs → collect (bulk workflow).")
         step_from, step_until = "refs", "collect"
 
     elif run_mode == "Stage range":
@@ -2015,10 +2707,13 @@ elif tab == "Run":
         with colA:
             step_from = st.selectbox("Start stage", options=STEP_KEYS, index=0)
         with colB:
-            step_until = st.selectbox("End stage", options=STEP_KEYS, index=len(STEP_KEYS) - 1)
+            step_until = st.selectbox("End stage", options=STEP_KEYS, index=len(STEP_KEYS) - 2)  # collect by default
 
-        # Optional: warn if user chose an invalid order
-        if STEP_KEYS.index(step_from) > STEP_KEYS.index(step_until):
+        # Allow "surface" to appear only as a conceptual end stage in the UI
+        idx_from = STEP_KEYS.index(step_from)
+        idx_until = STEP_KEYS.index(step_until)
+
+        if idx_from > idx_until:
             st.error("Start stage must be before (or equal to) End stage.")
             st.stop()
 
@@ -2026,7 +2721,7 @@ elif tab == "Run":
 
     else:  # Single stage
         single = st.selectbox("Stage", options=STEP_KEYS, index=0)
-        only_steps = [single]  # will use --only
+        only_steps = [single]
         step_from, step_until = "refs", "collect"  # range irrelevant when using --only
         st.info(f"Will run only: **{single}**")
 
@@ -2043,54 +2738,125 @@ elif tab == "Run":
     with col2:
         verbose = st.checkbox("Verbose logging", value=False)
 
-    # Advanced controls (keep clean)
+    # Advanced controls
     with st.expander("Advanced controls", expanded=False):
         st.markdown("### Filter overrides (only relevant if filter runs)")
-        filter_only = st.text_input("Filter only one composition (optional)", value="", placeholder="e.g. Sb5_Zr5")
+        filter_only = st.text_input(
+            "Filter only one composition (optional)",
+            value="",
+            placeholder="e.g. Sb5_Zr5"
+        )
         force = st.checkbox("Force recomputation (ignore existing outputs)", value=False)
 
         colF1, colF2 = st.columns(2)
         with colF1:
-            window_mev = st.number_input("Energy window override (meV)", min_value=0.0, value=0.0, step=10.0)
+            window_mev = st.number_input(
+                "Energy window override (meV)",
+                min_value=0.0,
+                value=0.0,
+                step=10.0
+            )
         with colF2:
-            topn = st.number_input("Top-N override", min_value=0, value=0, step=1)
+            topn = st.number_input(
+                "Top-N override",
+                min_value=0,
+                value=0,
+                step=1
+            )
 
-        # If run_mode is Stage range, you may still want to let user specify --only subset
-        # (optional; you can remove this if you want strict simplicity)
+        # Optional subset selection for stage-range mode
         if run_mode == "Stage range":
             extra_only = st.multiselect(
                 "Run only selected stages (optional)",
                 options=STEP_KEYS,
                 default=[],
-                help="If set, overrides the stage range and runs only these stages.",
+                help=(
+                    "If set, only these stages are run. "
+                    "If 'surface' is included, it will run as a separate command after the bulk stages."
+                ),
             )
             if extra_only:
                 only_steps = extra_only
 
     # -------------------------
-    # Build command
+    # Build command(s)
     # -------------------------
-    cmd = ["dopingflow", "run-all", "-c", str(input_toml_path), "--from", step_from, "--until", step_until]
+    run_surface_after = False
+    surface_cmd: list[str] | None = None
 
-    if only_steps:
-        cmd += ["--only", ",".join(only_steps)]
+    if run_mode == "Single stage" and only_steps == ["surface"]:
+        cmd = ["dopingflow", "surface", "-c", str(input_toml_path)]
+        if verbose:
+            cmd += ["--verbose"]
 
-    if dry_run:
-        cmd += ["--dry-run"]
-    if verbose:
-        cmd += ["--verbose"]
+    else:
+        requested_only = only_steps[:] if only_steps else []
 
-    if filter_only.strip():
-        cmd += ["--filter-only", filter_only.strip()]
-    if force:
-        cmd += ["--force"]
-    if window_mev > 0:
-        cmd += ["--window-mev", str(float(window_mev))]
-    if topn > 0:
-        cmd += ["--topn", str(int(topn))]
+        # If surface is requested alongside bulk stages, run it afterward
+        if "surface" in requested_only:
+            run_surface_after = True
+            requested_only = [s for s in requested_only if s != "surface"]
 
+        # Handle range mode if user selected surface as from/until
+        if step_from == "surface" or step_until == "surface":
+            st.warning(
+                "The surface stage is executed separately from run-all. "
+                "Bulk stages will run first, then the surface stage can run afterward."
+            )
+
+        # Keep run-all limited to bulk stages
+        effective_from = step_from if step_from in BULK_STEP_KEYS else "refs"
+        effective_until = step_until if step_until in BULK_STEP_KEYS else "collect"
+
+        cmd = [
+            "dopingflow", "run-all",
+            "-c", str(input_toml_path),
+            "--from", effective_from,
+            "--until", effective_until,
+        ]
+
+        if requested_only:
+            # Only pass bulk stages to --only
+            requested_only_bulk = [s for s in requested_only if s in BULK_STEP_KEYS]
+            if requested_only_bulk:
+                cmd += ["--only", ",".join(requested_only_bulk)]
+
+        if dry_run:
+            cmd += ["--dry-run"]
+        if verbose:
+            cmd += ["--verbose"]
+
+        if filter_only.strip():
+            cmd += ["--filter-only", filter_only.strip()]
+        if force:
+            cmd += ["--force"]
+        if window_mev > 0:
+            cmd += ["--window-mev", str(float(window_mev))]
+        if topn > 0:
+            cmd += ["--topn", str(int(topn))]
+
+        if run_surface_after:
+            surface_cmd = ["dopingflow", "surface", "-c", str(input_toml_path)]
+            if verbose:
+                surface_cmd += ["--verbose"]
+
+        # Special handling: if stage range is only "surface" conceptually
+        if run_mode == "Stage range" and step_from == "surface" and step_until == "surface":
+            cmd = ["dopingflow", "surface", "-c", str(input_toml_path)]
+            if verbose:
+                cmd += ["--verbose"]
+            run_surface_after = False
+            surface_cmd = None
+
+    # -------------------------
+    # Command preview
+    # -------------------------
     st.subheader("Command preview")
-    st.code(" ".join(cmd))
+
+    if surface_cmd is not None and cmd[1] != "surface":
+        st.code(" ".join(cmd) + "\n" + " ".join(surface_cmd))
+    else:
+        st.code(" ".join(cmd))
 
     # -------------------------
     # Run + Log
@@ -2098,10 +2864,16 @@ elif tab == "Run":
     log_path = project_root / "logs" / "gui_run.log"
 
     col_run, col_refresh = st.columns([1, 1])
+
     with col_run:
         if st.button("▶ Run", use_container_width=True):
             with st.spinner("Running workflow..."):
                 rc = run_command(cmd, cwd=project_root, log_path=log_path)
+
+                # Run surface afterward only if bulk run succeeded, not a dry-run, and surface was requested
+                if rc == 0 and run_surface_after and surface_cmd is not None and not dry_run:
+                    rc = run_command(surface_cmd, cwd=project_root, log_path=log_path)
+
             if rc == 0:
                 st.success("Workflow finished successfully.")
             else:
@@ -2119,15 +2891,10 @@ elif tab == "Run":
 # Page: Results Explorer
 # -----------------------
 elif tab == "Results Explorer":
-    from pathlib import Path
-    from datetime import datetime
-    import json
-
+    from datetime import datetime    
     import numpy as np
-    import pandas as pd
     import plotly.express as px
     import plotly.io as pio
-    import streamlit as st
 
     st.title("Results Explorer")
 
@@ -2214,17 +2981,13 @@ elif tab == "Results Explorer":
     )
 
     # ============================================================
-    # Dopant parsing (based on your CSV)
+    # Dopant parsing (only if available)
     # ============================================================
     st.divider()
-    st.subheader("Dopant-set plot studio (correct filtering + full hover)")
 
     has_json = "dopant_counts_json" in df_f.columns
     has_str = "dopant_counts" in df_f.columns
-
-    if not (has_json or has_str):
-        st.error("CSV must contain `dopant_counts_json` or `dopant_counts`.")
-        st.stop()
+    has_dopant_data = has_json or has_str
 
     def parse_dopants_from_counts_json(s) -> dict:
         """
@@ -2236,7 +2999,6 @@ elif tab == "Results Explorer":
         try:
             d = json.loads(str(s))
             if isinstance(d, dict):
-                # keep only positive counts
                 out = {}
                 for k, v in d.items():
                     try:
@@ -2266,7 +3028,6 @@ elif tab == "Results Explorer":
             if not part:
                 continue
             if ":" not in part:
-                # if someone writes "Sb" only
                 out[part] = max(out.get(part, 0), 1)
                 continue
             el, cnt = part.split(":", 1)
@@ -2282,7 +3043,7 @@ elif tab == "Results Explorer":
     def dopant_sig_from_dict(d: dict) -> str:
         keys = sorted(d.keys())
         return "+".join(keys) if keys else "Undoped"
-    
+
     def to_float_or_none(value):
         try:
             value = str(value).strip()
@@ -2290,103 +3051,100 @@ elif tab == "Results Explorer":
                 return None
             return float(value)
         except Exception:
-            return None    
+            return None
 
-    # Build parsing columns (JSON-safe strings only)
-    dfp = df_f.copy()
+    if has_dopant_data:
+        st.subheader("Dopant-set plot studio (correct filtering + full hover)")
 
-    if has_json:
-        dfp["_dopant_dict"] = dfp["dopant_counts_json"].apply(parse_dopants_from_counts_json)
-        # fallback to dopant_counts if json empty
-        if has_str:
-            mask_empty = dfp["_dopant_dict"].apply(lambda d: len(d) == 0)
-            dfp.loc[mask_empty, "_dopant_dict"] = dfp.loc[mask_empty, "dopant_counts"].apply(parse_dopants_from_counts_str)
+        # Build parsing columns
+        dfp = df_f.copy()
+
+        if has_json:
+            dfp["_dopant_dict"] = dfp["dopant_counts_json"].apply(parse_dopants_from_counts_json)
+            if has_str:
+                mask_empty = dfp["_dopant_dict"].apply(lambda d: len(d) == 0)
+                dfp.loc[mask_empty, "_dopant_dict"] = dfp.loc[mask_empty, "dopant_counts"].apply(parse_dopants_from_counts_str)
+        else:
+            dfp["_dopant_dict"] = dfp["dopant_counts"].apply(parse_dopants_from_counts_str)
+
+        dfp["dopant_sig"] = dfp["_dopant_dict"].apply(dopant_sig_from_dict)
+        dfp["n_dopants"] = dfp["_dopant_dict"].apply(lambda d: len(d.keys()))
+        dfp["dopant_list_str"] = dfp["_dopant_dict"].apply(lambda d: ", ".join(sorted(d.keys())) if d else "Undoped")
+
+        all_elements = sorted({el for d in dfp["_dopant_dict"].values for el in d.keys()})
+
+        st.markdown("### Select structures")
+
+        selected_classes = st.multiselect(
+            "Dopant count class",
+            options=["0 (undoped)", "1 (single)", "2 (double)", "3 (triple)", "4+ (>=4)"],
+            default=["1 (single)", "2 (double)", "3 (triple)"],
+        )
+
+        required = set(
+            st.multiselect(
+                "Required dopants (optional)",
+                options=all_elements,
+                default=[],
+                help=(
+                    "Rules:\n"
+                    "- For 1/2 dopants: EXACT match (only these dopants)\n"
+                    "- For >=3 dopants: CONTAINS (must include these, plus others allowed)\n"
+                    "- Leave empty: show ALL structures in the selected dopant-count class(es)"
+                ),
+            )
+        )
+
+        excluded = set(
+            st.multiselect(
+                "Exclude dopants (optional)",
+                options=all_elements,
+                default=[],
+            )
+        )
+
+        def class_selected(n: int) -> bool:
+            if n == 0:
+                return "0 (undoped)" in selected_classes
+            if n == 1:
+                return "1 (single)" in selected_classes
+            if n == 2:
+                return "2 (double)" in selected_classes
+            if n == 3:
+                return "3 (triple)" in selected_classes
+            return "4+ (>=4)" in selected_classes
+
+        def keep_row(d: dict, n: int) -> bool:
+            ds = set(d.keys())
+
+            if not class_selected(n):
+                return False
+
+            if excluded and (ds & excluded):
+                return False
+
+            if not required:
+                return True
+
+            if n in (1, 2):
+                return ds == required
+
+            if n >= 3:
+                return required.issubset(ds)
+
+            return False
+
+        plot_df = dfp[dfp.apply(lambda r: keep_row(r["_dopant_dict"], int(r["n_dopants"])), axis=1)].copy()
+
+        st.caption(f"Selected structures: **{len(plot_df):,}**")
+        if plot_df.empty:
+            st.warning("No matching structures.")
+            st.stop()
+
     else:
-        dfp["_dopant_dict"] = dfp["dopant_counts"].apply(parse_dopants_from_counts_str)
-
-    dfp["dopant_sig"] = dfp["_dopant_dict"].apply(dopant_sig_from_dict)
-    dfp["n_dopants"] = dfp["_dopant_dict"].apply(lambda d: len(d.keys()))
-    dfp["dopant_list_str"] = dfp["_dopant_dict"].apply(lambda d: ", ".join(sorted(d.keys())) if d else "Undoped")
-
-    # Universe of dopants
-    all_elements = sorted({el for d in dfp["_dopant_dict"].values for el in d.keys()})
-
-    # ============================================================
-    # Correct filtering UI
-    # ============================================================
-    st.markdown("### Select structures")
-
-    selected_classes = st.multiselect(
-        "Dopant count class",
-        options=["0 (undoped)", "1 (single)", "2 (double)", "3 (triple)", "4+ (>=4)"],
-        default=["1 (single)", "2 (double)", "3 (triple)"],
-    )
-
-    required = set(
-        st.multiselect(
-            "Required dopants (optional)",
-            options=all_elements,
-            default=[],
-            help=(
-                "Rules:\n"
-                "- For 1/2 dopants: EXACT match (only these dopants)\n"
-                "- For >=3 dopants: CONTAINS (must include these, plus others allowed)\n"
-                "- Leave empty: show ALL structures in the selected dopant-count class(es)"
-            ),
-        )
-    )
-
-    excluded = set(
-        st.multiselect(
-            "Exclude dopants (optional)",
-            options=all_elements,
-            default=[],
-        )
-    )
-
-    def class_selected(n: int) -> bool:
-        if n == 0:
-            return "0 (undoped)" in selected_classes
-        if n == 1:
-            return "1 (single)" in selected_classes
-        if n == 2:
-            return "2 (double)" in selected_classes
-        if n == 3:
-            return "3 (triple)" in selected_classes
-        return "4+ (>=4)" in selected_classes
-
-    def keep_row(d: dict, n: int) -> bool:
-        ds = set(d.keys())
-
-        # class
-        if not class_selected(n):
-            return False
-
-        # exclude always
-        if excluded and (ds & excluded):
-            return False
-
-        # no required -> keep all in class
-        if not required:
-            return True
-
-        # exact for 1/2
-        if n in (1, 2):
-            return ds == required
-
-        # contains for >=3
-        if n >= 3:
-            return required.issubset(ds)
-
-        # undoped only if required empty (handled)
-        return False
-
-    df_sel = dfp[dfp.apply(lambda r: keep_row(r["_dopant_dict"], int(r["n_dopants"])), axis=1)].copy()
-
-    st.caption(f"Selected structures: **{len(df_sel):,}**")
-    if df_sel.empty:
-        st.warning("No matching structures.")
-        st.stop()
+        st.subheader("Generic plot studio")
+        st.info("This dataset does not contain dopant_counts_json or dopant_counts. Using generic plotting mode.")
+        plot_df = df_f.copy()
 
     # ============================================================
     # Plot builder with FULL hover
@@ -2394,7 +3152,7 @@ elif tab == "Results Explorer":
     st.divider()
     st.subheader("Plot")
 
-    numeric_cols_sel = [c for c in df_sel.columns if pd.api.types.is_numeric_dtype(df_sel[c])]
+    numeric_cols_sel = [c for c in plot_df.columns if pd.api.types.is_numeric_dtype(plot_df[c])]
     if not numeric_cols_sel:
         st.error("No numeric columns available to plot.")
         st.stop()
@@ -2405,8 +3163,13 @@ elif tab == "Results Explorer":
     with col2:
         y_col = st.selectbox("Y axis", options=numeric_cols_sel, index=min(1, len(numeric_cols_sel) - 1))
     with col3:
-        color_by = st.selectbox("Color by", options=["dopant_sig", "n_dopants"] + [c for c in df_sel.columns if c not in numeric_cols_sel], index=0)
+        preferred_color_cols = [c for c in ["dopant_sig", "n_dopants", "composition_tag", "candidate", "surface_energy_status"] if c in plot_df.columns]
+        other_color_cols = [c for c in plot_df.columns if c not in numeric_cols_sel and c not in preferred_color_cols]
+        color_options = preferred_color_cols + other_color_cols
+        if not color_options:
+            color_options = ["(none)"]
 
+    color_by = st.selectbox("Color by", options=color_options, index=0)
     # Appearance
     with st.expander("Appearance & axes", expanded=True):
         cA, cB, cC = st.columns([1.2, 1, 1])
@@ -2427,17 +3190,35 @@ elif tab == "Results Explorer":
 
     # FULL hover: include all columns EXCEPT non-serializable/internal ones
     internal_cols = {"_dopant_dict"}  # <- dict is serializable, but can get large; keep it out of hover
-    hover_cols = [c for c in df_sel.columns.tolist() if c not in internal_cols]
+    hover_cols = [c for c in plot_df.columns.tolist() if c not in internal_cols]
 
-    fig = px.scatter(
-        df_sel,
-        x=x_col,
-        y=y_col,
-        color=color_by if color_by in df_sel.columns else "dopant_sig",
-        hover_name="candidate" if "candidate" in df_sel.columns else ("composition_tag" if "composition_tag" in df_sel.columns else None),
-        hover_data=hover_cols,  # ✅ everything safe
-        labels={x_col: x_col, y_col: y_col},
-    )
+    # Decide which column to use as hover title
+    hover_name_col = None
+    for c in ["candidate", "composition_tag"]:
+        if c in plot_df.columns:
+            hover_name_col = c
+            break
+
+    # Build scatter plot safely
+    if color_by == "(none)":
+        fig = px.scatter(
+            plot_df,
+            x=x_col,
+            y=y_col,
+            hover_name=hover_name_col,
+            hover_data=hover_cols,
+            labels={x_col: x_col, y_col: y_col},
+        )
+    else:
+        fig = px.scatter(
+            plot_df,
+            x=x_col,
+            y=y_col,
+            color=color_by,
+            hover_name=hover_name_col,
+            hover_data=hover_cols,
+            labels={x_col: x_col, y_col: y_col},
+        )
     fig.update_layout(template=template, height=700)
     fig.update_traces(opacity=float(opacity), marker=dict(size=12))
 
@@ -2509,50 +3290,276 @@ elif tab == "Results Explorer":
 # Page: Structure Viewer
 # -----------------------
 else:
+    import py3Dmol
+
+    from pymatgen.core import Structure
+    from pymatgen.io.cif import CifWriter
+
+    def show_structure(path, title=None, width=700, height=500, viewer_mode="bulk"):
+        """
+        Display a periodic structure with visible unit-cell boundaries.
+
+        Parameters
+        ----------
+        path : str or Path
+            Structure file path (POSCAR / CONTCAR / CIF / any pymatgen-readable file).
+        title : str, optional
+            Caption shown above the viewer.
+        width : int
+            Viewer width in pixels.
+        height : int
+            Viewer height in pixels.
+        viewer_mode : str
+            "bulk" or "surface". Currently used only for future extensibility.
+        """
+        try:
+            structure = Structure.from_file(str(path))
+        except Exception as e:
+            st.error(f"Failed to read structure file `{path}`: {e}")
+            return
+
+        try:
+            cif_str = str(CifWriter(structure))
+        except Exception as e:
+            st.error(f"Failed to convert structure to CIF for visualization: {e}")
+            return
+
+        try:
+            view = py3Dmol.view(width=width, height=height)
+            view.addModel(cif_str, "cif")
+
+            # Ball-stick style
+            view.setStyle(
+                {
+                    "sphere": {"scale": 0.32},
+                    "stick": {"radius": 0.14},
+                }
+            )
+
+            # Draw periodic cell boundaries
+            view.addUnitCell()
+
+            # Fit the structure nicely in the frame
+            view.zoomTo()
+
+            # White background
+            view.setBackgroundColor("white")
+
+            if title:
+                st.caption(title)
+
+            st.components.v1.html(view._make_html(), height=height, width=width)
+
+        except Exception as e:
+            st.error(f"Failed to render structure `{path}`: {e}")
+
     st.title("Structure Viewer (before/after)")
 
-    cfg_now = load_toml(input_toml_path)
-    outdir_now = cfg_now.get("structure", {}).get("outdir", "random_structures")
-    proj = ProjectIndex(root=project_root, outdir=project_root / outdir_now)
+    view_mode = st.radio(
+        "View mode",
+        options=["Bulk candidate", "Surface slab"],
+        horizontal=True,
+        help="Choose whether to inspect bulk workflow structures or generated surface slabs.",
+    )
 
-    comps = proj.compositions()
-    if not comps:
-        st.warning(f"No compositions found in `{proj.outdir}`.")
-        st.stop()
+    # ============================================================
+    # BULK VIEWER
+    # ============================================================
+    if view_mode == "Bulk candidate":
+        cfg_now = load_toml(input_toml_path)
+        outdir_now = cfg_now.get("structure", {}).get("outdir", "random_structures")
+        proj = ProjectIndex(root=project_root, outdir=project_root / outdir_now)
 
-    comp = st.selectbox("Composition", options=comps)
-    base = proj.composition_path(comp)
-
-    selected = proj.selected_candidates(comp)
-    if selected:
-        cand_name = st.selectbox("Candidate", options=selected)
-    else:
-        cand_dirs = sorted([p.name for p in base.glob("candidate_*") if p.is_dir()])
-        if not cand_dirs:
-            st.warning("No candidate folders found yet.")
+        comps = proj.compositions()
+        if not comps:
+            st.warning(f"No compositions found in `{proj.outdir}`.")
             st.stop()
-        cand_name = st.selectbox("Candidate", options=cand_dirs)
 
-    cand_dir = proj.find_candidate_dir(comp, cand_name)
-    if cand_dir is None:
-        st.error("Candidate folder not found.")
-        st.stop()
+        comp = st.selectbox("Composition", options=comps, key="bulk_comp")
+        base = proj.composition_path(comp)
 
-    files = proj.find_structure_files(cand_dir)
-    st.write({k: str(v) for k, v in files.items()})
-
-    colL, colR = st.columns(2)
-
-    with colL:
-        st.subheader("Before")
-        if "before" in files:
-            show_structure(files["before"], title=f"{comp} / {cand_name} — before")
+        selected = proj.selected_candidates(comp)
+        if selected:
+            cand_name = st.selectbox("Candidate", options=selected, key="bulk_cand")
         else:
-            st.info("No 'before' structure file found.")
+            cand_dirs = sorted([p.name for p in base.glob("candidate_*") if p.is_dir()])
+            if not cand_dirs:
+                st.warning("No candidate folders found yet.")
+                st.stop()
+            cand_name = st.selectbox(
+                "Candidate",
+                options=cand_dirs,
+                key="bulk_cand_fallback",
+            )
 
-    with colR:
-        st.subheader("After")
-        if "after" in files:
-            show_structure(files["after"], title=f"{comp} / {cand_name} — after")
-        else:
-            st.info("No 'after' structure file found.")
+        cand_dir = proj.find_candidate_dir(comp, cand_name)
+        if cand_dir is None:
+            st.error("Candidate folder not found.")
+            st.stop()
+
+        files = proj.find_structure_files(cand_dir)
+
+        with st.expander("Structure files", expanded=False):
+            st.json({k: str(v) for k, v in files.items()})
+
+        colL, colR = st.columns(2)
+
+        with colL:
+            st.subheader("Before")
+            if "before" in files:
+                show_structure(
+                    files["before"],
+                    title=f"{comp} / {cand_name} — before",
+                    viewer_mode="bulk",
+                    width=700,
+                    height=500,
+                )
+            else:
+                st.info("No 'before' structure file found.")
+
+        with colR:
+            st.subheader("After")
+            if "after" in files:
+                show_structure(
+                    files["after"],
+                    title=f"{comp} / {cand_name} — after",
+                    viewer_mode="bulk",
+                    width=700,
+                    height=500,
+                )
+            else:
+                st.info("No 'after' structure file found.")
+
+    # ============================================================
+    # SURFACE VIEWER
+    # ============================================================
+    else:
+        cfg_now = load_toml(input_toml_path)
+        surface_cfg = cfg_now.get("surface", {}) or {}
+
+        surface_outdir = surface_cfg.get("outdir", "generated_surfaces")
+        surface_root = (project_root / surface_outdir).resolve()
+
+        st.caption(f"Surface root: `{surface_root}`")
+
+        if not surface_root.exists():
+            st.warning(f"Surface output directory not found: `{surface_root}`")
+            st.stop()
+
+        # --------------------------------------------------------
+        # composition
+        # --------------------------------------------------------
+        surface_comps = sorted([p.name for p in surface_root.iterdir() if p.is_dir()])
+        if not surface_comps:
+            st.warning("No surface composition folders found.")
+            st.stop()
+
+        comp = st.selectbox("Surface composition", options=surface_comps, key="surf_comp")
+        comp_dir = surface_root / comp
+
+        # --------------------------------------------------------
+        # candidate
+        # --------------------------------------------------------
+        candidate_dirs = sorted([p.name for p in comp_dir.glob("candidate_*") if p.is_dir()])
+        if not candidate_dirs:
+            st.warning("No surface candidate folders found.")
+            st.stop()
+
+        cand_name = st.selectbox("Surface candidate", options=candidate_dirs, key="surf_cand")
+        cand_dir = comp_dir / cand_name
+
+        # --------------------------------------------------------
+        # orientation
+        # --------------------------------------------------------
+        hkl_dirs = sorted([p.name for p in cand_dir.glob("hkl_*") if p.is_dir()])
+        if not hkl_dirs:
+            st.warning("No surface orientation folders found.")
+            st.stop()
+
+        hkl_name = st.selectbox("Surface orientation", options=hkl_dirs, key="surf_hkl")
+        hkl_dir = cand_dir / hkl_name
+
+        # --------------------------------------------------------
+        # termination
+        # --------------------------------------------------------
+        term_dirs = sorted([p.name for p in hkl_dir.glob("term_*") if p.is_dir()])
+        if not term_dirs:
+            st.warning("No surface termination folders found.")
+            st.stop()
+
+        term_name = st.selectbox("Termination", options=term_dirs, key="surf_term")
+        term_dir = hkl_dir / term_name
+
+        # --------------------------------------------------------
+        # locate files
+        # --------------------------------------------------------
+        relaxed_name = str(surface_cfg.get("surface_relaxed_filename", "CONTCAR"))
+
+        before_path = term_dir / "POSCAR"
+        after_path = term_dir / relaxed_name
+
+        meta_path = term_dir / "meta.json"
+        relax_meta_path = term_dir / str(
+            surface_cfg.get("surface_relax_meta_filename", "surface_relax.json")
+        )
+
+        info_dict = {
+            "before": str(before_path) if before_path.exists() else None,
+            "after": str(after_path) if after_path.exists() else None,
+            "meta": str(meta_path) if meta_path.exists() else None,
+            "surface_relax_meta": str(relax_meta_path) if relax_meta_path.exists() else None,
+        }
+
+        with st.expander("Surface files", expanded=False):
+            st.json(info_dict)
+
+        # --------------------------------------------------------
+        # optional metadata preview
+        # --------------------------------------------------------
+        with st.expander("Metadata", expanded=False):
+            if meta_path.exists():
+                try:
+                    st.json(json.loads(meta_path.read_text(encoding="utf-8")))
+                except Exception as e:
+                    st.warning(f"Failed to read meta.json: {e}")
+            else:
+                st.info("No meta.json found.")
+
+            if relax_meta_path.exists():
+                try:
+                    st.json(json.loads(relax_meta_path.read_text(encoding="utf-8")))
+                except Exception as e:
+                    st.warning(f"Failed to read surface_relax.json: {e}")
+            else:
+                st.info("No surface_relax.json found.")
+
+        # --------------------------------------------------------
+        # visualization
+        # --------------------------------------------------------
+        colL, colR = st.columns(2)
+
+        with colL:
+            st.subheader("Before relaxation")
+            if before_path.exists():
+                show_structure(
+                    before_path,
+                    title=f"{comp} / {cand_name} / {hkl_name} / {term_name} — POSCAR",
+                    viewer_mode="surface",
+                    width=800,
+                    height=550,
+                )
+            else:
+                st.info("No initial slab POSCAR found.")
+
+        with colR:
+            st.subheader("After relaxation")
+            if after_path.exists():
+                show_structure(
+                    after_path,
+                    title=f"{comp} / {cand_name} / {hkl_name} / {term_name} — {relaxed_name}",
+                    viewer_mode="surface",
+                    width=800,
+                    height=550,
+                )
+            else:
+                st.info(f"No relaxed slab file found (`{relaxed_name}`).")

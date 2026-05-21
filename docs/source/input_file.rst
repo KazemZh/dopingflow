@@ -620,6 +620,8 @@ The following metadata is recorded:
 - energy_sp_eV
 - configuration details
 
+---------------------------------------------------------------------
+
 [relax]
 -------
 
@@ -1019,6 +1021,428 @@ skip_if_done (boolean, default: true)
 If true, do not overwrite existing ``results_database.csv``.
 
 ---------------------------------------------------------------------
+
+[surface]
+---------
+
+Step 08 — Surface generation and optional surface relaxation.
+
+This stage constructs slab models from selected relaxed bulk candidates
+and optionally relaxes those slabs using machine-learning interatomic potentials.
+
+The stage reads candidate data from a database file:
+
+::
+
+   results_database.csv
+
+For each selected candidate, the workflow loads the relaxed bulk structure from:
+
+::
+
+   candidate_*/02_relax/POSCAR
+
+and generates surface slabs for the requested orientations and terminations.
+
+Generated slabs are written to:
+
+::
+
+   [surface].outdir / composition_tag / candidate_### / hkl_* / term_*/
+
+If enabled, slab relaxation is performed using the same backend abstraction
+as in Step 03.
+
+Candidate Selection
+~~~~~~~~~~~~~~~~~~~
+
+Selection is performed in two stages:
+
+1. Restrict dataset by composition:
+
+   - ``composition_tag``
+   - or ``composition_tags``
+
+2. Apply ``selection_mode`` inside the selected composition subset.
+
+Available selection modes:
+
+- ``"id"``
+- ``"ids"``
+- ``"rank_range"``
+- ``"top_n"``
+- ``"filters"``
+
+
+Orientation Modes
+~~~~~~~~~~~~~~~~~
+
+orientation_mode (string)
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- ``"explicit"`` — use Miller indices from ``miller_list``
+- ``"automatic"`` — generate indices up to ``max_miller``
+
+miller_list (list)
+~~~~~~~~~~~~~~~~~~
+
+List of Miller indices when using explicit mode.
+
+Example:
+
+::
+
+   [[1, 0, 0], [1, 1, 0], [1, 1, 1]]
+
+max_miller (integer)
+~~~~~~~~~~~~~~~~~~~~
+
+Maximum Miller index used in automatic mode.
+
+max_orientations (integer)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Maximum number of orientations kept in automatic mode.
+
+
+Slab Construction
+~~~~~~~~~~~~~~~~~
+
+min_slab_size (float)
+~~~~~~~~~~~~~~~~~~~~~
+
+Minimum slab thickness.
+
+min_vacuum_size (float)
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Minimum vacuum thickness.
+
+center_slab (boolean)
+~~~~~~~~~~~~~~~~~~~~~
+
+If true, centers the slab in the simulation cell.
+
+in_unit_planes (boolean)
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Controls units of slab and vacuum thickness:
+
+- ``true`` → values interpreted in crystallographic planes
+- ``false`` → values interpreted in Å (recommended)
+
+lll_reduce (boolean)
+~~~~~~~~~~~~~~~~~~~~
+
+Apply LLL lattice reduction.
+
+primitive (boolean)
+~~~~~~~~~~~~~~~~~~~
+
+Build primitive slab if possible.
+
+reorient_lattice (boolean)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Align slab normal with the out-of-plane axis.
+
+orthogonal_c (boolean)
+~~~~~~~~~~~~~~~~~~~~~~
+
+If true, enforces:
+
+- ``c perpendicular to (a, b)``
+
+This is strongly recommended for:
+
+- clean POSCAR output
+- stable relaxation
+- correct slab thickness interpretation
+
+
+Surface Terminations
+~~~~~~~~~~~~~~~~~~~~
+
+termination_mode (string)
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- ``"all"`` — keep all generated terminations
+- ``"first"`` — keep only the first termination
+
+max_terminations_per_orientation (integer)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Maximum number of terminations retained per orientation.
+
+
+Fixed Atoms
+~~~~~~~~~~~
+
+The surface stage can optionally fix atoms in the slab.
+
+Fixed atoms are written in the same ``POSCAR`` file using selective dynamics:
+
+- fixed → ``F F F``
+- free → ``T T T``
+
+fix_atoms (boolean)
+~~~~~~~~~~~~~~~~~~~
+
+Enable or disable fixed atoms.
+
+fix_region (string)
+~~~~~~~~~~~~~~~~~~~
+
+- ``"bottom"`` — fix bottom part of slab
+- ``"middle"`` — fix central region
+
+fix_method (string)
+~~~~~~~~~~~~~~~~~~~
+
+- ``"layers"`` — fix a number of atomic layers
+- ``"thickness"`` — fix a region of given thickness (Å)
+
+fix_n_layers (integer)
+~~~~~~~~~~~~~~~~~~~~~~
+
+Number of layers to fix when using ``layers`` mode.
+
+fix_thickness_A (float)
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Thickness of fixed region (Å) when using ``thickness`` mode.
+
+fix_layer_tolerance_A (float)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Tolerance used to group atoms into layers along the z-direction.
+
+Notes
+~~~~~
+
+- Layer grouping is based on Cartesian z-coordinates.
+- Fixed atoms are enforced during relaxation using ASE constraints,
+  not only written to the POSCAR.
+
+Surface Relaxation
+~~~~~~~~~~~~~~~~~~
+
+relax_surface (boolean)
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Enable or disable slab relaxation.
+
+Relaxation is performed using the same backend system as in Step 03.
+
+surface_backend (string, default: "m3gnet")
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Available options:
+
+- ``"m3gnet"``
+- ``"uma"``
+- ``"mace"``
+- ``"grace"``
+
+surface_model (string, default: "default")
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Model selection depends on backend (same behavior as Step 03).
+
+surface_task (string, default: "")
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Optional task specification (used only for ``uma``).
+
+surface_optimizer (string, default: "bfgs")
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+ASE optimizer:
+
+- ``"bfgs"``
+- ``"lbfgs"``
+- ``"fire"``
+- ``"mdmin"``
+- ``"quasinewton"``
+
+surface_fmax (float)
+~~~~~~~~~~~~~~~~~~~~
+
+Maximum force convergence criterion (eV/Å).
+
+surface_max_steps (integer, default: 300)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Maximum number of optimizer steps.
+
+surface_device (string, default: "cpu")
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- ``"cpu"``
+- ``"cuda"``
+
+surface_gpu_id (integer, default: 0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+GPU index used when ``device = "cuda"``.
+
+surface_tf_threads (integer)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+TensorFlow thread count (for ``m3gnet``).
+
+surface_omp_threads (integer)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+OpenMP thread count.
+
+Notes
+~~~~~
+
+- GPU mode uses a single effective worker.
+- CPU mode runs sequentially per slab (no multiprocessing currently).
+- Fixed atoms are enforced via ASE ``FixAtoms``.
+
+
+Surface energy
+~~~~~~~~~~~~~~
+
+When enabled, the surface stage also evaluates the surface energy of each generated slab.
+
+The surface energy is computed using the standard symmetric slab expression:
+
+.. math::
+
+   \gamma = \frac{E_{\mathrm{slab}} - n \, E_{\mathrm{bulk}}}{2A}
+
+where:
+
+- :math:`E_{\mathrm{slab}}` is the total energy of the slab (typically from surface relaxation)
+- :math:`E_{\mathrm{bulk}}` is the relaxed bulk energy of the parent candidate
+- :math:`n` is the number of bulk-equivalent units contained in the slab
+- :math:`A` is the surface area
+- the factor of 2 accounts for the two surfaces of the slab
+
+Requirements
+^^^^^^^^^^^^
+
+Surface energy is computed only when all of the following conditions are satisfied:
+
+- A slab energy is available (typically when ``relax_surface = true``)
+- A bulk reference energy is available from the workflow database
+- The slab composition is proportional to the parent bulk composition
+
+If any of these conditions are not met, the surface energy is not computed and a status flag is recorded instead.
+
+Output fields
+^^^^^^^^^^^^^
+
+The following fields are written to:
+
+- ``meta.json`` (per surface)
+- ``surface_summary.csv`` (global summary)
+
+surface_energy_status (string)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Indicates whether surface energy was successfully computed.
+
+Possible values include:
+
+- ``"ok"`` — surface energy successfully computed
+- ``"missing_slab_energy"`` — slab energy not available
+- ``"missing_bulk_energy"`` — bulk reference energy missing
+- ``"not_computable_not_proportional"`` — slab composition not proportional to bulk
+- ``"not_computable_missing_species"``
+- ``"not_computable_extra_species"``
+- ``"failed: <error>"`` — unexpected numerical or runtime failure
+
+surface_energy_eV_A2 (float)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Surface energy expressed in eV/Å².
+
+surface_energy_J_m2 (float)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Surface energy expressed in J/m².
+
+Conversion used:
+
+.. math::
+
+   1 \, \mathrm{eV/Å^2} = 16.02176634 \, \mathrm{J/m^2}
+
+surface_energy_reference_bulk_eV (float)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Bulk reference energy used in the calculation.
+
+surface_energy_n_bulk_equiv (float)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Number of bulk-equivalent units contained in the slab.
+
+This value is determined automatically from the ratio of slab and bulk compositions.
+
+Notes
+^^^^^
+
+- Surface energies are only well-defined for slabs whose composition is proportional to the parent bulk.
+- Non-stoichiometric terminations are not assigned a surface energy in the current implementation.
+- Future extensions may include chemical-potential-based surface energies for non-stoichiometric slabs.
+
+Output
+~~~~~~
+
+For each generated slab:
+
+::
+
+   composition_tag/
+       candidate_###/
+           hkl_h_k_l/
+               term_###/
+                   POSCAR
+                   CONTCAR
+                   meta.json
+                   surface_relax.log
+                   surface_relax.traj
+                   surface_relax.json
+
+Files:
+
+``POSCAR``
+   Generated slab structure (with optional selective dynamics)
+
+``CONTCAR``
+   Relaxed slab structure (if relaxation is enabled)
+
+``meta.json``
+   Slab metadata
+
+``surface_relax.log``
+   Relaxation log
+
+``surface_relax.traj``
+   ASE trajectory
+
+``surface_relax.json``
+   Relaxation metadata
+
+Global output:
+
+::
+
+   surface_summary.csv
+
+Notes
+~~~~~
+
+- ``min_slab_size`` and ``min_vacuum_size`` should be interpreted in Å
+  when ``in_unit_planes = false``.
+- ``orthogonal_c = true`` is recommended for correct slab geometry.
+- Relaxed structures are saved separately and do not overwrite the initial slab.
 
 Design Principles
 -----------------

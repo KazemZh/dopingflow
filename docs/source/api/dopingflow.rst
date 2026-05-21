@@ -108,6 +108,14 @@ dopingflow.scan module
    :show-inheritance:
    :undoc-members:
 
+dopingflow.surface module
+-------------------------
+
+.. automodule:: dopingflow.surface
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 dopingflow.utils.io module
 --------------------------
 

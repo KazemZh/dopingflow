@@ -54,6 +54,7 @@ Each stage can be executed independently and uses its own configuration block.
    methods/bandgap
    methods/formation_energy
    methods/database
+   methods/surfaces
 
 
 Examples

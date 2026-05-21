@@ -10,11 +10,18 @@ pipeline for the exploration of doped crystalline materials.
 It combines symmetry-aware structure generation with machine-learned
 interatomic potentials to efficiently screen large configurational spaces.
 
+The workflow is designed to first identify promising bulk candidates and
+then optionally extend the analysis to surface structures.
+
 
 Pipeline Structure
 ------------------
 
 Reference Construction → Enumeration → Screening → Relaxation → Filtering → Band Gap → Formation Energy → Database
+
+Optional Post-Processing:
+
+Database → Surface Generation → Surface Relaxation
 
 
 Stages
@@ -54,6 +61,17 @@ Stages
    - Aggregate results across all stages
    - Export a unified CSV database
 
+8. Surface generation (optional)
+   - Select candidates from the database
+   - Generate slab structures for chosen Miller indices
+   - Enumerate surface terminations
+   - Optionally fix atoms in the slab
+
+9. Surface relaxation (optional)
+   - Relax slab structures using ML interatomic potentials
+   - Apply atom constraints (e.g. fixed bottom layers)
+   - Use the same backend abstraction as bulk relaxation
+
 
 Design Principles
 -----------------
@@ -63,3 +81,37 @@ Design Principles
 - **Reproducible**: Fully controlled via ``input.toml``
 - **Scalable**: Supports multiprocessing and GPU execution
 - **Extensible**: New models and stages can be added easily
+
+
+Notes
+-----
+
+- The core workflow (Stages 0–7) focuses on bulk screening and database generation.
+- Surface generation is intentionally decoupled from the main pipeline and is executed separately.
+- This design allows users to:
+  - inspect and validate bulk candidates before surface modeling
+  - control the number of generated slabs
+  - avoid combinatorial explosion of surface structures
+
+Typical Usage
+-------------
+
+A typical workflow consists of:
+
+1. Running the full bulk pipeline:
+
+   ::
+
+      dopingflow run-all -c input.toml
+
+2. Inspecting the resulting database:
+
+   ::
+
+      results_database.csv
+
+3. Generating and optionally relaxing surfaces:
+
+   ::
+
+      dopingflow surface -c input.toml

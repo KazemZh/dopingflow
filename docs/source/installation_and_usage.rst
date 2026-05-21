@@ -50,6 +50,15 @@ This executes:
 
 ``refs -> generate -> scan -> relax -> filter -> bandgap -> formation -> collect``
 
+The surface stage is not included in ``run-all`` and must be executed separately:
+
+::
+
+   dopingflow surface -c input.toml
+
+This design allows users to first inspect and validate the final database
+before generating surface structures.
+
 
 Resuming and partial runs (run-all)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -158,6 +167,11 @@ Step 07: collect results into one CSV database:
 
    dopingflow collect -c input.toml
 
+Step 08: generate surfaces and optionally relax slabs:
+
+::
+
+   dopingflow surface -c input.toml
 
 Outputs Overview
 ----------------
@@ -274,6 +288,44 @@ Writes one flat CSV in the workflow root:
 This file is a compact “database view” across compositions and selected candidates,
 combining scan/relax/filter/bandgap/formation results where available.
 
+Step 08 (surface)
+~~~~~~~~~~~~~~~~~
+
+Generates slab structures from selected candidates and optionally relaxes them.
+
+Input:
+
+- ``results_database.csv`` (from Step 07)
+
+Writes per candidate:
+
+::
+
+   <outdir>/<composition_tag>/candidate_###/hkl_h_k_l/term_###/
+
+Files per slab:
+
+- ``POSCAR`` (generated slab)
+- ``CONTCAR`` (relaxed slab, if enabled)
+- ``meta.json`` (slab metadata)
+
+Optional relaxation outputs:
+
+- ``surface_relax.log``
+- ``surface_relax.traj``
+- ``surface_relax.json``
+
+Global output:
+
+::
+
+   <outdir>/surface_summary.csv
+
+The surface stage uses:
+
+- pymatgen for slab generation
+- the same ML backend abstraction as Step 03 for relaxation
+- ASE optimizers for slab relaxation
 
 Tips
 ----
@@ -289,3 +341,18 @@ Tips
   ::
 
      dopingflow run-all -c input.toml --until filter
+
+- Run surface generation only after verifying final candidates:
+
+  ::
+
+     dopingflow collect -c input.toml
+     dopingflow surface -c input.toml
+
+- Start with a single composition and one candidate to validate surface settings:
+
+  ::
+
+     composition_tag = "Sb50"
+     selection_mode = "id"
+     candidate_id = 1

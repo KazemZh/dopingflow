@@ -21,8 +21,8 @@ sys.path.insert(0, str(SRC_DIR))
 project = "dopingflow"
 copyright = "2026, Kazem Zhour"
 author = "Kazem Zhour"
-release = "3.1.0"
-version = "3.1"
+release = "4.1.0"
+version = "4.1"
 
 # -----------------------------------------------------------------------------
 # General configuration

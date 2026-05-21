@@ -194,3 +194,13 @@ def run_all_cmd(
         # Nice UX: show output for collect
         if k == "collect" and isinstance(res, Path):
             typer.echo(f"\nWrote database CSV: {res}")
+
+@app.command("surface")
+def surface_cmd(
+    config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
+    verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
+) -> None:
+    """Step 08: Generate surfaces from selected doped bulk candidates."""
+    _init(config, verbose)
+    from dopingflow.surface import run_surface_from_toml
+    run_surface_from_toml(config)
