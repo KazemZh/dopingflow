@@ -17,7 +17,7 @@ then optionally extend the analysis to surface structures.
 Pipeline Structure
 ------------------
 
-Reference Construction → Enumeration → Screening → Relaxation → Filtering → Band Gap → Formation Energy → Database
+Reference Construction → Enumeration → Screening → Relaxation → Filtering → Band Gap → Formation Energy → Database → Phase Diagram
 
 Optional Post-Processing:
 
@@ -61,13 +61,16 @@ Stages
    - Aggregate results across all stages
    - Export a unified CSV database
 
-8. Surface generation (optional)
+8. Phase diagram analysis
+   - Compute energy above hull for each candidate using pymatgen
+
+9. Surface generation (optional)
    - Select candidates from the database
    - Generate slab structures for chosen Miller indices
    - Enumerate surface terminations
    - Optionally fix atoms in the slab
 
-9. Surface relaxation (optional)
+10. Surface relaxation (optional)
    - Relax slab structures using ML interatomic potentials
    - Apply atom constraints (e.g. fixed bottom layers)
    - Use the same backend abstraction as bulk relaxation

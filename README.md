@@ -195,7 +195,6 @@ After launching, a local browser window will open automatically.
 .
 ├── CHANGELOG.md
 ├── docs
-│   ├── build
 │   ├── make.bat
 │   ├── Makefile
 │   └── source
@@ -206,6 +205,7 @@ After launching, a local browser window will open automatically.
 │       ├── examples
 │       │   ├── enumerate_screening.rst
 │       │   ├── explicit_batch.rst
+│       │   ├── explicit_single_oxides.rst
 │       │   ├── explicit_single.rst
 │       │   └── smoke_test.rst
 │       ├── index.rst
@@ -217,9 +217,11 @@ After launching, a local browser window will open automatically.
 │       │   ├── filtering.rst
 │       │   ├── formation_energy.rst
 │       │   ├── generation.rst
+│       │   ├── phase_diagram.rst
 │       │   ├── references.rst
 │       │   ├── relaxation.rst
-│       │   └── scanning.rst
+│       │   ├── scanning.rst
+│       │   └── surfaces.rst
 │       ├── required_inputs.rst
 │       ├── _static
 │       │   ├── .gitkeep
@@ -229,17 +231,11 @@ After launching, a local browser window will open automatically.
 ├── dopingflow-user-guide.pdf
 ├── examples
 │   ├── enumerate_screening
-│   │   ├── input.toml
-│   │   └── README.md
 │   ├── explicit_batch
-│   │   ├── input.toml
-│   │   └── README.md
 │   ├── explicit_single_composition
-│   │   ├── input.toml
-│   │   └── README.md
-│   └── smoke_test
-│       ├── input.toml
-│       └── README.md
+│   ├── explicit_single_composition_oxide_reference
+│   ├── smoke_test
+│   └── surface_creation
 ├── .github
 │   └── workflows
 │       └── docs.yml
@@ -249,38 +245,34 @@ After launching, a local browser window will open automatically.
 │   ├── gui_config.py
 │   ├── io_project.py
 │   ├── README.md
-│   ├── requirements-gui.txt
 │   └── view_structure.py
 ├── input.toml
 ├── LICENSE
 ├── logo.png
 ├── pyproject.toml
 ├── README.md
-├── results_database.csv
 ├── src
-│   ├── dopingflow
-│   │   ├── bandgap.py
-│   │   ├── cli.py
-│   │   ├── collect.py
-│   │   ├── filtering.py
-│   │   ├── formation.py
-│   │   ├── generate.py
-│   │   ├── __init__.py
-│   │   ├── logging.py
-│   │   ├── refs.py
-│   │   ├── relax.py
-│   │   ├── scan.py
-│   │   └── utils
-│   │       ├── io.py
-│   │       ├── parallel.py
-│   │       └── pymatgen_helpers.py
-│   └── dopingflow.egg-info
-│       ├── dependency_links.txt
-│       ├── entry_points.txt
-│       ├── PKG-INFO
-│       ├── requires.txt
-│       ├── SOURCES.txt
-│       └── top_level.txt
+│   └── dopingflow
+│       ├── bandgap.py
+│       ├── cli.py
+│       ├── collect.py
+│       ├── filtering.py
+│       ├── formation.py
+│       ├── generate.py
+│       ├── hardware.py
+│       ├── __init__.py
+│       ├── logging.py
+│       ├── ml_backends.py
+│       ├── ml_relaxation.py
+│       ├── phase_diagram.py
+│       ├── refs.py
+│       ├── relax.py
+│       ├── scan.py
+│       ├── surface.py
+│       └── utils
+│           ├── io.py
+│           ├── parallel.py
+│           └── pymatgen_helpers.py
 └── tests
     ├── test_cli_help.py
     ├── test_cli.py
