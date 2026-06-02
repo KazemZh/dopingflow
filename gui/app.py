@@ -1577,6 +1577,54 @@ if tab == "Input Builder":
                 )
 
         # -----------------------------
+        # Relaxation degrees of freedom
+        # -----------------------------
+        st.divider()
+        st.subheader("Relaxation degrees of freedom")
+
+        relax_mode_choices = CHOICES["relax.relax_mode"]
+        current_relax_mode = str(
+            cfg_edit["relax"].get("relax_mode", DEFAULTS["relax"]["relax_mode"])
+        ).strip().lower()
+        if current_relax_mode not in relax_mode_choices:
+            current_relax_mode = DEFAULTS["relax"]["relax_mode"]
+
+        cell_filter_choices = CHOICES["relax.cell_filter"]
+        current_cell_filter = str(
+            cfg_edit["relax"].get("cell_filter", DEFAULTS["relax"]["cell_filter"])
+        ).strip().lower()
+        if current_cell_filter not in cell_filter_choices:
+            current_cell_filter = DEFAULTS["relax"]["cell_filter"]
+
+        colR1, colR2 = st.columns(2, vertical_alignment="bottom")
+
+        with colR1:
+            cfg_edit["relax"]["relax_mode"] = st.selectbox(
+                "Relaxation mode",
+                options=relax_mode_choices,
+                index=relax_mode_choices.index(current_relax_mode),
+                help=(
+                    "atoms: atomic positions only; full: atoms + full cell; "
+                    "isotropic: atoms + uniform cell scaling; volume: volume only with fixed fractional positions; "
+                    "shape: cell shape at nearly constant volume; xy: relax a,b only and keep c fixed; "
+                    "cell_only: cell relaxation with fixed fractional positions."
+                ),
+                key="relax_mode",
+            )
+
+        with colR2:
+            cfg_edit["relax"]["cell_filter"] = st.selectbox(
+                "Cell filter",
+                options=cell_filter_choices,
+                index=cell_filter_choices.index(current_cell_filter),
+                help=(
+                    "ASE cell filter used for cell relaxation. "
+                    "frechet is recommended; unit is simpler; exp is mostly for legacy compatibility."
+                ),
+                key="relax_cell_filter",
+            )
+
+        # -----------------------------
         # Optimizer & convergence
         # -----------------------------
         st.divider()

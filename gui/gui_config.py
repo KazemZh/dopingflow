@@ -84,6 +84,10 @@ CHOICES = {
     "relax.backend": BACKEND_CHOICES,
     "relax.optimizer": OPTIMIZER_CHOICES,
 
+    "relax.relax_mode": ["atoms", "full", "isotropic", "volume", "shape", "xy", "cell_only"],
+    "relax.cell_filter": ["frechet", "unit", "exp"],
+
+
     "filter.mode": ["window", "topn"],
     "formation.normalize": ["total", "per_dopant", "per_host"],
 }
@@ -174,6 +178,8 @@ DEFAULTS = {
         "skip_candidate_if_done": True,
         "device": "cpu",
         "gpu_id": 0,
+        "relax_mode": "atoms",
+        "cell_filter": "frechet",
     },
     "filter": {
         "mode": "window",

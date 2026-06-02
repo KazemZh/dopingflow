@@ -743,6 +743,32 @@ Allowed values for ``uma``:
 
 For ``m3gnet``, ``mace``, and ``grace``, this parameter is ignored and should be left empty.
 
+relax_mode (string, default: "atoms")
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Controls which degrees of freedom are optimized.
+
+Available options:
+
+- ``"atoms"`` — relax atomic positions only.
+- ``"full"`` — relax atomic positions, cell shape, and volume.
+- ``"isotropic"`` — relax atomic positions with uniform cell scaling.
+- ``"volume"`` — relax volume only while keeping fractional atomic positions fixed.
+- ``"shape"`` — relax cell shape at nearly constant volume.
+- ``"xy"`` — relax only the in-plane ``a`` and ``b`` cell lengths, keeping ``c`` and angles fixed.
+- ``"cell_only"`` — relax the cell while keeping fractional atomic positions fixed.
+
+cell_filter (string, default: "frechet")
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+ASE cell filter used when ``relax_mode`` involves cell relaxation.
+
+Available options:
+
+- ``"frechet"`` — recommended default.
+- ``"unit"`` — simpler direct cell filter.
+- ``"exp"`` — older exponential cell filter, mainly for compatibility.
+
 optimizer (string, default: "bfgs")
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

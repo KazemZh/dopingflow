@@ -106,6 +106,8 @@ Example input.toml
    optimizer = "bfgs"
    fmax = 0.05
    max_steps = 300
+   relax_mode = "atoms"
+   cell_filter = "frechet"
    n_workers = 6
    tf_threads = 1
    omp_threads = 1

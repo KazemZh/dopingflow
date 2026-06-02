@@ -42,6 +42,9 @@ class RelaxConfig:
     skip_candidate_if_done: bool
     device: str
     gpu_id: int
+    
+    relax_mode: str
+    cell_filter: str
 
     backend: str
     model: str
@@ -58,6 +61,24 @@ def _parse_relax_config(raw: dict[str, Any], root: Path) -> RelaxConfig:
     outdir = (root / outdir_name).resolve()
 
     order = [str(x) for x in (gen.get("poscar_order", []) or [])]
+
+    relax_mode = str(rel.get("relax_mode", "atoms")).strip().lower()
+    cell_filter = str(rel.get("cell_filter", "frechet")).strip().lower()
+
+    allowed_modes = {
+        "atoms", "full", "isotropic", "volume",
+        "shape", "xy", "cell_only"
+    }
+
+    if relax_mode not in allowed_modes:
+        raise ValueError(
+            "[relax].relax_mode must be one of: "
+            "atoms, full, isotropic, volume, shape, xy, cell_only"
+        )
+
+    if cell_filter not in {"frechet", "unit", "exp"}:
+        raise ValueError('[relax].cell_filter must be "frechet", "unit", or "exp"')
+
 
     fmax = float(rel.get("fmax", 0.05))
     max_steps = int(rel.get("max_steps", 300))
@@ -112,6 +133,8 @@ def _parse_relax_config(raw: dict[str, Any], root: Path) -> RelaxConfig:
         skip_candidate_if_done=skip_candidate_if_done,
         device=device,
         gpu_id=gpu_id,
+        relax_mode=relax_mode,
+        cell_filter=cell_filter,
         backend=backend,
         model=model,
         task=task,
@@ -219,7 +242,9 @@ def _relax_one_candidate(
         str,
         str,
         str,
-        str,
+        str,  # optimizer
+        str,  # relax_mode
+        str,  # cell_filter
     ]
 ) -> Dict[str, Any]:
     (
@@ -236,6 +261,8 @@ def _relax_one_candidate(
         model,
         task,
         optimizer,
+        relax_mode,
+        cell_filter,
     ) = job
 
     cand_path = Path(candidate_dir_str)
@@ -289,6 +316,8 @@ def _relax_one_candidate(
             optimizer_name=optimizer,
             fmax=float(fmax),
             max_steps=int(max_steps),
+            relax_mode=relax_mode,
+            cell_filter=cell_filter,
         )
 
         _safe_write_poscar(s_rel, out_dir / "POSCAR", order=order)
@@ -299,6 +328,8 @@ def _relax_one_candidate(
             "backend": backend,
             "model": model,
             "task": task,
+            "relax_mode": relax_mode,
+            "cell_filter": cell_filter,
             "optimizer": optimizer,
             "device": device,
             "gpu_id": gpu_id if device == "cuda" else None,
@@ -410,7 +441,8 @@ def _run_folder(folder: Path, cfg: RelaxConfig) -> None:
     log.info("%s: found %d candidates", folder.name, len(candidates))
     log.info(
         "Relax settings: backend=%s model=%s task=%s optimizer=%s device=%s gpu_id=%d "
-        "n_workers=%d effective_n_workers=%d fmax=%s max_steps=%d tf_threads=%d omp_threads=%d",
+        "n_workers=%d effective_n_workers=%d fmax=%s max_steps=%d "
+        "tf_threads=%d omp_threads=%d relax_mode=%s cell_filter=%s",
         cfg.backend,
         cfg.model,
         cfg.task,
@@ -423,6 +455,8 @@ def _run_folder(folder: Path, cfg: RelaxConfig) -> None:
         cfg.max_steps,
         cfg.tf_threads,
         cfg.omp_threads,
+        cfg.relax_mode,
+        cfg.cell_filter,
     )
 
     import multiprocessing as mp
@@ -445,6 +479,8 @@ def _run_folder(folder: Path, cfg: RelaxConfig) -> None:
             cfg.model,
             cfg.task,
             cfg.optimizer,
+            cfg.relax_mode,
+            cfg.cell_filter,
         )
         for c in candidates
     ]

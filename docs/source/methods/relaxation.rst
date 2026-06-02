@@ -95,10 +95,10 @@ The stopping criteria are:
 - maximum atomic force below ``[relax].fmax``
 - or optimizer step count reaching ``[relax].max_steps``
 
-Both:
-
-- atomic coordinates
-- lattice parameters
+The relaxed degrees of freedom are controlled by ``[relax].relax_mode``.
+By default, only atomic positions are relaxed. Cell relaxation can be enabled
+explicitly using modes such as ``full``, ``isotropic``, ``volume``,
+``shape``, ``xy``, or ``cell_only``.
 
 are allowed to relax.
 
@@ -260,6 +260,8 @@ The relaxation metadata includes:
 - final maximum force
 - convergence status
 - link to original scan metadata
+- relax_mode
+- cell_filter
 
 For each structure folder:
 
