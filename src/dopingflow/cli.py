@@ -15,6 +15,7 @@ from dopingflow.filtering import run_filtering_from_toml
 from dopingflow.bandgap import run_bandgap_from_toml
 from dopingflow.formation import run_formation_from_toml
 from dopingflow.collect import run_collect_from_toml
+from dopingflow.phase_diagram import run_phase_diagram_from_toml
 
 app = typer.Typer(help="dopingflow: ML doping workflow pipeline")
 
@@ -109,15 +110,25 @@ def collect_cmd(
     typer.echo(f"\nWrote database CSV: {out_path}")
 
 
+@app.command("phase-diagram")
+def phase_diagram_cmd(
+    config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
+    verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
+) -> None:
+    """Step 08: Compute phase-diagram energy above hull."""
+    _init(config, verbose)
+    out_path = run_phase_diagram_from_toml(config)
+    typer.echo(f"\nWrote phase-diagram CSV: {out_path}")
+
 @app.command("run-all")
 def run_all_cmd(
     config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
     start: str = typer.Option(
         "refs",
         "--from",
-        help="Start step key (refs, generate, scan, relax, filter, bandgap, formation, collect)",
+        help="Start step key (refs, generate, scan, relax, filter, bandgap, formation, collect, phase-diagram)",
     ),
-    stop: str = typer.Option("collect", "--until", help="Stop step key (inclusive)"),
+    stop: str = typer.Option("phase-diagram", "--until", help="Stop step key (inclusive)"),
     only: Optional[str] = typer.Option(
         None,
         "--only",
@@ -150,6 +161,7 @@ def run_all_cmd(
         ("bandgap", "05 bandgap", lambda: run_bandgap_from_toml(config)),
         ("formation", "06 formation", lambda: run_formation_from_toml(config)),
         ("collect", "07 collect", lambda: run_collect_from_toml(config)),
+        ("phase-diagram", "08 phase-diagram", lambda: run_phase_diagram_from_toml(config)),
     ]
 
     key_to_idx = {k: i for i, (k, _, _) in enumerate(steps)}

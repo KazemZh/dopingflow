@@ -408,12 +408,19 @@ def run_refs_build(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | N
             p = (cfg.metals_dir / f"{el}.POSCAR").resolve()
             relax_ref(el, p, ref_type="metal")
     else:
+        # relax metal endpoints too, needed for full phase diagram
+        for el in cfg.metal_ref:
+            p = (cfg.metals_dir / f"{el}.POSCAR").resolve()
+            relax_ref(el, p, ref_type="metal")
+
         for ox in cfg.oxides_ref:
             p = (cfg.oxides_dir / f"{ox}.POSCAR").resolve()
             relax_ref(ox, p, ref_type="oxide")
 
         p_g = (cfg.gas_dir / f"{cfg.gas_ref}.POSCAR").resolve()
         relax_ref(cfg.gas_ref, p_g, ref_type="gas")
+
+
 
     # --- 4) Write JSON cache ---
     out: dict[str, Any] = {

@@ -14,12 +14,22 @@ ALLOWED_DOPANTS = ["Sb", "Ti", "Zr", "Nb", "Zn", "Ni", "Mn", "Ba", "W"]
 # Typical run presets
 RUN_PRESETS = {
     "Smoke test (refs → filter)": {"from": "refs", "until": "filter"},
-    "Full workflow (refs → collect)": {"from": "refs", "until": "collect"},
+    "Full workflow (refs → phase-diagram)": {"from": "refs", "until": "phase-diagram"},
     "Scan → Relax": {"from": "scan", "until": "relax"},
     "Filter only (recompute)": {"from": "filter", "until": "filter"},
 }
 
-STEP_KEYS = ["refs", "generate", "scan", "relax", "filter", "bandgap", "formation", "collect"]
+STEP_KEYS = [
+    "refs",
+    "generate",
+    "scan",
+    "relax",
+    "filter",
+    "bandgap",
+    "formation",
+    "collect",
+    "phase-diagram",
+]
 
 # -----------------------------
 # Shared backend / execution choices
@@ -199,5 +209,9 @@ DEFAULTS = {
     "formation": {
         "skip_if_done": True,
         "normalize": "per_dopant",
+    },
+    "phase_diagram": {
+        "skip_if_done": True,
+        "stable_threshold_eV_per_atom": 0.05,
     },
 }

@@ -209,6 +209,91 @@ def _build_mu_from_refs(ref: dict[str, Any], *, host_formula: str) -> tuple[str,
     return ref_mode, mu
 
 
+def _get_oxide_mixing_refs(
+    ref: dict[str, Any],
+    *,
+    host_formula: str,
+) -> tuple[dict[str, Any], dict[str, dict[str, Any]], float]:
+    """
+    Build oxide-reference data needed for mixing energy.
+
+    Returns:
+      host_ref:
+        {
+          "formula": host_formula,
+          "E_per_formula_unit_eV": ...,
+          "reduced_composition": ...
+        }
+
+      dopant_oxide_refs:
+        {
+          dopant_element: oxide_entry
+        }
+
+      E_O2:
+        O2 molecule energy in eV.
+    """
+    from pymatgen.core.composition import Composition
+
+    refs = ref.get("references", {}) or {}
+    oxide_mode = ref.get("oxide_mode", {}) or {}
+
+    gas_ref_name = str(oxide_mode.get("gas_ref", "O2")).strip()
+    gas = refs.get(gas_ref_name, None)
+    if not isinstance(gas, dict):
+        raise KeyError(f"Missing gas reference: {gas_ref_name}")
+
+    if "E_per_molecule_eV" in gas:
+        E_O2 = float(gas["E_per_molecule_eV"])
+    elif "E_total_eV" in gas:
+        E_O2 = float(gas["E_total_eV"])
+    else:
+        raise KeyError(f"Gas reference {gas_ref_name} missing E_total_eV or E_per_molecule_eV")
+
+    host_comp = Composition(host_formula).reduced_composition.as_dict()
+
+    host_block = ref.get("host", {}) or {}
+    if "E_unit_total_eV" not in host_block or "n_atoms_unit" not in host_block:
+        raise KeyError("reference JSON missing host.E_unit_total_eV or host.n_atoms_unit")
+
+    E_unit_total = float(host_block["E_unit_total_eV"])
+    n_atoms_unit = int(host_block["n_atoms_unit"])
+
+    atoms_per_fu = sum(float(v) for v in host_comp.values())
+    n_fu = float(n_atoms_unit) / atoms_per_fu
+    if n_fu <= 0:
+        raise ValueError("Could not determine number of formula units in host unit cell.")
+
+    E_host_fu = E_unit_total / n_fu
+
+    host_ref = {
+        "formula": host_formula,
+        "E_per_formula_unit_eV": float(E_host_fu),
+        "reduced_composition": host_comp,
+    }
+
+    dopant_oxide_refs: dict[str, dict[str, Any]] = {}
+
+    for ox_name in oxide_mode.get("oxides_ref", []) or []:
+        ox_name = str(ox_name).strip()
+        ox_entry = refs.get(ox_name, None)
+        if not isinstance(ox_entry, dict):
+            continue
+
+        comp = ox_entry.get("reduced_composition", None)
+        if not isinstance(comp, dict) or "O" not in comp:
+            continue
+
+        cations = [k for k in comp.keys() if k != "O"]
+        if len(cations) != 1:
+            continue
+
+        el = str(cations[0])
+        dopant_oxide_refs[el] = ox_entry
+
+    return host_ref, dopant_oxide_refs, E_O2
+
+
 def _read_selected_candidates(path: Path) -> List[str]:
     out: List[str] = []
     for ln in path.read_text(encoding="utf-8").splitlines():
@@ -269,10 +354,141 @@ def _compute_substitution_dopant_counts(
     return dopants
 
 
+def _compute_mixing_energy_from_oxides(
+    *,
+    E_doped: float,
+    counts: Dict[str, int],
+    host_species: str,
+    anion_species: List[str],
+    dop_counts: Dict[str, int],
+    host_ref: dict[str, Any],
+    dopant_oxide_refs: dict[str, dict[str, Any]],
+    E_O2: float,
+) -> dict[str, Any]:
+    """
+    Pseudo-binary oxide-reference mixing energy.
+
+    Atom-balanced reference reaction:
+
+      a host_oxide + b dopant_oxide -> doped_structure + c O2
+
+    Example for Sn38Sb2O80 with SnO2 and Sb2O5:
+
+      38 SnO2 + 1 Sb2O5 -> Sn38Sb2O80 + 0.5 O2
+
+    Therefore:
+
+      E_mix = E_doped + c E_O2 - a E_SnO2 - b E_Sb2O5
+
+    The sign convention follows:
+      products - reactants
+    """
+    if len(anion_species) != 1:
+        raise ValueError("Mixing energy currently supports exactly one anion species.")
+
+    anion = anion_species[0]
+
+    host_comp = host_ref["reduced_composition"]
+    E_host_fu = float(host_ref["E_per_formula_unit_eV"])
+
+    if host_species not in host_comp:
+        raise KeyError(f"Host species {host_species} missing in host reference composition.")
+    if anion not in host_comp:
+        raise KeyError(f"Anion species {anion} missing in host reference composition.")
+
+    n_host_in_host_oxide = float(host_comp[host_species])
+    n_oxygen_in_host_oxide = float(host_comp[anion])
+
+    n_host_candidate = float(counts.get(host_species, 0))
+    n_oxygen_candidate = float(counts.get(anion, 0))
+
+    if n_host_candidate <= 0:
+        raise ValueError("Candidate contains no host atoms.")
+    if n_oxygen_candidate <= 0:
+        raise ValueError("Candidate contains no anion atoms.")
+
+    coeff_host_oxide = n_host_candidate / n_host_in_host_oxide
+
+    E_refs = coeff_host_oxide * E_host_fu
+    oxygen_from_refs = coeff_host_oxide * n_oxygen_in_host_oxide
+
+    reaction_left = [f"{coeff_host_oxide:g} {host_ref['formula']}"]
+
+    for dop, n_dop in sorted(dop_counts.items()):
+        ox = dopant_oxide_refs.get(dop, None)
+        if ox is None:
+            raise KeyError(f"Missing oxide reference for dopant {dop}")
+
+        comp = ox.get("reduced_composition", None)
+        if not isinstance(comp, dict):
+            raise KeyError(f"Oxide reference for dopant {dop} missing reduced_composition")
+
+        if dop not in comp:
+            raise KeyError(f"Dopant {dop} missing in its oxide reference composition.")
+        if anion not in comp:
+            raise KeyError(f"Anion {anion} missing in dopant oxide reference composition.")
+
+        E_ox_fu = float(ox["E_per_formula_unit_eV"])
+
+        n_dop_in_oxide = float(comp[dop])
+        n_oxygen_in_oxide = float(comp[anion])
+
+        coeff_oxide = float(n_dop) / n_dop_in_oxide
+
+        E_refs += coeff_oxide * E_ox_fu
+        oxygen_from_refs += coeff_oxide * n_oxygen_in_oxide
+
+        formula = ox.get("formula", None) or ox.get("name", None) or f"{dop}_oxide"
+        reaction_left.append(f"{coeff_oxide:g} {formula}")
+
+    n_O2_out = (oxygen_from_refs - n_oxygen_candidate) / 2.0
+
+    E_mix_total = float(E_doped + n_O2_out * E_O2 - E_refs)
+
+    n_atoms_total = int(sum(counts.values()))
+    n_cations_total = int(sum(n for el, n in counts.items() if el not in anion_species))
+    n_dop_total = int(sum(dop_counts.values()))
+
+    if n_atoms_total <= 0:
+        raise ValueError("Candidate has zero atoms.")
+    if n_cations_total <= 0:
+        raise ValueError("Candidate has zero cations.")
+
+    x_dopant = float(n_dop_total) / float(n_cations_total) if n_cations_total > 0 else 0.0
+
+    reaction_reference = (
+        " + ".join(reaction_left)
+        + f" -> doped_structure + {n_O2_out:g} O2"
+    )
+
+    return {
+        "x_dopant": float(x_dopant),
+        "n_atoms_total": int(n_atoms_total),
+        "n_cations_total": int(n_cations_total),
+        "n_dopant_atoms": int(n_dop_total),
+        "n_O2_out": float(n_O2_out),
+        "E_mix_eV_total": float(E_mix_total),
+        "E_mix_eV_per_atom": float(E_mix_total) / float(n_atoms_total),
+        "E_mix_eV_per_cation": float(E_mix_total) / float(n_cations_total),
+        "E_mix_eV_per_dopant": (
+            float(E_mix_total) / float(n_dop_total)
+            if n_dop_total > 0
+            else float(E_mix_total)
+        ),
+        "reaction_reference": reaction_reference,
+    }
+
+
 def _write_candidate_meta(candidate_dir: Path, payload: Dict[str, Any]) -> None:
     out_dir = candidate_dir / "04_formation"
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "meta.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _fmt_float_or_blank(x: Any) -> str:
+    if x == "" or x is None:
+        return ""
+    return f"{float(x):.8f}"
 
 
 def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None = None) -> None:
@@ -286,6 +502,9 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
     Writes per composition folder:
       - formation_energies.csv
       - candidate_*/04_formation/meta.json
+
+    In oxide reference mode, this also computes a pseudo-binary oxide-reference
+    mixing energy suitable for composition-stability / convex-hull-like plots.
     """
     cfg = _parse_formation_config(raw_cfg, root)
     ref = _load_ref_json(root)
@@ -300,6 +519,23 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
 
     ref_mode, mu = _build_mu_from_refs(ref, host_formula=host_formula)
     log.info("Formation reference mode: %s", ref_mode)
+
+    # Prepare oxide mixing references only in oxide mode
+    mixing_enabled = ref_mode == "oxide"
+    host_ref: dict[str, Any] | None = None
+    dopant_oxide_refs: dict[str, dict[str, Any]] = {}
+    E_O2: float | None = None
+
+    if mixing_enabled:
+        try:
+            host_ref, dopant_oxide_refs, E_O2 = _get_oxide_mixing_refs(
+                ref,
+                host_formula=host_formula,
+            )
+            log.info("Oxide-reference mixing energy enabled.")
+        except Exception as exc:
+            mixing_enabled = False
+            log.warning("Oxide-reference mixing energy disabled: %s", exc)
 
     mu_host = mu.get(cfg.host_species, None)
     if mu_host is None:
@@ -329,7 +565,7 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
             log.info("SKIP (%d/%d) %s: no relaxed candidates found (run Step 03)", i, len(folders), folder.name)
             continue
 
-        rows: List[Tuple[str, float, float, float, int, str]] = []
+        rows: List[Tuple[Any, ...]] = []
 
         for poscar in poscars:
             cand_dir = poscar.parents[1]  # candidate_XXX
@@ -381,6 +617,30 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
                     E_report = E_form_total / float(n_dop_total)
                     norm_tag = "eV_per_dopant_atom"
 
+            # mixing energy, only available in oxide reference mode
+            mixing_payload: dict[str, Any] | None = None
+            if mixing_enabled:
+                try:
+                    if host_ref is None or E_O2 is None:
+                        raise RuntimeError("Internal error: mixing references were not initialized.")
+                    mixing_payload = _compute_mixing_energy_from_oxides(
+                        E_doped=E_doped,
+                        counts=counts,
+                        host_species=cfg.host_species,
+                        anion_species=cfg.anion_species,
+                        dop_counts=dop_counts,
+                        host_ref=host_ref,
+                        dopant_oxide_refs=dopant_oxide_refs,
+                        E_O2=E_O2,
+                    )
+                except Exception as exc:
+                    log.warning(
+                        "%s/%s: mixing energy failed: %s",
+                        folder.name,
+                        cand_dir.name,
+                        exc,
+                    )
+
             # Write candidate meta for collection stage
             payload: Dict[str, Any] = {
                 "stage": "04_formation",
@@ -400,11 +660,29 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
                 "dopant_counts": dop_counts,
                 "E_form_eV_total": float(E_form_total),
                 "reported": {"value": float(E_report), "unit": norm_tag},
+                "mixing": mixing_payload,
             }
             _write_candidate_meta(cand_dir, payload)
 
             dop_str = ";".join([f"{k}:{v}" for k, v in sorted(dop_counts.items())]) if dop_counts else ""
-            rows.append((cand_dir.name, E_doped, E_form_total, E_report, n_dop_total, dop_str))
+
+            rows.append(
+                (
+                    cand_dir.name,
+                    E_doped,
+                    E_form_total,
+                    E_report,
+                    n_dop_total,
+                    dop_str,
+                    mixing_payload["x_dopant"] if mixing_payload else "",
+                    mixing_payload["E_mix_eV_total"] if mixing_payload else "",
+                    mixing_payload["E_mix_eV_per_atom"] if mixing_payload else "",
+                    mixing_payload["E_mix_eV_per_cation"] if mixing_payload else "",
+                    mixing_payload["E_mix_eV_per_dopant"] if mixing_payload else "",
+                    mixing_payload["n_O2_out"] if mixing_payload else "",
+                    mixing_payload["reaction_reference"] if mixing_payload else "",
+                )
+            )
 
         if not rows:
             log.info("SKIP %s: no valid candidates", folder.name)
@@ -424,10 +702,48 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
                     "n_dopant_atoms",
                     "dopant_counts",
                     "reference_mode",
+                    "x_dopant",
+                    "E_mix_eV_total",
+                    "E_mix_eV_per_atom",
+                    "E_mix_eV_per_cation",
+                    "E_mix_eV_per_dopant",
+                    "n_O2_out",
+                    "mixing_reaction_reference",
                 ]
             )
-            for cand, E_d, Eft, Erf, nd, dops in rows:
-                w.writerow([cand, f"{E_d:.8f}", f"{Eft:.8f}", f"{Erf:.8f}", nd, dops, ref_mode])
+            for (
+                cand,
+                E_d,
+                Eft,
+                Erf,
+                nd,
+                dops,
+                x_dop,
+                Emix_tot,
+                Emix_atom,
+                Emix_cat,
+                Emix_dop,
+                nO2,
+                mix_reaction,
+            ) in rows:
+                w.writerow(
+                    [
+                        cand,
+                        f"{E_d:.8f}",
+                        f"{Eft:.8f}",
+                        f"{Erf:.8f}",
+                        nd,
+                        dops,
+                        ref_mode,
+                        _fmt_float_or_blank(x_dop),
+                        _fmt_float_or_blank(Emix_tot),
+                        _fmt_float_or_blank(Emix_atom),
+                        _fmt_float_or_blank(Emix_cat),
+                        _fmt_float_or_blank(Emix_dop),
+                        _fmt_float_or_blank(nO2),
+                        mix_reaction,
+                    ]
+                )
 
         log.info("OK   %s: wrote %s (rows=%d)", folder.name, OUT_CSV, len(rows))
 

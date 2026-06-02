@@ -142,6 +142,7 @@ dopingflow filter -c input.toml
 dopingflow bandgap -c input.toml
 dopingflow formation -c input.toml
 dopingflow collect -c input.toml
+dopingflow phase-diagram -c input.toml
 dopingflow surface -c input.toml
 ```
 

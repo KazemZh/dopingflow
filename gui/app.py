@@ -241,6 +241,7 @@ if tab == "Input Builder":
         "bandgap",
         "formation",
         "database",
+        "phase_diagram",
         "surface",
     ]:
         cfg_edit.setdefault(secname, {})
@@ -2006,6 +2007,35 @@ if tab == "Input Builder":
         elif norm == "total":
             st.info("**total**: raw formation energy of the doped supercell (in eV).")
             st.latex(r"E_{\mathrm{form}} \; [\mathrm{eV}]")
+
+    # -----------------------------
+    # PHASE DIAGRAM
+    # -----------------------------
+
+    with st.expander("Phase diagram", expanded=False):
+        st.subheader("Energy above hull")
+
+        cfg_edit.setdefault("phase_diagram", {})
+
+        cfg_edit["phase_diagram"]["skip_if_done"] = st.checkbox(
+            "Skip if phase_diagram_results.csv already exists",
+            value=bool(cfg_edit["phase_diagram"].get("skip_if_done", True)),
+            help="Skip the phase-diagram step if phase_diagram_results.csv already exists.",
+        )
+
+        cfg_edit["phase_diagram"]["stable_threshold_eV_per_atom"] = st.number_input(
+            "Stability threshold (eV/atom)",
+            value=float(cfg_edit["phase_diagram"].get("stable_threshold_eV_per_atom", 0.05)),
+            min_value=0.0,
+            step=0.01,
+            format="%.3f",
+            help="Threshold used to label metastable candidates.",
+        )
+
+        st.info(
+            "This step builds a Sn–Sb–O phase diagram from reference phases and doped candidates, "
+            "then reports energy above hull and decomposition products."
+        )
 
     # -----------------------------
     # SURFACE
