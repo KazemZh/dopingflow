@@ -134,7 +134,7 @@ export MP_API_KEY=your_api_key
 Each stage can be run individually:
 
 ``` bash
-dopingflow refs-build -c input.toml
+dopingflow refs -c input.toml
 dopingflow generate -c input.toml
 dopingflow scan -c input.toml
 dopingflow relax -c input.toml

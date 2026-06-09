@@ -772,9 +772,39 @@ def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
 
     base = Structure.from_file(str(poscar_path))
 
-    sub_idx, dopant_counts, host_count = _infer_enumeration_sublattice(
-        base, host=cfg.host_species, anions=cfg.anion_species
-    )
+    metadata_path = struct_dir / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path.exists() else {}
+
+    if metadata.get("sequential_incremental"):
+        base = Structure.from_file(metadata["base_poscar"])
+
+        sub_idx = [
+            i for i, site in enumerate(base)
+            if site.species_string == cfg.host_species
+        ]
+
+        dopant_counts = {
+            str(k): int(v)
+            for k, v in metadata.get("additional_counts", {}).items()
+            if int(v) > 0
+        }
+
+        host_count = len(sub_idx) - sum(dopant_counts.values())
+
+        if host_count < 0:
+            raise ValueError(
+                f"Sequential scan needs {sum(dopant_counts.values())} new dopants, "
+                f"but only {len(sub_idx)} host sites are available."
+            )
+
+        log.info("Sequential incremental scan mode detected.")
+        log.info("Fixed previous dopants from: %s", metadata["base_poscar"])
+        log.info("Only scanning new dopants: %s", dopant_counts)
+
+    else:
+        sub_idx, dopant_counts, host_count = _infer_enumeration_sublattice(
+            base, host=cfg.host_species, anions=cfg.anion_species
+        )
 
     N = len(sub_idx)
     raw_ncfg = _estimate_num_configs(N, dopant_counts)

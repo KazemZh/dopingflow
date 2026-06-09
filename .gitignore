@@ -25,7 +25,7 @@ database/
 generated_surfaces/
 *.csv
 scaling_test.dat
-Sb2*/
+Sb*/
 
 # IDE
 .vscode/

@@ -25,6 +25,8 @@ log = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class GenerateConfig:
     # structure
+    base_poscar: str | None
+    incremental: bool
     outdir: str
 
     # generate
@@ -56,6 +58,11 @@ def _parse_generate_config(raw: dict[str, Any]) -> GenerateConfig:
     gen = raw.get("generate", {}) or {}
     dop = raw.get("doping", {}) or {}
 
+    base_poscar = gen.get("base_poscar", None)
+    base_poscar = str(base_poscar).strip() if base_poscar else None
+
+    incremental = bool(gen.get("incremental", False))
+
     outdir = str(st.get("outdir", "random_structures")).strip()
 
     poscar_order = list(gen.get("poscar_order", []))
@@ -85,6 +92,8 @@ def _parse_generate_config(raw: dict[str, Any]) -> GenerateConfig:
     levels = [float(x) for x in levels]
 
     return GenerateConfig(
+        base_poscar=base_poscar,
+        incremental=incremental,
         outdir=outdir,
         poscar_order=poscar_order,
         seed_base=seed_base,
@@ -193,6 +202,87 @@ def normalize_to_counts_and_effective(
 
     return counts, effective, warnings, requested_total, eff_total
 
+def normalize_incremental_counts(
+    base: Structure,
+    host_species: str,
+    requested_pct: Dict[str, float],
+) -> tuple[Dict[str, int], Dict[str, int], Dict[str, int], Dict[str, float], List[str], int]:
+    """
+    For sequential doping:
+    - count existing dopants in the base structure
+    - compute target dopant counts
+    - return only the additional dopants to add
+    """
+
+    species_counts = {}
+    for site in base:
+        species_counts[site.species_string] = species_counts.get(site.species_string, 0) + 1
+
+    existing_counts = {
+        el: int(species_counts.get(el, 0))
+        for el in requested_pct
+    }
+
+    n_remaining_host = int(species_counts.get(host_species, 0))
+    n_reference_sites = n_remaining_host + sum(existing_counts.values())
+
+    warnings: List[str] = []
+    target_counts: Dict[str, int] = {}
+    additional_counts: Dict[str, int] = {}
+    effective_pct: Dict[str, float] = {}
+
+    for el, pct in requested_pct.items():
+        target = int(round(float(pct) * n_reference_sites / 100.0))
+        existing = existing_counts.get(el, 0)
+        additional = target - existing
+
+        if additional < 0:
+            raise ValueError(
+                f"Sequential target for {el} is smaller than existing amount: "
+                f"target={target}, existing={existing}. "
+                "Sequential compositions must be increasing."
+            )
+
+        target_counts[el] = target
+        additional_counts[el] = additional
+        effective_pct[el] = 100.0 * target / n_reference_sites
+
+        if abs(effective_pct[el] - float(pct)) > 1e-9:
+            warnings.append(
+                f"{el}: requested {pct:.6g}% -> target {target} atoms "
+                f"-> effective {effective_pct[el]:.6g}%"
+            )
+
+    if sum(additional_counts.values()) > n_remaining_host:
+        raise ValueError(
+            f"Need to add {sum(additional_counts.values())} dopants, "
+            f"but only {n_remaining_host} host sites remain."
+        )
+
+    return target_counts, existing_counts, additional_counts, effective_pct, warnings, n_reference_sites
+
+def build_incremental_structure_from_counts(
+    base: Structure,
+    host_species: str,
+    additional_counts: Dict[str, int],
+    seed: int,
+) -> Structure:
+    import random
+
+    s = base.copy()
+    rng = random.Random(seed)
+
+    host_indices = [i for i, site in enumerate(s) if site.species_string == host_species]
+    rng.shuffle(host_indices)
+
+    cursor = 0
+    for dopant, n in additional_counts.items():
+        for _ in range(n):
+            idx = host_indices[cursor]
+            cursor += 1
+            s[idx] = dopant
+
+    return s
 
 def composition_tag(effective_pct: Dict[str, float], must_first: List[str] | None = None) -> str:
     must_first = must_first or []
@@ -319,7 +409,13 @@ def run_generate(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | Non
         shutil.rmtree(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
-    pristine, host_supercell_path, ref_data = _load_relaxed_host_supercell(root)
+    if cfg.base_poscar:
+        host_supercell_path = (root / cfg.base_poscar).resolve()
+        pristine = Structure.from_file(str(host_supercell_path))
+        ref_data = {}
+        log.info("Using custom base POSCAR: %s", host_supercell_path)
+    else:
+        pristine, host_supercell_path, ref_data = _load_relaxed_host_supercell(root)
 
     host_indices = [i for i, site in enumerate(pristine) if site.species_string == cfg.host_species]
     n_host = len(host_indices)
@@ -355,12 +451,36 @@ def run_generate(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | Non
     for idx, requested_comp in enumerate(requested_comps, start=1):
         validate_composition_minimal(requested_comp)
 
-        dopant_counts, effective_pct, warnings, total_req, total_eff = normalize_to_counts_and_effective(
-            n_host=n_host,
-            requested_pct=requested_comp,
-        )
+        if cfg.incremental:
+            (
+                target_counts,
+                existing_counts,
+                additional_counts,
+                effective_pct,
+                warnings,
+                n_host_reference,
+            ) = normalize_incremental_counts(
+                base=pristine,
+                host_species=cfg.host_species,
+                requested_pct=requested_comp,
+            )
+
+            total_req = float(sum(requested_comp.values()))
+            total_eff = float(sum(effective_pct.values()))
+
+        else:
+            dopant_counts, effective_pct, warnings, total_req, total_eff = normalize_to_counts_and_effective(
+                n_host=n_host,
+                requested_pct=requested_comp,
+            )
+
+            target_counts = dopant_counts
+            existing_counts = {el: 0 for el in requested_comp}
+            additional_counts = dopant_counts
+            n_host_reference = n_host
 
         base_tag = composition_tag(effective_pct, must_first=must_first_for_tag) or "pristine"
+
         tag_counts[base_tag] = tag_counts.get(base_tag, 0) + 1
         tag = base_tag if tag_counts[base_tag] == 1 else f"{base_tag}__v{tag_counts[base_tag]}"
 
@@ -372,12 +492,21 @@ def run_generate(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | Non
                 log.warning("  - %s", w)
             log.warning("  -> Using EFFECTIVE composition tag: %s", tag)
 
-        s = build_structure_from_counts(
-            pristine=pristine,
-            host_species=cfg.host_species,
-            dopant_counts=dopant_counts,
-            seed=seed,
-        )
+        if cfg.incremental:
+            s = build_incremental_structure_from_counts(
+                base=pristine,
+                host_species=cfg.host_species,
+                additional_counts=additional_counts,
+                seed=seed,
+            )
+        else:
+            s = build_structure_from_counts(
+                pristine=pristine,
+                host_species=cfg.host_species,
+                dopant_counts=dopant_counts,
+                seed=seed,
+            )
+
         s2 = reorder_structure_by_species(s, cfg.poscar_order)
 
         comp_dir = outdir / tag
@@ -394,8 +523,14 @@ def run_generate(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | Non
             "host_species": cfg.host_species,
             "n_host": n_host,
             "requested_pct": requested_comp,
-            "rounded_counts": dopant_counts,
+            "rounded_counts": target_counts,
+            "target_counts": target_counts,
+            "existing_counts": existing_counts,
+            "additional_counts": additional_counts,
             "effective_pct": effective_pct,
+            "sequential_incremental": bool(cfg.incremental),
+            "base_poscar": str(host_supercell_path),
+            "n_host_reference": n_host_reference,
             "requested_total_pct": total_req,
             "effective_total_pct": total_eff,
             "rounding_warnings": warnings,

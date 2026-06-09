@@ -17,6 +17,8 @@ from dopingflow.formation import run_formation_from_toml
 from dopingflow.collect import run_collect_from_toml
 from dopingflow.phase_diagram import run_phase_diagram_from_toml
 
+from dopingflow.sequential import run_sequential_from_toml
+
 app = typer.Typer(help="dopingflow: ML doping workflow pipeline")
 
 
@@ -206,6 +208,16 @@ def run_all_cmd(
         # Nice UX: show output for collect
         if k == "collect" and isinstance(res, Path):
             typer.echo(f"\nWrote database CSV: {res}")
+
+@app.command("sequential-run")
+def sequential_run_cmd(
+    config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
+    verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
+) -> None:
+    """Run gradual sequential doping workflow."""
+    _init(config, verbose)
+    out_path = run_sequential_from_toml(config)
+    typer.echo(f"\nSequential workflow finished. Output directory: {out_path}")
 
 @app.command("surface")
 def surface_cmd(
