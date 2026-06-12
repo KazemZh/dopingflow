@@ -31,7 +31,7 @@ The full documentation is available in multiple formats:
 ### Clone repository
 
 ``` bash
-git clone https://github.com/KazemZh/ml-doping-workflow.git
+git clone https://github.com/KazemZh/dopingflow.git
 cd ml-doping-workflow
 ```
 
