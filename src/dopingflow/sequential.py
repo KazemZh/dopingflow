@@ -19,7 +19,8 @@ from dopingflow.relax import run_relax
 from dopingflow.filtering import run_filtering
 from dopingflow.bandgap import run_bandgap
 from dopingflow.formation import run_formation
-from dopingflow.collect import run_collect
+from dopingflow.collect_relative import run_collect
+from dopingflow.relative_energy import populate_relative_energy_columns
 
 log = logging.getLogger(__name__)
 
@@ -93,16 +94,18 @@ def _best_relaxed_poscar(comp_dir: Path) -> Path:
     return poscar
 
 
-def _merge_step_databases(sequential_root: Path, root: Path) -> Path:
+def _merge_step_databases(
+    sequential_root: Path,
+    root: Path,
+    raw_cfg: dict[str, Any],
+) -> Path:
     import pandas as pd
 
     csv_files = sorted(sequential_root.glob("step_*/results_database.csv"))
-
     if not csv_files:
         raise FileNotFoundError("No step results_database.csv files found to merge.")
 
     dfs = []
-
     for csv_path in csv_files:
         step_root = csv_path.parent
         df = pd.read_csv(csv_path)
@@ -113,10 +116,13 @@ def _merge_step_databases(sequential_root: Path, root: Path) -> Path:
         dfs.append(df)
 
     merged = pd.concat(dfs, ignore_index=True)
-
     out = root / "results_database.csv"
     merged.to_csv(out, index=False)
 
+    # Per-step collection has only one composition and therefore cannot define
+    # a meaningful global endpoint. Recalculate relative energies once all
+    # sequential compositions have been merged.
+    populate_relative_energy_columns(out, raw_cfg)
     return out
 
 
@@ -251,7 +257,6 @@ def run_sequential(
 
             copied_best = best_copy_dir / "POSCAR"
             shutil.copy2(best_poscar, copied_best)
-
             previous_best = copied_best
 
             summary = {
@@ -293,8 +298,7 @@ def run_sequential(
         log.info("Step database copied to: %s", step_db)
 
     log.info("Sequential doping workflow finished.")
-
-    merged_csv = _merge_step_databases(sequential_root, root)
+    merged_csv = _merge_step_databases(sequential_root, root, raw_cfg)
     log.info("Merged sequential database written to: %s", merged_csv)
 
     return sequential_root
