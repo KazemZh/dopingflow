@@ -34,12 +34,22 @@ _DYNAMIC_METRICS = (
     "n_O2_out",
     "mixing_reaction_reference",
 )
+_RELATIVE_METRICS = (
+    "E_form_rel_eV_per_cation",
+    "E_mix_rel_eV_per_cation",
+)
+_RELATIVE_SOURCES = {
+    "E_form_rel_eV_per_cation": "E_form_eV_per_cation",
+    "E_mix_rel_eV_per_cation": "E_mix_eV_per_cation",
+}
 
 
 @dataclass(frozen=True)
 class DBConfig:
     outdir: Path
     skip_if_done: bool
+    relative_enabled: bool
+    relative_endpoint_x: float | None
 
 
 def read_json(path: Path) -> Optional[dict]:
@@ -77,12 +87,33 @@ def _to_float(value: Any) -> Optional[float]:
         return None
 
 
+def _parse_relative_endpoint(raw: dict[str, Any]) -> float | None:
+    formation = raw.get("formation", {}) or {}
+    relative = formation.get("relative", {}) or {}
+    endpoint_raw = relative.get("endpoint_x", "auto")
+
+    if endpoint_raw is None or str(endpoint_raw).strip().lower() in {"", "auto"}:
+        return None
+
+    endpoint_x = float(endpoint_raw)
+    if not 0.0 < endpoint_x <= 1.0:
+        raise ValueError(
+            "[formation.relative].endpoint_x must be in (0, 1] or 'auto'"
+        )
+    return endpoint_x
+
+
 def _parse_db_config(raw: dict[str, Any], root: Path) -> DBConfig:
     structure = raw.get("structure", {}) or {}
     database = raw.get("database", {}) or {}
+    formation = raw.get("formation", {}) or {}
+    relative = formation.get("relative", {}) or {}
+
     return DBConfig(
         outdir=(root / str(structure.get("outdir", "random_structures"))).resolve(),
         skip_if_done=bool(database.get("skip_if_done", True)),
+        relative_enabled=bool(relative.get("enabled", False)),
+        relative_endpoint_x=_parse_relative_endpoint(raw),
     )
 
 
@@ -100,6 +131,7 @@ def read_filtered_table(path: Path) -> Dict[str, Dict[str, Any]]:
     output: Dict[str, Dict[str, Any]] = {}
     if not path.exists():
         return output
+
     with path.open("r", encoding="utf-8") as handle:
         for row in csv.DictReader(handle):
             candidate = (row.get("candidate") or "").strip()
@@ -117,6 +149,7 @@ def read_scan_ranking(path: Path) -> Dict[str, Dict[str, Any]]:
     output: Dict[str, Dict[str, Any]] = {}
     if not path.exists():
         return output
+
     with path.open("r", encoding="utf-8") as handle:
         for row in csv.DictReader(handle):
             candidate = (
@@ -128,6 +161,7 @@ def read_scan_ranking(path: Path) -> Dict[str, Dict[str, Any]]:
             ).strip()
             if not candidate:
                 continue
+
             output[candidate] = {
                 "rank_scan": _to_int(row.get("rank") or row.get("rank_scan")),
                 "E_scan_eV": _to_float(
@@ -145,12 +179,16 @@ def read_bandgap_summary(path: Path) -> Dict[str, Dict[str, Any]]:
     output: Dict[str, Dict[str, Any]] = {}
     if not path.exists():
         return output
+
     with path.open("r", encoding="utf-8") as handle:
         for row in csv.DictReader(handle):
-            candidate = (row.get("candidate") or row.get("candidate_id") or row.get("name") or "").strip()
+            candidate = (
+                row.get("candidate") or row.get("candidate_id") or row.get("name") or ""
+            ).strip()
             if not candidate:
                 continue
-            value = None
+
+            bandgap = None
             for key in (
                 "bandgap_eV_ALIGNN_MBJ",
                 "bandgap_eV",
@@ -158,10 +196,10 @@ def read_bandgap_summary(path: Path) -> Dict[str, Dict[str, Any]]:
                 "pred_bandgap",
                 "pred_bandgap_eV",
             ):
-                value = _to_float(row.get(key))
-                if value is not None:
+                bandgap = _to_float(row.get(key))
+                if bandgap is not None:
                     break
-            output[candidate] = {"bandgap_eV": value}
+            output[candidate] = {"bandgap_eV": bandgap}
     return output
 
 
@@ -194,8 +232,6 @@ def read_formation_meta(path: Path) -> Dict[str, Any]:
             if isinstance(result, dict):
                 results[str(label)] = _normalise_reference_result(result)
 
-    # Legacy output: retain one deterministic column set if no multi-reference
-    # payload exists.
     if not results and data:
         label = str(data.get("primary_reference_label") or "legacy")
         results[label] = _normalise_reference_result(data)
@@ -214,14 +250,17 @@ def _parse_dynamic_reference_columns(row: Dict[str, Any]) -> Dict[str, Dict[str,
     for key, value in row.items():
         if "__" not in key:
             continue
+
         metric, label = key.split("__", 1)
         if metric not in _DYNAMIC_METRICS:
             continue
+
         result = results.setdefault(label, {})
-        if metric == "mixing_reaction_reference":
-            result[metric] = str(value or "")
-        else:
-            result[metric] = _to_float(value)
+        result[metric] = (
+            str(value or "")
+            if metric == "mixing_reaction_reference"
+            else _to_float(value)
+        )
     return results
 
 
@@ -235,9 +274,8 @@ def read_formation_csv(path: Path) -> Dict[str, Dict[str, Any]]:
             candidate = (row.get("candidate") or "").strip()
             if not candidate:
                 continue
-            results = _parse_dynamic_reference_columns(row)
 
-            # Current single-reference/legacy fallback.
+            results = _parse_dynamic_reference_columns(row)
             if not results and row.get("E_form_eV_total") not in {None, ""}:
                 label = str(row.get("primary_reference_label") or "legacy")
                 results[label] = {
@@ -252,7 +290,9 @@ def read_formation_csv(path: Path) -> Dict[str, Dict[str, Any]]:
                     "E_form_rel_eV_per_cation": _to_float(row.get("E_form_rel_eV_per_cation")),
                     "E_mix_rel_eV_per_cation": _to_float(row.get("E_mix_rel_eV_per_cation")),
                     "n_O2_out": _to_float(row.get("n_O2_out")),
-                    "mixing_reaction_reference": str(row.get("mixing_reaction_reference") or ""),
+                    "mixing_reaction_reference": str(
+                        row.get("mixing_reaction_reference") or ""
+                    ),
                 }
 
             output[candidate] = {
@@ -275,11 +315,109 @@ def _populate_dynamic_columns(
 ) -> None:
     for label, values in results.items():
         for metric in _DYNAMIC_METRICS:
-            row[_dynamic_column_name(metric, label)] = values.get(metric)
+            value = values.get(metric)
+            # Relative values are calculated globally after all compositions
+            # have been collected. Do not create empty columns beforehand.
+            if metric in _RELATIVE_METRICS and value is None:
+                continue
+            row[_dynamic_column_name(metric, label)] = value
+
+
+def _actual_endpoint_x(rows: List[Dict[str, Any]], requested_x: float | None) -> float:
+    x_values = sorted(
+        {
+            float(row["x_dopant"])
+            for row in rows
+            if _to_float(row.get("x_dopant")) is not None
+            and float(row["x_dopant"]) > 0.0
+        }
+    )
+    if not x_values:
+        raise ValueError("Relative energy requested, but no positive x_dopant values were collected.")
+
+    if requested_x is None:
+        return x_values[-1]
+
+    matches = [x for x in x_values if abs(x - requested_x) <= 1e-8]
+    if not matches:
+        available = ", ".join(f"{x:.8g}" for x in x_values)
+        raise ValueError(
+            f"No collected candidate has endpoint_x={requested_x:.8g}. "
+            f"Available actual dopant fractions: {available}"
+        )
+    return matches[0]
+
+
+def _reference_labels(rows: List[Dict[str, Any]], source_metric: str) -> List[str]:
+    prefix = f"{source_metric}__"
+    return sorted(
+        {
+            column[len(prefix):]
+            for row in rows
+            for column in row
+            if column.startswith(prefix)
+        }
+    )
+
+
+def _calculate_relative_columns(
+    rows: List[Dict[str, Any]],
+    *,
+    endpoint_x: float | None,
+) -> set[str]:
+    """
+    Populate relative energies after ALL composition folders have been collected.
+
+    This belongs in collection rather than a per-folder formation stage because
+    the definition requires one global endpoint X for the entire workflow.
+    """
+    X = _actual_endpoint_x(rows, endpoint_x)
+    added_columns: set[str] = set()
+
+    for relative_metric, source_metric in _RELATIVE_SOURCES.items():
+        for label in _reference_labels(rows, source_metric):
+            source_column = _dynamic_column_name(source_metric, label)
+            relative_column = _dynamic_column_name(relative_metric, label)
+
+            endpoint_values = [
+                float(row[source_column])
+                for row in rows
+                if _to_float(row.get("x_dopant")) is not None
+                and abs(float(row["x_dopant"]) - X) <= 1e-8
+                and _to_float(row.get(source_column)) is not None
+            ]
+            if not endpoint_values:
+                log.warning(
+                    "Cannot calculate %s: no valid endpoint energy for reference %s at X=%.8g",
+                    relative_metric,
+                    label,
+                    X,
+                )
+                continue
+
+            endpoint_energy = min(endpoint_values)
+            for row in rows:
+                x = _to_float(row.get("x_dopant"))
+                energy = _to_float(row.get(source_column))
+                row[relative_column] = (
+                    None if x is None or energy is None
+                    else energy - (x / X) * endpoint_energy
+                )
+
+            added_columns.add(relative_column)
+            log.info(
+                "Relative %s for %s: X=%.8g, E_min(X)=%.8f eV/cation",
+                relative_metric,
+                label,
+                X,
+                endpoint_energy,
+            )
+
+    return added_columns
 
 
 def run_collect(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None = None) -> Path:
-    """Collect selected candidates into a wide, reference-aware result database."""
+    """Collect selected candidates into one wide, reference-aware database."""
     cfg = _parse_db_config(raw_cfg, root)
     out_csv = (root / OUT_CSV).resolve()
 
@@ -316,7 +454,6 @@ def run_collect(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None
         "dopant_counts",
         "reference_labels_json",
     ]
-
     rows_out: List[Dict[str, Any]] = []
     dynamic_header: set[str] = set()
 
@@ -325,7 +462,12 @@ def run_collect(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None
         filtered = read_filtered_table(folder / RANK_RELAX_FILTERED)
         candidates = selected or sorted(filtered)
         if not candidates:
-            log.warning("Skip %s: no %s and no %s", folder.name, SELECTED_TXT, RANK_RELAX_FILTERED)
+            log.warning(
+                "Skip %s: no %s and no %s",
+                folder.name,
+                SELECTED_TXT,
+                RANK_RELAX_FILTERED,
+            )
             continue
 
         composition_meta = read_json(folder / META_COMP) or {}
@@ -339,7 +481,11 @@ def run_collect(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None
             fmeta = read_formation_meta(candidate_dir / FORMATION_META)
             fcsv = formation_csv.get(candidate, {})
 
-            reference_results = fmeta.get("reference_results") or fcsv.get("reference_results") or {}
+            reference_results = (
+                fmeta.get("reference_results")
+                or fcsv.get("reference_results")
+                or {}
+            )
             if not isinstance(reference_results, dict):
                 reference_results = {}
 
@@ -359,16 +505,28 @@ def run_collect(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None
             row: Dict[str, Any] = {
                 "composition_tag": folder.name,
                 "requested_index": safe_get(composition_meta, "requested_index"),
-                "requested_pct_json": json.dumps(safe_get(composition_meta, "requested_pct"))
-                    if safe_get(composition_meta, "requested_pct") is not None else "",
-                "effective_pct_json": json.dumps(safe_get(composition_meta, "effective_pct"))
-                    if safe_get(composition_meta, "effective_pct") is not None else "",
-                "rounded_counts_json": json.dumps(safe_get(composition_meta, "rounded_counts"))
-                    if safe_get(composition_meta, "rounded_counts") is not None else "",
+                "requested_pct_json": (
+                    json.dumps(safe_get(composition_meta, "requested_pct"))
+                    if safe_get(composition_meta, "requested_pct") is not None
+                    else ""
+                ),
+                "effective_pct_json": (
+                    json.dumps(safe_get(composition_meta, "effective_pct"))
+                    if safe_get(composition_meta, "effective_pct") is not None
+                    else ""
+                ),
+                "rounded_counts_json": (
+                    json.dumps(safe_get(composition_meta, "rounded_counts"))
+                    if safe_get(composition_meta, "rounded_counts") is not None
+                    else ""
+                ),
                 "host_species": safe_get(composition_meta, "host_species", default=""),
                 "n_host": safe_get(composition_meta, "n_host"),
-                "supercell_json": json.dumps(safe_get(composition_meta, "supercell"))
-                    if safe_get(composition_meta, "supercell") is not None else "",
+                "supercell_json": (
+                    json.dumps(safe_get(composition_meta, "supercell"))
+                    if safe_get(composition_meta, "supercell") is not None
+                    else ""
+                ),
                 "candidate": candidate,
                 "candidate_path": str(candidate_dir.resolve()),
                 "rank_relax_filtered": filtered.get(candidate, {}).get("rank_relax_filtered"),
@@ -382,13 +540,25 @@ def run_collect(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None
                 "reference_mode": fmeta.get("reference_mode") or fcsv.get("reference_mode") or "",
                 "x_dopant": _to_float(x_dopant),
                 "n_dopant_atoms": n_dopants,
-                "dopant_counts_json": json.dumps(dopant_counts_dict) if dopant_counts_dict is not None else "",
+                "dopant_counts_json": (
+                    json.dumps(dopant_counts_dict)
+                    if dopant_counts_dict is not None
+                    else ""
+                ),
                 "dopant_counts": fcsv.get("dopant_counts", ""),
                 "reference_labels_json": json.dumps(sorted(reference_results)),
             }
             _populate_dynamic_columns(row, reference_results)
             dynamic_header.update(key for key in row if "__" in key)
             rows_out.append(row)
+
+    if cfg.relative_enabled:
+        dynamic_header.update(
+            _calculate_relative_columns(
+                rows_out,
+                endpoint_x=cfg.relative_endpoint_x,
+            )
+        )
 
     with out_csv.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=base_header + sorted(dynamic_header))
