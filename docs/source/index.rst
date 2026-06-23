@@ -68,6 +68,7 @@ Examples
 
    examples/explicit_single
    examples/explicit_single_oxides
+   examples/multi_reference_oxide
    examples/explicit_batch
    examples/enumerate_screening
    examples/smoke_test
