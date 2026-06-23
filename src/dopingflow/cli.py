@@ -14,9 +14,8 @@ from dopingflow.relax import run_relax_from_toml
 from dopingflow.filtering import run_filtering_from_toml
 from dopingflow.bandgap import run_bandgap_from_toml
 from dopingflow.formation import run_formation_from_toml
-from dopingflow.collect import run_collect_from_toml
+from dopingflow.collect_relative import run_collect_from_toml
 from dopingflow.phase_diagram import run_phase_diagram_from_toml
-
 from dopingflow.sequential import run_sequential_from_toml
 
 app = typer.Typer(help="dopingflow: ML doping workflow pipeline")
@@ -122,6 +121,7 @@ def phase_diagram_cmd(
     out_path = run_phase_diagram_from_toml(config)
     typer.echo(f"\nWrote phase-diagram CSV: {out_path}")
 
+
 @app.command("run-all")
 def run_all_cmd(
     config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
@@ -137,7 +137,6 @@ def run_all_cmd(
         help="Comma-separated list of step keys to run (subset). Example: refs,generate,scan",
     ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print planned steps without running"),
-    # filter-specific passthroughs
     filter_only: Optional[str] = typer.Option(None, "--filter-only", help="Filter step: run only one folder name (e.g. Sb5_Zr5)"),
     force: bool = typer.Option(False, "--force", help="Filter step: rerun even if outputs exist"),
     window_meV: Optional[float] = typer.Option(None, "--window-mev", help="Filter step: override window filter (forces mode=window)"),
@@ -205,9 +204,9 @@ def run_all_cmd(
         typer.echo(f"\n=== {title} ({k}) ===")
         res = fn()
 
-        # Nice UX: show output for collect
         if k == "collect" and isinstance(res, Path):
             typer.echo(f"\nWrote database CSV: {res}")
+
 
 @app.command("sequential-run")
 def sequential_run_cmd(
@@ -218,13 +217,3 @@ def sequential_run_cmd(
     _init(config, verbose)
     out_path = run_sequential_from_toml(config)
     typer.echo(f"\nSequential workflow finished. Output directory: {out_path}")
-
-@app.command("surface")
-def surface_cmd(
-    config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
-    verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
-) -> None:
-    """Step 08: Generate surfaces from selected doped bulk candidates."""
-    _init(config, verbose)
-    from dopingflow.surface import run_surface_from_toml
-    run_surface_from_toml(config)
