@@ -11,18 +11,29 @@ from typing import Any, Dict, List, Optional
 log = logging.getLogger(__name__)
 
 OUT_CSV = "results_database.csv"
-
-# composition-level files
 META_COMP = "metadata.json"
 SELECTED_TXT = "selected_candidates.txt"
 RANK_RELAX_FILTERED = "ranking_relax_filtered.csv"
 RANK_SCAN = "ranking_scan.csv"
 BANDGAP_SUMMARY = "bandgap_alignn_summary.csv"
 FORMATION_CSV = "formation_energies.csv"
-
-# candidate-level
 RELAX_META = Path("02_relax") / "meta.json"
 FORMATION_META = Path("04_formation") / "meta.json"
+
+_DYNAMIC_METRICS = (
+    "E_form_eV_total",
+    "E_form_eV_per_atom",
+    "E_form_eV_per_cation",
+    "E_form_eV_per_dopant",
+    "E_mix_eV_total",
+    "E_mix_eV_per_atom",
+    "E_mix_eV_per_cation",
+    "E_mix_eV_per_dopant",
+    "E_form_rel_eV_per_cation",
+    "E_mix_rel_eV_per_cation",
+    "n_O2_out",
+    "mixing_reaction_reference",
+)
 
 
 @dataclass(frozen=True)
@@ -36,127 +47,110 @@ def read_json(path: Path) -> Optional[dict]:
         return None
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception as exc:
+        log.warning("Could not read JSON %s: %s", path, exc)
         return None
 
 
-def safe_get(d: Optional[dict], *keys, default=None):
-    cur = d
-    for k in keys:
-        if not isinstance(cur, dict) or k not in cur:
+def safe_get(data: Optional[dict], *keys: str, default: Any = None) -> Any:
+    current: Any = data
+    for key in keys:
+        if not isinstance(current, dict) or key not in current:
             return default
-        cur = cur[k]
-    return cur
+        current = current[key]
+    return current
 
 
-def _to_int(x: Any) -> Optional[int]:
+def _to_int(value: Any) -> Optional[int]:
     try:
-        s = str(x).strip()
-        if s == "":
-            return None
-        return int(float(s))
+        text = str(value).strip()
+        return None if text == "" else int(float(text))
     except Exception:
         return None
 
 
-def _to_float(x: Any) -> Optional[float]:
+def _to_float(value: Any) -> Optional[float]:
     try:
-        s = str(x).strip()
-        if s == "":
-            return None
-        return float(s)
+        text = str(value).strip()
+        return None if text == "" else float(text)
     except Exception:
         return None
 
 
 def _parse_db_config(raw: dict[str, Any], root: Path) -> DBConfig:
-    st = raw.get("structure", {}) or {}
-    db = raw.get("database", {}) or {}
-
-    outdir_name = str(st.get("outdir", "random_structures"))
-    outdir = (root / outdir_name).resolve()
-
-    skip_if_done = bool(db.get("skip_if_done", True))
-    return DBConfig(outdir=outdir, skip_if_done=skip_if_done)
+    structure = raw.get("structure", {}) or {}
+    database = raw.get("database", {}) or {}
+    return DBConfig(
+        outdir=(root / str(structure.get("outdir", "random_structures"))).resolve(),
+        skip_if_done=bool(database.get("skip_if_done", True)),
+    )
 
 
 def read_selected_txt(path: Path) -> List[str]:
     if not path.exists():
         return []
-    names: List[str] = []
-    for ln in path.read_text(encoding="utf-8").splitlines():
-        ln = ln.strip()
-        if ln and not ln.startswith("#"):
-            names.append(ln)
-    return names
+    return [
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
 
 
 def read_filtered_table(path: Path) -> Dict[str, Dict[str, Any]]:
-    out: Dict[str, Dict[str, Any]] = {}
+    output: Dict[str, Dict[str, Any]] = {}
     if not path.exists():
-        return out
-
-    with open(path, "r", encoding="utf-8") as f:
-        r = csv.DictReader(f)
-        for row in r:
-            cand = (row.get("candidate") or "").strip()
-            if not cand:
-                continue
-
-            out[cand] = {
-                "rank_relax_filtered": _to_int(row.get("rank_filtered")),
-                "E_relaxed_eV_filtered": _to_float(row.get("energy_relaxed_eV")),
-                "delta_e_eV": _to_float(row.get("delta_e_eV")),
-                "filter_mode": (row.get("filter_mode") or "").strip(),
-            }
-
-    return out
+        return output
+    with path.open("r", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            candidate = (row.get("candidate") or "").strip()
+            if candidate:
+                output[candidate] = {
+                    "rank_relax_filtered": _to_int(row.get("rank_filtered")),
+                    "E_relaxed_eV_filtered": _to_float(row.get("energy_relaxed_eV")),
+                    "delta_e_eV": _to_float(row.get("delta_e_eV")),
+                    "filter_mode": (row.get("filter_mode") or "").strip(),
+                }
+    return output
 
 
 def read_scan_ranking(path: Path) -> Dict[str, Dict[str, Any]]:
-    out: Dict[str, Dict[str, Any]] = {}
+    output: Dict[str, Dict[str, Any]] = {}
     if not path.exists():
-        return out
-
-    with open(path, "r", encoding="utf-8") as f:
-        r = csv.DictReader(f)
-        for row in r:
-            cand = (
+        return output
+    with path.open("r", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            candidate = (
                 row.get("candidate")
                 or row.get("candidate_id")
                 or row.get("name")
                 or row.get("folder")
                 or ""
             ).strip()
-            if not cand:
+            if not candidate:
                 continue
-
-            rank = _to_int(row.get("rank") or row.get("rank_scan"))
-            E = _to_float(
-                row.get("E_eV")
-                or row.get("energy_eV")
-                or row.get("E_scan_eV")
-                or row.get("energy_sp_eV")
-                or row.get("energy")
-            )
-
-            out[cand] = {"rank_scan": rank, "E_scan_eV": E}
-    return out
+            output[candidate] = {
+                "rank_scan": _to_int(row.get("rank") or row.get("rank_scan")),
+                "E_scan_eV": _to_float(
+                    row.get("E_eV")
+                    or row.get("energy_eV")
+                    or row.get("E_scan_eV")
+                    or row.get("energy_sp_eV")
+                    or row.get("energy")
+                ),
+            }
+    return output
 
 
 def read_bandgap_summary(path: Path) -> Dict[str, Dict[str, Any]]:
-    out: Dict[str, Dict[str, Any]] = {}
+    output: Dict[str, Dict[str, Any]] = {}
     if not path.exists():
-        return out
-
-    with open(path, "r", encoding="utf-8") as f:
-        r = csv.DictReader(f)
-        for row in r:
-            cand = (row.get("candidate") or row.get("candidate_id") or row.get("name") or "").strip()
-            if not cand:
+        return output
+    with path.open("r", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            candidate = (row.get("candidate") or row.get("candidate_id") or row.get("name") or "").strip()
+            if not candidate:
                 continue
-
-            bg = None
+            value = None
             for key in (
                 "bandgap_eV_ALIGNN_MBJ",
                 "bandgap_eV",
@@ -164,111 +158,139 @@ def read_bandgap_summary(path: Path) -> Dict[str, Dict[str, Any]]:
                 "pred_bandgap",
                 "pred_bandgap_eV",
             ):
-                if key in row and row[key] is not None and str(row[key]).strip() != "":
-                    bg = _to_float(row[key])
-                    if bg is not None:
-                        break
-
-            out[cand] = {"bandgap_eV": bg}
-    return out
+                value = _to_float(row.get(key))
+                if value is not None:
+                    break
+            output[candidate] = {"bandgap_eV": value}
+    return output
 
 
-def read_formation_csv(path: Path) -> Dict[str, Dict[str, Any]]:
-    """
-    formation_energies.csv written by formation.py.
-
-    We keep it as a fallback, but prefer candidate_*/04_formation/meta.json for rich info.
-    """
-    out: Dict[str, Dict[str, Any]] = {}
-    if not path.exists():
-        return out
-
-    with open(path, "r", encoding="utf-8") as f:
-        r = csv.DictReader(f)
-        for row in r:
-            cand = (row.get("candidate") or "").strip()
-            if not cand:
-                continue
-
-            out[cand] = {
-                "reference_mode": (row.get("reference_mode") or "").strip(),
-                "E_form_eV_total": _to_float(
-                    row.get("E_form_eV_total")
-                    or row.get("E_form_total")
-                    or row.get("E_form_total_eV")
-                ),
-                "E_form_norm": _to_float(
-                    row.get("E_form_per_dopant")
-                    or row.get("E_form_per_host")
-                    or row.get("E_form_norm")
-                    or row.get("E_form_total")
-                ),
-                "n_dopant_atoms": _to_int(row.get("n_dopant_atoms")),
-                "dopant_counts": (row.get("dopant_counts") or "").strip(),
-                # mixing-energy fallback columns
-                "x_dopant": _to_float(row.get("x_dopant")),
-                "E_mix_eV_total": _to_float(row.get("E_mix_eV_total")),
-                "E_mix_eV_per_atom": _to_float(row.get("E_mix_eV_per_atom")),
-                "E_mix_eV_per_cation": _to_float(row.get("E_mix_eV_per_cation")),
-                "E_mix_eV_per_dopant": _to_float(row.get("E_mix_eV_per_dopant")),
-                "n_O2_out": _to_float(row.get("n_O2_out")),
-                "mixing_reaction_reference": (row.get("mixing_reaction_reference") or "").strip(),
-            }
-    return out
-
-
-def read_formation_meta(path: Path) -> Dict[str, Any]:
-    """
-    candidate_*/04_formation/meta.json written by formation.py.
-    """
-    d = read_json(path) or {}
-    mixing = d.get("mixing", None)
-    if not isinstance(mixing, dict):
-        mixing = {}
-
+def _normalise_reference_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    mixing = result.get("mixing", {}) or {}
+    relative = result.get("relative", {}) or {}
     return {
-        "reference_mode": d.get("reference_mode"),
-        "E_form_eV_total": d.get("E_form_eV_total"),
-        "E_form_norm": safe_get(d, "reported", "value", default=None),
-        "E_form_norm_unit": safe_get(d, "reported", "unit", default=""),
-        "dopant_counts_dict": d.get("dopant_counts", None),
-        "n_atoms_supercell": d.get("n_atoms_supercell", None),
-        # mixing
-        "x_dopant": mixing.get("x_dopant", None),
-        "E_mix_eV_total": mixing.get("E_mix_eV_total", None),
-        "E_mix_eV_per_atom": mixing.get("E_mix_eV_per_atom", None),
-        "E_mix_eV_per_cation": mixing.get("E_mix_eV_per_cation", None),
-        "E_mix_eV_per_dopant": mixing.get("E_mix_eV_per_dopant", None),
-        "n_O2_out": mixing.get("n_O2_out", None),
+        "E_form_eV_total": result.get("E_form_eV_total"),
+        "E_form_eV_per_atom": result.get("E_form_eV_per_atom"),
+        "E_form_eV_per_cation": result.get("E_form_eV_per_cation"),
+        "E_form_eV_per_dopant": result.get("E_form_eV_per_dopant"),
+        "E_mix_eV_total": mixing.get("E_mix_eV_total"),
+        "E_mix_eV_per_atom": mixing.get("E_mix_eV_per_atom"),
+        "E_mix_eV_per_cation": mixing.get("E_mix_eV_per_cation"),
+        "E_mix_eV_per_dopant": mixing.get("E_mix_eV_per_dopant"),
+        "E_form_rel_eV_per_cation": relative.get("E_form_rel_eV_per_cation"),
+        "E_mix_rel_eV_per_cation": relative.get("E_mix_rel_eV_per_cation"),
+        "n_O2_out": mixing.get("n_O2_out"),
         "mixing_reaction_reference": mixing.get("reaction_reference", ""),
     }
 
 
+def read_formation_meta(path: Path) -> Dict[str, Any]:
+    data = read_json(path) or {}
+    results: Dict[str, Dict[str, Any]] = {}
+
+    stored = data.get("reference_results", {})
+    if isinstance(stored, dict):
+        for label, result in stored.items():
+            if isinstance(result, dict):
+                results[str(label)] = _normalise_reference_result(result)
+
+    # Legacy output: retain one deterministic column set if no multi-reference
+    # payload exists.
+    if not results and data:
+        label = str(data.get("primary_reference_label") or "legacy")
+        results[label] = _normalise_reference_result(data)
+
+    return {
+        "reference_mode": data.get("reference_mode", ""),
+        "reference_results": results,
+        "dopant_counts_dict": data.get("dopant_counts"),
+        "n_atoms_supercell": data.get("n_atoms_supercell"),
+        "x_dopant": data.get("x_dopant"),
+    }
+
+
+def _parse_dynamic_reference_columns(row: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    results: Dict[str, Dict[str, Any]] = {}
+    for key, value in row.items():
+        if "__" not in key:
+            continue
+        metric, label = key.split("__", 1)
+        if metric not in _DYNAMIC_METRICS:
+            continue
+        result = results.setdefault(label, {})
+        if metric == "mixing_reaction_reference":
+            result[metric] = str(value or "")
+        else:
+            result[metric] = _to_float(value)
+    return results
+
+
+def read_formation_csv(path: Path) -> Dict[str, Dict[str, Any]]:
+    output: Dict[str, Dict[str, Any]] = {}
+    if not path.exists():
+        return output
+
+    with path.open("r", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            candidate = (row.get("candidate") or "").strip()
+            if not candidate:
+                continue
+            results = _parse_dynamic_reference_columns(row)
+
+            # Current single-reference/legacy fallback.
+            if not results and row.get("E_form_eV_total") not in {None, ""}:
+                label = str(row.get("primary_reference_label") or "legacy")
+                results[label] = {
+                    "E_form_eV_total": _to_float(row.get("E_form_eV_total")),
+                    "E_form_eV_per_atom": _to_float(row.get("E_form_eV_per_atom")),
+                    "E_form_eV_per_cation": _to_float(row.get("E_form_eV_per_cation")),
+                    "E_form_eV_per_dopant": _to_float(row.get("E_form_per_dopant")),
+                    "E_mix_eV_total": _to_float(row.get("E_mix_eV_total")),
+                    "E_mix_eV_per_atom": _to_float(row.get("E_mix_eV_per_atom")),
+                    "E_mix_eV_per_cation": _to_float(row.get("E_mix_eV_per_cation")),
+                    "E_mix_eV_per_dopant": _to_float(row.get("E_mix_eV_per_dopant")),
+                    "E_form_rel_eV_per_cation": _to_float(row.get("E_form_rel_eV_per_cation")),
+                    "E_mix_rel_eV_per_cation": _to_float(row.get("E_mix_rel_eV_per_cation")),
+                    "n_O2_out": _to_float(row.get("n_O2_out")),
+                    "mixing_reaction_reference": str(row.get("mixing_reaction_reference") or ""),
+                }
+
+            output[candidate] = {
+                "reference_mode": (row.get("reference_mode") or "").strip(),
+                "reference_results": results,
+                "n_dopant_atoms": _to_int(row.get("n_dopant_atoms")),
+                "dopant_counts": (row.get("dopant_counts") or "").strip(),
+                "x_dopant": _to_float(row.get("x_dopant")),
+            }
+    return output
+
+
+def _dynamic_column_name(metric: str, label: str) -> str:
+    return f"{metric}__{label}"
+
+
+def _populate_dynamic_columns(
+    row: Dict[str, Any],
+    results: Dict[str, Dict[str, Any]],
+) -> None:
+    for label, values in results.items():
+        for metric in _DYNAMIC_METRICS:
+            row[_dynamic_column_name(metric, label)] = values.get(metric)
+
+
 def run_collect(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None = None) -> Path:
-    """
-    Step 07: Collect results into ONE flat CSV database (results_database.csv),
-    ONLY for the filtered/selected candidates (Step 04 output).
-
-    Selection priority:
-      1) selected_candidates.txt
-      2) ranking_relax_filtered.csv
-    """
+    """Collect selected candidates into a wide, reference-aware result database."""
     cfg = _parse_db_config(raw_cfg, root)
-
     out_csv = (root / OUT_CSV).resolve()
+
     if cfg.skip_if_done and out_csv.exists():
         log.info("SKIP %s already exists: %s", OUT_CSV, out_csv)
         log.info("Set [database].skip_if_done=false to overwrite.")
         return out_csv
-
     if not cfg.outdir.exists():
         raise FileNotFoundError(f"[structure].outdir not found: {cfg.outdir}")
 
-    folders = sorted([p for p in cfg.outdir.iterdir() if p.is_dir()])
-    log.info("Step 07 collect: %d composition folders in: %s", len(folders), cfg.outdir)
-
-    header = [
-        # composition-level
+    base_header = [
         "composition_tag",
         "requested_index",
         "requested_pct_json",
@@ -277,168 +299,106 @@ def run_collect(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None
         "host_species",
         "n_host",
         "supercell_json",
-        # candidate-level
         "candidate",
         "candidate_path",
-        # relax filtered
         "rank_relax_filtered",
         "E_relaxed_eV_filtered",
         "delta_e_eV",
         "filter_mode",
-        # scan
         "rank_scan",
         "E_scan_eV",
-        # relax meta
         "E_relaxed_eV",
-        # bandgap
         "bandgap_eV",
-        # formation
         "reference_mode",
-        "E_form_eV_total",
-        "E_form_norm",
-        "E_form_norm_unit",
+        "x_dopant",
         "n_dopant_atoms",
         "dopant_counts_json",
-        # mixing
-        "x_dopant",
-        "E_mix_eV_total",
-        "E_mix_eV_per_atom",
-        "E_mix_eV_per_cation",
-        "E_mix_eV_per_dopant",
-        "n_O2_out",
-        "mixing_reaction_reference",
-        # legacy string
         "dopant_counts",
+        "reference_labels_json",
     ]
 
     rows_out: List[Dict[str, Any]] = []
+    dynamic_header: set[str] = set()
 
-    for folder in folders:
-        comp_tag = folder.name
-
+    for folder in sorted(path for path in cfg.outdir.iterdir() if path.is_dir()):
         selected = read_selected_txt(folder / SELECTED_TXT)
-        filtered_map = read_filtered_table(folder / RANK_RELAX_FILTERED)
-
-        if selected:
-            candidate_names = selected
-        elif filtered_map:
-            candidate_names = sorted(filtered_map.keys())
-        else:
-            log.warning("Skip %s: no %s and no %s", comp_tag, SELECTED_TXT, RANK_RELAX_FILTERED)
+        filtered = read_filtered_table(folder / RANK_RELAX_FILTERED)
+        candidates = selected or sorted(filtered)
+        if not candidates:
+            log.warning("Skip %s: no %s and no %s", folder.name, SELECTED_TXT, RANK_RELAX_FILTERED)
             continue
 
-        comp_meta = read_json(folder / META_COMP) or {}
-        scan_map = read_scan_ranking(folder / RANK_SCAN)
-        bg_map = read_bandgap_summary(folder / BANDGAP_SUMMARY)
-        form_csv_map = read_formation_csv(folder / FORMATION_CSV)
+        composition_meta = read_json(folder / META_COMP) or {}
+        scans = read_scan_ranking(folder / RANK_SCAN)
+        bandgaps = read_bandgap_summary(folder / BANDGAP_SUMMARY)
+        formation_csv = read_formation_csv(folder / FORMATION_CSV)
 
-        requested_pct = safe_get(comp_meta, "requested_pct", default=None)
-        effective_pct = safe_get(comp_meta, "effective_pct", default=None)
-        rounded_counts = safe_get(comp_meta, "rounded_counts", default=None)
-        supercell = safe_get(comp_meta, "supercell", default=None)
+        for candidate in candidates:
+            candidate_dir = folder / candidate
+            relax_meta = read_json(candidate_dir / RELAX_META) or {}
+            fmeta = read_formation_meta(candidate_dir / FORMATION_META)
+            fcsv = formation_csv.get(candidate, {})
 
-        for cand in candidate_names:
-            cand_dir = folder / cand
-            relax_meta = read_json(cand_dir / RELAX_META) or {}
+            reference_results = fmeta.get("reference_results") or fcsv.get("reference_results") or {}
+            if not isinstance(reference_results, dict):
+                reference_results = {}
 
-            fmeta = read_formation_meta(cand_dir / FORMATION_META)
-            fcsv = form_csv_map.get(cand, {}) if isinstance(form_csv_map, dict) else {}
+            dopant_counts_dict = fmeta.get("dopant_counts_dict")
+            if not isinstance(dopant_counts_dict, dict):
+                dopant_counts_dict = None
 
-            reference_mode = fmeta.get("reference_mode") or fcsv.get("reference_mode") or ""
-
-            E_form_total = fmeta.get("E_form_eV_total")
-            E_form_norm = fmeta.get("E_form_norm")
-            E_form_unit = fmeta.get("E_form_norm_unit") or ""
-
-            if E_form_total is None:
-                E_form_total = fcsv.get("E_form_eV_total")
-            if E_form_norm is None:
-                E_form_norm = fcsv.get("E_form_norm")
-
-            dop_counts_dict = fmeta.get("dopant_counts_dict")
-            dop_counts_json = json.dumps(dop_counts_dict) if isinstance(dop_counts_dict, dict) else ""
-            dop_counts_legacy = fcsv.get("dopant_counts", "") if isinstance(fcsv, dict) else ""
-
-            n_dopant_atoms = None
-            if isinstance(dop_counts_dict, dict):
-                try:
-                    n_dopant_atoms = int(sum(int(v) for v in dop_counts_dict.values()))
-                except Exception:
-                    n_dopant_atoms = None
-            if n_dopant_atoms is None and isinstance(fcsv, dict):
-                n_dopant_atoms = _to_int(fcsv.get("n_dopant_atoms"))
-
+            n_dopants = (
+                int(sum(int(value) for value in dopant_counts_dict.values()))
+                if dopant_counts_dict is not None
+                else fcsv.get("n_dopant_atoms")
+            )
             x_dopant = fmeta.get("x_dopant")
-            E_mix_total = fmeta.get("E_mix_eV_total")
-            E_mix_atom = fmeta.get("E_mix_eV_per_atom")
-            E_mix_cation = fmeta.get("E_mix_eV_per_cation")
-            E_mix_dopant = fmeta.get("E_mix_eV_per_dopant")
-            n_O2_out = fmeta.get("n_O2_out")
-            mixing_reaction = fmeta.get("mixing_reaction_reference") or ""
-
             if x_dopant is None:
                 x_dopant = fcsv.get("x_dopant")
-            if E_mix_total is None:
-                E_mix_total = fcsv.get("E_mix_eV_total")
-            if E_mix_atom is None:
-                E_mix_atom = fcsv.get("E_mix_eV_per_atom")
-            if E_mix_cation is None:
-                E_mix_cation = fcsv.get("E_mix_eV_per_cation")
-            if E_mix_dopant is None:
-                E_mix_dopant = fcsv.get("E_mix_eV_per_dopant")
-            if n_O2_out is None:
-                n_O2_out = fcsv.get("n_O2_out")
-            if not mixing_reaction:
-                mixing_reaction = fcsv.get("mixing_reaction_reference", "")
 
-            row = {
-                "composition_tag": comp_tag,
-                "requested_index": safe_get(comp_meta, "requested_index", default=None),
-                "requested_pct_json": json.dumps(requested_pct) if requested_pct is not None else "",
-                "effective_pct_json": json.dumps(effective_pct) if effective_pct is not None else "",
-                "rounded_counts_json": json.dumps(rounded_counts) if rounded_counts is not None else "",
-                "host_species": safe_get(comp_meta, "host_species", default=""),
-                "n_host": safe_get(comp_meta, "n_host", default=None),
-                "supercell_json": json.dumps(supercell) if supercell is not None else "",
-                "candidate": cand,
-                "candidate_path": str(cand_dir.resolve()),
-                "rank_relax_filtered": filtered_map.get(cand, {}).get("rank_relax_filtered", None),
-                "E_relaxed_eV_filtered": filtered_map.get(cand, {}).get("E_relaxed_eV_filtered", None),
-                "delta_e_eV": filtered_map.get(cand, {}).get("delta_e_eV", None),
-                "filter_mode": filtered_map.get(cand, {}).get("filter_mode", ""),
-                "rank_scan": scan_map.get(cand, {}).get("rank_scan", None),
-                "E_scan_eV": scan_map.get(cand, {}).get("E_scan_eV", None),
-                "E_relaxed_eV": relax_meta.get("energy_relaxed_eV", None),
-                "bandgap_eV": bg_map.get(cand, {}).get("bandgap_eV", None),
-                "reference_mode": reference_mode,
-                "E_form_eV_total": _to_float(E_form_total),
-                "E_form_norm": _to_float(E_form_norm),
-                "E_form_norm_unit": str(E_form_unit or ""),
-                "n_dopant_atoms": n_dopant_atoms,
-                "dopant_counts_json": dop_counts_json,
+            row: Dict[str, Any] = {
+                "composition_tag": folder.name,
+                "requested_index": safe_get(composition_meta, "requested_index"),
+                "requested_pct_json": json.dumps(safe_get(composition_meta, "requested_pct"))
+                    if safe_get(composition_meta, "requested_pct") is not None else "",
+                "effective_pct_json": json.dumps(safe_get(composition_meta, "effective_pct"))
+                    if safe_get(composition_meta, "effective_pct") is not None else "",
+                "rounded_counts_json": json.dumps(safe_get(composition_meta, "rounded_counts"))
+                    if safe_get(composition_meta, "rounded_counts") is not None else "",
+                "host_species": safe_get(composition_meta, "host_species", default=""),
+                "n_host": safe_get(composition_meta, "n_host"),
+                "supercell_json": json.dumps(safe_get(composition_meta, "supercell"))
+                    if safe_get(composition_meta, "supercell") is not None else "",
+                "candidate": candidate,
+                "candidate_path": str(candidate_dir.resolve()),
+                "rank_relax_filtered": filtered.get(candidate, {}).get("rank_relax_filtered"),
+                "E_relaxed_eV_filtered": filtered.get(candidate, {}).get("E_relaxed_eV_filtered"),
+                "delta_e_eV": filtered.get(candidate, {}).get("delta_e_eV"),
+                "filter_mode": filtered.get(candidate, {}).get("filter_mode", ""),
+                "rank_scan": scans.get(candidate, {}).get("rank_scan"),
+                "E_scan_eV": scans.get(candidate, {}).get("E_scan_eV"),
+                "E_relaxed_eV": relax_meta.get("energy_relaxed_eV"),
+                "bandgap_eV": bandgaps.get(candidate, {}).get("bandgap_eV"),
+                "reference_mode": fmeta.get("reference_mode") or fcsv.get("reference_mode") or "",
                 "x_dopant": _to_float(x_dopant),
-                "E_mix_eV_total": _to_float(E_mix_total),
-                "E_mix_eV_per_atom": _to_float(E_mix_atom),
-                "E_mix_eV_per_cation": _to_float(E_mix_cation),
-                "E_mix_eV_per_dopant": _to_float(E_mix_dopant),
-                "n_O2_out": _to_float(n_O2_out),
-                "mixing_reaction_reference": str(mixing_reaction or ""),
-                "dopant_counts": dop_counts_legacy,
+                "n_dopant_atoms": n_dopants,
+                "dopant_counts_json": json.dumps(dopant_counts_dict) if dopant_counts_dict is not None else "",
+                "dopant_counts": fcsv.get("dopant_counts", ""),
+                "reference_labels_json": json.dumps(sorted(reference_results)),
             }
-
+            _populate_dynamic_columns(row, reference_results)
+            dynamic_header.update(key for key in row if "__" in key)
             rows_out.append(row)
 
-    with open(out_csv, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=header)
-        w.writeheader()
-        for r in rows_out:
-            w.writerow(r)
+    with out_csv.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=base_header + sorted(dynamic_header))
+        writer.writeheader()
+        writer.writerows(rows_out)
 
     log.info("DONE Step 07 collect: wrote %d rows to %s", len(rows_out), out_csv)
     return out_csv
 
 
-# TOML wrapper
 try:
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover
@@ -451,5 +411,4 @@ def _load_raw_toml(path: Path) -> dict[str, Any]:
 
 def run_collect_from_toml(config_path: Path) -> Path:
     raw = _load_raw_toml(config_path)
-    root = config_path.resolve().parent
-    return run_collect(raw, root, config_path=config_path)
+    return run_collect(raw, config_path.resolve().parent, config_path=config_path)
