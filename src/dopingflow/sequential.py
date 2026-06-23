@@ -207,8 +207,12 @@ def run_sequential(
             log.info("Running filter for %s", comp_label)
             run_filtering(cfg, root)
 
-            log.info("Running bandgap for %s", comp_label)
-            run_bandgap(cfg, root)
+            bandgap_cfg = cfg.get("bandgap", {}) or {}
+            if bool(bandgap_cfg.get("enabled", True)):
+                log.info("Running bandgap for %s", comp_label)
+                run_bandgap(cfg, root)
+            else:
+                log.info("Skipping bandgap for %s because [bandgap].enabled=false", comp_label)
 
         else:
             if not step_outdir.exists():
