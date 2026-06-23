@@ -14,6 +14,7 @@ The workflow integrates:
 
 - Structure generation and symmetry-aware enumeration
 - ML-based screening and relaxation using configurable backends (M3GNet, UMA, MACE, GRACE)
+- Sequential gradual doping with stepwise relaxation and energy recomputation
 - Formation energy calculations using configurable thermodynamic reference schemes
 - Bandgap prediction using ALIGNN
 - Automated database collection
@@ -48,12 +49,14 @@ Each stage can be executed independently and uses its own configuration block.
 
    methods/references
    methods/generation
+   methods/sequential
    methods/scanning
    methods/relaxation
    methods/filtering
    methods/bandgap
    methods/formation_energy
    methods/database
+   methods/phase_diagram
    methods/surfaces
 
 
@@ -68,6 +71,7 @@ Examples
    examples/explicit_batch
    examples/enumerate_screening
    examples/smoke_test
+   examples/sequential_workflow
 
 
 API Reference

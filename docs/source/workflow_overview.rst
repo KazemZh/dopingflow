@@ -23,58 +23,89 @@ Optional Post-Processing:
 
 Database → Surface Generation → Surface Relaxation
 
+Sequential Workflow
+-------------------
+
+For gradual doping studies, ``dopingflow`` also provides a sequential workflow:
+
+::
+
+   dopingflow sequential-run -c input.toml
+
+In this mode, the workflow processes the composition list step by step. For example,
+a sequence such as 2.5%, 5%, 7.5%, and 10% Sb is treated as a gradual doping path.
+At each step, the workflow scans possible dopant positions, relaxes the selected
+candidates, and copies the lowest-energy relaxed structure as the starting point
+for the next composition.
+
+The sequential workflow supports two modes:
+
+- ``full``: run generation, scan, relaxation, filtering, optional bandgap,
+  formation energy, and database collection for each composition.
+- ``recompute_energies``: reuse existing relaxed sequential structures and
+  recompute formation/mixing energies after changing reference structures.
 
 Stages
 ------
 
 0. Reference construction and relaxation
+
    - Relax host structure (unit cell and supercell)
    - Relax reference phases (metal or oxide mode)
    - Build thermodynamic reference dataset
 
 1. Symmetry-reduced dopant enumeration
+
    - Generate substitutional doped configurations
    - Identify symmetry-unique arrangements on the cation sublattice
 
 2. ML-based energy screening
+
    - Evaluate single-point energies using a selected ML backend
    - Supports: M3GNet, UMA, MACE, GRACE
    - Exact enumeration or stochastic sampling
 
 3. Structure relaxation
+
    - Relax candidate structures using ML forces
    - Uses ASE optimizers (e.g. BFGS, FIRE, LBFGS)
    - CPU or GPU execution
 
 4. Energy-based filtering
+
    - Select low-energy candidates
    - Window-based or top-N selection strategies
 
 5. Band gap prediction
+
    - Predict electronic band gaps using ALIGNN
 
 6. Formation energy evaluation
+
    - Compute formation energies using reference structures
    - Supports metal and oxide reference schemes
 
 7. Database assembly
+
    - Aggregate results across all stages
    - Export a unified CSV database
 
 8. Phase diagram analysis
+
    - Compute energy above hull for each candidate using pymatgen
 
 9. Surface generation (optional)
+
    - Select candidates from the database
    - Generate slab structures for chosen Miller indices
    - Enumerate surface terminations
    - Optionally fix atoms in the slab
 
 10. Surface relaxation (optional)
+
    - Relax slab structures using ML interatomic potentials
    - Apply atom constraints (e.g. fixed bottom layers)
    - Use the same backend abstraction as bulk relaxation
-
 
 Design Principles
 -----------------

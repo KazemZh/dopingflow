@@ -53,6 +53,7 @@ The following sections are supported:
 - ``[references]``
 - ``[structure]``
 - ``[doping]``
+- ``[sequential]``
 - ``[generate]``
 - ``[scan]``
 - ``[relax]``
@@ -261,6 +262,44 @@ levels (array of floats)
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
 Discrete concentration values per dopant.
+
+---------------------------------------------------------------------
+
+[sequential]
+------------
+
+Controls the gradual sequential doping workflow executed with:
+
+::
+
+   dopingflow sequential-run -c input.toml
+
+outdir (string, default: "sequential_structures")
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Directory where sequential step folders are written.
+
+mode (string, default: "full")
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Controls the sequential execution mode:
+
+- ``"full"`` — run the full stepwise workflow:
+  generate → scan → relax → filter → optional bandgap → formation → collect.
+
+- ``"recompute_energies"`` — reuse existing relaxed sequential structures and
+  rerun only formation energy and database collection. This is useful when the
+  user wants to change the thermodynamic reference, for example from ``Sb2O3``
+  to ``Sb2O5``, without regenerating or relaxing structures.
+
+Example
+~~~~~~~
+
+::
+
+   [sequential]
+   outdir = "sequential_structures"
+   mode = "full"
 
 ---------------------------------------------------------------------
 
@@ -932,6 +971,12 @@ Step 05 — Bandgap prediction using a local ALIGNN model.
 
 Requires environment variable ``ALIGNN_MODEL_DIR`` pointing to
 a local ALIGNN model directory.
+
+enabled (boolean, default: true)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If false, ``sequential-run`` skips the bandgap stage. The final database is still
+written, but ``bandgap_eV`` is left empty.
 
 skip_if_done (bool)
 ~~~~~~~~~~~~~~~~~~~

@@ -134,7 +134,7 @@ export MP_API_KEY=your_api_key
 Each stage can be run individually:
 
 ``` bash
-dopingflow refs -c input.toml
+dopingflow refs-build -c input.toml
 dopingflow generate -c input.toml
 dopingflow scan -c input.toml
 dopingflow relax -c input.toml
@@ -150,6 +150,12 @@ Or run the complete pipeline:
 
 ``` bash
 dopingflow run-all -c input.toml
+```
+
+For gradual composition-by-composition doping, use sequential-run. This reuses the lowest-energy relaxed structure from each composition as the base for the next composition:
+
+``` bash
+dopingflow sequential-run -c input.toml
 ```
 
 ------------------------------------------------------------------------
@@ -207,7 +213,8 @@ After launching, a local browser window will open automatically.
 │       │   ├── explicit_batch.rst
 │       │   ├── explicit_single_oxides.rst
 │       │   ├── explicit_single.rst
-│       │   └── smoke_test.rst
+│       │   ├── smoke_test.rst
+│       │   └── sequential_workflow.rst
 │       ├── index.rst
 │       ├── input_file.rst
 │       ├── installation_and_usage.rst
@@ -220,6 +227,7 @@ After launching, a local browser window will open automatically.
 │       │   ├── phase_diagram.rst
 │       │   ├── references.rst
 │       │   ├── relaxation.rst
+│       │   ├── sequential.rst
 │       │   ├── scanning.rst
 │       │   └── surfaces.rst
 │       ├── required_inputs.rst
@@ -268,6 +276,7 @@ After launching, a local browser window will open automatically.
 │       ├── refs.py
 │       ├── relax.py
 │       ├── scan.py
+│       ├── sequential.py
 │       ├── surface.py
 │       └── utils
 │           ├── io.py

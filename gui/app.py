@@ -235,6 +235,7 @@ if tab == "Input Builder":
         "structure",
         "doping",
         "generate",
+        "sequential",
         "scan",
         "relax",
         "filter",
@@ -941,6 +942,34 @@ if tab == "Input Builder":
 
             # compositions unused in enumerate mode
             cfg_edit["doping"].setdefault("compositions", [])
+
+    # -----------------------------
+    # SEQUENTIAL
+    # -----------------------------
+
+    with st.expander("Sequential workflow", expanded=False):
+        cfg_edit.setdefault("sequential", {})
+
+        cfg_edit["sequential"]["outdir"] = st.text_input(
+            "Sequential output directory",
+            value=str(cfg_edit["sequential"].get("outdir", "sequential_structures")),
+            help="Directory containing step_001_*, step_002_*, ... sequential outputs.",
+        )
+
+        mode_choices = ["full", "recompute_energies"]
+        current_mode = str(cfg_edit["sequential"].get("mode", "full")).strip().lower()
+        if current_mode not in mode_choices:
+            current_mode = "full"
+
+        cfg_edit["sequential"]["mode"] = st.selectbox(
+            "Sequential mode",
+            options=mode_choices,
+            index=mode_choices.index(current_mode),
+            help=(
+                "full: run generate → scan → relax → filter → optional bandgap → formation → collect. "
+                "recompute_energies: reuse existing relaxed sequential structures and rerun formation/collect only."
+            ),
+        )
 
     # -----------------------------
     # SCAN
@@ -1859,6 +1888,11 @@ if tab == "Input Builder":
     # BANDGAP
     # -----------------------------
     with st.expander("Bandgap", expanded=False):
+        cfg_edit["bandgap"]["enabled"] = st.checkbox(
+            "Enable bandgap calculation",
+            value=bool(cfg_edit["bandgap"].get("enabled", True)),
+            help="If disabled, sequential-run skips the bandgap step and leaves bandgap_eV empty in results_database.csv.",
+        )        
         st.subheader("Bandgap prediction")
 
         st.caption(
@@ -2762,12 +2796,20 @@ elif tab == "Run":
 
     run_mode = st.radio(
         "What do you want to run?",
-        options=["Full workflow", "Stage range", "Single stage"],
+        options=[
+            "Full workflow",
+            "Sequential workflow",
+            "Stage range",
+            "Single stage",
+        ],
         horizontal=True,
         help=(
-            "Full workflow runs the bulk pipeline. "
-            "Stage range runs from a start stage to an end stage. "
-            "Single stage runs exactly one chosen stage, including surface."
+            "Full workflow runs the standard bulk pipeline (refs → generate → scan → "
+            "relax → filter → bandgap → formation → collect). "
+            "Sequential workflow performs gradual sequential doping using the settings "
+            "defined in the [sequential] section of input.toml. "
+            "Stage range runs from a selected start stage to an end stage. "
+            "Single stage runs exactly one chosen stage, including the surface stage."
         ),
     )
 
@@ -2779,6 +2821,11 @@ elif tab == "Run":
     if run_mode == "Full workflow":
         st.success("Will run: refs → collect (bulk workflow).")
         step_from, step_until = "refs", "collect"
+
+    elif run_mode == "Sequential workflow":
+        st.success(
+            "Will run: sequential doping workflow using [sequential].mode from input.toml."
+        )
 
     elif run_mode == "Stage range":
         colA, colB = st.columns(2)
@@ -2862,8 +2909,22 @@ elif tab == "Run":
     run_surface_after = False
     surface_cmd: list[str] | None = None
 
-    if run_mode == "Single stage" and only_steps == ["surface"]:
+    if run_mode == "Sequential workflow":
+
+        cmd = [
+            "dopingflow",
+            "sequential-run",
+            "-c",
+            str(input_toml_path),
+        ]
+
+        if verbose:
+            cmd += ["--verbose"]
+
+    elif run_mode == "Single stage" and only_steps == ["surface"]:
+
         cmd = ["dopingflow", "surface", "-c", str(input_toml_path)]
+
         if verbose:
             cmd += ["--verbose"]
 

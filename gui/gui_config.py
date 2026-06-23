@@ -86,6 +86,8 @@ CHOICES = {
     "references.optimizer": OPTIMIZER_CHOICES,
     "references.oxygen_mode": ["O-rich", "O-poor"],
 
+    "sequential.mode": ["full", "recompute_energies"],
+
     "scan.mode": ["auto", "exact", "sample"],
     "scan.device": DEVICE_CHOICES,
     "scan.backend": BACKEND_CHOICES,
@@ -152,6 +154,10 @@ DEFAULTS = {
         "allowed_totals": [5, 10, 15],
         "levels": [5, 10],
     },
+    "sequential": {
+        "outdir": "sequential_structures",
+        "mode": "full",
+    },    
     "scan": {
         "backend": "m3gnet",
         "model": "default",
@@ -198,6 +204,7 @@ DEFAULTS = {
         "skip_if_done": True,
     },
     "bandgap": {
+        "enabled": True,
         "skip_if_done": True,
         "cutoff": 8.0,
         "max_neighbors": 12,
