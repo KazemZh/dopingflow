@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from dopingflow.formation import CandidateRecord, _apply_relative_energies, _flat_columns
 
 
@@ -64,13 +66,13 @@ def test_relative_energies_use_lowest_endpoint_per_reference():
         endpoint_x=None,
     )
 
-    assert X == 0.10
-    assert endpoints["SbO2"]["E_form_eV_per_cation"] == 0.60
-    assert endpoints["Sb2O3"]["E_mix_eV_per_cation"] == 0.50
+    assert X == pytest.approx(0.10)
+    assert endpoints["SbO2"]["E_form_eV_per_cation"] == pytest.approx(0.60)
+    assert endpoints["Sb2O3"]["E_mix_eV_per_cation"] == pytest.approx(0.50)
 
     # E_rel(x=0.05) = E(x=0.05) - (0.05 / 0.10) * E_min(X)
-    assert low_x.reference_results["SbO2"]["relative"]["E_form_rel_eV_per_cation"] == 0.0
-    assert low_x.reference_results["Sb2O3"]["relative"]["E_mix_rel_eV_per_cation"] == -0.05
+    assert low_x.reference_results["SbO2"]["relative"]["E_form_rel_eV_per_cation"] == pytest.approx(0.0)
+    assert low_x.reference_results["Sb2O3"]["relative"]["E_mix_rel_eV_per_cation"] == pytest.approx(-0.05)
 
 
 def test_wide_columns_keep_one_row_per_candidate():
