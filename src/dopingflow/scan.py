@@ -7,7 +7,7 @@ import math
 import os
 import time
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from itertools import combinations
 from multiprocessing import get_context
 from pathlib import Path
@@ -26,6 +26,8 @@ from dopingflow.ml_backends import (
     build_ase_calculator,
 )
 from dopingflow.ml_relaxation import structure_energy_with_calculator
+
+from datetime import datetime
 
 log = logging.getLogger(__name__)
 
@@ -761,11 +763,18 @@ def _enumerate_unique_configs_exact(
     log.info("Done exact generation: raw=%d, unique(sym)=%d", checked_raw, len(unique_labels))
     return unique_labels, checked_raw
 
-
 # -----------------------------
 # Core
 # -----------------------------
-def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
+def _scan_one_folder(
+    struct_dir: Path,
+    cfg: ScanConfig,
+    *,
+    raw_cfg: dict[str, Any],
+    config_path: Path | None = None,
+) -> None:
+    run_start = datetime.now().astimezone()
+    t_start = time.time()
     poscar_path = struct_dir / cfg.poscar_in
     if not poscar_path.exists():
         raise FileNotFoundError(f"Missing {cfg.poscar_in} in {struct_dir}")
@@ -903,29 +912,11 @@ def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
             "signature": sig,
             "eval_order_index": int(eval_idx),
             "config": {
-                "backend": cfg.backend,
-                "model": cfg.model,
-                "task": cfg.task,
-                "poscar_in": cfg.poscar_in,
-                "topk": cfg.topk,
-                "symprec": cfg.symprec,
-                "max_enum": cfg.max_enum,
-                "n_workers": cfg.n_workers,
-                "chunksize": cfg.chunksize,
-                "order": cfg.order,
-                "anion_species": cfg.anion_species,
-                "host_species": cfg.host_species,
-                "max_unique": cfg.max_unique,
-                "device": cfg.device,
-                "gpu_id": cfg.gpu_id,
-                "mode": cfg.mode,
+                **asdict(cfg),
                 "selected_mode": selected_mode,
-                "sample_budget": cfg.sample_budget,
-                "sample_batch_size": cfg.sample_batch_size,
-                "sample_patience": cfg.sample_patience,
-                "sample_seed": cfg.sample_seed,
-                "sample_max_saved": cfg.sample_max_saved,
             },
+            "raw_input_config": raw_cfg,
+            "structure_metadata_used_by_scan": metadata,
             "counts": {
                 "sublattice_sites": int(N),
                 "host_count_on_sublattice": int(host_count),
@@ -965,32 +956,80 @@ def _scan_one_folder(struct_dir: Path, cfg: ScanConfig) -> None:
         encoding="utf-8",
     )
 
+    run_end = datetime.now().astimezone()
+    walltime = time.time() - t_start
+
+    full_scan_config = asdict(cfg)
+
     with open(struct_dir / "scan_summary.txt", "w", encoding="utf-8") as f:
-        f.write(f"CWD: {struct_dir}\n")
-        f.write(f"POSCAR_IN: {cfg.poscar_in}\n")
-        f.write(f"TOPK: {cfg.topk}\n")
-        f.write(f"SYMPREC: {cfg.symprec}\n")
-        f.write(f"n_workers: {cfg.n_workers}\n")
-        f.write(f"CHUNKSIZE: {cfg.chunksize}\n")
-        f.write(f"device: {cfg.device}\n")
-        f.write(f"gpu_id: {cfg.gpu_id}\n")
-        f.write(f"backend: {cfg.backend}\n")
-        f.write(f"model: {cfg.model}\n")
-        f.write(f"task: {cfg.task}\n")
-        f.write(f"Host: {cfg.host_species}\n")
-        f.write(f"Anions: {cfg.anion_species}\n")
-        f.write(f"Mode requested: {cfg.mode}\n")
-        f.write(f"Mode selected: {selected_mode}\n")
-        f.write(f"Sublattice sites: {N}\n")
-        f.write(f"Dopant counts: {dopant_counts}\n")
-        f.write(f"Estimated raw configs: {raw_ncfg}\n")
-        f.write(f"Raw checked: {checked_raw}\n")
-        f.write(f"Unique(sym): {unique_count}\n")
+        f.write("SCAN RUN SUMMARY\n")
+        f.write("================\n")
+        f.write(f"Run started: {run_start.isoformat()}\n")
+        f.write(f"Run finished: {run_end.isoformat()}\n")
+        f.write(f"Walltime_seconds: {walltime:.2f}\n")
+        f.write(f"CWD: {struct_dir}\n\n")
+
+        f.write("FULL RESOLVED SCAN PARAMETERS\n")
+        f.write("=============================\n")
+        for key, value in full_scan_config.items():
+            f.write(f"{key}: {value}\n")
+
+        f.write("\nRAW INPUT CONFIGURATION USED BY SCAN\n")
+        f.write("====================================\n")
+        f.write(json.dumps(raw_cfg, indent=2))
+        f.write("\n")
+
+        f.write("\nSTRUCTURE METADATA USED BY SCAN\n")
+        f.write("===============================\n")
+        f.write(json.dumps(metadata, indent=2))
+        f.write("\n")
+
+        f.write("\nDERIVED SCAN INFORMATION\n")
+        f.write("========================\n")
+        f.write(f"selected_mode: {selected_mode}\n")
+        f.write(f"sublattice_sites: {N}\n")
+        f.write(f"host_count_on_sublattice: {host_count}\n")
+        f.write(f"dopant_counts_on_sublattice: {dopant_counts}\n")
+        f.write(f"estimated_raw_configs: {raw_ncfg}\n")
+        f.write(f"raw_checked: {checked_raw}\n")
+        f.write(f"unique_sym_configs: {unique_count}\n")
+        f.write(f"n_symmetry_permutations: {len(perms)}\n")
+
         for k, v in stats.items():
             f.write(f"{k}: {v}\n")
-        f.write("Best energies (eV):\n")
+
+        f.write("\nBEST ENERGIES\n")
+        f.write("=============\n")
         for r in ranking_rows:
             f.write(f"  {r['candidate']}: {r['energy_sp_eV']:.10f} | {r['signature']}\n")
+
+    summary_json = {
+        "run_started": run_start.isoformat(),
+        "run_finished": run_end.isoformat(),
+        "walltime_seconds": walltime,
+        "cwd": str(struct_dir),
+        "config_path": str(config_path) if config_path else None,
+        "full_resolved_scan_config": full_scan_config,
+        "raw_input_config": raw_cfg,
+        "structure_metadata_used_by_scan": metadata,
+        "derived_scan_information": {
+            "selected_mode": selected_mode,
+            "sublattice_sites": int(N),
+            "host_count_on_sublattice": int(host_count),
+            "dopant_counts_on_sublattice": {k: int(v) for k, v in dopant_counts.items()},
+            "estimated_raw_configs": int(raw_ncfg),
+            "raw_checked": int(checked_raw),
+            "unique_sym_configs": int(unique_count),
+            "n_symmetry_permutations": int(len(perms)),
+            **stats,
+        },
+    }
+
+    (struct_dir / "scan_summary.json").write_text(
+        json.dumps(summary_json, indent=2),
+        encoding="utf-8",
+    )
+
 
     log.info("DONE %s | wrote candidate_*/01_scan, ranking_scan.csv, scan_summary.txt", struct_dir)
 
@@ -1056,7 +1095,7 @@ def run_scan(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None = 
             )
 
         log.info("RUN (%d/%d) %s", i, len(subdirs), sdir.name)
-        _scan_one_folder(sdir, cfg)
+        _scan_one_folder(sdir, cfg, raw_cfg=raw_cfg, config_path=config_path)
 
     log.info("DONE Step 02 scan for all structure folders.")
 
