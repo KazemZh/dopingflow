@@ -17,7 +17,7 @@ then optionally extend the analysis to surface structures.
 Pipeline Structure
 ------------------
 
-Reference Construction → Enumeration → Screening → Relaxation → Filtering → Band Gap → Formation Energy → Database → Phase Diagram
+Reference Construction → Enumeration → Screening → Relaxation → Filtering → Band Gap → Formation Energy → Database → 1D Alloy Hull → Phase Diagram
 
 Optional Post-Processing:
 
@@ -44,6 +44,9 @@ The sequential workflow supports two modes:
   formation energy, and database collection for each composition.
 - ``recompute_energies``: reuse existing relaxed sequential structures and
   recompute formation/mixing energies after changing reference structures.
+
+After ``sequential-run`` completes, run ``dopingflow alloy-hull -c input.toml``
+to construct the global hull from the merged sequential database.
 
 Stages
 ------
@@ -90,18 +93,25 @@ Stages
    - Aggregate results across all stages
    - Export a unified CSV database
 
-8. Phase diagram analysis
+8. Restricted one-dimensional alloy hull
+
+   - Construct the lower convex envelope along one fixed substitutional alloy line
+   - Compute energy above the restricted 1D hull per cation
+   - Identify stable alloy vertices and tie-line decompositions
+
+9. Full phase diagram analysis
 
    - Compute energy above hull for each candidate using pymatgen
+   - Compare against all included competing phases in the multicomponent chemical system
 
-9. Surface generation (optional)
+10. Surface generation (optional)
 
    - Select candidates from the database
    - Generate slab structures for chosen Miller indices
    - Enumerate surface terminations
    - Optionally fix atoms in the slab
 
-10. Surface relaxation (optional)
+11. Surface relaxation (optional)
 
    - Relax slab structures using ML interatomic potentials
    - Apply atom constraints (e.g. fixed bottom layers)
@@ -120,7 +130,8 @@ Design Principles
 Notes
 -----
 
-- The core workflow (Stages 0–7) focuses on bulk screening and database generation.
+- The core workflow (Stages 0–9) focuses on bulk screening, database generation,
+  and thermodynamic analysis.
 - Surface generation is intentionally decoupled from the main pipeline and is executed separately.
 - This design allows users to:
   - inspect and validate bulk candidates before surface modeling
