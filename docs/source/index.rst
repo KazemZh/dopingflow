@@ -16,6 +16,7 @@ The workflow integrates:
 - ML-based screening and relaxation using configurable backends (M3GNet, UMA, MACE, GRACE)
 - Sequential gradual doping with stepwise relaxation and energy recomputation
 - Formation energy calculations using configurable thermodynamic reference schemes
+- Restricted one-dimensional alloy convex hulls and full multicomponent phase diagrams
 - Bandgap prediction using ALIGNN
 - Automated database collection
 - Fully reproducible, stage-isolated execution
@@ -56,6 +57,7 @@ Each stage can be executed independently and uses its own configuration block.
    methods/bandgap
    methods/formation_energy
    methods/database
+   methods/alloy_hull
    methods/phase_diagram
    methods/surfaces
 
