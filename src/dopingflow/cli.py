@@ -15,6 +15,7 @@ from dopingflow.filtering import run_filtering_from_toml
 from dopingflow.bandgap import run_bandgap_from_toml
 from dopingflow.formation import run_formation_from_toml
 from dopingflow.collect_relative import run_collect_from_toml
+from dopingflow.alloy_hull import run_alloy_hull_from_toml
 from dopingflow.phase_diagram import run_phase_diagram_from_toml
 from dopingflow.sequential import run_sequential_from_toml
 
@@ -111,12 +112,23 @@ def collect_cmd(
     typer.echo(f"\nWrote database CSV: {out_path}")
 
 
+@app.command("alloy-hull")
+def alloy_hull_cmd(
+    config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
+    verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
+) -> None:
+    """Step 08: Build restricted one-dimensional alloy convex hull."""
+    _init(config, verbose)
+    out_path = run_alloy_hull_from_toml(config)
+    typer.echo(f"\nWrote alloy-hull CSV: {out_path}")
+
+
 @app.command("phase-diagram")
 def phase_diagram_cmd(
     config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
     verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
 ) -> None:
-    """Step 08: Compute phase-diagram energy above hull."""
+    """Step 09: Compute full phase-diagram energy above hull."""
     _init(config, verbose)
     out_path = run_phase_diagram_from_toml(config)
     typer.echo(f"\nWrote phase-diagram CSV: {out_path}")
@@ -128,7 +140,7 @@ def run_all_cmd(
     start: str = typer.Option(
         "refs",
         "--from",
-        help="Start step key (refs, generate, scan, relax, filter, bandgap, formation, collect, phase-diagram)",
+        help="Start step key (refs, generate, scan, relax, filter, bandgap, formation, collect, alloy-hull, phase-diagram)",
     ),
     stop: str = typer.Option("phase-diagram", "--until", help="Stop step key (inclusive)"),
     only: Optional[str] = typer.Option(
@@ -147,7 +159,7 @@ def run_all_cmd(
     Run the full pipeline in order, with optional step selection.
 
     Step keys:
-      refs -> generate -> scan -> relax -> filter -> bandgap -> formation -> collect
+      refs -> generate -> scan -> relax -> filter -> bandgap -> formation -> collect -> alloy-hull -> phase-diagram
     """
     _init(config, verbose)
 
@@ -162,7 +174,8 @@ def run_all_cmd(
         ("bandgap", "05 bandgap", lambda: run_bandgap_from_toml(config)),
         ("formation", "06 formation", lambda: run_formation_from_toml(config)),
         ("collect", "07 collect", lambda: run_collect_from_toml(config)),
-        ("phase-diagram", "08 phase-diagram", lambda: run_phase_diagram_from_toml(config)),
+        ("alloy-hull", "08 alloy-hull", lambda: run_alloy_hull_from_toml(config)),
+        ("phase-diagram", "09 phase-diagram", lambda: run_phase_diagram_from_toml(config)),
     ]
 
     key_to_idx = {k: i for i, (k, _, _) in enumerate(steps)}
@@ -193,7 +206,7 @@ def run_all_cmd(
     typer.echo("\nPlanned steps:")
     for i in selected_indices:
         k, title, _ = steps[i]
-        typer.echo(f"  - {k:9s} {title}")
+        typer.echo(f"  - {k:11s} {title}")
 
     if dry_run:
         typer.echo("\n(dry-run) Nothing executed.")
@@ -204,8 +217,8 @@ def run_all_cmd(
         typer.echo(f"\n=== {title} ({k}) ===")
         res = fn()
 
-        if k == "collect" and isinstance(res, Path):
-            typer.echo(f"\nWrote database CSV: {res}")
+        if k in {"collect", "alloy-hull"} and isinstance(res, Path):
+            typer.echo(f"\nWrote output CSV: {res}")
 
 
 @app.command("sequential-run")
