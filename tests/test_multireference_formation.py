@@ -2,7 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from dopingflow.formation import CandidateRecord, _apply_relative_energies, _flat_columns
+from dopingflow.formation import (
+    CandidateRecord,
+    _apply_relative_energies,
+    _flat_columns,
+    _parse_formation_config,
+)
 
 
 def _result(E_form_per_cation: float, E_mix_per_cation: float):
@@ -35,7 +40,7 @@ def _record(name: str, x: float, results: dict):
     )
 
 
-def test_relative_energies_use_lowest_endpoint_per_reference():
+def test_relative_energies_preserve_oxide_tieline_values():
     low_x = _record(
         "candidate_low_x",
         0.05,
@@ -66,13 +71,16 @@ def test_relative_energies_use_lowest_endpoint_per_reference():
         endpoint_x=None,
     )
 
-    assert X == pytest.approx(0.10)
-    assert endpoints["SbO2"]["E_form_eV_per_cation"] == pytest.approx(0.60)
-    assert endpoints["Sb2O3"]["E_mix_eV_per_cation"] == pytest.approx(0.50)
+    assert X == pytest.approx(1.0)
+    assert endpoints["SbO2"]["reference"] == "oxide_reference_already_tieline_corrected"
+    assert endpoints["Sb2O3"]["reference"] == "oxide_reference_already_tieline_corrected"
 
-    # E_rel(x=0.05) = E(x=0.05) - (0.05 / 0.10) * E_min(X)
-    assert low_x.reference_results["SbO2"]["relative"]["E_form_rel_eV_per_cation"] == pytest.approx(0.0)
-    assert low_x.reference_results["Sb2O3"]["relative"]["E_mix_rel_eV_per_cation"] == pytest.approx(-0.05)
+    assert low_x.reference_results["SbO2"]["relative"][
+        "E_form_rel_eV_per_cation"
+    ] == pytest.approx(0.30)
+    assert low_x.reference_results["Sb2O3"]["relative"][
+        "E_mix_rel_eV_per_cation"
+    ] == pytest.approx(0.20)
 
 
 def test_wide_columns_keep_one_row_per_candidate():
@@ -87,3 +95,17 @@ def test_wide_columns_keep_one_row_per_candidate():
     assert "E_form_eV_total__SbO2" in values
     assert "E_mix_eV_per_cation__Sb2O5" in values
     assert "E_form_eV_total__Sb2O3" not in values
+
+
+def test_relative_configuration_stays_in_formation_section(tmp_path):
+    config = _parse_formation_config(
+        {
+            "doping": {"host_species": "Sn"},
+            "scan": {"anion_species": ["O"]},
+            "formation": {"relative_enabled": True, "endpoint_x": "auto"},
+        },
+        tmp_path,
+    )
+
+    assert config.relative_enabled is True
+    assert config.relative_endpoint_x is None

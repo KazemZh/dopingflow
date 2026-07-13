@@ -1,11 +1,11 @@
-"""Collection entry points that always add global relative energies."""
+"""Collection entry points with optional legacy relative-energy fallback."""
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
 from dopingflow.collect import run_collect as _run_collect
-from dopingflow.relative_energy import populate_relative_energy_columns
+from dopingflow.relative_energy import populate_relative_energy_columns, relative_energy_enabled
 
 try:
     import tomllib
@@ -19,9 +19,11 @@ def run_collect(
     *,
     config_path: Path | None = None,
 ) -> Path:
-    """Run normal collection and always populate relative-energy columns."""
+    """Collect results and add legacy relative columns only when requested."""
     out_csv = _run_collect(raw_cfg, root, config_path=config_path)
-    return populate_relative_energy_columns(out_csv, raw_cfg)
+    if relative_energy_enabled(raw_cfg):
+        return populate_relative_energy_columns(out_csv, raw_cfg)
+    return out_csv
 
 
 def run_collect_from_toml(config_path: Path) -> Path:

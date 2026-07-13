@@ -57,6 +57,11 @@ Candidate-level
 ~~~~~~~~~~~~~~~
 
 - ``candidate_*/02_relax/meta.json`` (from Step 03 relaxation)
+- ``candidate_*/04_formation/meta.json`` (preferred formation source)
+
+The per-candidate formation metadata is preferred because it retains the full
+multi-reference result mapping. ``formation_energies.csv`` is used as a
+backward-compatible fallback.
 
 
 Selection Policy
@@ -96,7 +101,9 @@ For each composition folder inside ``[structure].outdir``:
 4. For each selected candidate:
 
    a. Read relaxed-energy metadata from ``candidate_*/02_relax/meta.json`` (if available).
-   b. Combine composition-level and candidate-level information into one row.
+   b. Read formation metadata from ``candidate_*/04_formation/meta.json``.
+   c. Flatten every reference scenario into wide ``__<scenario>`` columns.
+   d. Combine composition-level and candidate-level information into one row.
 
 5. Write all rows to:
 
@@ -190,6 +197,25 @@ Formation-energy fields
 
 - ``dopant_counts``:
   Compact dopant-count string from Step 06 (if available).
+
+- ``primary_reference_label``:
+  Reference scenario used for the backward-compatible unsuffixed fields.
+
+Multi-reference fields
+~~~~~~~~~~~~~~~~~~~~~~
+
+Every reference scenario is encoded as a column suffix. Examples include:
+
+- ``E_form_eV_per_cation__Sb2O3``
+- ``E_mix_eV_per_cation__Sb2O3``
+- ``E_form_rel_eV_per_cation__Sb2O3``
+- ``oxide_endpoint_eV_per_cation__Sb2O3``
+- ``oxide_endpoint_by_dopant_json__Sb2O3``
+- ``oxide_references_json__Sb2O3``
+
+Co-doped scenarios retain all oxide names in a deterministic suffix, for
+example ``E_mix_eV_per_cation__Sb2O3__TiO2``. Formation-stage relative columns
+are authoritative and are preserved during collection.
 
 
 Outputs

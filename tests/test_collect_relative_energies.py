@@ -1,29 +1,35 @@
-import pytest
+import json
 
-from dopingflow.collect import _calculate_relative_columns
+from dopingflow.collect import read_formation_meta
 
 
-def test_collect_populates_relative_columns_after_global_collection():
-    rows = [
-        {
-            "x_dopant": 0.05,
-            "E_form_eV_per_cation__SbO2": 0.20,
-            "E_mix_eV_per_cation__SbO2": 0.30,
-        },
-        {
-            "x_dopant": 0.10,
-            "E_form_eV_per_cation__SbO2": 0.40,
-            "E_mix_eV_per_cation__SbO2": 0.10,
-        },
-    ]
+def test_collect_flattens_formation_stage_relative_columns(tmp_path):
+    path = tmp_path / "meta.json"
+    path.write_text(
+        json.dumps(
+            {
+                "primary_reference_label": "SbO2",
+                "reference_results": {
+                    "SbO2": {
+                        "E_form_eV_per_cation": 0.20,
+                        "mixing": {"E_mix_eV_per_cation": 0.30},
+                        "relative": {
+                            "endpoint_x": 1.0,
+                            "reference": "oxide_reference_already_tieline_corrected",
+                            "E_form_rel_eV_per_cation": 0.20,
+                            "E_mix_rel_eV_per_cation": 0.30,
+                        },
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
 
-    columns = _calculate_relative_columns(rows, endpoint_x=None)
+    result = read_formation_meta(path)
+    wide = result["wide_reference_results"]
 
-    assert "E_form_rel_eV_per_cation__SbO2" in columns
-    assert "E_mix_rel_eV_per_cation__SbO2" in columns
-
-    # X = 0.10; both endpoint energies are 0.40 and 0.10, respectively.
-    assert rows[0]["E_form_rel_eV_per_cation__SbO2"] == pytest.approx(0.0)
-    assert rows[0]["E_mix_rel_eV_per_cation__SbO2"] == pytest.approx(0.25)
-    assert rows[1]["E_form_rel_eV_per_cation__SbO2"] == pytest.approx(0.0)
-    assert rows[1]["E_mix_rel_eV_per_cation__SbO2"] == pytest.approx(0.0)
+    assert result["primary_reference_label"] == "SbO2"
+    assert wide["E_form_rel_eV_per_cation__SbO2"] == 0.20
+    assert wide["E_mix_rel_eV_per_cation__SbO2"] == 0.30
+    assert wide["relative_reference__SbO2"] == "oxide_reference_already_tieline_corrected"

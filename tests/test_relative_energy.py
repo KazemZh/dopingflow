@@ -58,3 +58,24 @@ def test_explicit_endpoint_x_is_read_from_formation_section(tmp_path):
         result = list(csv.DictReader(handle))
 
     assert float(result[0]["E_form_rel_eV_per_cation__SbO2"]) == pytest.approx(0.0)
+
+
+def test_existing_formation_relative_columns_are_preserved(tmp_path):
+    path = tmp_path / "results_database.csv"
+    rows = [
+        {
+            "x_dopant": "0.10",
+            "E_form_eV_per_cation__SbO2": "0.40",
+            "E_form_rel_eV_per_cation__SbO2": "0.40",
+        }
+    ]
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+
+    populate_relative_energy_columns(path, {"formation": {"endpoint_x": "auto"}})
+
+    with path.open(newline="", encoding="utf-8") as handle:
+        result = list(csv.DictReader(handle))
+    assert float(result[0]["E_form_rel_eV_per_cation__SbO2"]) == pytest.approx(0.40)

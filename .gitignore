@@ -28,6 +28,9 @@ scaling_test.dat
 Sb*/
 sampling_convergence/
 sequential_structures/
+Mn*/
+alloy_hull_summary.json
+phase_diagrams/
 
 # IDE
 .vscode/

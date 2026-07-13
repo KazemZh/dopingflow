@@ -1,5 +1,5 @@
 Multiple Oxide References and Relative Energies
-==============================================
+===============================================
 
 This example evaluates Sb-doped SnO2 against three separate Sb oxide references.
 The workflow keeps **one candidate per row** and writes a separate column for
@@ -23,15 +23,13 @@ Add every required binary oxide to the existing ``[references].oxides_ref`` list
    [formation]
    skip_if_done = false
    normalize = "per_dopant"
-
-   # Optional. The default is "auto".
-   # Relative formation and mixing energies are always calculated.
+   relative_enabled = true
    endpoint_x = "auto"
 
-``endpoint_x`` is in fractional units. For example, use ``1.0`` for a 100%
-dopant endpoint or ``0.30`` for a 30% endpoint. With ``"auto"`` (or when the
-key is omitted), dopingflow uses the largest actual ``x_dopant`` present in
-the completed database.
+Both relative-energy parameters remain directly inside the existing
+``[formation]`` section. No nested configuration section is required.
+``"auto"`` identifies the pure oxide endmember and is recorded as
+``endpoint_x = 1.0`` in the output metadata.
 
 Place one POSCAR file for every oxide in ``reference_structures/``:
 
@@ -73,22 +71,17 @@ The following values are written for every oxide reference:
 Relative-energy definition
 --------------------------
 
-For each reference independently, the relative value is always calculated on
-a per-cation basis after the complete database has been assembled:
+The oxide chemical potentials and atom-balanced mixing reaction already place
+each candidate on the host-oxide/dopant-oxide tie-line reference. Applying a
+second database-derived endpoint subtraction would double-correct the energy.
+Therefore the relative per-cation columns preserve the corresponding
+oxide-referenced formation and mixing values. The pure oxide endpoint energy,
+the composition-weighted co-doping correction, and the reference identity are
+written as separate provenance columns.
 
-.. math::
-
-   E_{\mathrm{rel}}(x) = E(x) - \frac{x}{X} E_{\min}(X)
-
-where ``x`` is the actual dopant fraction extracted from the relaxed POSCAR,
-``X`` is ``[formation].endpoint_x`` or the largest actual dopant fraction when
-``endpoint_x = "auto"``, and :math:`E_{\min}(X)` is the lowest-energy candidate
-at that endpoint composition. The endpoint is selected separately for every
-oxide-reference scenario.
-
-For the sequential workflow, relative energies are recalculated once all step
-databases have been merged, so they use the global composition range rather
-than the single composition in an individual step.
+Collection and sequential merging preserve these formation-stage values. The
+legacy database endpoint calculation is used only when reading an older result
+database that has absolute reference-specific columns but no relative columns.
 
 Co-doping
 ---------

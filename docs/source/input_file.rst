@@ -1063,6 +1063,20 @@ Defines how the reported formation energy is normalized:
 - ``"per_dopant"`` — eV per substituted dopant atom
 - ``"per_host"`` — eV per atom in the supercell
 
+relative_enabled (boolean, default: false)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If true, write reference-specific relative formation and mixing-energy columns.
+In oxide mode these values preserve the already tie-line-referenced per-cation
+energies and include explicit oxide-endmember provenance.
+
+endpoint_x (string or float, default: "auto")
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Controls endpoint metadata and the compatibility calculation for older result
+databases. ``"auto"`` uses the pure oxide endmember for new oxide-reference
+results. A numeric value must lie in ``(0, 1]``.
+
 Formation energies require:
 
 - Successful execution of ``refs-build``
@@ -1093,10 +1107,30 @@ If true, do not overwrite existing ``results_database.csv``.
 
 ---------------------------------------------------------------------
 
+[phase_diagram]
+---------------
+
+Step 09 — Per-chemical-system phase-diagram analysis.
+
+skip_if_done (boolean, default: true)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If true and ``phase_diagram_results.csv`` exists, return the existing result
+without rebuilding the per-system diagrams.
+
+stable_threshold_eV_per_atom (float, default: 1e-8)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Non-negative energy-above-hull threshold used for the boolean ``stable`` field.
+The step writes a combined CSV plus one CSV per exact chemical system under
+``phase_diagrams/``.
+
+---------------------------------------------------------------------
+
 [surface]
 ---------
 
-Step 08 — Surface generation and optional surface relaxation.
+Optional surface generation and surface relaxation.
 
 This stage constructs slab models from selected relaxed bulk candidates
 and optionally relaxes those slabs using machine-learning interatomic potentials.

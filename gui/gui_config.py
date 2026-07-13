@@ -216,6 +216,8 @@ DEFAULTS = {
     "formation": {
         "skip_if_done": True,
         "normalize": "per_dopant",
+        "relative_enabled": True,
+        "endpoint_x": "auto",
     },
     "phase_diagram": {
         "skip_if_done": True,

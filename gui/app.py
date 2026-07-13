@@ -2042,6 +2042,34 @@ if tab == "Input Builder":
             st.info("**total**: raw formation energy of the doped supercell (in eV).")
             st.latex(r"E_{\mathrm{form}} \; [\mathrm{eV}]")
 
+        st.divider()
+        st.subheader("Relative oxide-reference energies")
+        cfg_edit["formation"]["relative_enabled"] = st.checkbox(
+            "Write relative per-cation energy columns",
+            value=bool(cfg_edit["formation"].get("relative_enabled", True)),
+            help=(
+                "Writes one relative formation and mixing-energy column for each "
+                "oxide-reference scenario. All settings remain in [formation]."
+            ),
+        )
+        endpoint_value = str(cfg_edit["formation"].get("endpoint_x", "auto"))
+        endpoint_text = st.text_input(
+            "endpoint_x",
+            value=endpoint_value,
+            help="Use 'auto' for the oxide endmember, or enter a fraction in (0, 1].",
+            disabled=not cfg_edit["formation"]["relative_enabled"],
+        ).strip()
+        if endpoint_text.lower() in {"", "auto"}:
+            cfg_edit["formation"]["endpoint_x"] = "auto"
+        else:
+            try:
+                parsed_endpoint = float(endpoint_text)
+                if not 0.0 < parsed_endpoint <= 1.0:
+                    raise ValueError
+                cfg_edit["formation"]["endpoint_x"] = parsed_endpoint
+            except ValueError:
+                st.error("endpoint_x must be 'auto' or a number in (0, 1].")
+
     # -----------------------------
     # PHASE DIAGRAM
     # -----------------------------
@@ -2063,12 +2091,14 @@ if tab == "Input Builder":
             min_value=0.0,
             step=0.01,
             format="%.3f",
-            help="Threshold used to label metastable candidates.",
+            help="Candidates at or below this energy-above-hull threshold are labeled stable.",
         )
 
         st.info(
-            "This step builds a Sn–Sb–O phase diagram from reference phases and doped candidates, "
-            "then reports energy above hull and decomposition products."
+            "This step builds a separate phase diagram for every exact candidate chemical "
+            "system, writes per-system CSV files under phase_diagrams/, and also writes a "
+            "combined phase_diagram_results.csv. Every element in a system requires an "
+            "elemental terminal reference from refs-build."
         )
 
     # -----------------------------
@@ -3043,7 +3073,24 @@ elif tab == "Results Explorer":
     st.subheader("Data source")
 
     default_csv = project_root / "results_database.csv"
-    csv_path_str = st.text_input("Results CSV path", value=str(default_csv))
+    known_sources = {
+        "Main results database": default_csv,
+        "Combined phase-diagram results": project_root / "phase_diagram_results.csv",
+    }
+    phase_dir = project_root / "phase_diagrams"
+    if phase_dir.exists():
+        for phase_csv in sorted(phase_dir.glob("phase_diagram_*.csv")):
+            known_sources[f"Phase diagram: {phase_csv.stem.removeprefix('phase_diagram_')}"] = phase_csv
+    source_choice = st.selectbox(
+        "Known result source",
+        options=list(known_sources) + ["Custom path"],
+    )
+    suggested_path = known_sources.get(source_choice, default_csv)
+    csv_path_str = st.text_input(
+        "Results CSV path",
+        value=str(suggested_path),
+        key=f"results_csv_path_{source_choice}",
+    )
     csv_path = Path(csv_path_str).expanduser()
     if not csv_path.is_absolute():
         csv_path = (project_root / csv_path).resolve()

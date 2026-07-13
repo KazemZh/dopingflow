@@ -288,8 +288,22 @@ Writes one flat CSV in the workflow root:
 This file is a compact “database view” across compositions and selected candidates,
 combining scan/relax/filter/bandgap/formation results where available.
 
-Step 08 (surface)
-~~~~~~~~~~~~~~~~~
+Step 08 (restricted alloy hull)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Writes ``alloy_hull_results.csv`` and ``alloy_hull_summary.json`` for the
+configured substitutional alloy line.
+
+
+Step 09 (phase diagram)
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Writes the combined ``phase_diagram_results.csv`` plus one exact-system CSV
+under ``phase_diagrams/`` for every chemical system represented by candidates.
+
+
+Optional surface workflow
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Generates slab structures from selected candidates and optionally relaxes them.
 

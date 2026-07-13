@@ -8,7 +8,7 @@ The GUI provides an interactive way to:
 - Run workflow stages
 - Monitor logs
 - Visualize generated structures
-- Explore `results_database.csv` interactively with Plotly
+- Explore the main database and per-system phase-diagram CSVs with Plotly
 
 The GUI is optional. The CLI remains the primary interface for scripted and HPC workflows.
 
@@ -78,7 +78,8 @@ Supports:
 
 ### 3️⃣ Results Explorer
 
-Reads `results_database.csv` and allows:
+Selects `results_database.csv`, the combined phase-diagram result, an
+individual chemical-system result, or a custom CSV path and allows:
 
 - Column selection
 - Interactive Plotly plotting

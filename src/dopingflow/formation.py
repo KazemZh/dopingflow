@@ -47,7 +47,6 @@ def _parse_formation_config(raw: dict[str, Any], root: Path) -> FormationConfig:
     dop = raw.get("doping", {}) or {}
     scan = raw.get("scan", {}) or {}
     form = raw.get("formation", {}) or {}
-    rel = form.get("relative", {}) or {}
 
     outdir = (root / str(st.get("outdir", "random_structures"))).resolve()
     host_species = str(dop.get("host_species", "")).strip()
@@ -62,13 +61,13 @@ def _parse_formation_config(raw: dict[str, Any], root: Path) -> FormationConfig:
     if normalize not in {"total", "per_dopant", "per_host"}:
         raise ValueError("[formation].normalize must be one of: total, per_dopant, per_host")
 
-    endpoint_raw = rel.get("endpoint_x", "auto")
+    endpoint_raw = form.get("endpoint_x", "auto")
     if endpoint_raw is None or str(endpoint_raw).strip().lower() in {"", "auto"}:
         endpoint_x = None
     else:
         endpoint_x = float(endpoint_raw)
         if not 0.0 < endpoint_x <= 1.0:
-            raise ValueError("[formation.relative].endpoint_x must be in (0, 1] or 'auto'")
+            raise ValueError("[formation].endpoint_x must be in (0, 1] or 'auto'")
 
     return FormationConfig(
         outdir=outdir,
@@ -76,7 +75,7 @@ def _parse_formation_config(raw: dict[str, Any], root: Path) -> FormationConfig:
         anion_species=anion_species,
         skip_if_done=bool(form.get("skip_if_done", True)),
         normalize=normalize,
-        relative_enabled=bool(rel.get("enabled", False)),
+        relative_enabled=bool(form.get("relative_enabled", False)),
         relative_endpoint_x=endpoint_x,
     )
 
@@ -202,20 +201,32 @@ def _oxide_reference_groups(
 
 
 def _oxygen_mu(ref: dict[str, Any]) -> tuple[float, float]:
+    """Return shifted oxygen chemical potential and shifted O2 molecule energy.
+
+    If [oxide_mode].muO_shift_ev is defined, it is a per-O-atom shift.
+    Therefore the effective molecule energy used in any O2 term is
+
+        E_O2_effective = E_O2_raw + 2 * muO_shift_ev
+    """
     oxide_mode = ref.get("oxide_mode", {}) or {}
     refs = ref.get("references", {}) or {}
     gas_ref = str(oxide_mode.get("gas_ref", "O2")).strip()
     gas = refs.get(gas_ref)
     if not isinstance(gas, dict):
         raise KeyError(f"oxide mode: missing gas reference '{gas_ref}'")
+
     if "E_per_molecule_eV" in gas:
-        E_o2 = float(gas["E_per_molecule_eV"])
+        E_o2_raw = float(gas["E_per_molecule_eV"])
     elif "E_total_eV" in gas:
-        E_o2 = float(gas["E_total_eV"])
+        E_o2_raw = float(gas["E_total_eV"])
     else:
         raise KeyError(f"Gas reference {gas_ref} missing E_total_eV or E_per_molecule_eV")
 
-    return 0.5 * E_o2 + float(oxide_mode.get("muO_shift_ev", 0.0)), E_o2
+    muO_shift = float(oxide_mode.get("muO_shift_ev", 0.0))
+    mu_oxygen = 0.5 * E_o2_raw + muO_shift
+    E_o2_effective = E_o2_raw + 2.0 * muO_shift
+
+    return mu_oxygen, E_o2_effective
 
 
 def _mu_from_oxide(
@@ -321,6 +332,97 @@ def _mixing_energy(
     }
 
 
+def _single_oxide_endpoint_energy_per_cation(
+    *,
+    host_ref: Dict[str, Any],
+    host_species: str,
+    anion: str,
+    oxide: Dict[str, Any],
+    E_O2: float,
+) -> float:
+    """Pure dopant-oxide endpoint relative to the host oxide, per cation.
+
+    This is atom-balanced per one host cation. For SnO2 examples:
+      Sb2O3: 0.5 E(Sb2O3) + 0.25 E(O2_eff) - E(SnO2)
+      Sb2O5: 0.5 E(Sb2O5) - 0.25 E(O2_eff) - E(SnO2)
+      SbO2 :     E(SbO2)                       - E(SnO2)
+    """
+    host_comp = host_ref["reduced_composition"]
+    if host_species not in host_comp or anion not in host_comp:
+        raise KeyError(f"Host oxide does not contain {host_species} and {anion}")
+
+    n_host_cat = float(host_comp[host_species])
+    n_host_anion = float(host_comp[anion])
+    E_host_fu = float(host_ref["E_per_formula_unit_eV"])
+
+    oxide_comp = oxide["reduced_composition"]
+    dopant_elements = [str(el) for el in oxide_comp if el != anion]
+    if len(dopant_elements) != 1:
+        raise ValueError(f"Only binary dopant oxides are supported, got {oxide_comp}")
+
+    dopant = dopant_elements[0]
+    n_dop_cat = float(oxide_comp[dopant])
+    n_oxide_anion = float(oxide_comp[anion])
+    E_oxide_fu = float(oxide["E_per_formula_unit_eV"])
+
+    E_host_per_cation = E_host_fu / n_host_cat
+    E_oxide_per_cation = E_oxide_fu / n_dop_cat
+
+    # Positive n_O2_out means O2 is on product side:
+    # host oxide -> dopant oxide + n_O2_out O2
+    n_O2_out_per_cation = (
+        (n_host_anion / n_host_cat) - (n_oxide_anion / n_dop_cat)
+    ) / 2.0
+
+    return float(E_oxide_per_cation + n_O2_out_per_cation * E_O2 - E_host_per_cation)
+
+
+def _oxide_endpoint_energies_per_cation(
+    *,
+    host_ref: Dict[str, Any],
+    host_species: str,
+    anion: str,
+    selected_oxides: Dict[str, tuple[str, Dict[str, Any]]],
+    E_O2: float,
+) -> Dict[str, float]:
+    """Endpoint energy for each dopant oxide in a reference scenario.
+
+    Supports both single-dopant and co-doped scenarios. For co-doping, the
+    relative correction is built later as sum_i x_i * E_endpoint_i, so atom
+    balance is respected independently for every dopant endpoint.
+    """
+    endpoints: Dict[str, float] = {}
+    for dopant, (_oxide_name, oxide) in sorted(selected_oxides.items()):
+        endpoints[dopant] = _single_oxide_endpoint_energy_per_cation(
+            host_ref=host_ref,
+            host_species=host_species,
+            anion=anion,
+            oxide=oxide,
+            E_O2=E_O2,
+        )
+    return endpoints
+
+
+def _weighted_endpoint_correction_per_cation(
+    *,
+    counts: Dict[str, int],
+    dopant_counts: Dict[str, int],
+    anion: str,
+    endpoint_by_dopant: Dict[str, float],
+) -> float:
+    """Return sum_i x_i * E_endpoint_i for the candidate composition."""
+    n_cations = int(sum(count for element, count in counts.items() if element != anion))
+    if n_cations <= 0:
+        raise ValueError("Candidate has no cations.")
+
+    correction = 0.0
+    for dopant, count in dopant_counts.items():
+        if dopant not in endpoint_by_dopant:
+            raise KeyError(f"Missing endpoint energy for dopant {dopant}")
+        x_i = float(count) / float(n_cations)
+        correction += x_i * float(endpoint_by_dopant[dopant])
+    return float(correction)
+
 def _metal_chemical_potentials(ref: dict[str, Any]) -> Dict[str, float]:
     mus: Dict[str, float] = {}
     for name, entry in (ref.get("references", {}) or {}).items():
@@ -369,9 +471,32 @@ def _formation_result(
         correction += float(count) * (host_mu_value - mu_dopant)
 
     E_form_total = float(E_doped - E_pristine + correction)
+    endpoint_by_dopant = _oxide_endpoint_energies_per_cation(
+        host_ref=host_ref,
+        host_species=host_species,
+        anion=anion,
+        selected_oxides=selected_oxides,
+        E_O2=E_O2,
+    )
+    endpoint_correction_eV_per_cation = _weighted_endpoint_correction_per_cation(
+        counts=counts,
+        dopant_counts=dopant_counts,
+        anion=anion,
+        endpoint_by_dopant=endpoint_by_dopant,
+    )
+
     result: Dict[str, Any] = {
         "oxide_references": oxide_references,
         "mu_eV_per_atom_used": mus,
+        "oxide_endpoint_eV_per_cation_by_dopant": endpoint_by_dopant,
+        "oxide_endpoint_correction_eV_per_cation": endpoint_correction_eV_per_cation,
+        # Backward-compatible scalar. For a single dopant this is the pure endpoint;
+        # for co-doping it is the composition-weighted correction sum_i x_i E_i.
+        "oxide_endpoint_eV_per_cation": (
+            next(iter(endpoint_by_dopant.values()))
+            if len(endpoint_by_dopant) == 1
+            else endpoint_correction_eV_per_cation
+        ),
         "E_form_eV_total": E_form_total,
         "E_form_eV_per_atom": E_form_total / n_atoms if n_atoms else E_form_total,
         "E_form_eV_per_cation": E_form_total / n_cations,
@@ -422,20 +547,42 @@ def _flat_columns(reference_results: Dict[str, Dict[str, Any]], *, relative_enab
     values: Dict[str, Any] = {}
     for label, result in sorted(reference_results.items()):
         mixing = result.get("mixing", {}) or {}
+
+        if "oxide_endpoint_eV_per_cation" in result:
+            values[f"oxide_endpoint_eV_per_cation__{label}"] = result.get(
+                "oxide_endpoint_eV_per_cation"
+            )
+        if "oxide_endpoint_correction_eV_per_cation" in result:
+            values[f"oxide_endpoint_correction_eV_per_cation__{label}"] = result.get(
+                "oxide_endpoint_correction_eV_per_cation"
+            )
+        if "oxide_endpoint_eV_per_cation_by_dopant" in result:
+            values[f"oxide_endpoint_by_dopant_json__{label}"] = json.dumps(
+                result.get("oxide_endpoint_eV_per_cation_by_dopant", {})
+            )
+
         values[f"E_form_eV_total__{label}"] = result.get("E_form_eV_total")
         values[f"E_form_eV_per_atom__{label}"] = result.get("E_form_eV_per_atom")
         values[f"E_form_eV_per_cation__{label}"] = result.get("E_form_eV_per_cation")
         values[f"E_form_eV_per_dopant__{label}"] = result.get("E_form_eV_per_dopant")
+
         values[f"E_mix_eV_total__{label}"] = mixing.get("E_mix_eV_total")
         values[f"E_mix_eV_per_atom__{label}"] = mixing.get("E_mix_eV_per_atom")
         values[f"E_mix_eV_per_cation__{label}"] = mixing.get("E_mix_eV_per_cation")
         values[f"E_mix_eV_per_dopant__{label}"] = mixing.get("E_mix_eV_per_dopant")
         values[f"n_O2_out__{label}"] = mixing.get("n_O2_out")
         values[f"mixing_reaction_reference__{label}"] = mixing.get("reaction_reference", "")
+
         if relative_enabled:
             relative = result.get("relative", {}) or {}
-            values[f"E_form_rel_eV_per_cation__{label}"] = relative.get("E_form_rel_eV_per_cation")
-            values[f"E_mix_rel_eV_per_cation__{label}"] = relative.get("E_mix_rel_eV_per_cation")
+            values[f"E_form_rel_eV_per_cation__{label}"] = relative.get(
+                "E_form_rel_eV_per_cation"
+            )
+            values[f"E_mix_rel_eV_per_cation__{label}"] = relative.get(
+                "E_mix_rel_eV_per_cation"
+            )
+            values[f"relative_reference__{label}"] = relative.get("reference", "")
+            values[f"relative_endpoint_x__{label}"] = relative.get("endpoint_x")
     return values
 
 
@@ -444,70 +591,65 @@ def _apply_relative_energies(
     *,
     endpoint_x: float | None,
 ) -> tuple[float, Dict[str, Dict[str, Any]]]:
-    all_x = [record.x_dopant for record in records if record.x_dopant > 0.0]
-    if not all_x:
-        raise ValueError("Relative energies requested, but no doped candidates were found.")
+    """Populate relative columns without double-correcting oxide references.
 
-    X = max(all_x) if endpoint_x is None else endpoint_x
-    tolerance = 1e-8
-    endpoint_records = [record for record in records if abs(record.x_dopant - X) <= tolerance]
-    if not endpoint_records:
-        available = ", ".join(f"{x:.8g}" for x in sorted(set(all_x)))
-        raise ValueError(
-            f"No candidates found at [formation.relative].endpoint_x={X:.8g}. "
-            f"Available actual dopant fractions: {available}"
-        )
+    In oxide reference mode, E_form_eV_per_cation and E_mix_eV_per_cation are
+    already referenced to the selected oxide/host tie-line through the chemical
+    potentials or the atom-balanced mixing reaction. Therefore the relative
+    columns are aliases of the corresponding per-cation absolute columns.
+
+    Endpoint information is still recorded for transparency. For co-doping, the
+    endpoint correction is composition weighted: sum_i x_i E_endpoint_i.
+    """
+    if not records:
+        raise ValueError("Relative energies requested, but no candidates were found.")
+
+    X = 1.0 if endpoint_x is None else float(endpoint_x)
+    if not 0.0 < X <= 1.0:
+        raise ValueError("Relative endpoint_x must be in (0, 1].")
 
     endpoint_by_label: Dict[str, Dict[str, Any]] = {}
-    labels = sorted({
-        label
-        for record in endpoint_records
-        for label in record.reference_results
-    })
-
-    for label in labels:
-        eligible = [
-            record.reference_results[label]
-            for record in endpoint_records
-            if label in record.reference_results
-        ]
-        if not eligible:
-            continue
-        endpoint = min(
-            eligible,
-            key=lambda result: float(result["E_form_eV_per_cation"]),
-        )
-        mixing = endpoint.get("mixing", {}) or {}
-        endpoint_by_label[label] = {
-            "E_form_eV_per_cation": float(endpoint["E_form_eV_per_cation"]),
-            "E_mix_eV_per_cation": mixing.get("E_mix_eV_per_cation"),
-        }
 
     for record in records:
         for label, result in record.reference_results.items():
-            endpoint = endpoint_by_label.get(label)
-            if endpoint is None:
-                continue
-            factor = record.x_dopant / X
+            endpoint_by_label.setdefault(
+                label,
+                {
+                    "reference": "oxide_reference_already_tieline_corrected",
+                    "oxide_endpoint_eV_per_cation_by_dopant": result.get(
+                        "oxide_endpoint_eV_per_cation_by_dopant", {}
+                    ),
+                    "oxide_endpoint_correction_eV_per_cation": result.get(
+                        "oxide_endpoint_correction_eV_per_cation", None
+                    ),
+                    "E_endpoint_eV_per_cation": result.get(
+                        "oxide_endpoint_eV_per_cation", None
+                    ),
+                },
+            )
+
+    for record in records:
+        for label, result in record.reference_results.items():
+            mixing = result.get("mixing", {}) or {}
+            E_mix_per_cation = mixing.get("E_mix_eV_per_cation")
+
             result["relative"] = {
                 "endpoint_x": X,
-                "E_form_endpoint_eV_per_cation": endpoint["E_form_eV_per_cation"],
-                "E_mix_endpoint_eV_per_cation": endpoint["E_mix_eV_per_cation"],
-                "E_form_rel_eV_per_cation": (
-                    float(result["E_form_eV_per_cation"])
-                    - factor * endpoint["E_form_eV_per_cation"]
+                "reference": "oxide_reference_already_tieline_corrected",
+                "E_endpoint_eV_per_cation": result.get("oxide_endpoint_eV_per_cation"),
+                "oxide_endpoint_eV_per_cation_by_dopant": result.get(
+                    "oxide_endpoint_eV_per_cation_by_dopant", {}
                 ),
+                "oxide_endpoint_correction_eV_per_cation": result.get(
+                    "oxide_endpoint_correction_eV_per_cation"
+                ),
+                "E_form_rel_eV_per_cation": float(result["E_form_eV_per_cation"]),
                 "E_mix_rel_eV_per_cation": (
-                    float(result["mixing"]["E_mix_eV_per_cation"])
-                    - factor * float(endpoint["E_mix_eV_per_cation"])
-                    if (result.get("mixing", {}) or {}).get("E_mix_eV_per_cation") is not None
-                    and endpoint.get("E_mix_eV_per_cation") is not None
-                    else None
+                    float(E_mix_per_cation) if E_mix_per_cation is not None else None
                 ),
             }
 
     return X, endpoint_by_label
-
 
 def _write_folder_csv(
     folder: Path,
@@ -636,10 +778,19 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
                 continue
 
             n_cations = sum(count for element, count in counts.items() if element != anion)
+            if n_cations <= 0:
+                log.warning("%s/%s: no cations identified -> skip", folder.name, candidate_dir.name)
+                continue
+
             x_dopant = sum(dopant_counts.values()) / float(n_cations)
             reference_results: Dict[str, Dict[str, Any]] = {}
+
             if reference_mode == "oxide":
-                assert host_ref is not None and mu_oxygen is not None and E_O2 is not None and mu_host is not None
+                assert host_ref is not None
+                assert mu_oxygen is not None
+                assert E_O2 is not None
+                assert mu_host is not None
+
                 for label, selected_oxides in _iter_oxide_scenarios(dopant_counts, reference_groups):
                     reference_results[label] = _formation_result(
                         E_doped=E_doped,
@@ -662,6 +813,7 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
                     raise KeyError(
                         "Missing metal chemical potentials for dopant(s): " + ", ".join(sorted(missing))
                     )
+
                 correction = sum(
                     float(count) * (float(mu_host) - metal_mus[dopant])
                     for dopant, count in dopant_counts.items()
@@ -716,7 +868,8 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
         return
 
     relative_metadata: Dict[str, Any] = {}
-    if cfg.relative_enabled:
+    formation_writes_relative = cfg.relative_enabled and reference_mode == "oxide"
+    if formation_writes_relative:
         X, endpoint_by_label = _apply_relative_energies(
             all_records,
             endpoint_x=cfg.relative_endpoint_x,
@@ -724,7 +877,7 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
         relative_metadata = {
             "enabled": True,
             "endpoint_x": X,
-            "endpoint_selection": "lowest_E_form_per_cation",
+            "endpoint_selection": "oxide_endmember_tieline",
             "endpoint_energies": endpoint_by_label,
         }
 
@@ -746,6 +899,7 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
             "reference_results": record.reference_results,
             "relative_energy": relative_metadata,
             "primary_reference_label": first_label,
+            # Backward-compatible primary fields.
             "E_form_eV_total": primary["E_form_eV_total"],
             "reported": primary["reported"],
             "mixing": primary["mixing"],
@@ -757,7 +911,7 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
             folder,
             folder_records,
             reference_mode=reference_mode,
-            relative_enabled=cfg.relative_enabled,
+            relative_enabled=formation_writes_relative,
         )
 
     log.info("DONE Step 06 formation.")

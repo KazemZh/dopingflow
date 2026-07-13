@@ -15,6 +15,12 @@ _SOURCE_TO_RELATIVE = {
 }
 
 
+def relative_energy_enabled(raw_cfg: dict[str, Any]) -> bool:
+    """Return the flat ``[formation].relative_enabled`` setting."""
+    formation = raw_cfg.get("formation", {}) or {}
+    return bool(formation.get("relative_enabled", False))
+
+
 def _as_float(value: Any) -> float | None:
     try:
         text = str(value).strip()
@@ -64,9 +70,12 @@ def populate_relative_energy_columns(
     csv_path: Path,
     raw_cfg: dict[str, Any],
 ) -> Path:
-    """Always populate relative formation and mixing energies in one CSV.
+    """Populate missing legacy relative-energy columns in one CSV.
 
-    For each oxide-reference suffix, the calculation is:
+    Formation now writes oxide-endmember tie-line values directly. Existing
+    relative columns are therefore authoritative and are never overwritten by
+    this compatibility postprocessor. For older databases that contain only
+    absolute reference-specific columns, the fallback calculation is:
 
         E_rel(x) = E(x) - (x / X) E_min(X)
 
@@ -98,6 +107,9 @@ def populate_relative_energy_columns(
         for source_column in source_columns:
             label = source_column.removeprefix(source_prefix)
             relative_column = f"{relative_prefix}{label}"
+            if relative_column in fieldnames:
+                log.info("Preserving formation-stage relative column %s", relative_column)
+                continue
             endpoint_energies = [
                 energy
                 for row in rows

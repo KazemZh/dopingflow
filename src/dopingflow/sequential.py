@@ -20,7 +20,7 @@ from dopingflow.filtering import run_filtering
 from dopingflow.bandgap import run_bandgap
 from dopingflow.formation import run_formation
 from dopingflow.collect_relative import run_collect
-from dopingflow.relative_energy import populate_relative_energy_columns
+from dopingflow.relative_energy import populate_relative_energy_columns, relative_energy_enabled
 
 log = logging.getLogger(__name__)
 
@@ -119,10 +119,11 @@ def _merge_step_databases(
     out = root / "results_database.csv"
     merged.to_csv(out, index=False)
 
-    # Per-step collection has only one composition and therefore cannot define
-    # a meaningful global endpoint. Recalculate relative energies once all
-    # sequential compositions have been merged.
-    populate_relative_energy_columns(out, raw_cfg)
+    # Preserve formation-stage oxide tie-line values. For legacy step databases
+    # without relative columns, calculate the old global-endpoint fallback only
+    # when relative output was explicitly requested.
+    if relative_energy_enabled(raw_cfg):
+        populate_relative_energy_columns(out, raw_cfg)
     return out
 
 

@@ -6,6 +6,23 @@ The format loosely follows semantic versioning.
 
 ---
 
+## [Unreleased]
+### Added
+- Multi-reference oxide endpoint and co-doping provenance columns
+- One phase-diagram CSV per exact candidate chemical system
+- Phase-diagram source selection in the GUI Results Explorer
+- Tests for flat formation configuration, metadata flattening, and per-system phase diagrams
+
+### Changed
+- Relative-energy settings now remain directly inside `[formation]` as
+  `relative_enabled` and `endpoint_x`
+- Formation-stage oxide tie-line values are preserved during collection and
+  sequential database merging
+- `[phase_diagram].skip_if_done` and
+  `stable_threshold_eV_per_atom` are now honored by the implementation
+- Formation, database, phase-diagram, GUI, and example documentation now
+  describe the multi-reference output schema
+
 ## [0.3.0] - 2026-02-16
 ### Added
 - Streamlit GUI for interactive workflow configuration and execution

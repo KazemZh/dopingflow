@@ -142,6 +142,7 @@ dopingflow filter -c input.toml
 dopingflow bandgap -c input.toml
 dopingflow formation -c input.toml
 dopingflow collect -c input.toml
+dopingflow alloy-hull -c input.toml
 dopingflow phase-diagram -c input.toml
 dopingflow surface -c input.toml
 ```
@@ -181,7 +182,15 @@ The GUI allows you to:
 - Build and edit `input.toml`
 - Run workflow stages interactively
 - Visualize generated structures
-- Explore `results_database.csv` with Plotly
+- Explore `results_database.csv` and per-system phase-diagram CSVs with Plotly
+
+Relative-energy controls remain inside the existing `[formation]` section:
+
+```toml
+[formation]
+relative_enabled = true
+endpoint_x = "auto"
+```
 
 ### Launch the GUI
 

@@ -101,8 +101,10 @@ Stages
 
 9. Full phase diagram analysis
 
-   - Compute energy above hull for each candidate using pymatgen
-   - Compare against all included competing phases in the multicomponent chemical system
+   - Build a separate pymatgen hull for each exact candidate chemical system
+   - Include compatible reference phases and lower-dimensional candidates
+   - Require one elemental terminal reference for every element
+   - Write per-system CSV files plus a combined result table
 
 10. Surface generation (optional)
 

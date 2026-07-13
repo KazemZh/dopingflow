@@ -43,7 +43,7 @@ This stage uses settings from the following sections of ``input.toml``:
 - ``[structure]``: provides the output directory containing structure folders.
 - ``[doping]``: defines the substitution host species.
 - ``[scan]``: provides the anion species list used to identify dopants.
-- ``[formation]``: controls skipping and the normalization convention.
+- ``[formation]``: controls skipping, normalization, and optional relative columns.
 
 It also requires the reference-energy JSON from Step 00:
 
@@ -156,6 +156,31 @@ If you later want normalization per *host-sublattice* site, that quantity can be
 stored explicitly in the reference JSON and used here.
 
 
+Multiple Oxide References and Relative Values
+----------------------------------------------
+
+In oxide mode, every binary oxide listed for a dopant is evaluated. Co-doped
+candidates use the Cartesian product of the available oxide choices, producing
+deterministic scenario labels such as ``Sb2O3__TiO2``.
+
+Relative output is configured without adding another TOML section::
+
+   [formation]
+   relative_enabled = true
+   endpoint_x = "auto"
+
+The oxide chemical potentials and the atom-balanced mixing reaction already
+reference the candidate to its host-oxide/dopant-oxide tie-line. Consequently,
+the relative per-cation values equal their corresponding oxide-referenced
+formation and mixing values; collection does not apply a second endpoint
+subtraction. ``endpoint_x = "auto"`` records the pure oxide endmember
+(:math:`x=1`).
+
+For co-doping, endpoint provenance includes both the endpoint energy for each
+dopant and the composition-weighted correction
+:math:`\sum_i x_i E_{\mathrm{endpoint},i}`.
+
+
 Outputs
 -------
 
@@ -168,16 +193,19 @@ For each structure folder, this stage writes:
 
    formation_energies.csv
 
-Columns:
+Base columns:
 
 - ``candidate``: candidate directory name
 - ``E_doped_eV``: relaxed total energy of the doped candidate
-- ``E_form_eV_total``: total formation energy in eV
-- ``E_form_<normalize>``: normalized formation energy (according to config)
 - ``n_dopant_atoms``: total dopant atoms :math:`N_{\mathrm{dop}}`
 - ``dopant_counts``: compact dopant count string (e.g. ``Sb:2;Zr:1``)
+- ``x_dopant``: actual dopant fraction on the cation sublattice
+- ``reference_mode``: ``metal`` or ``oxide``
 
-Rows are sorted by ``E_form_eV_total`` (ascending).
+Each reference scenario then contributes wide columns with a ``__<scenario>``
+suffix, including formation energies, mixing energies, relative values, oxide
+endpoint energies, reaction text, and JSON endpoint provenance. Rows remain one
+candidate per row and are sorted by relaxed doped energy.
 
 Per-candidate metadata
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -195,6 +223,9 @@ This file includes:
 - chemical potentials used for the involved species
 - inferred dopant counts
 - total formation energy and the reported normalized value
+- the full ``reference_results`` mapping for all oxide scenarios
+- the primary reference label used for backward-compatible top-level fields
+- relative-energy and oxide-endpoint provenance
 
 
 Reproducibility and Skipping

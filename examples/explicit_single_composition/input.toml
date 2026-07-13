@@ -84,5 +84,7 @@ device = "cpu"
 [formation]
 skip_if_done = true
 normalize = "per_dopant"
+relative_enabled = true
+endpoint_x = "auto"
 
 [database]

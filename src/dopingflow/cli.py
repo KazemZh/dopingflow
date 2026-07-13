@@ -217,7 +217,7 @@ def run_all_cmd(
         typer.echo(f"\n=== {title} ({k}) ===")
         res = fn()
 
-        if k in {"collect", "alloy-hull"} and isinstance(res, Path):
+        if k in {"collect", "alloy-hull", "phase-diagram"} and isinstance(res, Path):
             typer.echo(f"\nWrote output CSV: {res}")
 
 
