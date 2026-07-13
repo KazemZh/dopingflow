@@ -8,12 +8,19 @@ The format loosely follows semantic versioning.
 
 ## [Unreleased]
 ### Added
+- Dynamic discovery of the installed MACE ``mace_mp`` foundation-model aliases,
+  including MACE-MH-0 and MACE-MH-1
+- MACE custom-checkpoint paths and optional multi-head selection through each
+  stage's existing ``model`` and ``task`` parameters
+- Shared GUI controls and backend tests for MACE aliases, checkpoints, and heads
 - Multi-reference oxide endpoint and co-doping provenance columns
 - One phase-diagram CSV per exact candidate chemical system
 - Phase-diagram source selection in the GUI Results Explorer
 - Tests for flat formation configuration, metadata flattening, and per-system phase diagrams
 
 ### Changed
+- The MACE optional dependency now requires ``mace-torch>=0.3.14`` and the GUI
+  no longer advertises unsupported ``small-mpa-0``/``large-mpa-0`` aliases
 - Relative-energy settings now remain directly inside `[formation]` as
   `relative_enabled` and `endpoint_x`
 - Formation-stage oxide tie-line values are preserved during collection and

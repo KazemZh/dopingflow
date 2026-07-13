@@ -92,7 +92,9 @@ Supported backends include:
   - requires authentication and model access permissions
 
 - ``mace``:
-  - foundation models trained on Materials Project / OMAT / MPA datasets
+
+  - foundation models exposed by the installed MACE ``mace_mp`` calculator,
+    including MP, MPA, OMAT, MATPES, and multi-head models
   - fast and efficient, especially for large-scale screening
 
 - ``grace``:
@@ -101,21 +103,31 @@ Supported backends include:
 
 Model selection is controlled via ``[scan].model``.
 
-Examples:
+MACE-MH example using the existing ``[scan]`` parameters:
 
 ::
 
+   [scan]
    backend = "mace"
-   model = "small"
+   model = "mh-1"
+   task = "omat_pbe"
 
+For a single-head MACE model such as ``small``, keep ``task = ""``. A UMA
+configuration uses the same fields with a required UMA task:
+
+::
+
+   [scan]
    backend = "uma"
    model = "uma-s-1p2"
    task  = "omat"
 
 Notes:
 
-- ``task`` is required only for the UMA backend.
-- For other backends, ``task`` is ignored.
+- ``task`` is required for UMA. For MACE it optionally selects a multi-head
+  model head; blank uses the model default.
+- The available MACE aliases are discovered from the installed ``mace-torch``
+  package. A local checkpoint path can be used instead of an alias.
 - Models are typically downloaded and cached automatically on first use.
 
 +----------+-----------+--------+----------------------+------------------+

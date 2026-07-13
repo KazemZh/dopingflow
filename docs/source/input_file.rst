@@ -393,7 +393,7 @@ Available options:
 
 - ``"m3gnet"`` — TensorFlow-based universal interatomic potential
 - ``"uma"`` — FAIR-Chem universal model (requires Hugging Face access)
-- ``"mace"`` — MACE foundation models (Materials Project / OMAT / MPA)
+- ``"mace"`` — MACE foundation models (MP, MPA, OMAT, MATPES, and MH)
 - ``"grace"`` — GRACE graph neural network models (if installed)
 
 Each backend has its own supported models and execution characteristics.
@@ -414,14 +414,14 @@ Behavior depends on backend:
   - ``"uma-m-1p1"``
 
 - ``mace``:
-  - ``"small"``
-  - ``"medium"``
-  - ``"large"``
-  - ``"small-mpa-0"``
-  - ``"medium-mpa-0"``
-  - ``"large-mpa-0"``
-  - ``"small-omat-0"``
-  - ``"medium-omat-0"``
+
+  - accepts every alias exposed by the installed MACE ``mace_mp`` calculator
+  - common aliases include ``"small"``, ``"medium"``, ``"large"``,
+    ``"medium-mpa-0"``, ``"small-omat-0"``, ``"medium-omat-0"``,
+    ``"mace-matpes-pbe-0"``, ``"mace-matpes-r2scan-0"``, ``"mh-0"``,
+    and ``"mh-1"``
+  - a local ``.model``, ``.pt``, or ``.pth`` checkpoint path is also accepted
+  - named model weights are downloaded and cached by MACE on first use
 
 - ``grace``:
   - ``GRACE-1L-OMAT``
@@ -461,7 +461,11 @@ Optional task specification (used only for certain backends).
   - ``"odac"``
   - ``"omc"``
 
-- ``m3gnet``, ``mace``, ``grace``:
+- ``mace`` optionally uses ``task`` as the multi-head model ``head``. For
+  ``model = "mh-1"``, leave it empty for MACE's default ``omat_pbe`` head or set
+  a supported head explicitly, for example ``task = "omat_pbe"``.
+
+- ``m3gnet``, ``grace``:
   - Not used → keep empty (``""``)
 
 poscar_in (string, default: "POSCAR")
@@ -732,14 +736,13 @@ Behavior depends on backend:
   - ``"uma-m-1p1"``
 
 - ``mace``:
-  - ``"small"``
-  - ``"medium"``
-  - ``"large"``
-  - ``"small-mpa-0"``
-  - ``"medium-mpa-0"``
-  - ``"large-mpa-0"``
-  - ``"small-omat-0"``
-  - ``"medium-omat-0"``
+
+  - accepts every alias exposed by the installed MACE ``mace_mp`` calculator
+  - common aliases include ``"small"``, ``"medium"``, ``"large"``,
+    ``"medium-mpa-0"``, ``"small-omat-0"``, ``"medium-omat-0"``,
+    ``"mace-matpes-pbe-0"``, ``"mace-matpes-r2scan-0"``, ``"mh-0"``,
+    and ``"mh-1"``
+  - local ``.model``, ``.pt``, and ``.pth`` checkpoint paths are accepted
 
 - ``grace``:
   - ``GRACE-1L-OMAT``
@@ -768,7 +771,7 @@ Behavior depends on backend:
 task (string, default: "")
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Optional task specification used only for ``uma``.
+Optional task specification used for ``uma`` and multi-head MACE models.
 
 Allowed values for ``uma``:
 
@@ -780,7 +783,9 @@ Allowed values for ``uma``:
 - ``"odac"``
 - ``"omc"``
 
-For ``m3gnet``, ``mace``, and ``grace``, this parameter is ignored and should be left empty.
+For MACE, ``task`` is passed as the optional model ``head``. Leave it empty for
+the model default; for example, MACE-MH-1 defaults to ``omat_pbe``. For
+``m3gnet`` and ``grace``, this parameter is ignored.
 
 relax_mode (string, default: "atoms")
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1357,7 +1362,8 @@ Model selection depends on backend (same behavior as Step 03).
 surface_task (string, default: "")
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Optional task specification (used only for ``uma``).
+Task/domain for UMA, or an optional MACE model ``head``. Leave it empty to use
+the MACE model default (MACE-MH-1 defaults to ``omat_pbe``).
 
 surface_optimizer (string, default: "bfgs")
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

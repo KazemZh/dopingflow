@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import os
+from functools import lru_cache
+from pathlib import Path
 from typing import Optional, Tuple
 
 log = logging.getLogger(__name__)
@@ -11,16 +13,24 @@ _ALLOWED_BACKENDS = {"m3gnet", "uma", "mace", "grace"}
 _UMA_MODELS = {"uma-s-1p2", "uma-s-1p1", "uma-m-1p1"}
 _UMA_TASKS = {"omat", "oc20", "oc22", "oc25", "omol", "odac", "omc"}
 
-_MACE_MODELS = {
+_MACE_FALLBACK_MODELS = (
     "small",
     "medium",
     "large",
-    "small-mpa-0",
+    "small-0b",
+    "medium-0b",
+    "small-0b2",
+    "medium-0b2",
+    "large-0b2",
+    "medium-0b3",
     "medium-mpa-0",
-    "large-mpa-0",
     "small-omat-0",
     "medium-omat-0",
-}
+    "mace-matpes-pbe-0",
+    "mace-matpes-r2scan-0",
+    "mh-0",
+    "mh-1",
+)
 
 _GRACE_MODELS = {
     "GRACE-1L-OMAT",
@@ -46,6 +56,38 @@ _GRACE_MODELS = {
     "GRACE-2L-SMAX-OMAT-M",
     "GRACE-2L-SMAX-OMAT-L",
 }
+
+
+@lru_cache(maxsize=1)
+def get_mace_model_choices() -> Tuple[str, ...]:
+    """Return the aliases supported by the installed ``mace_mp`` calculator.
+
+    MACE owns this catalogue and may add aliases between releases.  Keeping the
+    installed package authoritative prevents dopingflow from rejecting a model
+    that the user's MACE version already supports.  The fallback keeps the GUI
+    and validation useful when MACE is an optional, not-yet-installed backend.
+    """
+    try:
+        from mace.calculators.foundations_models import mace_mp_names
+
+        # MACE includes ``None`` as an internal "use default" sentinel in some
+        # releases; dopingflow already represents that choice as ``small``.
+        discovered = tuple(str(name) for name in mace_mp_names if name is not None)
+        if discovered:
+            return discovered
+    except Exception as exc:  # MACE is optional and can fail during heavy imports
+        log.debug("Could not discover installed MACE model aliases: %s", exc)
+
+    return _MACE_FALLBACK_MODELS
+
+
+def _is_mace_checkpoint_reference(model: str) -> bool:
+    """Recognize a local/custom checkpoint without requiring it to exist yet."""
+    return (
+        "/" in model
+        or "\\" in model
+        or Path(model).suffix.lower() in {".model", ".pt", ".pth"}
+    )
 
 
 def set_default_runtime_env(
@@ -112,12 +154,15 @@ def normalize_backend_config(
     if backend == "mace":
         if model in {"", "default"}:
             model = "small"
-        if model not in _MACE_MODELS:
+        supported_models = get_mace_model_choices()
+        if model not in supported_models and not _is_mace_checkpoint_reference(model):
             raise ValueError(
-                f"[{section_name}].model must be one of {sorted(_MACE_MODELS)} "
+                f"[{section_name}].model must be an alias supported by the installed "
+                f"MACE package ({', '.join(supported_models)}) or a checkpoint path "
                 "for backend='mace'"
             )
-        task = ""
+        if _is_mace_checkpoint_reference(model):
+            model = str(Path(model).expanduser())
         return backend, model, task
 
     if backend == "grace":
@@ -315,7 +360,16 @@ def build_ase_calculator(
                 "MACE backend requested, but mace-torch is not installed."
             ) from e
 
-        return mace_mp(model=model, device=device, default_dtype="float64")
+        kwargs = {
+            "model": model,
+            "device": device,
+            "default_dtype": "float64",
+        }
+        if task:
+            # Multi-head MACE models (for example mh-1) call this a ``head``.
+            # Reusing the existing stage-level task field avoids new TOML sections.
+            kwargs["head"] = task
+        return mace_mp(**kwargs)
 
     if backend == "grace":
         try:

@@ -33,7 +33,7 @@ uma = [
 ]
 
 mace = [
-  "mace-torch>=0.3.10",
+  "mace-torch>=0.3.14",
 ]
 
 grace = [

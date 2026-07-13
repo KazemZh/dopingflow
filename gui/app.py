@@ -18,7 +18,15 @@ GUI_DIR = Path(__file__).resolve().parent
 if str(GUI_DIR) not in sys.path:
     sys.path.insert(0, str(GUI_DIR))
 
-from gui_config import SUPER_CELL_PRESETS, DOPING_MODE_CHOICES, ALLOWED_DOPANTS, RUN_PRESETS, DEFAULTS, CHOICES
+from gui_config import (
+    SUPER_CELL_PRESETS,
+    DOPING_MODE_CHOICES,
+    ALLOWED_DOPANTS,
+    RUN_PRESETS,
+    DEFAULTS,
+    CHOICES,
+    MACE_MODEL_CHOICES,
+)
 from io_project import ProjectIndex
 from view_structure import show_structure
 
@@ -41,6 +49,65 @@ def load_toml(path: Path) -> dict:
 
 def save_toml(path: Path, cfg: dict) -> None:
     path.write_text(toml.dumps(cfg))
+
+
+@st.cache_data(show_spinner=False)
+def available_mace_models() -> tuple[str, ...]:
+    """Use the installed MACE catalogue, with GUI defaults as an offline fallback."""
+    try:
+        from dopingflow.ml_backends import get_mace_model_choices
+
+        return get_mace_model_choices()
+    except Exception:
+        return tuple(MACE_MODEL_CHOICES)
+
+
+def mace_model_input(label: str, current_model: str, *, key: str) -> str:
+    """Render a shared MACE alias selector with a custom-checkpoint escape hatch."""
+    current_model = str(current_model).strip()
+    if current_model in {"", "default"}:
+        current_model = "small"
+
+    model_choices = list(available_mace_models())
+    custom_label = "Custom checkpoint path…"
+    choices = [*model_choices, custom_label]
+    selected = current_model if current_model in model_choices else custom_label
+    selected = st.selectbox(
+        label,
+        options=choices,
+        index=choices.index(selected),
+        key=key,
+        help=(
+            "Select a mace_mp alias. MACE downloads its weights on first use, or "
+            "choose a local .model/.pt/.pth checkpoint path."
+        ),
+    )
+    if selected != custom_label:
+        return selected
+
+    custom_model = st.text_input(
+        f"{label} checkpoint path",
+        value=current_model if current_model not in model_choices else "",
+        key=f"{key}_custom",
+        placeholder="/path/to/model.model",
+    ).strip()
+    if not custom_model:
+        st.warning("Enter a MACE checkpoint path before saving or running.")
+        return current_model
+    return custom_model
+
+
+def mace_head_input(label: str, current_task: str, *, key: str) -> str:
+    return st.text_input(
+        label,
+        value=str(current_task).strip(),
+        key=key,
+        placeholder="Optional, e.g. omat_pbe for mh-1",
+        help=(
+            "Optional MACE multi-head model head. Leave blank for the model default; "
+            "mh-1 defaults to omat_pbe. Stored in the existing task parameter."
+        ),
+    ).strip()
 
 
 def run_command(cmd: list[str], cwd: Path, log_path: Path) -> int:
@@ -385,17 +452,6 @@ if tab == "Input Builder":
         uma_models = ["uma-s-1p2", "uma-s-1p1", "uma-m-1p1"]
         uma_tasks = ["omat", "oc20", "oc22", "oc25", "omol", "odac", "omc"]
 
-        mace_models = [
-            "small",
-            "medium",
-            "large",
-            "small-mpa-0",
-            "medium-mpa-0",
-            "large-mpa-0",
-            "small-omat-0",
-            "medium-omat-0",
-        ]
-
         grace_models = [
             "GRACE-1L-OMAT",
             "GRACE-1L-OMAT-M-base",
@@ -448,19 +504,11 @@ if tab == "Input Builder":
                 )
 
             elif selected_backend == "mace":
-                current_model = str(
-                    cfg_edit["references"].get("model", "small")
-                ).strip()
-                if current_model not in mace_models:
-                    current_model = "small"
-
-                cfg_edit["references"]["model"] = st.selectbox(
+                cfg_edit["references"]["model"] = mace_model_input(
                     "model",
-                    options=mace_models,
-                    index=mace_models.index(current_model),
-                    help="Pretrained MACE model.",
+                    cfg_edit["references"].get("model", "small"),
+                    key="references_model_mace",
                 )
-                cfg_edit["references"]["task"] = ""
 
             elif selected_backend == "grace":
                 current_model = str(
@@ -491,12 +539,18 @@ if tab == "Input Builder":
                     index=uma_tasks.index(current_task),
                     help="Task family used by the UMA calculator.",
                 )
+            elif selected_backend == "mace":
+                cfg_edit["references"]["task"] = mace_head_input(
+                    "MACE head (optional)",
+                    cfg_edit["references"].get("task", ""),
+                    key="references_task_mace",
+                )
             else:
                 cfg_edit["references"]["task"] = st.text_input(
                     "task",
                     value="",
                     disabled=True,
-                    help="Task is only used for the UMA backend.",
+                    help="Task is used by UMA and as an optional MACE head.",
                 )
 
         colE1, colE2 = st.columns(2)
@@ -1068,35 +1122,17 @@ if tab == "Input Builder":
                 )
 
         elif scan_backend == "mace":
-            mace_models = [
-                "small",
-                "medium",
-                "large",
-                "small-mpa-0",
-                "medium-mpa-0",
-                "large-mpa-0",
-                "small-omat-0",
-                "medium-omat-0",
-            ]
-            current_model = str(cfg_edit["scan"].get("model", "small"))
-            if current_model not in mace_models:
-                current_model = "small"
-
-            cfg_edit["scan"]["task"] = ""
-
             with colBM:
-                cfg_edit["scan"]["model"] = st.selectbox(
+                cfg_edit["scan"]["model"] = mace_model_input(
                     "MACE model",
-                    options=mace_models,
-                    index=mace_models.index(current_model),
+                    cfg_edit["scan"].get("model", "small"),
                     key="scan_model_mace",
                 )
             with colBT:
-                st.text_input(
-                    "Task",
-                    value="",
-                    disabled=True,
-                    key="scan_task_disabled_mace",
+                cfg_edit["scan"]["task"] = mace_head_input(
+                    "MACE head (optional)",
+                    cfg_edit["scan"].get("task", ""),
+                    key="scan_task_mace",
                 )
 
         else:  # grace
@@ -1496,17 +1532,6 @@ if tab == "Input Builder":
         uma_model_choices = ["uma-s-1p2", "uma-s-1p1", "uma-m-1p1"]
         uma_task_choices = ["omat", "oc20", "oc22", "oc25", "omol", "odac", "omc"]
 
-        mace_model_choices = [
-            "small",
-            "medium",
-            "large",
-            "small-mpa-0",
-            "medium-mpa-0",
-            "large-mpa-0",
-            "small-omat-0",
-            "medium-omat-0",
-        ]
-
         grace_model_choices = [
             "GRACE-1L-OMAT",
             "GRACE-1L-OMAT-M-base",
@@ -1559,15 +1584,9 @@ if tab == "Input Builder":
                 )
 
             elif relax_backend == "mace":
-                current_model = str(cfg_edit["relax"].get("model", "small")).strip()
-                if current_model in {"", "default"} or current_model not in mace_model_choices:
-                    current_model = "small"
-
-                cfg_edit["relax"]["model"] = st.selectbox(
+                cfg_edit["relax"]["model"] = mace_model_input(
                     "MACE model",
-                    options=mace_model_choices,
-                    index=mace_model_choices.index(current_model),
-                    help="Choose the pretrained MACE model.",
+                    cfg_edit["relax"].get("model", "small"),
                     key="relax_model_mace",
                 )
 
@@ -1596,6 +1615,12 @@ if tab == "Input Builder":
                     index=uma_task_choices.index(current_task),
                     help="Task/domain used by the UMA predictor.",
                     key="relax_task_uma",
+                )
+            elif relax_backend == "mace":
+                cfg_edit["relax"]["task"] = mace_head_input(
+                    "MACE head (optional)",
+                    cfg_edit["relax"].get("task", ""),
+                    key="relax_task_mace",
                 )
             else:
                 cfg_edit["relax"]["task"] = ""
@@ -2543,11 +2568,6 @@ if tab == "Input Builder":
 
             uma_model_choices = ["uma-s-1p2", "uma-s-1p1", "uma-m-1p1"]
             uma_task_choices = ["omat", "oc20", "oc22", "oc25", "omol", "odac", "omc"]
-            mace_model_choices = [
-                "small", "medium", "large",
-                "small-mpa-0", "medium-mpa-0", "large-mpa-0",
-                "small-omat-0", "medium-omat-0",
-            ]
             grace_model_choices = [
                 "GRACE-1L-OMAT",
                 "GRACE-1L-OMAT-M-base",
@@ -2595,13 +2615,9 @@ if tab == "Input Builder":
                         key="surface_model_uma",
                     )
                 elif surface_backend == "mace":
-                    current_model = str(cfg_edit["surface"].get("surface_model", "small")).strip()
-                    if current_model not in mace_model_choices:
-                        current_model = "small"
-                    cfg_edit["surface"]["surface_model"] = st.selectbox(
+                    cfg_edit["surface"]["surface_model"] = mace_model_input(
                         "surface_model",
-                        options=mace_model_choices,
-                        index=mace_model_choices.index(current_model),
+                        cfg_edit["surface"].get("surface_model", "small"),
                         key="surface_model_mace",
                     )
                 else:
@@ -2625,6 +2641,12 @@ if tab == "Input Builder":
                         options=uma_task_choices,
                         index=uma_task_choices.index(current_task),
                         key="surface_task_uma",
+                    )
+                elif surface_backend == "mace":
+                    cfg_edit["surface"]["surface_task"] = mace_head_input(
+                        "MACE head (optional)",
+                        cfg_edit["surface"].get("surface_task", ""),
+                        key="surface_task_mace",
                     )
                 else:
                     cfg_edit["surface"]["surface_task"] = ""

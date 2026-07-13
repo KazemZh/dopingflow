@@ -123,7 +123,10 @@ UMA
 MACE
 ~~~~
 
-- Uses pretrained MACE foundation models
+- Discovers the ``mace_mp`` foundation-model aliases supported by the installed
+  MACE package, including ``mh-0`` and ``mh-1`` with MACE 0.3.14 or newer
+- Accepts a local MACE checkpoint path through ``model``
+- Uses the existing ``task`` parameter as an optional multi-head model head
 - Integrated through the ASE calculator interface
 - Supports CPU and GPU execution
 

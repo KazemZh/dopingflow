@@ -45,11 +45,19 @@ MACE_MODEL_CHOICES = [
     "small",
     "medium",
     "large",
-    "small-mpa-0",
+    "small-0b",
+    "medium-0b",
+    "small-0b2",
+    "medium-0b2",
+    "large-0b2",
+    "medium-0b3",
     "medium-mpa-0",
-    "large-mpa-0",
     "small-omat-0",
     "medium-omat-0",
+    "mace-matpes-pbe-0",
+    "mace-matpes-r2scan-0",
+    "mh-0",
+    "mh-1",
 ]
 
 GRACE_MODEL_CHOICES = [

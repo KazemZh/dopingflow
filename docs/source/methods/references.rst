@@ -270,7 +270,7 @@ The backend is selected through:
 
 - ``backend``
 - ``model``
-- ``task`` (used only for UMA)
+- ``task`` (required for UMA; optional MACE multi-head model head)
 
 The runtime environment is controlled through:
 
