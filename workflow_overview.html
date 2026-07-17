@@ -1,0 +1,315 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Workflow Overview &mdash; dopingflow documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=42d1b3bd"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Installation, Usage, and Outputs" href="installation_and_usage.html" />
+    <link rel="prev" title="dopingflow" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html">
+            
+              <img src="_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Workflow Overview</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#conceptual-pipeline">Conceptual Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#pipeline-structure">Pipeline Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#sequential-workflow">Sequential Workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#stages">Stages</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#design-principles">Design Principles</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#typical-usage">Typical Usage</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="installation_and_usage.html">Installation, Usage, and Outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="required_inputs.html">Required Input Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="input_file.html">Input File Specification (input.toml)</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="methods/references.html">0. Reference Energy Construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/generation.html">1. Structure Generation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/sequential.html">Sequential Doping Workflow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/scanning.html">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/filtering.html">4. Relaxed-Candidate Filtering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/bandgap.html">5. Bandgap Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/formation_energy.html">6. Formation Energy Evaluation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/database.html">7. Database Collection</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/alloy_hull.html">Restricted One-Dimensional Alloy Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/phase_diagram.html">Phase Diagram and Energy Above Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/surfaces.html">Surface Generation and Relaxation</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="examples/explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/explicit_single_oxides.html">Explicit Example — Single Target Composition using Oxide References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/multi_reference_oxide.html">Multiple Oxide References and Relative Energies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/sequential_workflow.html">Sequential Example — Gradual Sb Doping</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api/modules.html">dopingflow</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Workflow Overview</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/workflow_overview.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="workflow-overview">
+<h1>Workflow Overview<a class="headerlink" href="#workflow-overview" title="Link to this heading"></a></h1>
+<section id="conceptual-pipeline">
+<h2>Conceptual Pipeline<a class="headerlink" href="#conceptual-pipeline" title="Link to this heading"></a></h2>
+<p>The ML Doping Workflow implements a fully automated, multi-stage surrogate
+pipeline for the exploration of doped crystalline materials.</p>
+<p>It combines symmetry-aware structure generation with machine-learned
+interatomic potentials to efficiently screen large configurational spaces.</p>
+<p>The workflow is designed to first identify promising bulk candidates and
+then optionally extend the analysis to surface structures.</p>
+</section>
+<section id="pipeline-structure">
+<h2>Pipeline Structure<a class="headerlink" href="#pipeline-structure" title="Link to this heading"></a></h2>
+<p>Reference Construction → Enumeration → Screening → Relaxation → Filtering → Band Gap → Formation Energy → Database → 1D Alloy Hull → Phase Diagram</p>
+<p>Optional Post-Processing:</p>
+<p>Database → Surface Generation → Surface Relaxation</p>
+</section>
+<section id="sequential-workflow">
+<h2>Sequential Workflow<a class="headerlink" href="#sequential-workflow" title="Link to this heading"></a></h2>
+<p>For gradual doping studies, <code class="docutils literal notranslate"><span class="pre">dopingflow</span></code> also provides a sequential workflow:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">sequential</span><span class="o">-</span><span class="n">run</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+</pre></div>
+</div>
+<p>In this mode, the workflow processes the composition list step by step. For example,
+a sequence such as 2.5%, 5%, 7.5%, and 10% Sb is treated as a gradual doping path.
+At each step, the workflow scans possible dopant positions, relaxes the selected
+candidates, and copies the lowest-energy relaxed structure as the starting point
+for the next composition.</p>
+<p>The sequential workflow supports two modes:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">full</span></code>: run generation, scan, relaxation, filtering, optional bandgap,
+formation energy, and database collection for each composition.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">recompute_energies</span></code>: reuse existing relaxed sequential structures and
+recompute formation/mixing energies after changing reference structures.</p></li>
+</ul>
+<p>After <code class="docutils literal notranslate"><span class="pre">sequential-run</span></code> completes, run <code class="docutils literal notranslate"><span class="pre">dopingflow</span> <span class="pre">alloy-hull</span> <span class="pre">-c</span> <span class="pre">input.toml</span></code>
+to construct the global hull from the merged sequential database.</p>
+</section>
+<section id="stages">
+<h2>Stages<a class="headerlink" href="#stages" title="Link to this heading"></a></h2>
+<ol class="arabic simple" start="0">
+<li><p>Reference construction and relaxation</p>
+<ul class="simple">
+<li><p>Relax host structure (unit cell and supercell)</p></li>
+<li><p>Relax reference phases (metal or oxide mode)</p></li>
+<li><p>Build thermodynamic reference dataset</p></li>
+</ul>
+</li>
+<li><p>Symmetry-reduced dopant enumeration</p>
+<ul class="simple">
+<li><p>Generate substitutional doped configurations</p></li>
+<li><p>Identify symmetry-unique arrangements on the cation sublattice</p></li>
+</ul>
+</li>
+<li><p>ML-based energy screening</p>
+<ul class="simple">
+<li><p>Evaluate single-point energies using a selected ML backend</p></li>
+<li><p>Supports: M3GNet, UMA, MACE, GRACE</p></li>
+<li><p>Exact enumeration or stochastic sampling</p></li>
+</ul>
+</li>
+<li><p>Structure relaxation</p>
+<ul class="simple">
+<li><p>Relax candidate structures using ML forces</p></li>
+<li><p>Uses ASE optimizers (e.g. BFGS, FIRE, LBFGS)</p></li>
+<li><p>CPU or GPU execution</p></li>
+</ul>
+</li>
+<li><p>Energy-based filtering</p>
+<ul class="simple">
+<li><p>Select low-energy candidates</p></li>
+<li><p>Window-based or top-N selection strategies</p></li>
+</ul>
+</li>
+<li><p>Band gap prediction</p>
+<ul class="simple">
+<li><p>Predict electronic band gaps using ALIGNN</p></li>
+</ul>
+</li>
+<li><p>Formation energy evaluation</p>
+<ul class="simple">
+<li><p>Compute formation energies using reference structures</p></li>
+<li><p>Supports metal and oxide reference schemes</p></li>
+</ul>
+</li>
+<li><p>Database assembly</p>
+<ul class="simple">
+<li><p>Aggregate results across all stages</p></li>
+<li><p>Export a unified CSV database</p></li>
+</ul>
+</li>
+<li><p>Restricted one-dimensional alloy hull</p>
+<ul class="simple">
+<li><p>Construct the lower convex envelope along one fixed substitutional alloy line</p></li>
+<li><p>Compute energy above the restricted 1D hull per cation</p></li>
+<li><p>Identify stable alloy vertices and tie-line decompositions</p></li>
+</ul>
+</li>
+<li><p>Full phase diagram analysis</p>
+<ul class="simple">
+<li><p>Build a separate pymatgen hull for each exact candidate chemical system</p></li>
+<li><p>Include compatible reference phases and lower-dimensional candidates</p></li>
+<li><p>Require one elemental terminal reference for every element</p></li>
+<li><p>Write per-system CSV files plus a combined result table</p></li>
+</ul>
+</li>
+<li><p>Surface generation (optional)</p></li>
+</ol>
+<blockquote>
+<div><ul class="simple">
+<li><p>Select candidates from the database</p></li>
+<li><p>Generate slab structures for chosen Miller indices</p></li>
+<li><p>Enumerate surface terminations</p></li>
+<li><p>Optionally fix atoms in the slab</p></li>
+</ul>
+</div></blockquote>
+<ol class="arabic simple" start="11">
+<li><p>Surface relaxation (optional)</p></li>
+</ol>
+<blockquote>
+<div><ul class="simple">
+<li><p>Relax slab structures using ML interatomic potentials</p></li>
+<li><p>Apply atom constraints (e.g. fixed bottom layers)</p></li>
+<li><p>Use the same backend abstraction as bulk relaxation</p></li>
+</ul>
+</div></blockquote>
+</section>
+<section id="design-principles">
+<h2>Design Principles<a class="headerlink" href="#design-principles" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>Modular</strong>: Each stage can be executed independently</p></li>
+<li><p><strong>Backend-agnostic</strong>: Multiple ML potentials are supported</p></li>
+<li><p><strong>Reproducible</strong>: Fully controlled via <code class="docutils literal notranslate"><span class="pre">input.toml</span></code></p></li>
+<li><p><strong>Scalable</strong>: Supports multiprocessing and GPU execution</p></li>
+<li><p><strong>Extensible</strong>: New models and stages can be added easily</p></li>
+</ul>
+</section>
+<section id="notes">
+<h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>The core workflow (Stages 0–9) focuses on bulk screening, database generation,
+and thermodynamic analysis.</p></li>
+<li><p>Surface generation is intentionally decoupled from the main pipeline and is executed separately.</p></li>
+<li><p>This design allows users to:
+- inspect and validate bulk candidates before surface modeling
+- control the number of generated slabs
+- avoid combinatorial explosion of surface structures</p></li>
+</ul>
+</section>
+<section id="typical-usage">
+<h2>Typical Usage<a class="headerlink" href="#typical-usage" title="Link to this heading"></a></h2>
+<p>A typical workflow consists of:</p>
+<ol class="arabic">
+<li><p>Running the full bulk pipeline:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">run</span><span class="o">-</span><span class="nb">all</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+</pre></div>
+</div>
+</li>
+<li><p>Inspecting the resulting database:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">results_database</span><span class="o">.</span><span class="n">csv</span>
+</pre></div>
+</div>
+</li>
+<li><p>Generating and optionally relaxing surfaces:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">surface</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+</pre></div>
+</div>
+</li>
+</ol>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="dopingflow" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="installation_and_usage.html" class="btn btn-neutral float-right" title="Installation, Usage, and Outputs" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

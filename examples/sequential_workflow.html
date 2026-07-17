@@ -1,0 +1,353 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sequential Example — Gradual Sb Doping &mdash; dopingflow documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=42d1b3bd"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="dopingflow" href="../api/modules.html" />
+    <link rel="prev" title="Smoke Test — Minimal Fast Run" href="smoke_test.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html">
+            
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../workflow_overview.html">Workflow Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation_and_usage.html">Installation, Usage, and Outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../required_inputs.html">Required Input Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file.html">Input File Specification (input.toml)</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../methods/references.html">0. Reference Energy Construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/generation.html">1. Structure Generation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/sequential.html">Sequential Doping Workflow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/scanning.html">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/filtering.html">4. Relaxed-Candidate Filtering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/bandgap.html">5. Bandgap Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/formation_energy.html">6. Formation Energy Evaluation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/database.html">7. Database Collection</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/alloy_hull.html">Restricted One-Dimensional Alloy Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/phase_diagram.html">Phase Diagram and Energy Above Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/surfaces.html">Surface Generation and Relaxation</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="explicit_single_oxides.html">Explicit Example — Single Target Composition using Oxide References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="multi_reference_oxide.html">Multiple Oxide References and Relative Energies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Sequential Example — Gradual Sb Doping</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#purpose">Purpose</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#workflow">Workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#required-files">Required Files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#example-input-toml">Example input.toml</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#recomputing-energies-with-a-different-reference">Recomputing Energies with a Different Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#outputs">Outputs</a></li>
+</ul>
+</li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../api/modules.html">dopingflow</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Sequential Example — Gradual Sb Doping</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/examples/sequential_workflow.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="sequential-example-gradual-sb-doping">
+<h1>Sequential Example — Gradual Sb Doping<a class="headerlink" href="#sequential-example-gradual-sb-doping" title="Link to this heading"></a></h1>
+<section id="purpose">
+<h2>Purpose<a class="headerlink" href="#purpose" title="Link to this heading"></a></h2>
+<p>This example performs <strong>gradual sequential Sb doping</strong> of <code class="docutils literal notranslate"><span class="pre">SnO2</span></code>.</p>
+<p>Use this mode when:</p>
+<ul class="simple">
+<li><p>You want to increase the dopant concentration step by step.</p></li>
+<li><p>You want each composition to start from the lowest-energy relaxed structure of the previous composition.</p></li>
+<li><p>You want to improve structural optimization along a doping path.</p></li>
+<li><p>You want to recompute formation and mixing energies later using different oxide references without regenerating or relaxing structures.</p></li>
+</ul>
+</section>
+<section id="workflow">
+<h2>Workflow<a class="headerlink" href="#workflow" title="Link to this heading"></a></h2>
+<p>Run the sequential workflow:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">sequential</span><span class="o">-</span><span class="n">run</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+</pre></div>
+</div>
+<p>In <code class="docutils literal notranslate"><span class="pre">mode</span> <span class="pre">=</span> <span class="pre">&quot;full&quot;</span></code>, each composition step runs:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">generate</span> <span class="o">-&gt;</span> <span class="n">scan</span> <span class="o">-&gt;</span> <span class="n">relax</span> <span class="o">-&gt;</span> <span class="nb">filter</span> <span class="o">-&gt;</span> <span class="n">optional</span> <span class="n">bandgap</span> <span class="o">-&gt;</span> <span class="n">formation</span> <span class="o">-&gt;</span> <span class="n">collect</span>
+</pre></div>
+</div>
+<p>After each step, the lowest-energy relaxed structure is copied to:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sequential_structures</span><span class="o">/</span><span class="n">step_xxx_</span><span class="o">&lt;</span><span class="n">composition</span><span class="o">&gt;/</span><span class="n">best_relaxed</span><span class="o">/</span><span class="n">POSCAR</span>
+</pre></div>
+</div>
+<p>and used as the starting structure for the next composition.</p>
+</section>
+<section id="required-files">
+<h2>Required Files<a class="headerlink" href="#required-files" title="Link to this heading"></a></h2>
+<p>The working directory must contain:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+<span class="n">reference_structures</span><span class="o">/</span>
+    <span class="n">SnO2</span><span class="o">.</span><span class="n">POSCAR</span>
+    <span class="n">Sb2O5</span><span class="o">.</span><span class="n">POSCAR</span>
+    <span class="n">O2</span><span class="o">.</span><span class="n">POSCAR</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">SnO2.POSCAR</span></code>: pristine host oxide structure.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Sb2O5.POSCAR</span></code>: dopant oxide reference structure.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">O2.POSCAR</span></code>: oxygen gas reference structure.</p></li>
+</ul>
+</section>
+<section id="example-input-toml">
+<h2>Example input.toml<a class="headerlink" href="#example-input-toml" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">structure</span><span class="p">]</span>
+<span class="n">outdir</span> <span class="o">=</span> <span class="s2">&quot;Sb_sequential_SnO2_mace&quot;</span>
+
+<span class="p">[</span><span class="n">references</span><span class="p">]</span>
+<span class="n">reference_mode</span> <span class="o">=</span> <span class="s2">&quot;oxide&quot;</span>
+<span class="n">skip_if_done</span> <span class="o">=</span> <span class="n">false</span>
+<span class="n">fmax</span> <span class="o">=</span> <span class="mf">0.02</span>
+<span class="n">max_steps</span> <span class="o">=</span> <span class="mi">300</span>
+<span class="n">tf_threads</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="n">omp_threads</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="n">device</span> <span class="o">=</span> <span class="s2">&quot;cpu&quot;</span>
+<span class="n">gpu_id</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="n">backend</span> <span class="o">=</span> <span class="s2">&quot;mace&quot;</span>
+<span class="n">model</span> <span class="o">=</span> <span class="s2">&quot;small&quot;</span>
+<span class="n">task</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+<span class="n">optimizer</span> <span class="o">=</span> <span class="s2">&quot;bfgs&quot;</span>
+<span class="n">host</span> <span class="o">=</span> <span class="s2">&quot;SnO2&quot;</span>
+<span class="n">host_dir</span> <span class="o">=</span> <span class="s2">&quot;reference_structures/&quot;</span>
+<span class="n">supercell</span> <span class="o">=</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">]</span>
+<span class="n">metal_ref</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;Sn&quot;</span><span class="p">,</span> <span class="s2">&quot;Sb&quot;</span><span class="p">]</span>
+<span class="n">metals_dir</span> <span class="o">=</span> <span class="s2">&quot;reference_structures/&quot;</span>
+<span class="n">oxides_ref</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;Sb2O5&quot;</span><span class="p">]</span>
+<span class="n">oxides_dir</span> <span class="o">=</span> <span class="s2">&quot;reference_structures/&quot;</span>
+<span class="n">gas_ref</span> <span class="o">=</span> <span class="s2">&quot;O2&quot;</span>
+<span class="n">gas_dir</span> <span class="o">=</span> <span class="s2">&quot;reference_structures/&quot;</span>
+<span class="n">oxygen_mode</span> <span class="o">=</span> <span class="s2">&quot;O-rich&quot;</span>
+<span class="n">muO_shift_ev</span> <span class="o">=</span> <span class="mf">0.0</span>
+
+<span class="p">[</span><span class="n">generate</span><span class="p">]</span>
+<span class="n">poscar_order</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;Sb&quot;</span><span class="p">,</span> <span class="s2">&quot;Sn&quot;</span><span class="p">,</span> <span class="s2">&quot;O&quot;</span><span class="p">]</span>
+<span class="n">seed_base</span> <span class="o">=</span> <span class="mi">12345</span>
+
+<span class="p">[</span><span class="n">sequential</span><span class="p">]</span>
+<span class="n">outdir</span> <span class="o">=</span> <span class="s2">&quot;sequential_structures&quot;</span>
+<span class="n">mode</span> <span class="o">=</span> <span class="s2">&quot;full&quot;</span>
+
+<span class="p">[</span><span class="n">doping</span><span class="p">]</span>
+<span class="n">mode</span> <span class="o">=</span> <span class="s2">&quot;enumerate&quot;</span>
+<span class="n">host_species</span> <span class="o">=</span> <span class="s2">&quot;Sn&quot;</span>
+<span class="n">must_include</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;Sb&quot;</span><span class="p">]</span>
+<span class="n">dopants</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;Sb&quot;</span><span class="p">]</span>
+<span class="n">max_dopants_total</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="n">allowed_totals</span> <span class="o">=</span> <span class="p">[</span><span class="mf">2.5</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">,</span> <span class="mf">7.5</span><span class="p">,</span> <span class="mf">10.0</span><span class="p">]</span>
+<span class="n">levels</span> <span class="o">=</span> <span class="p">[</span><span class="mf">2.5</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">,</span> <span class="mf">7.5</span><span class="p">,</span> <span class="mf">10.0</span><span class="p">]</span>
+
+<span class="p">[</span><span class="n">scan</span><span class="p">]</span>
+<span class="n">backend</span> <span class="o">=</span> <span class="s2">&quot;mace&quot;</span>
+<span class="n">model</span> <span class="o">=</span> <span class="s2">&quot;small&quot;</span>
+<span class="n">task</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+<span class="n">poscar_in</span> <span class="o">=</span> <span class="s2">&quot;POSCAR&quot;</span>
+<span class="n">topk</span> <span class="o">=</span> <span class="mi">20</span>
+<span class="n">symprec</span> <span class="o">=</span> <span class="mf">0.001</span>
+<span class="n">n_workers</span> <span class="o">=</span> <span class="mi">8</span>
+<span class="n">chunksize</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="n">max_enum</span> <span class="o">=</span> <span class="mi">10000</span>
+<span class="n">max_unique</span> <span class="o">=</span> <span class="mi">5000</span>
+<span class="n">anion_species</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;O&quot;</span><span class="p">]</span>
+<span class="n">skip_if_done</span> <span class="o">=</span> <span class="n">false</span>
+<span class="n">mode</span> <span class="o">=</span> <span class="s2">&quot;auto&quot;</span>
+<span class="n">sample_budget</span> <span class="o">=</span> <span class="mi">10000</span>
+<span class="n">sample_batch_size</span> <span class="o">=</span> <span class="mi">20</span>
+<span class="n">sample_patience</span> <span class="o">=</span> <span class="mi">60</span>
+<span class="n">sample_seed</span> <span class="o">=</span> <span class="mi">42</span>
+<span class="n">sample_max_saved</span> <span class="o">=</span> <span class="mi">1000</span>
+<span class="n">device</span> <span class="o">=</span> <span class="s2">&quot;cpu&quot;</span>
+<span class="n">gpu_id</span> <span class="o">=</span> <span class="mi">0</span>
+
+<span class="p">[</span><span class="n">relax</span><span class="p">]</span>
+<span class="n">backend</span> <span class="o">=</span> <span class="s2">&quot;mace&quot;</span>
+<span class="n">model</span> <span class="o">=</span> <span class="s2">&quot;small&quot;</span>
+<span class="n">task</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+<span class="n">relax_mode</span> <span class="o">=</span> <span class="s2">&quot;full&quot;</span>
+<span class="n">cell_filter</span> <span class="o">=</span> <span class="s2">&quot;frechet&quot;</span>
+<span class="n">optimizer</span> <span class="o">=</span> <span class="s2">&quot;bfgs&quot;</span>
+<span class="n">fmax</span> <span class="o">=</span> <span class="mf">0.05</span>
+<span class="n">max_steps</span> <span class="o">=</span> <span class="mi">300</span>
+<span class="n">n_workers</span> <span class="o">=</span> <span class="mi">4</span>
+<span class="n">tf_threads</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="n">omp_threads</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="n">skip_if_done</span> <span class="o">=</span> <span class="n">false</span>
+<span class="n">skip_candidate_if_done</span> <span class="o">=</span> <span class="n">false</span>
+<span class="n">device</span> <span class="o">=</span> <span class="s2">&quot;cpu&quot;</span>
+<span class="n">gpu_id</span> <span class="o">=</span> <span class="mi">0</span>
+
+<span class="p">[</span><span class="nb">filter</span><span class="p">]</span>
+<span class="n">mode</span> <span class="o">=</span> <span class="s2">&quot;window&quot;</span>
+<span class="n">window_meV</span> <span class="o">=</span> <span class="mf">50.0</span>
+<span class="n">max_candidates</span> <span class="o">=</span> <span class="mi">12</span>
+<span class="n">skip_if_done</span> <span class="o">=</span> <span class="n">false</span>
+
+<span class="p">[</span><span class="n">bandgap</span><span class="p">]</span>
+<span class="n">enabled</span> <span class="o">=</span> <span class="n">false</span>
+<span class="n">skip_if_done</span> <span class="o">=</span> <span class="n">false</span>
+<span class="n">cutoff</span> <span class="o">=</span> <span class="mf">8.0</span>
+<span class="n">max_neighbors</span> <span class="o">=</span> <span class="mi">12</span>
+<span class="n">n_workers</span> <span class="o">=</span> <span class="mi">4</span>
+<span class="n">device</span> <span class="o">=</span> <span class="s2">&quot;cpu&quot;</span>
+<span class="n">gpu_id</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="n">batch_size</span> <span class="o">=</span> <span class="mi">32</span>
+
+<span class="p">[</span><span class="n">formation</span><span class="p">]</span>
+<span class="n">skip_if_done</span> <span class="o">=</span> <span class="n">false</span>
+<span class="n">normalize</span> <span class="o">=</span> <span class="s2">&quot;total&quot;</span>
+
+<span class="p">[</span><span class="n">database</span><span class="p">]</span>
+<span class="n">skip_if_done</span> <span class="o">=</span> <span class="n">false</span>
+</pre></div>
+</div>
+</section>
+<section id="recomputing-energies-with-a-different-reference">
+<h2>Recomputing Energies with a Different Reference<a class="headerlink" href="#recomputing-energies-with-a-different-reference" title="Link to this heading"></a></h2>
+<p>After the full sequential workflow has finished, the same relaxed structures can be reused to recompute formation and mixing energies with a different oxide reference.</p>
+<p>For example, change:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">oxides_ref</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;Sb2O5&quot;</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>to another reference, then rebuild references:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">refs</span><span class="o">-</span><span class="n">build</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+</pre></div>
+</div>
+<p>Then set:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">sequential</span><span class="p">]</span>
+<span class="n">mode</span> <span class="o">=</span> <span class="s2">&quot;recompute_energies&quot;</span>
+</pre></div>
+</div>
+<p>and rerun:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">sequential</span><span class="o">-</span><span class="n">run</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+</pre></div>
+</div>
+<p>This skips:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">generate</span> <span class="o">-&gt;</span> <span class="n">scan</span> <span class="o">-&gt;</span> <span class="n">relax</span> <span class="o">-&gt;</span> <span class="nb">filter</span> <span class="o">-&gt;</span> <span class="n">bandgap</span>
+</pre></div>
+</div>
+<p>and reruns only:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">formation</span> <span class="o">-&gt;</span> <span class="n">collect</span>
+</pre></div>
+</div>
+<p>for the existing sequential structures.</p>
+</section>
+<section id="outputs">
+<h2>Outputs<a class="headerlink" href="#outputs" title="Link to this heading"></a></h2>
+<p>Each sequential step writes its own folder:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sequential_structures</span><span class="o">/</span>
+    <span class="n">step_001_Sb2p5</span><span class="o">/</span>
+    <span class="n">step_002_Sb5</span><span class="o">/</span>
+    <span class="n">step_003_Sb7p5</span><span class="o">/</span>
+    <span class="n">step_004_Sb10</span><span class="o">/</span>
+</pre></div>
+</div>
+<p>Each step contains:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">input_step.json</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">random_structures/&lt;composition&gt;/</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">best_relaxed/POSCAR</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">results_database.csv</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sequential_step_summary.json</span></code></p></li>
+</ul>
+<p>The final merged database is written to the project root:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">results_database</span><span class="o">.</span><span class="n">csv</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="smoke_test.html" class="btn btn-neutral float-left" title="Smoke Test — Minimal Fast Run" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../api/modules.html" class="btn btn-neutral float-right" title="dopingflow" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

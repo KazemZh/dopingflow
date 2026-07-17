@@ -1,0 +1,571 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Surface Generation and Relaxation &mdash; dopingflow documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=42d1b3bd"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Explicit Example — Single Target Composition" href="../examples/explicit_single.html" />
+    <link rel="prev" title="Phase Diagram and Energy Above Hull" href="phase_diagram.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html">
+            
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../workflow_overview.html">Workflow Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation_and_usage.html">Installation, Usage, and Outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../required_inputs.html">Required Input Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file.html">Input File Specification (input.toml)</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="references.html">0. Reference Energy Construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generation.html">1. Structure Generation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sequential.html">Sequential Doping Workflow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scanning.html">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="filtering.html">4. Relaxed-Candidate Filtering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bandgap.html">5. Bandgap Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="formation_energy.html">6. Formation Energy Evaluation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="database.html">7. Database Collection</a></li>
+<li class="toctree-l1"><a class="reference internal" href="alloy_hull.html">Restricted One-Dimensional Alloy Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="phase_diagram.html">Phase Diagram and Energy Above Hull</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Surface Generation and Relaxation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#input-data">Input Data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#candidate-selection">Candidate Selection</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#slab-generation">Slab Generation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#explicit-orientation">Explicit orientation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#automatic-orientation">Automatic orientation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#slab-construction">Slab construction</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#orthogonalization">Orthogonalization</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#surface-terminations">Surface Terminations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#atom-ordering">Atom Ordering</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#fixed-atoms-selective-dynamics">Fixed Atoms (Selective Dynamics)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#layer-based-fixing">Layer-based fixing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#thickness-based-fixing">Thickness-based fixing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#output-behavior">Output behavior</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#surface-relaxation">Surface Relaxation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#workflow">Workflow</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#backends">Backends</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#optimizer">Optimizer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#constraints">Constraints</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#surface-energy">Surface Energy</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#definition">Definition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#bulk-reference">Bulk reference</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#slab-energy">Slab energy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#bulk-equivalence-factor">Bulk equivalence factor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#stoichiometry-requirement">Stoichiometry requirement</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#status-reporting">Status reporting</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#units">Units</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#outputs">Outputs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#files">Files</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#metadata">Metadata</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#design-considerations">Design Considerations</a></li>
+</ul>
+</li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_single_oxides.html">Explicit Example — Single Target Composition using Oxide References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/multi_reference_oxide.html">Multiple Oxide References and Relative Energies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/sequential_workflow.html">Sequential Example — Gradual Sb Doping</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../api/modules.html">dopingflow</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Surface Generation and Relaxation</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/methods/surfaces.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="surface-generation-and-relaxation">
+<h1>Surface Generation and Relaxation<a class="headerlink" href="#surface-generation-and-relaxation" title="Link to this heading"></a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>The surface stage extends the bulk workflow by constructing slab models from
+selected relaxed bulk candidates and optionally relaxing those slabs.</p>
+<p>This stage operates <strong>after</strong> bulk structure generation, filtering, bandgap
+prediction, and formation energy evaluation.</p>
+<p>The workflow consists of:</p>
+<ol class="arabic simple">
+<li><p>Selecting candidate structures from a database</p></li>
+<li><p>Generating slab geometries for chosen surface orientations</p></li>
+<li><p>Enumerating surface terminations</p></li>
+<li><p>Optionally fixing part of the slab</p></li>
+<li><p>Optionally relaxing the slab using a machine-learning backend</p></li>
+<li><p>Writing structures and metadata</p></li>
+</ol>
+</section>
+<section id="input-data">
+<h2>Input Data<a class="headerlink" href="#input-data" title="Link to this heading"></a></h2>
+<p>The surface stage reads candidate data from a CSV database, typically:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">results_database</span><span class="o">.</span><span class="n">csv</span>
+</pre></div>
+</div>
+<p>Each row corresponds to a bulk candidate and contains:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">composition_tag</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">candidate</span></code> (e.g. <code class="docutils literal notranslate"><span class="pre">candidate_001</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">candidate_path</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">E_form_norm</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">bandgap_eV</span></code></p></li>
+</ul>
+<p>The corresponding relaxed bulk structure is loaded from:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">candidate_path</span> <span class="o">/</span> <span class="mi">02</span><span class="n">_relax</span> <span class="o">/</span> <span class="n">POSCAR</span>
+</pre></div>
+</div>
+</section>
+<section id="candidate-selection">
+<h2>Candidate Selection<a class="headerlink" href="#candidate-selection" title="Link to this heading"></a></h2>
+<p>Selection is performed in two steps:</p>
+<ol class="arabic">
+<li><p><strong>Composition filtering</strong></p>
+<p>The dataset is first restricted using:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">composition_tag</span></code></p></li>
+<li><p>or <code class="docutils literal notranslate"><span class="pre">composition_tags</span></code></p></li>
+</ul>
+</li>
+<li><p><strong>Selection mode</strong></p>
+<p>Within the selected composition subset, candidates are filtered using:</p>
+<ul class="simple">
+<li><p>ID selection (<code class="docutils literal notranslate"><span class="pre">candidate_id</span></code>)</p></li>
+<li><p>multiple IDs (<code class="docutils literal notranslate"><span class="pre">candidate_ids</span></code>)</p></li>
+<li><p>ranking-based selection</p></li>
+<li><p>numeric filters (formation energy and bandgap)</p></li>
+</ul>
+</li>
+</ol>
+<p>This two-step strategy ensures that comparisons are always made within the same
+chemical composition.</p>
+</section>
+<section id="slab-generation">
+<h2>Slab Generation<a class="headerlink" href="#slab-generation" title="Link to this heading"></a></h2>
+<p>For each selected bulk structure, slabs are generated using
+<code class="docutils literal notranslate"><span class="pre">pymatgen.core.surface.SlabGenerator</span></code>.</p>
+<p>The user can choose between two modes:</p>
+<section id="explicit-orientation">
+<h3>Explicit orientation<a class="headerlink" href="#explicit-orientation" title="Link to this heading"></a></h3>
+<p>The Miller indices are directly provided:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">miller_list</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]]</span>
+</pre></div>
+</div>
+</section>
+<section id="automatic-orientation">
+<h3>Automatic orientation<a class="headerlink" href="#automatic-orientation" title="Link to this heading"></a></h3>
+<p>All Miller indices up to <code class="docutils literal notranslate"><span class="pre">max_miller</span></code> are generated, and the first
+<code class="docutils literal notranslate"><span class="pre">max_orientations</span></code> are kept.</p>
+</section>
+<section id="slab-construction">
+<h3>Slab construction<a class="headerlink" href="#slab-construction" title="Link to this heading"></a></h3>
+<p>The slab is built according to:</p>
+<ul class="simple">
+<li><p>minimum slab thickness</p></li>
+<li><p>minimum vacuum thickness</p></li>
+<li><p>optional lattice reduction</p></li>
+<li><p>optional primitive reduction</p></li>
+<li><p>optional lattice reorientation</p></li>
+</ul>
+<p>Important:</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">in_unit_planes</span> <span class="pre">=</span> <span class="pre">false</span></code>, both slab and vacuum thickness are interpreted
+in Ångström.</p>
+</section>
+<section id="orthogonalization">
+<h3>Orthogonalization<a class="headerlink" href="#orthogonalization" title="Link to this heading"></a></h3>
+<p>If <code class="docutils literal notranslate"><span class="pre">orthogonal_c</span> <span class="pre">=</span> <span class="pre">true</span></code>, the slab is transformed so that:</p>
+<ul class="simple">
+<li><p>the <code class="docutils literal notranslate"><span class="pre">c</span></code> vector is perpendicular to the surface plane</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">a</span></code> and <code class="docutils literal notranslate"><span class="pre">b</span></code> span the surface</p></li>
+</ul>
+<p>This is recommended for:</p>
+<ul class="simple">
+<li><p>clean POSCAR output</p></li>
+<li><p>stable relaxation behavior</p></li>
+<li><p>easier interpretation of slab thickness</p></li>
+</ul>
+</section>
+</section>
+<section id="surface-terminations">
+<h2>Surface Terminations<a class="headerlink" href="#surface-terminations" title="Link to this heading"></a></h2>
+<p>Each orientation can produce multiple terminations.</p>
+<p>The workflow uses:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">slabs</span> <span class="o">=</span> <span class="n">SlabGenerator</span><span class="p">(</span><span class="o">...</span><span class="p">)</span><span class="o">.</span><span class="n">get_slabs</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Each slab corresponds to a different termination of the same surface.</p>
+<p>The user controls:</p>
+<ul class="simple">
+<li><p>whether to keep all terminations</p></li>
+<li><p>or only the first one</p></li>
+<li><p>the maximum number of terminations per orientation</p></li>
+</ul>
+<p>No symmetry-based deduplication is applied by default, ensuring that all
+physically distinct terminations are preserved.</p>
+</section>
+<section id="atom-ordering">
+<h2>Atom Ordering<a class="headerlink" href="#atom-ordering" title="Link to this heading"></a></h2>
+<p>Before writing structures, atoms are reordered according to:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">generate</span><span class="p">]</span><span class="o">.</span><span class="n">poscar_order</span>
+</pre></div>
+</div>
+<p>Within each species, atoms are sorted by:</p>
+<ol class="arabic simple">
+<li><p>fractional z</p></li>
+<li><p>fractional y</p></li>
+<li><p>fractional x</p></li>
+</ol>
+<p>This ensures:</p>
+<ul class="simple">
+<li><p>clean and consistent POSCAR files</p></li>
+<li><p>compatibility with VASP and post-processing tools</p></li>
+</ul>
+</section>
+<section id="fixed-atoms-selective-dynamics">
+<h2>Fixed Atoms (Selective Dynamics)<a class="headerlink" href="#fixed-atoms-selective-dynamics" title="Link to this heading"></a></h2>
+<p>The surface stage supports fixing part of the slab.</p>
+<p>Two strategies are available:</p>
+<section id="layer-based-fixing">
+<h3>Layer-based fixing<a class="headerlink" href="#layer-based-fixing" title="Link to this heading"></a></h3>
+<p>Atoms are grouped into layers based on their Cartesian z-coordinate.</p>
+<p>Grouping is controlled by a tolerance:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">fix_layer_tolerance_A</span>
+</pre></div>
+</div>
+<p>The user selects:</p>
+<ul class="simple">
+<li><p>bottom layers</p></li>
+<li><p>or middle layers</p></li>
+</ul>
+</section>
+<section id="thickness-based-fixing">
+<h3>Thickness-based fixing<a class="headerlink" href="#thickness-based-fixing" title="Link to this heading"></a></h3>
+<p>Atoms are selected based on their z-position:</p>
+<ul class="simple">
+<li><p>bottom region: atoms within a thickness from the minimum z</p></li>
+<li><p>middle region: atoms around the slab center</p></li>
+</ul>
+</section>
+<section id="output-behavior">
+<h3>Output behavior<a class="headerlink" href="#output-behavior" title="Link to this heading"></a></h3>
+<p>Fixed atoms are written in the same <code class="docutils literal notranslate"><span class="pre">POSCAR</span></code> file using VASP selective dynamics:</p>
+<ul class="simple">
+<li><p>fixed atoms: <code class="docutils literal notranslate"><span class="pre">F</span> <span class="pre">F</span> <span class="pre">F</span></code></p></li>
+<li><p>free atoms: <code class="docutils literal notranslate"><span class="pre">T</span> <span class="pre">T</span> <span class="pre">T</span></code></p></li>
+</ul>
+<p>Important:</p>
+<p>These flags are not only written to file but are also enforced during relaxation
+using ASE constraints.</p>
+</section>
+</section>
+<section id="surface-relaxation">
+<h2>Surface Relaxation<a class="headerlink" href="#surface-relaxation" title="Link to this heading"></a></h2>
+<p>If enabled, slabs are relaxed using the same abstraction layer as bulk relaxation.</p>
+<section id="workflow">
+<h3>Workflow<a class="headerlink" href="#workflow" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p>Convert the slab to ASE atoms</p></li>
+<li><p>Attach the ML calculator</p></li>
+<li><p>Apply <code class="docutils literal notranslate"><span class="pre">FixAtoms</span></code> constraint (if needed)</p></li>
+<li><p>Run ASE optimizer</p></li>
+<li><p>Convert back to pymatgen structure</p></li>
+</ol>
+</section>
+<section id="backends">
+<h3>Backends<a class="headerlink" href="#backends" title="Link to this heading"></a></h3>
+<p>The relaxation uses the same backend system as the bulk stage:</p>
+<ul class="simple">
+<li><p>M3GNet</p></li>
+<li><p>ALIGNN (if available)</p></li>
+<li><p>other supported ML potentials</p></li>
+</ul>
+<p>Runtime configuration includes:</p>
+<ul class="simple">
+<li><p>device (CPU or CUDA)</p></li>
+<li><p>GPU ID</p></li>
+<li><p>threading settings</p></li>
+</ul>
+</section>
+<section id="optimizer">
+<h3>Optimizer<a class="headerlink" href="#optimizer" title="Link to this heading"></a></h3>
+<p>Supported optimizers:</p>
+<ul class="simple">
+<li><p>BFGS</p></li>
+<li><p>LBFGS</p></li>
+<li><p>FIRE</p></li>
+<li><p>MDMin</p></li>
+<li><p>QuasiNewton</p></li>
+</ul>
+<p>The optimizer runs until:</p>
+<ul class="simple">
+<li><p>maximum force &lt; <code class="docutils literal notranslate"><span class="pre">surface_fmax</span></code></p></li>
+<li><p>or maximum steps reached</p></li>
+</ul>
+</section>
+<section id="constraints">
+<h3>Constraints<a class="headerlink" href="#constraints" title="Link to this heading"></a></h3>
+<p>Fixed atoms are enforced using:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ase</span><span class="o">.</span><span class="n">constraints</span><span class="o">.</span><span class="n">FixAtoms</span>
+</pre></div>
+</div>
+<p>This ensures:</p>
+<ul class="simple">
+<li><p>atoms marked as fixed do not move during relaxation</p></li>
+<li><p>constraints are physically enforced, not only written in POSCAR</p></li>
+</ul>
+</section>
+</section>
+<section id="surface-energy">
+<h2>Surface Energy<a class="headerlink" href="#surface-energy" title="Link to this heading"></a></h2>
+<p>The surface stage can evaluate the surface energy of each slab when a slab
+energy is available (typically after surface relaxation).</p>
+<section id="definition">
+<h3>Definition<a class="headerlink" href="#definition" title="Link to this heading"></a></h3>
+<p>The surface energy is computed using the symmetric slab expression:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>:math:`\gamma = \frac{E_{\mathrm{slab}} - n E_{\mathrm{bulk}}}{2A}`
+</pre></div>
+</div>
+<p>where:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">E_slab</span></code> is the slab total energy</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">E_bulk</span></code> is the relaxed bulk energy of the parent candidate</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">n</span></code> is the number of bulk-equivalent units contained in the slab</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">A</span></code> is the surface area</p></li>
+<li><p>the factor of 2 accounts for the two exposed surfaces</p></li>
+</ul>
+</section>
+<section id="bulk-reference">
+<h3>Bulk reference<a class="headerlink" href="#bulk-reference" title="Link to this heading"></a></h3>
+<p>The bulk energy is taken from the relaxed candidate structure selected
+from the workflow database.</p>
+<p>This ensures consistency between bulk and surface calculations for the
+same doped composition.</p>
+</section>
+<section id="slab-energy">
+<h3>Slab energy<a class="headerlink" href="#slab-energy" title="Link to this heading"></a></h3>
+<p>Surface energy is computed only when a slab energy is available.</p>
+<p>In the current implementation, this corresponds to:</p>
+<ul class="simple">
+<li><p>relaxed slab energy when <code class="docutils literal notranslate"><span class="pre">relax_surface</span> <span class="pre">=</span> <span class="pre">true</span></code></p></li>
+</ul>
+<p>If no slab energy is available, surface energy is not computed.</p>
+</section>
+<section id="bulk-equivalence-factor">
+<h3>Bulk equivalence factor<a class="headerlink" href="#bulk-equivalence-factor" title="Link to this heading"></a></h3>
+<p>The factor <code class="docutils literal notranslate"><span class="pre">n</span></code> is determined automatically from the composition of the slab
+and the parent bulk.</p>
+<p>For each species, the ratio:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">N_slab</span> <span class="o">/</span> <span class="n">N_bulk</span>
+</pre></div>
+</div>
+<p>is computed.</p>
+<p>If all species share the same ratio within numerical tolerance, the slab is
+considered proportional to the bulk composition and this value defines <code class="docutils literal notranslate"><span class="pre">n</span></code>.</p>
+<p>If the ratios differ between species, the slab is not considered proportional
+and surface energy is not assigned.</p>
+</section>
+<section id="stoichiometry-requirement">
+<h3>Stoichiometry requirement<a class="headerlink" href="#stoichiometry-requirement" title="Link to this heading"></a></h3>
+<p>Surface energy is only computed for slabs whose composition is proportional
+to the bulk.</p>
+<p>This includes:</p>
+<ul class="simple">
+<li><p>stoichiometric slabs</p></li>
+<li><p>symmetric cleavage surfaces</p></li>
+</ul>
+<p>Surface energy is not computed for:</p>
+<ul class="simple">
+<li><p>non-stoichiometric terminations</p></li>
+<li><p>slabs missing bulk species</p></li>
+<li><p>slabs containing additional species</p></li>
+</ul>
+</section>
+<section id="status-reporting">
+<h3>Status reporting<a class="headerlink" href="#status-reporting" title="Link to this heading"></a></h3>
+<p>Each slab is assigned a status flag:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">ok</span></code> — surface energy successfully computed</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">missing_slab_energy</span></code> — slab energy not available</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">missing_bulk_energy</span></code> — bulk energy not available</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">not_computable_not_proportional</span></code> — composition mismatch</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">not_computable_missing_species</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">not_computable_extra_species</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">failed</span></code> — numerical or runtime failure</p></li>
+</ul>
+</section>
+<section id="units">
+<h3>Units<a class="headerlink" href="#units" title="Link to this heading"></a></h3>
+<p>Surface energy is reported in:</p>
+<ul class="simple">
+<li><p>eV/Å²</p></li>
+<li><p>J/m²</p></li>
+</ul>
+<p>The conversion used is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>1 eV/Å² = 16.02176634 J/m²
+</pre></div>
+</div>
+</section>
+</section>
+<section id="outputs">
+<h2>Outputs<a class="headerlink" href="#outputs" title="Link to this heading"></a></h2>
+<p>Each slab produces a directory:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">composition_tag</span> <span class="o">/</span> <span class="n">candidate</span> <span class="o">/</span> <span class="n">hkl</span> <span class="o">/</span> <span class="n">termination</span>
+</pre></div>
+</div>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Sb50</span><span class="o">/</span><span class="n">candidate_001</span><span class="o">/</span><span class="n">hkl_1_0_0</span><span class="o">/</span><span class="n">term_001</span><span class="o">/</span>
+</pre></div>
+</div>
+<section id="files">
+<h3>Files<a class="headerlink" href="#files" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">POSCAR</span></code></dt><dd><p>Generated slab (with optional selective dynamics)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">CONTCAR</span></code></dt><dd><p>Relaxed slab structure (if relaxation is enabled)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">surface_relax.log</span></code></dt><dd><p>Optimizer log</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">surface_relax.traj</span></code></dt><dd><p>ASE trajectory</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">surface_relax.json</span></code></dt><dd><p>Relaxation metadata</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">meta.json</span></code></dt><dd><p>General slab metadata</p>
+</dd>
+</dl>
+</section>
+</section>
+<section id="metadata">
+<h2>Metadata<a class="headerlink" href="#metadata" title="Link to this heading"></a></h2>
+<p>Each slab has a <code class="docutils literal notranslate"><span class="pre">meta.json</span></code> file containing:</p>
+<ul class="simple">
+<li><p>composition and candidate information</p></li>
+<li><p>Miller index and termination ID</p></li>
+<li><p>number of atoms</p></li>
+<li><p>surface area</p></li>
+<li><p>slab and vacuum thickness estimates</p></li>
+<li><p>fixing parameters</p></li>
+<li><p>relaxation settings and results</p></li>
+<li><p>surface energy (when available)</p></li>
+<li><p>surface energy status flag</p></li>
+<li><p>bulk-equivalent scaling factor</p></li>
+</ul>
+<p>This metadata is also aggregated into:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">surface_summary</span><span class="o">.</span><span class="n">csv</span>
+</pre></div>
+</div>
+</section>
+<section id="design-considerations">
+<h2>Design Considerations<a class="headerlink" href="#design-considerations" title="Link to this heading"></a></h2>
+<p>The surface stage is designed to:</p>
+<ul class="simple">
+<li><p>remain fully decoupled from bulk workflow stages</p></li>
+<li><p>allow flexible selection of candidates</p></li>
+<li><p>preserve all physically meaningful terminations</p></li>
+<li><p>support reproducible slab generation</p></li>
+<li><p>reuse the same backend abstraction for relaxation</p></li>
+</ul>
+<p>This ensures consistency between:</p>
+<ul class="simple">
+<li><p>bulk relaxation</p></li>
+<li><p>surface relaxation</p></li>
+<li><p>downstream surface simulations</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="phase_diagram.html" class="btn btn-neutral float-left" title="Phase Diagram and Energy Above Hull" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../examples/explicit_single.html" class="btn btn-neutral float-right" title="Explicit Example — Single Target Composition" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

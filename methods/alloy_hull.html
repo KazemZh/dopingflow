@@ -1,0 +1,227 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Restricted One-Dimensional Alloy Hull &mdash; dopingflow documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=42d1b3bd"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Phase Diagram and Energy Above Hull" href="phase_diagram.html" />
+    <link rel="prev" title="7. Database Collection" href="database.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html">
+            
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../workflow_overview.html">Workflow Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation_and_usage.html">Installation, Usage, and Outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../required_inputs.html">Required Input Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file.html">Input File Specification (input.toml)</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="references.html">0. Reference Energy Construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generation.html">1. Structure Generation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sequential.html">Sequential Doping Workflow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scanning.html">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="filtering.html">4. Relaxed-Candidate Filtering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bandgap.html">5. Bandgap Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="formation_energy.html">6. Formation Energy Evaluation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="database.html">7. Database Collection</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Restricted One-Dimensional Alloy Hull</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#energy-used-for-the-hull">Energy used for the hull</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#configuration">Configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#run">Run</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#outputs">Outputs</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="phase_diagram.html">Phase Diagram and Energy Above Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="surfaces.html">Surface Generation and Relaxation</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_single_oxides.html">Explicit Example — Single Target Composition using Oxide References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/multi_reference_oxide.html">Multiple Oxide References and Relative Energies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/sequential_workflow.html">Sequential Example — Gradual Sb Doping</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../api/modules.html">dopingflow</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Restricted One-Dimensional Alloy Hull</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/methods/alloy_hull.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="restricted-one-dimensional-alloy-hull">
+<h1>Restricted One-Dimensional Alloy Hull<a class="headerlink" href="#restricted-one-dimensional-alloy-hull" title="Link to this heading"></a></h1>
+<p>The <code class="docutils literal notranslate"><span class="pre">alloy-hull</span></code> stage builds a <strong>restricted one-dimensional convex hull</strong>
+for a single substitutional alloy path. For example, for Sb substitution in
+SnO2 it uses the fixed-composition line:</p>
+<div class="math notranslate nohighlight">
+\[\mathrm{Sn}_{1-x}\mathrm{Sb}_x\mathrm{O}_2.\]</div>
+<p>This stage is different from <code class="docutils literal notranslate"><span class="pre">phase-diagram</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">alloy-hull</span></code> compares only SnO2-type host, the selected Sb substitutional
+candidates, and an optional stoichiometrically compatible endpoint such as
+SbO2.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">phase-diagram</span></code> is the full multicomponent Sn-Sb-O stability calculation;
+it may decompose a candidate into phases outside the Sn_(1-x)Sb_xO2 line.</p></li>
+</ul>
+<section id="energy-used-for-the-hull">
+<h2>Energy used for the hull<a class="headerlink" href="#energy-used-for-the-hull" title="Link to this heading"></a></h2>
+<p>The stage uses direct relaxed total energies, normalized per cation:</p>
+<div class="math notranslate nohighlight">
+\[e_\sigma = \frac{E_\sigma}{N_{\mathrm{Sn}} + N_{\mathrm{Sb}}}.\]</div>
+<p>At each composition, only the lowest-energy candidate is retained. The lower
+convex envelope is then constructed from these minima, the relaxed host at
+<code class="docutils literal notranslate"><span class="pre">x</span> <span class="pre">=</span> <span class="pre">0</span></code>, and the endpoint reference at <code class="docutils literal notranslate"><span class="pre">x</span> <span class="pre">=</span> <span class="pre">1</span></code> when one is available.</p>
+<p>For a candidate at <code class="docutils literal notranslate"><span class="pre">x</span></code> lying between two neighbouring hull vertices
+<code class="docutils literal notranslate"><span class="pre">(x_1,</span> <span class="pre">e_1)</span></code> and <code class="docutils literal notranslate"><span class="pre">(x_2,</span> <span class="pre">e_2)</span></code>, the stage computes:</p>
+<div class="math notranslate nohighlight">
+\[e_{\mathrm{hull}}(x)
+= e_1 + \frac{x-x_1}{x_2-x_1}(e_2-e_1),\]</div>
+<p>and reports:</p>
+<div class="math notranslate nohighlight">
+\[E_{\mathrm{above\ 1D\ hull}}(x)
+= e_\sigma(x)-e_{\mathrm{hull}}(x).\]</div>
+<p>This is reference-independent for a fixed alloy line: adding any term linear
+in <code class="docutils literal notranslate"><span class="pre">x</span></code> to every energy, such as the oxide-reference or oxygen-chemical-
+potential contribution, changes the energy zero and slopes but does not change
+the hull vertices or energy above the restricted 1D hull.</p>
+</section>
+<section id="configuration">
+<h2>Configuration<a class="headerlink" href="#configuration" title="Link to this heading"></a></h2>
+<p>The section is optional. The defaults are appropriate for a single-dopant
+workflow:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">alloy_hull</span><span class="p">]</span>
+<span class="n">dopant</span> <span class="o">=</span> <span class="s2">&quot;auto&quot;</span>
+<span class="n">endpoint_reference</span> <span class="o">=</span> <span class="s2">&quot;auto&quot;</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">dopant</span> <span class="pre">=</span> <span class="pre">&quot;auto&quot;</span></code> detects the unique dopant in the result database. When
+multiple dopants are present, specify one explicitly, for example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">alloy_hull</span><span class="p">]</span>
+<span class="n">dopant</span> <span class="o">=</span> <span class="s2">&quot;Sb&quot;</span>
+<span class="n">endpoint_reference</span> <span class="o">=</span> <span class="s2">&quot;SbO2&quot;</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">endpoint_reference</span> <span class="pre">=</span> <span class="pre">&quot;auto&quot;</span></code> searches the cached oxide references for a
+binary dopant oxide with the same anion-to-cation ratio as the host line. For
+SnO2 doped with Sb, it selects SbO2. Set
+<code class="docutils literal notranslate"><span class="pre">endpoint_reference</span> <span class="pre">=</span> <span class="pre">&quot;none&quot;</span></code> to build a hull only over the sampled range;
+this is useful when no physical x = 1 endpoint has been calculated or cached.</p>
+</section>
+<section id="run">
+<h2>Run<a class="headerlink" href="#run" title="Link to this heading"></a></h2>
+<p>Run after collection:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">collect</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+<span class="n">dopingflow</span> <span class="n">alloy</span><span class="o">-</span><span class="n">hull</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">run-all</span></code> command also includes this stage between <code class="docutils literal notranslate"><span class="pre">collect</span></code> and
+<code class="docutils literal notranslate"><span class="pre">phase-diagram</span></code>.</p>
+</section>
+<section id="outputs">
+<h2>Outputs<a class="headerlink" href="#outputs" title="Link to this heading"></a></h2>
+<p>The stage writes:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">alloy_hull_results.csv</span></code>: one row per relaxed candidate, including
+<code class="docutils literal notranslate"><span class="pre">energy_per_cation_eV</span></code>, <code class="docutils literal notranslate"><span class="pre">hull_energy_1d_eV_per_cation</span></code>,
+<code class="docutils literal notranslate"><span class="pre">energy_above_1d_hull_eV_per_cation</span></code>, <code class="docutils literal notranslate"><span class="pre">on_1d_hull</span></code>, and the predicted
+1D decomposition between neighbouring hull vertices.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">alloy_hull_vertices.csv</span></code>: the actual lower-hull vertices, including host
+and endpoint reference points.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">alloy_hull_summary.json</span></code>: stage metadata and selected endpoint reference.</p></li>
+</ul>
+<p>The same 1D hull fields are also appended to <code class="docutils literal notranslate"><span class="pre">results_database.csv</span></code> so they
+can be used directly in Jupyter plotting scripts.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="database.html" class="btn btn-neutral float-left" title="7. Database Collection" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="phase_diagram.html" class="btn btn-neutral float-right" title="Phase Diagram and Energy Above Hull" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
