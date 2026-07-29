@@ -8,6 +8,30 @@ import pytest
 from dopingflow import ml_backends
 
 
+@pytest.mark.parametrize(
+    ("backend", "expected"),
+    [
+        ("m3gnet", ("m3gnet", "default", "")),
+        ("uma", ("uma", "uma-s-1p2", "omat")),
+        ("mace", ("mace", "small", "")),
+        ("grace", ("grace", "GRACE-1L-OMAT", "")),
+    ],
+)
+def test_blank_backend_model_and_task_use_compatible_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+    backend: str,
+    expected: tuple[str, str, str],
+) -> None:
+    monkeypatch.setattr(ml_backends, "get_mace_model_choices", lambda: ("small", "mh-1"))
+
+    assert ml_backends.normalize_backend_config(
+        backend=backend,
+        model="",
+        task="",
+        section_name="scan",
+    ) == expected
+
+
 def test_mace_discovery_filters_internal_none_sentinel(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -39,6 +63,25 @@ def test_mace_mh_alias_and_head_are_preserved(monkeypatch: pytest.MonkeyPatch) -
         backend="mace",
         model="mh-1",
         task="omat_pbe",
+        section_name="scan",
+    ) == ("mace", "mh-1", "omat_pbe")
+
+
+@pytest.mark.parametrize("task", ["", "   "])
+def test_mace_mh1_uses_compatible_head_when_task_is_blank(
+    monkeypatch: pytest.MonkeyPatch,
+    task: str,
+) -> None:
+    monkeypatch.setattr(
+        ml_backends,
+        "get_mace_model_choices",
+        lambda: ("small", "mh-1"),
+    )
+
+    assert ml_backends.normalize_backend_config(
+        backend="mace",
+        model="mh-1",
+        task=task,
         section_name="scan",
     ) == ("mace", "mh-1", "omat_pbe")
 
@@ -112,3 +155,24 @@ def test_mace_calculator_omits_blank_head(monkeypatch: pytest.MonkeyPatch) -> No
     )
 
     assert "head" not in captured
+
+
+def test_mace_calculator_defaults_mh1_head_when_called_directly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    mace_package = ModuleType("mace")
+    calculators = ModuleType("mace.calculators")
+    calculators.mace_mp = lambda **kwargs: captured.update(kwargs)  # type: ignore[attr-defined]
+    mace_package.calculators = calculators  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "mace", mace_package)
+    monkeypatch.setitem(sys.modules, "mace.calculators", calculators)
+
+    ml_backends.build_ase_calculator(
+        backend="mace",
+        model="mh-1",
+        task="",
+        device="cpu",
+    )
+
+    assert captured["head"] == "omat_pbe"

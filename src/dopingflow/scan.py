@@ -16,7 +16,6 @@ from typing import Any, Dict, List, Tuple
 import numpy as np
 from pymatgen.core import Structure
 from pymatgen.io.vasp import Poscar
-from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
 from dopingflow.ml_backends import (
     check_backend_dependency,
@@ -26,6 +25,10 @@ from dopingflow.ml_backends import (
     build_ase_calculator,
 )
 from dopingflow.ml_relaxation import structure_energy_with_calculator
+from dopingflow.utils.symmetry import (
+    build_sublattice_symmetry_permutations,
+    canonical_occupancy_key,
+)
 
 from datetime import datetime
 
@@ -237,53 +240,13 @@ def _make_parent_structure(base: Structure, sublattice_indices: List[int], host:
 def _build_symmetry_permutations(
     parent: Structure, sublattice_indices: List[int], symprec: float
 ) -> List[np.ndarray]:
-    sga = SpacegroupAnalyzer(parent, symprec=symprec)
-    ops = sga.get_symmetry_operations(cartesian=False)
-
-    frac = np.array([parent[i].frac_coords for i in sublattice_indices], dtype=float)
-    N = frac.shape[0]
-
-    def match_index(coord):
-        c = coord % 1.0
-        d = frac - c
-        d -= np.round(d)
-        dist2 = np.sum(d * d, axis=1)
-        j = int(np.argmin(dist2))
-        if dist2[j] > (symprec * 10) ** 2:
-            raise RuntimeError(
-                f"Failed to match symmetry-mapped site (min dist^2={dist2[j]})."
-            )
-        return j
-
-    perms = []
-    for op in ops:
-        R = np.array(op.rotation_matrix, dtype=float)
-        t = np.array(op.translation_vector, dtype=float)
-
-        perm = np.empty(N, dtype=np.int32)
-        for i in range(N):
-            r_new = R.dot(frac[i]) + t
-            perm[i] = match_index(r_new)
-        perms.append(perm)
-
-    uniq, seen = [], set()
-    for p in perms:
-        b = p.tobytes()
-        if b not in seen:
-            seen.add(b)
-            uniq.append(p)
-    return uniq
+    return build_sublattice_symmetry_permutations(
+        parent, sublattice_indices, symprec=symprec
+    )
 
 
 def _canonical_key(labels: np.ndarray, perms: List[np.ndarray]) -> bytes:
-    best = None
-    for perm in perms:
-        img = labels[perm]
-        b = img.tobytes()
-        if best is None or b < best:
-            best = b
-    assert best is not None
-    return best
+    return canonical_occupancy_key(labels, perms)
 
 
 def _enumerate_label_configs(N: int, dopant_label_counts: Dict[int, int]):

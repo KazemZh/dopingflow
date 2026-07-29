@@ -8,6 +8,15 @@ The format loosely follows semantic versioning.
 
 ## [Unreleased]
 ### Added
+- A complete one-command oxygen-vacancy workflow, exposed only as
+  ``dopingflow vacancies -c input.toml`` and configured in one flat
+  ``[vacancies]`` table
+- Actual-count formal-charge analysis, mixed-valence population scenarios,
+  symmetry-reduced exact/sampled enumeration, fixed-count ML ranking, top-k
+  relaxation, compatible parent references, resumable metadata, and separate
+  vacancy CSV/JSON databases
+- Vacancy controls, execution presets, result discovery, and three-way structure
+  comparison in the Streamlit GUI
 - Dynamic discovery of the installed MACE ``mace_mp`` foundation-model aliases,
   including MACE-MH-0 and MACE-MH-1
 - MACE custom-checkpoint paths and optional multi-head selection through each
@@ -19,6 +28,12 @@ The format loosely follows semantic versioning.
 - Tests for flat formation configuration, metadata flattening, and per-system phase diagrams
 
 ### Changed
+- Blank or omitted MACE ``task`` values now resolve to the compatible
+  ``omat_pbe`` head for ``model = "mh-1"`` instead of requesting MACE's
+  nonexistent ``default`` head
+- GUI-generated defaults now match runtime defaults for worker counts, random
+  seeds, relative energies, phase-diagram stability, and vacancy calculators;
+  the input reference also labels default and conditionally required fields
 - The MACE optional dependency now requires ``mace-torch>=0.3.14`` and the GUI
   no longer advertises unsupported ``small-mpa-0``/``large-mpa-0`` aliases
 - Relative-energy settings now remain directly inside `[formation]` as

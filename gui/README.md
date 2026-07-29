@@ -9,6 +9,9 @@ The GUI provides an interactive way to:
 - Monitor logs
 - Visualize generated structures
 - Explore the main database and per-system phase-diagram CSVs with Plotly
+- Configure and run the unified vacancy workflow and explore its separate database
+- Compare relaxed parent, generated vacancy, and relaxed vacancy structures
+- Select either the normal structure output or an existing directory containing many composition subdirectories
 
 The GUI is optional. The CLI remains the primary interface for scripted and HPC workflows.
 
@@ -52,7 +55,7 @@ Interactive editor for `input.toml`.
 
 - Structure definition
 - Doping setup (explicit or enumerate mode)
-- Scan, Relax, Filter, Bandgap, Formation settings
+- Scan, Relax, Filter, Bandgap, Formation, and one flat Vacancies section
 - Live TOML preview
 - Save directly to `input.toml`
 
@@ -71,6 +74,7 @@ Supports:
 - Full workflow execution
 - Stage range execution
 - Single-stage execution
+- Full workflow including vacancies and vacancies-only execution
 - Optional overrides
 - Log monitoring
 
@@ -79,7 +83,7 @@ Supports:
 ### 3️⃣ Results Explorer
 
 Selects `results_database.csv`, the combined phase-diagram result, an
-individual chemical-system result, or a custom CSV path and allows:
+individual chemical-system result, the vacancy database, or a custom CSV path and allows:
 
 - Column selection
 - Interactive Plotly plotting

@@ -144,6 +144,7 @@ dopingflow formation -c input.toml
 dopingflow collect -c input.toml
 dopingflow alloy-hull -c input.toml
 dopingflow phase-diagram -c input.toml
+dopingflow vacancies -c input.toml
 dopingflow surface -c input.toml
 ```
 
@@ -152,6 +153,20 @@ Or run the complete pipeline:
 ``` bash
 dopingflow run-all -c input.toml
 ```
+
+The unified `vacancies` command determines a continuous charge-based oxygen-
+vacancy range, symmetry-reduces configurations, screens all configurations and
+relaxes the top-k at each fixed vacancy count with one shared M3GNet, UMA, MACE,
+or GRACE calculator. It uses one flat `[vacancies]` section. To append it to
+the normal pipeline, run `dopingflow run-all -c input.toml --until vacancies`.
+Results are written separately to `<structure.outdir>/vacancies_database.csv`.
+Comparing different vacancy counts thermodynamically requires an oxygen chemical
+potential; raw ML total-energy differences alone are not vacancy formation energies.
+
+Existing multi-composition trees can be processed directly with
+`parent_source = "directory"` and a flat `parent_directory` path under
+`[vacancies]`. UMA model/task choices and the full supported GRACE model list are
+available in the GUI.
 
 For gradual composition-by-composition doping, use sequential-run. This reuses the lowest-energy relaxed structure from each composition as the base for the next composition:
 
@@ -183,6 +198,7 @@ The GUI allows you to:
 - Run workflow stages interactively
 - Visualize generated structures
 - Explore `results_database.csv` and per-system phase-diagram CSVs with Plotly
+- Configure, run, explore, and compare parent/generated/relaxed vacancy structures
 
 Relative-energy controls remain inside the existing `[formation]` section:
 
@@ -223,7 +239,8 @@ After launching, a local browser window will open automatically.
 │       │   ├── explicit_single_oxides.rst
 │       │   ├── explicit_single.rst
 │       │   ├── smoke_test.rst
-│       │   └── sequential_workflow.rst
+│       │   ├── sequential_workflow.rst
+│       │   └── vacancies.rst
 │       ├── index.rst
 │       ├── input_file.rst
 │       ├── installation_and_usage.rst
@@ -238,7 +255,8 @@ After launching, a local browser window will open automatically.
 │       │   ├── relaxation.rst
 │       │   ├── sequential.rst
 │       │   ├── scanning.rst
-│       │   └── surfaces.rst
+│       │   ├── surfaces.rst
+│       │   └── vacancies.rst
 │       ├── required_inputs.rst
 │       ├── _static
 │       │   ├── .gitkeep
@@ -252,7 +270,8 @@ After launching, a local browser window will open automatically.
 │   ├── explicit_single_composition
 │   ├── explicit_single_composition_oxide_reference
 │   ├── smoke_test
-│   └── surface_creation
+│   ├── surface_creation
+│   └── vacancies
 ├── .github
 │   └── workflows
 │       └── docs.yml
@@ -287,10 +306,12 @@ After launching, a local browser window will open automatically.
 │       ├── scan.py
 │       ├── sequential.py
 │       ├── surface.py
+│       ├── vacancies.py
 │       └── utils
 │           ├── io.py
 │           ├── parallel.py
-│           └── pymatgen_helpers.py
+│           ├── pymatgen_helpers.py
+│           └── symmetry.py
 └── tests
     ├── test_cli_help.py
     ├── test_cli.py

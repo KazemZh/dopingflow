@@ -48,7 +48,12 @@ To run the complete workflow in order:
 
 This executes:
 
-``refs -> generate -> scan -> relax -> filter -> bandgap -> formation -> collect``
+``refs -> generate -> scan -> relax -> filter -> bandgap -> formation -> collect -> alloy-hull -> phase-diagram``
+
+Vacancies are an optional final run-all step, leaving the default stop unchanged::
+
+   dopingflow run-all -c input.toml --until vacancies
+   dopingflow run-all -c input.toml --only vacancies
 
 The surface stage is not included in ``run-all`` and must be executed separately:
 
@@ -172,6 +177,16 @@ Step 08: generate surfaces and optionally relax slabs:
 ::
 
    dopingflow surface -c input.toml
+
+Unified oxygen-vacancy workflow:
+
+::
+
+   dopingflow vacancies -c input.toml
+
+This one command performs charge-count determination, symmetry enumeration,
+single-point screening, fixed-count top-k selection, and ML relaxation. Its six
+logged phases are implementation details, not separate public commands.
 
 Outputs Overview
 ----------------
@@ -300,6 +315,17 @@ Step 09 (phase diagram)
 
 Writes the combined ``phase_diagram_results.csv`` plus one exact-system CSV
 under ``phase_diagrams/`` for every chemical system represented by candidates.
+
+
+Step 10 (vacancies, optional)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Each selected parent receives ``candidate_###/05_vacancies/`` with the parent
+reference, per-count ranking tables, generated structures, and selected relaxed
+structures. Global tables remain separate from ``results_database.csv``::
+
+   <structure.outdir>/vacancies_database.csv
+   <structure.outdir>/vacancies_database.json
 
 
 Optional surface workflow

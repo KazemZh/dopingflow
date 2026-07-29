@@ -17,7 +17,7 @@ then optionally extend the analysis to surface structures.
 Pipeline Structure
 ------------------
 
-Reference Construction → Enumeration → Screening → Relaxation → Filtering → Band Gap → Formation Energy → Database → 1D Alloy Hull → Phase Diagram
+Reference Construction → Enumeration → Screening → Relaxation → Filtering → Band Gap → Formation Energy → Database → 1D Alloy Hull → Phase Diagram → Vacancies
 
 Optional Post-Processing:
 
@@ -106,14 +106,21 @@ Stages
    - Require one elemental terminal reference for every element
    - Write per-system CSV files plus a combined result table
 
-10. Surface generation (optional)
+10. Oxygen vacancies (optional run-all extension)
+
+   - Analyze actual selected-parent dopant counts and reachable formal charges
+   - Enumerate symmetry-distinct arrangements for every count through the maximum
+   - Screen and relax top-k arrangements with one shared ML calculator
+   - Keep vacancy results separate from normal thermodynamic databases
+
+11. Surface generation (optional)
 
    - Select candidates from the database
    - Generate slab structures for chosen Miller indices
    - Enumerate surface terminations
    - Optionally fix atoms in the slab
 
-11. Surface relaxation (optional)
+12. Surface relaxation (optional)
 
    - Relax slab structures using ML interatomic potentials
    - Apply atom constraints (e.g. fixed bottom layers)

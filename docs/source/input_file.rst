@@ -61,8 +61,83 @@ The following sections are supported:
 - ``[bandgap]``
 - ``[formation]``
 - ``[database]`` (optional)
+- ``[vacancies]`` (required only by the vacancy workflow)
 
 Not all sections are required for every stage. Each stage reads only what it needs.
+
+---------------------------------------------------------------------
+
+[vacancies]
+-----------
+
+The complete oxygen-vacancy workflow is configured in exactly one flat section
+and run with ``dopingflow vacancies -c input.toml``. Parallel arrays represent
+mixed formal oxidation states without creating TOML subsections.
+
+``host_species``, ``oxidation_state_elements``, and
+``oxidation_state_values`` are required chemistry-specific inputs.
+``parent_directory`` is additionally required when
+``parent_source = "directory"``. All other vacancy parameters shown below have
+runtime defaults; this example intentionally overrides the default
+M3GNet/CPU calculator with MACE/CUDA.
+
+::
+
+   [vacancies]
+   enabled = true
+   parent_source = "selected_candidates"
+   include_parent_reference = true
+   skip_if_done = true
+   resume = true
+   count_mode = "all_reachable"
+   host_species = "Sn"
+   host_oxidation_state = 4
+   vacancy_species = "O"
+   vacancy_compensation_charge = 2
+   oxidation_state_elements = ["Sb", "Nb"]
+   oxidation_state_values = [[3, 5], [5]]
+   extra_vacancies = 0
+   max_vacancies_cap = 8
+   symprec = 1.0e-3
+   angle_tolerance = 5.0
+   mapping_tolerance = 1.0
+   enumeration_mode = "auto"
+   max_exact_raw_configs = 300000
+   max_exact_unique_configs = 100000
+   sample_budget = 20000
+   sample_batch_size = 256
+   sample_patience = 4000
+   sample_seed = 42
+   sample_max_saved = 50000
+   minimum_vacancy_distance = 0.0
+   backend = "mace"
+   model = "medium-mpa-0"
+   task = ""
+   device = "cuda"
+   gpu_id = 0
+   n_workers = 1
+   tf_threads = 1
+   omp_threads = 1
+   chunksize = 25
+   topk_per_vacancy_count = 15
+   energy_normalization = "per_vacancy"
+   optimizer = "bfgs"
+   fmax = 0.05
+   max_steps = 300
+   relax_mode = "atoms"
+   cell_filter = "frechet"
+
+The same resolved backend/model/task is used for parent energies, defective
+single points, and every relaxation. See :doc:`methods/vacancies` for the full
+algorithm, output layout, resume rules, and interpretation limits.
+
+For a directory that already contains many composition subdirectories, use::
+
+   parent_source = "directory"
+   parent_directory = "Mn-Nb-Ta-Ce-Ru-In-Sn-Sb"
+
+Each subdirectory is discovered through its own ``selected_candidates.txt``.
+The directory path remains a flat key in ``[vacancies]``.
 
 ---------------------------------------------------------------------
 
@@ -89,37 +164,46 @@ It performs:
 Common Parameters
 ~~~~~~~~~~~~~~~~~
 
-reference_mode (string)
-^^^^^^^^^^^^^^^^^^^^^^^
+The required chemistry inputs are ``host`` and ``supercell``. ``metal_ref`` is
+required in metal mode; ``oxides_ref`` and a non-empty ``gas_ref`` are required
+in oxide mode. Omitted execution settings safely default to
+``backend = "m3gnet"``, ``model = "default"``, ``task = ""``,
+``optimizer = "bfgs"``, ``device = "cpu"``, ``gpu_id = 0``,
+``max_steps = 300``, and one TensorFlow/OpenMP thread. Backend-specific blank
+model/task values are normalized to the compatible choices listed under
+``[scan]``.
+
+reference_mode (string, default: "metal")
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Choose reference scheme:
 
 - ``"metal"``
 - ``"oxide"``
 
-skip_if_done (boolean)
-^^^^^^^^^^^^^^^^^^^^^^
+skip_if_done (boolean, default: true)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Skip reconstruction if JSON cache exists.
 
-fmax (float)
-^^^^^^^^^^^^
+fmax (float, default: 0.02)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Force convergence criterion used in relaxation (eV/Å).
 
-supercell (array of 3 integers)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+supercell (array of 3 integers, required)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Supercell used later for doping.
 The host supercell is constructed and relaxed at this stage.
 
-host (string)
-^^^^^^^^^^^^^
+host (string, required)
+^^^^^^^^^^^^^^^^^^^^^^^
 
 Chemical formula of the host oxide (e.g. ``"SnO2"``).
 
-host_dir (string)
-^^^^^^^^^^^^^^^^^
+host_dir (string, default: "reference_structures/oxides")
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Directory containing ``<host>.POSCAR``.
 
@@ -128,13 +212,13 @@ Metal Reference Mode
 
 Used when ``reference_mode = "metal"``.
 
-metal_ref (array of strings)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+metal_ref (array of strings, required in metal mode)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 List of metal element symbols used as reference phases.
 
-metals_dir (string)
-^^^^^^^^^^^^^^^^^^^
+metals_dir (string, default: "reference_structures/metals")
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Directory containing ``<Element>.POSCAR`` files.
 
@@ -148,36 +232,36 @@ Oxide Reference Mode
 
 Used when ``reference_mode = "oxide"``.
 
-oxides_ref (array of strings)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+oxides_ref (array of strings, required in oxide mode)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 List of dopant oxide formulas (e.g. ``"Sb2O5"``).
 
-oxides_dir (string)
-^^^^^^^^^^^^^^^^^^^
+oxides_dir (string, default: "reference_structures/oxides")
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Directory containing oxide POSCAR files.
 
-gas_ref (string)
-^^^^^^^^^^^^^^^^
+gas_ref (string, default: "O2")
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Gas reference formula (typically ``"O2"``).
 
-gas_dir (string)
-^^^^^^^^^^^^^^^^
+gas_dir (string, default: "reference_structures/gas")
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Directory containing gas POSCAR file.
 
-oxygen_mode (string)
-^^^^^^^^^^^^^^^^^^^^
+oxygen_mode (string, default: "O-rich")
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Currently supports:
 
 - ``"O-rich"``
 - ``"O-poor"``
 
-muO_shift_ev (float)
-^^^^^^^^^^^^^^^^^^^^
+muO_shift_ev (float, default: 0.0)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Optional chemical potential shift applied to oxygen (eV).
 
@@ -206,12 +290,12 @@ This directory becomes the root for:
 Defines substitutional doping behavior.
 
 host_species (string, required)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Element symbol of the host species to be substituted.
 
-mode (string)
-~~~~~~~~~~~~~
+mode (string, default: "explicit")
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Defines doping mode:
 
@@ -221,8 +305,8 @@ Defines doping mode:
 Explicit Mode
 ~~~~~~~~~~~~~
 
-compositions (array of tables)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+compositions (array of tables, required in explicit mode)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 List of dictionaries:
 
@@ -238,28 +322,28 @@ Percentages are defined relative to host sites.
 Enumerate Mode
 ~~~~~~~~~~~~~~
 
-dopants (array of strings)
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+dopants (array of strings, required in enumerate mode)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Allowed dopant elements.
 
-must_include (array of strings)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+must_include (array of strings, default: [])
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Dopants that must appear in each composition.
 
-max_dopants_total (integer)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+max_dopants_total (integer, default: 2)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Maximum number of distinct dopants per structure.
 
-allowed_totals (array of floats)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+allowed_totals (array of floats, required in enumerate mode)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Allowed total dopant percentages.
 
-levels (array of floats)
-^^^^^^^^^^^^^^^^^^^^^^^^
+levels (array of floats, required in enumerate mode)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Discrete concentration values per dopant.
 
@@ -324,15 +408,15 @@ Important
 Parameters
 ~~~~~~~~~~
 
-seed_base (integer)
-~~~~~~~~~~~~~~~~~~~
+seed_base (integer, default: 0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Base seed used for deterministic random substitution.
 
 Each composition generates a stable hash-based seed.
 
-poscar_order (array of strings, optional)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+poscar_order (array of strings, default: [])
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Defines element ordering in written POSCAR files.
 
@@ -403,6 +487,10 @@ model (string, default: "default")
 
 Specifies the pretrained model variant used by the selected backend.
 
+An omitted, empty, or ``"default"`` value is normalized to a compatible model:
+``default`` for M3GNet, ``uma-s-1p2`` for UMA, ``small`` for MACE, and
+``GRACE-1L-OMAT`` for GRACE.
+
 Behavior depends on backend:
 
 - ``m3gnet``:
@@ -452,7 +540,7 @@ task (string, default: "")
 
 Optional task specification (used only for certain backends).
 
-- ``uma`` requires a task:
+- ``uma`` uses ``"omat"`` when ``task`` is omitted or empty. Supported values are:
   - ``"omat"``
   - ``"oc20"``
   - ``"oc22"``
@@ -461,9 +549,11 @@ Optional task specification (used only for certain backends).
   - ``"odac"``
   - ``"omc"``
 
-- ``mace`` optionally uses ``task`` as the multi-head model ``head``. For
-  ``model = "mh-1"``, leave it empty for MACE's default ``omat_pbe`` head or set
-  a supported head explicitly, for example ``task = "omat_pbe"``.
+- ``mace`` uses ``task`` to select the training domain (the ``head``) of a
+  multi-head model. For ``model = "mh-1"``, an omitted or empty value is
+  resolved by dopingflow to the compatible ``omat_pbe`` head. Set a supported
+  head explicitly, such as ``task = "matpes_r2scan"``, when that training
+  domain and level of theory is desired.
 
 - ``m3gnet``, ``grace``:
   - Not used → keep empty (``""``)
@@ -473,13 +563,13 @@ poscar_in (string, default: "POSCAR")
 
 Filename inside each composition folder used as input.
 
-topk (integer)
-~~~~~~~~~~~~~~
+topk (integer, default: 15)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Number of lowest-energy configurations retained.
 
-symprec (float)
-~~~~~~~~~~~~~~~
+symprec (float, default: 1e-3)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Tolerance used for symmetry detection in ``SpacegroupAnalyzer``.
 
@@ -500,16 +590,16 @@ Possible values:
 - ``sample``  
   Uses random symmetry-unique sampling instead of full enumeration.
 
-max_enum (integer)
-~~~~~~~~~~~~~~~~~~
+max_enum (integer, default: 300000)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Maximum allowed number of raw combinatorial configurations in exact mode.
 
 If this limit is exceeded and ``mode = "auto"``, the scan automatically switches
 to sampling mode.
 
-max_unique (integer)
-~~~~~~~~~~~~~~~~~~~~
+max_unique (integer, default: 100000)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Maximum allowed number of symmetry-unique configurations in exact mode.
 
@@ -537,8 +627,8 @@ Behavior depends on backend:
 - ``grace``:
   - GPU support depends on model implementation
 
-n_workers (integer)
-~~~~~~~~~~~~~~~~~~~
+n_workers (integer, default: 12)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Number of parallel worker processes.
 
@@ -550,8 +640,8 @@ Number of parallel worker processes.
   
 - Ignored when ``device = "cuda"`` (GPU mode uses a single worker)
 
-chunksize (integer)
-~~~~~~~~~~~~~~~~~~~
+chunksize (integer, default: 50)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Chunk size used in the multiprocessing pool.
 
@@ -562,8 +652,8 @@ gpu_id (integer, default: 0)
 
 GPU index used when ``device = "cuda"``.
 
-anion_species (array of strings)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+anion_species (array of strings, default: ["O"])
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Species excluded from substitutional enumeration.
 Typically contains oxygen:
@@ -591,29 +681,29 @@ Used when:
 - ``mode = "sample"``
 - or ``mode = "auto"`` selects sampling for large configuration spaces
 
-sample_budget (integer)
-~~~~~~~~~~~~~~~~~~~~~~~
+sample_budget (integer, default: 20000)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Maximum number of random sampling attempts.
 
-sample_batch_size (integer)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+sample_batch_size (integer, default: 256)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Number of new symmetry-unique sampled configurations evaluated per batch.
 
-sample_patience (integer)
-~~~~~~~~~~~~~~~~~~~~~~~~~
+sample_patience (integer, default: 4000)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Sampling stops after this many sampled configurations fail to improve the
 current best candidate.
 
-sample_seed (integer)
-~~~~~~~~~~~~~~~~~~~~~
+sample_seed (integer, default: 42)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Random seed used for reproducible sampling.
 
-sample_max_saved (integer)
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+sample_max_saved (integer, default: 50000)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Maximum number of sampled canonical configurations stored to avoid duplicates.
 
@@ -725,6 +815,10 @@ model (string, default: "default")
 
 Specifies the pretrained model variant used by the selected relaxation backend.
 
+An omitted, empty, or ``"default"`` value is normalized to a compatible model:
+``default`` for M3GNet, ``uma-s-1p2`` for UMA, ``small`` for MACE, and
+``GRACE-1L-OMAT`` for GRACE.
+
 Behavior depends on backend:
 
 - ``m3gnet``:
@@ -773,7 +867,7 @@ task (string, default: "")
 
 Optional task specification used for ``uma`` and multi-head MACE models.
 
-Allowed values for ``uma``:
+For UMA, an omitted or empty value resolves to ``"omat"``. Allowed values are:
 
 - ``"omat"``
 - ``"oc20"``
@@ -783,8 +877,9 @@ Allowed values for ``uma``:
 - ``"odac"``
 - ``"omc"``
 
-For MACE, ``task`` is passed as the optional model ``head``. Leave it empty for
-the model default; for example, MACE-MH-1 defaults to ``omat_pbe``. For
+For MACE, ``task`` is passed as the optional model ``head``. An omitted or empty
+value uses a compatible dopingflow default; MACE-MH-1 resolves to
+``omat_pbe``. For
 ``m3gnet`` and ``grace``, this parameter is ignored.
 
 relax_mode (string, default: "atoms")
@@ -826,8 +921,8 @@ Available options:
 - ``"mdmin"``
 - ``"quasinewton"``
 
-fmax (float)
-~~~~~~~~~~~~
+fmax (float, default: 0.05)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Maximum force convergence criterion (eV/Å).
 
@@ -856,35 +951,35 @@ gpu_id (integer, default: 0)
 
 GPU index used when ``device = "cuda"``.
 
-n_workers (integer)
-~~~~~~~~~~~~~~~~~~~
+n_workers (integer, default: 6)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Number of parallel relaxation workers (one candidate per worker process).
 
 Relevant mainly when ``device = "cpu"``.
 
-tf_threads (integer)
-~~~~~~~~~~~~~~~~~~~~
+tf_threads (integer, default: 1)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 TensorFlow thread count per worker.
 
 Mainly relevant for the ``m3gnet`` backend.
 Keep small (typically 1) when using multiple workers.
 
-omp_threads (integer)
-~~~~~~~~~~~~~~~~~~~~~
+omp_threads (integer, default: 1)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 OpenMP thread count per worker.
 
 Keep small to avoid CPU oversubscription.
 
-skip_if_done (boolean)
-~~~~~~~~~~~~~~~~~~~~~~
+skip_if_done (boolean, default: true)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Skip an entire composition folder if ``ranking_relax.csv`` already exists.
 
-skip_candidate_if_done (boolean)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+skip_candidate_if_done (boolean, default: true)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Skip an individual candidate if both of the following already exist:
 
@@ -936,14 +1031,14 @@ The metadata records:
 
 Step 04 — Candidate selection.
 
-mode (string)
-~~~~~~~~~~~~~
+mode (string, default: "window")
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - ``"window"``
 - ``"topn"``
 
-window_meV (float)
-~~~~~~~~~~~~~~~~~~
+window_meV (float, default: 50.0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Energy window above the lowest relaxed energy (in meV).
 
@@ -957,13 +1052,13 @@ A value of 0 keeps only the lowest-energy structure.
 
 If no candidate satisfies the filtering criteria, the workflow raises an error.
 
-max_candidates (integer)
-~~~~~~~~~~~~~~~~~~~~~~~~
+max_candidates (integer, default: 12)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Number of candidates kept when mode = ``"topn"``.
 
-skip_if_done (boolean)
-~~~~~~~~~~~~~~~~~~~~~~
+skip_if_done (boolean, default: true)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Skip filtering if output exists.
 
@@ -983,8 +1078,8 @@ enabled (boolean, default: true)
 If false, ``sequential-run`` skips the bandgap stage. The final database is still
 written, but ``bandgap_eV`` is left empty.
 
-skip_if_done (bool)
-~~~~~~~~~~~~~~~~~~~
+skip_if_done (boolean, default: true)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If true, previously computed bandgap results are reused.
 
@@ -998,14 +1093,14 @@ If a candidate prediction fails:
 - The workflow continues with remaining candidates.
 - Failed candidates appear in the summary CSV with ``NaN`` bandgap.
 
-cutoff (float)
-~~~~~~~~~~~~~~
+cutoff (float, default: 8.0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Neighbor cutoff radius (Å) used to construct the atomic graph
 for ALIGNN inference. Must be > 0.
 
-max_neighbors (int)
-~~~~~~~~~~~~~~~~~~~
+max_neighbors (integer, default: 12)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Maximum number of neighbors retained per atom when building the graph.
 Must be > 0.
@@ -1028,8 +1123,8 @@ batch_size (integer, default: 32)
 
 Batch size used for GPU inference.
 
-n_workers (integer)
-~~~~~~~~~~~~~~~~~~~
+n_workers (integer, default: 1)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Number of CPU workers used for parallel bandgap prediction.
 
@@ -1053,14 +1148,14 @@ Formation energies are computed using the chemical potentials written by
 The reference scheme (metal or oxide) is automatically determined from
 ``[references].reference_mode`` and no additional user input is required here.
 
-skip_if_done (boolean)
-~~~~~~~~~~~~~~~~~~~~~~
+skip_if_done (boolean, default: true)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If true, skip formation calculation if ``formation_energies.csv`` already exists
 in a composition folder.
 
-normalize (string)
-~~~~~~~~~~~~~~~~~~
+normalize (string, default: "per_dopant")
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Defines how the reported formation energy is normalized:
 
@@ -1124,7 +1219,7 @@ If true and ``phase_diagram_results.csv`` exists, return the existing result
 without rebuilding the per-system diagrams.
 
 stable_threshold_eV_per_atom (float, default: 1e-8)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Non-negative energy-above-hull threshold used for the boolean ``stable`` field.
 The step writes a combined CSV plus one CSV per exact chemical system under
@@ -1362,8 +1457,9 @@ Model selection depends on backend (same behavior as Step 03).
 surface_task (string, default: "")
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Task/domain for UMA, or an optional MACE model ``head``. Leave it empty to use
-the MACE model default (MACE-MH-1 defaults to ``omat_pbe``).
+Task/domain for UMA, or an optional MACE model ``head``. An omitted or empty
+value uses a compatible dopingflow default (MACE-MH-1 resolves to
+``omat_pbe``).
 
 surface_optimizer (string, default: "bfgs")
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

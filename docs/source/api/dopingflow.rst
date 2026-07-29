@@ -124,6 +124,22 @@ dopingflow.utils.io module
    :show-inheritance:
    :undoc-members:
 
+dopingflow.vacancies module
+---------------------------
+
+.. automodule:: dopingflow.vacancies
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+dopingflow.utils.symmetry module
+--------------------------------
+
+.. automodule:: dopingflow.utils.symmetry
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 dopingflow.utils.parallel module
 --------------------------------
 

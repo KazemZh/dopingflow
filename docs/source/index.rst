@@ -59,6 +59,7 @@ Each stage can be executed independently and uses its own configuration block.
    methods/database
    methods/alloy_hull
    methods/phase_diagram
+   methods/vacancies
    methods/surfaces
 
 
@@ -75,6 +76,7 @@ Examples
    examples/enumerate_screening
    examples/smoke_test
    examples/sequential_workflow
+   examples/vacancies
 
 
 API Reference
