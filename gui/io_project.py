@@ -11,6 +11,11 @@ RANKING_FILES = [
 ]
 
 VACANCY_DATABASE_FILES = ["vacancies_database.csv", "vacancies_database.json"]
+VACANCY_ANALYSIS_FILES = [
+    "vacancy_minima_by_composition.csv",
+    "vacancy_stability_intervals.csv",
+    "vacancy_best_counts.csv",
+]
 
 @dataclass
 class ProjectIndex:
@@ -117,6 +122,13 @@ class ProjectIndex:
     def vacancy_database(self) -> Path | None:
         path = self.outdir / "vacancies_database.csv"
         return path if path.exists() else None
+
+    def vacancy_analysis_files(self) -> dict[str, Path]:
+        return {
+            filename: self.outdir / filename
+            for filename in VACANCY_ANALYSIS_FILES
+            if (self.outdir / filename).exists()
+        }
 
     def vacancy_parents(self, comp: str) -> list[str]:
         base = self.composition_path(comp)

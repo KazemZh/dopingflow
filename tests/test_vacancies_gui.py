@@ -15,6 +15,12 @@ def test_vacancy_gui_defaults_are_one_flat_section():
     assert all(not isinstance(value, dict) for value in section.values())
     assert CHOICES["vacancies.parent_source"] == ["selected_candidates", "directory"]
     assert CHOICES["vacancies.enumeration_mode"] == ["auto", "exact", "sample"]
+    assert CHOICES["vacancies.oxygen_reference_mode"] == [
+        "reference_file", "same_calculator", "explicit", "none"
+    ]
+    assert section["thermodynamic_analysis"] is False
+    assert section["analysis_energy_source"] == "relaxed_only"
+    assert section["exclude_unconverged"] is True
 
 
 def test_vacancy_toml_round_trip_stays_flat():
@@ -25,6 +31,10 @@ def test_vacancy_toml_round_trip_stays_flat():
     assert loaded["vacancies"]["oxidation_state_values"] == [
         [3, 5], [5], [3], [5], [3, 4], [3, 4, 5], [2, 3, 4]
     ]
+    assert loaded["vacancies"]["delta_mu_O_points_eV"] == [
+        0.0, -0.5, -1.0, -1.5, -2.0, -2.5, -3.0
+    ]
+    assert "thermodynamic_analysis" in loaded["vacancies"]
 
 
 def test_project_index_detects_vacancy_results(tmp_path: Path):

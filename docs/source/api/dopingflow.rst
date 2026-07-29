@@ -132,6 +132,14 @@ dopingflow.vacancies module
    :show-inheritance:
    :undoc-members:
 
+dopingflow.vacancy_analysis module
+----------------------------------
+
+.. automodule:: dopingflow.vacancy_analysis
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 dopingflow.utils.symmetry module
 --------------------------------
 

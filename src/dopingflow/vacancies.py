@@ -33,6 +33,11 @@ from dopingflow.utils.symmetry import (
     build_sublattice_symmetry_permutations,
     canonical_occupancy_key,
 )
+from dopingflow.vacancy_analysis import (
+    VacancyAnalysisConfig,
+    analyze_vacancy_thermodynamics,
+    parse_vacancy_analysis_config,
+)
 
 log = logging.getLogger(__name__)
 
@@ -140,6 +145,7 @@ class VacancyConfig:
     max_steps: int
     relax_mode: str
     cell_filter: str
+    analysis: VacancyAnalysisConfig
 
 
 def parse_oxidation_state_arrays(section: dict[str, Any]) -> dict[str, tuple[int, ...]]:
@@ -196,6 +202,13 @@ def parse_vacancy_config(raw: dict[str, Any], root: Path) -> VacancyConfig:
     enabled = bool(section.get("enabled", True))
     if not enabled:
         raise ValueError("[vacancies].enabled is false; enable it before running vacancies")
+    include_parent_reference = bool(section.get("include_parent_reference", True))
+    analysis_config = parse_vacancy_analysis_config(section, root)
+    if analysis_config.enabled and not include_parent_reference:
+        raise ValueError(
+            "[vacancies].include_parent_reference must be true when "
+            "thermodynamic_analysis=true so E_min(c,0) is available"
+        )
 
     parent_source = str(section.get("parent_source", "selected_candidates")).strip()
     if parent_source not in {"selected_candidates", "directory"}:
@@ -307,7 +320,7 @@ def parse_vacancy_config(raw: dict[str, Any], root: Path) -> VacancyConfig:
         enabled=enabled,
         parent_source=parent_source,
         parent_directory=parent_directory,
-        include_parent_reference=bool(section.get("include_parent_reference", True)),
+        include_parent_reference=include_parent_reference,
         skip_if_done=bool(section.get("skip_if_done", True)),
         resume=bool(section.get("resume", True)),
         count_mode=count_mode,
@@ -346,6 +359,7 @@ def parse_vacancy_config(raw: dict[str, Any], root: Path) -> VacancyConfig:
         max_steps=_positive_int(section, "max_steps", 300),
         relax_mode=relax_mode,
         cell_filter=cell_filter,
+        analysis=analysis_config,
     )
 
 
@@ -600,6 +614,10 @@ def _jsonable_config(cfg: VacancyConfig) -> dict[str, Any]:
         str(cfg.parent_directory) if cfg.parent_directory is not None else None
     )
     data["oxidation_states"] = {key: list(value) for key, value in cfg.oxidation_states.items()}
+    data["analysis"]["oxygen_reference_file"] = str(cfg.analysis.oxygen_reference_file)
+    data["analysis"]["oxygen_reference_structure"] = str(
+        cfg.analysis.oxygen_reference_structure
+    )
     return data
 
 
@@ -610,8 +628,12 @@ def _file_sha256(path: Path) -> str:
 
 
 def vacancy_config_fingerprint(cfg: VacancyConfig, *source_paths: Path) -> str:
+    generation_config = _jsonable_config(cfg)
+    # Analysis settings affect only derived compact outputs and must not force
+    # expensive vacancy enumeration/screening/relaxation to rerun.
+    generation_config.pop("analysis", None)
     payload = {
-        "config": _jsonable_config(cfg),
+        "config": generation_config,
         "sources": {str(path.resolve()): _file_sha256(path) for path in source_paths},
     }
     return hashlib.sha256(
@@ -831,6 +853,7 @@ def _parent_reference(
         energy_relaxed = float(source_meta["energy_relaxed_eV"])
         relaxed_structure = relaxed_parent
         energy_source = str(source_meta_path)
+        converged = bool(source_meta.get("converged", False))
     else:
         prior_consistency = _load_json(ref_dir / "relaxed" / "meta.json")
         prior_poscar = ref_dir / "relaxed" / "POSCAR"
@@ -840,6 +863,7 @@ def _parent_reference(
         ):
             relaxed_structure = Structure.from_file(prior_poscar)
             energy_relaxed = float(prior_consistency["energy_relaxed_eV"])
+            converged = bool(prior_consistency.get("converged", False))
         else:
             relaxed_structure, energy_relaxed, nsteps, final_force, converged = (
                 relax_structure_with_calculator(
@@ -881,6 +905,7 @@ def _parent_reference(
         "parent_model": cfg.model,
         "parent_task": cfg.task,
         "parent_relaxation_reused": reused,
+        "parent_converged": converged,
     }
     _write_json(ref_dir / "source.json", source)
     return source
@@ -911,11 +936,49 @@ def _run_parent(
         and (vacancy_root / "vacancy_results.csv").exists()
     ):
         log.info("SKIP %s: compatible vacancy workflow is complete", parent_id)
-        return json.loads((vacancy_root / "vacancy_results.json").read_text()), previous
+        prior_rows = json.loads((vacancy_root / "vacancy_results.json").read_text())
+        dopant_counts = _dopant_counts(relaxed_parent, cfg, parent_id)
+        species_counts = Counter(site.species_string for site in relaxed_parent)
+        n_host = int(species_counts[cfg.host_species])
+        common = {
+            "composition_directory": str(parent["composition"]),
+            "composition": str(parent["composition"]),
+            "candidate": str(parent["candidate"]),
+            "host_species": cfg.host_species,
+            "dopant_counts_from_parent": dopant_counts,
+            "dopant_counts_json": dopant_counts,
+            "n_host": n_host,
+            "n_total_dopants": sum(dopant_counts.values()),
+            "n_total_cations": n_host + sum(dopant_counts.values()),
+            "n_oxygen_sites_parent": int(species_counts[cfg.vacancy_species]),
+        }
+        for row in prior_rows:
+            for key, value in common.items():
+                row.setdefault(key, value)
+            if int(row.get("n_vacancies", -1)) == 0 and "converged" not in row:
+                source = _load_json(vacancy_root / "parent_reference" / "source.json")
+                row["converged"] = bool(source.get("parent_converged", False))
+        return prior_rows, previous
     vacancy_root.mkdir(parents=True, exist_ok=True)
 
-    log.info("[1/6] Parent analysis: %s", parent_id)
+    log.info("[1/7] Parent analysis: %s", parent_id)
     dopant_counts = _dopant_counts(relaxed_parent, cfg, parent_id)
+    species_counts = Counter(site.species_string for site in relaxed_parent)
+    n_host = int(species_counts[cfg.host_species])
+    n_total_dopants = sum(dopant_counts.values())
+    n_total_cations = n_host + n_total_dopants
+    composition_fields = {
+        "composition_directory": str(parent["composition"]),
+        "composition": str(parent["composition"]),
+        "candidate": str(parent["candidate"]),
+        "host_species": cfg.host_species,
+        "dopant_counts_from_parent": dopant_counts,
+        "dopant_counts_json": dopant_counts,
+        "n_host": n_host,
+        "n_total_dopants": n_total_dopants,
+        "n_total_cations": n_total_cations,
+        "n_oxygen_sites_parent": int(species_counts[cfg.vacancy_species]),
+    }
     scenarios = reachable_charge_scenarios(
         dopant_counts, cfg.oxidation_states, cfg.host_oxidation_state
     )
@@ -955,11 +1018,13 @@ def _run_parent(
                 "configuration_id": "parent_reference",
                 "vacancy_species": cfg.vacancy_species,
                 "n_vacancies": 0,
+                **composition_fields,
                 "vacancy_fraction": 0.0,
                 "vacancy_percent": 0.0,
                 "selected_for_relaxation": False,
                 **_energy_columns(parent_ref["parent_energy_sp_eV"], len(relaxed_parent), 0),
                 "energy_relaxed_total_eV": parent_ref["parent_energy_relaxed_eV"],
+                "converged": parent_ref["parent_converged"],
                 "backend": cfg.backend,
                 "model": cfg.model,
                 "task": cfg.task,
@@ -974,7 +1039,7 @@ def _run_parent(
         )
         rows.append(parent_row)
 
-    log.info("[2/6] Vacancy enumeration: %s counts=%s", parent_id, counts)
+    log.info("[2/7] Vacancy enumeration: %s counts=%s", parent_id, counts)
     for n_vacancies in counts:
         group_dir = vacancy_root / f"V_{cfg.vacancy_species}_{n_vacancies:02d}"
         configs, enumeration_meta = enumerate_vacancy_orbits(
@@ -1026,6 +1091,7 @@ def _run_parent(
                     "configuration_id": item["configuration_id"],
                     "vacancy_species": cfg.vacancy_species,
                     "n_vacancies": n_vacancies,
+                    **composition_fields,
                     "vacancy_fraction": generation_meta["vacancy_fraction"],
                     "vacancy_percent": generation_meta["vacancy_percent"],
                     "enumeration_mode": item["enumeration_mode"],
@@ -1050,7 +1116,7 @@ def _run_parent(
                 }
             )
 
-    log.info("[3/6] Single-point screening: %s", parent_id)
+    log.info("[3/7] Single-point screening: %s", parent_id)
     defective_rows = [row for row in rows if row["n_vacancies"] > 0]
     pending_sp: list[tuple[dict[str, Any], Structure, Path]] = []
     for row in defective_rows:
@@ -1122,7 +1188,7 @@ def _run_parent(
         )
         row["energy_sp_reported_eV"] = _reported_energy(row, cfg.energy_normalization)
 
-    log.info("[4/6] Top-k selection: %s", parent_id)
+    log.info("[4/7] Top-k selection: %s", parent_id)
     for n_vacancies in counts:
         group = [row for row in defective_rows if row["n_vacancies"] == n_vacancies]
         group.sort(key=lambda row: (row["energy_sp_total_eV"], row["configuration_id"]))
@@ -1145,7 +1211,7 @@ def _run_parent(
             "\n".join(selected) + ("\n" if selected else ""), encoding="utf-8"
         )
 
-    log.info("[5/6] Relaxation: %s", parent_id)
+    log.info("[5/7] Relaxation: %s", parent_id)
     pending_relax: list[tuple[dict[str, Any], Structure, Path]] = []
     for row in defective_rows:
         if not row["selected_for_relaxation"]:
@@ -1272,7 +1338,7 @@ def _run_parent(
             relaxed_group,
         )
 
-    log.info("[6/6] Summary writing: %s", parent_id)
+    log.info("Writing per-parent vacancy results: %s", parent_id)
     _write_json(vacancy_root / "vacancy_results.json", rows)
     _write_csv(vacancy_root / "vacancy_results.csv", rows)
     metadata = {
@@ -1281,6 +1347,8 @@ def _run_parent(
         "configuration_fingerprint": fingerprint,
         "resolved_config": _jsonable_config(cfg),
         "dopant_counts_from_parent": dopant_counts,
+        "n_host": n_host,
+        "n_total_cations": n_total_cations,
         "reachable_charge_scenarios": scenarios,
         "vacancy_range": count_meta,
         "n_result_rows": len(rows),
@@ -1315,6 +1383,22 @@ def run_vacancies(raw: dict[str, Any], root: Path, *, config_path: Path | None =
     csv_path = parent_root / "vacancies_database.csv"
     _write_csv(csv_path, all_rows)
     _write_json(parent_root / "vacancies_database.json", all_rows)
+    if cfg.analysis.enabled:
+        log.info("[6/7] Vacancy thermodynamic analysis")
+        analyze_vacancy_thermodynamics(
+            rows=all_rows,
+            analysis_cfg=cfg.analysis,
+            parent_root=parent_root,
+            backend=cfg.backend,
+            model=cfg.model,
+            task=cfg.task,
+            calculator=calculator,
+            optimizer=cfg.optimizer,
+            fmax=cfg.fmax,
+            max_steps=cfg.max_steps,
+            source_database=csv_path,
+        )
+    log.info("[7/7] Summary writing complete: %s", csv_path)
     return csv_path
 
 

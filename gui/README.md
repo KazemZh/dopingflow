@@ -11,6 +11,7 @@ The GUI provides an interactive way to:
 - Explore the main database and per-system phase-diagram CSVs with Plotly
 - Configure and run the unified vacancy workflow and explore its separate database
 - Compare relaxed parent, generated vacancy, and relaxed vacancy structures
+- Configure calculator-verified oxygen references and compact vacancy thermodynamics
 - Select either the normal structure output or an existing directory containing many composition subdirectories
 
 The GUI is optional. The CLI remains the primary interface for scripted and HPC workflows.
@@ -84,6 +85,11 @@ Supports:
 
 Selects `results_database.csv`, the combined phase-diagram result, an
 individual chemical-system result, the vacancy database, or a custom CSV path and allows:
+
+The known-source selector also detects vacancy composition minima, exact
+stability intervals, and selected-condition best counts. Dedicated filters cover
+actual composition, dynamic dopant percentages, ``delta_mu_O``, and stable
+vacancy count without traversing configuration directories.
 
 - Column selection
 - Interactive Plotly plotting

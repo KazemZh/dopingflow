@@ -112,6 +112,14 @@ Stages
    - Enumerate symmetry-distinct arrangements for every count through the maximum
    - Screen and relax top-k arrangements with one shared ML calculator
    - Keep vacancy results separate from normal thermodynamic databases
+   - Optionally aggregate exact integer compositions and converged count minima
+   - Verify an O2 reference and solve exact oxygen-grand-potential stability windows
+   - Write compact minima, interval, and selected-condition plotting tables
+
+The preferred vacancy count depends on ``delta_mu_O``. Raw total energy, energy
+per atom, and energy per vacancy cannot rank structures with different oxygen
+contents. The derived stability result is limited to generated doped-host
+structures and is not a full competing-phase grand-potential convex hull.
 
 11. Surface generation (optional)
 

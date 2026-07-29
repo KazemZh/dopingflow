@@ -5,11 +5,11 @@ def test_generate_minimal(tmp_path):
     # Minimal fake input config
     raw = {
         "structure": {
-            "base_poscar": "POSCAR",
             "supercell": [1, 1, 1],
             "outdir": "out",
         },
         "generate": {
+            "base_poscar": "POSCAR",
             "poscar_order": ["Sn", "O"],
             "seed_base": 0,
             "clean_outdir": True,

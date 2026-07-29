@@ -185,8 +185,9 @@ Unified oxygen-vacancy workflow:
    dopingflow vacancies -c input.toml
 
 This one command performs charge-count determination, symmetry enumeration,
-single-point screening, fixed-count top-k selection, and ML relaxation. Its six
-logged phases are implementation details, not separate public commands.
+single-point screening, fixed-count top-k selection, ML relaxation, and optional
+oxygen-grand-potential analysis. Its seven logged phases are implementation
+details, not separate public commands.
 
 Outputs Overview
 ----------------
@@ -326,6 +327,12 @@ structures. Global tables remain separate from ``results_database.csv``::
 
    <structure.outdir>/vacancies_database.csv
    <structure.outdir>/vacancies_database.json
+
+With ``[vacancies].thermodynamic_analysis = true``, the same command also writes
+``vacancy_minima_by_composition.csv``, ``vacancy_stability_intervals.csv``, and
+``vacancy_best_counts.csv``. The first detailed database contains every
+configuration; the compact files contain minima and oxygen-chemical-potential
+stability results. Never compare raw totals across different oxygen contents.
 
 
 Optional surface workflow

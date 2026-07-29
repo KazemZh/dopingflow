@@ -15,6 +15,9 @@ The format loosely follows semantic versioning.
   symmetry-reduced exact/sampled enumeration, fixed-count ML ranking, top-k
   relaxation, compatible parent references, resumable metadata, and separate
   vacancy CSV/JSON databases
+- Optional composition-level vacancy thermodynamics with verified/explicit O2
+  references, exact lower-envelope intervals, selected-condition best counts,
+  plotting-ready compact tables, GUI controls, and a four-figure matplotlib example
 - Vacancy controls, execution presets, result discovery, and three-way structure
   comparison in the Streamlit GUI
 - Dynamic discovery of the installed MACE ``mace_mp`` foundation-model aliases,

@@ -163,6 +163,13 @@ Results are written separately to `<structure.outdir>/vacancies_database.csv`.
 Comparing different vacancy counts thermodynamically requires an oxygen chemical
 potential; raw ML total-energy differences alone are not vacancy formation energies.
 
+Optional `[vacancies].thermodynamic_analysis = true` adds plotting-ready
+composition minima, exact oxygen-grand-potential stability intervals, and best
+counts at selected `delta_mu_O` conditions. O2 references must have matching
+backend/model/task metadata or be explicitly accepted and recorded as
+unverified. These results compare only the generated doped-host family, not all
+competing decomposition phases.
+
 Existing multi-composition trees can be processed directly with
 `parent_source = "directory"` and a flat `parent_directory` path under
 `[vacancies]`. UMA model/task choices and the full supported GRACE model list are
@@ -272,6 +279,7 @@ After launching, a local browser window will open automatically.
 │   ├── smoke_test
 │   ├── surface_creation
 │   └── vacancies
+│       └── plot_vacancy_analysis.py
 ├── .github
 │   └── workflows
 │       └── docs.yml
@@ -307,6 +315,7 @@ After launching, a local browser window will open automatically.
 │       ├── sequential.py
 │       ├── surface.py
 │       ├── vacancies.py
+│       ├── vacancy_analysis.py
 │       └── utils
 │           ├── io.py
 │           ├── parallel.py

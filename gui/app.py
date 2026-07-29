@@ -2309,6 +2309,73 @@ if tab == "Input Builder":
         for index, key in enumerate(("n_workers", "tf_threads", "omp_threads", "chunksize")):
             vac[key] = int(columns[index].number_input(key.replace("_", " ").title(), min_value=1, value=int(vac.get(key, defaults[key])), key=f"vac_exec_{key}"))
 
+        st.markdown("#### Thermodynamic analysis")
+        vac["thermodynamic_analysis"] = st.checkbox(
+            "Create compact composition minima and oxygen-grand-potential outputs",
+            value=bool(vac.get("thermodynamic_analysis", defaults["thermodynamic_analysis"])),
+            key="vac_thermodynamic_analysis",
+            help="Disabled by default for backward compatibility. Enable only after choosing an oxygen-reference policy.",
+        )
+        if vac["thermodynamic_analysis"]:
+            modes = CHOICES["vacancies.oxygen_reference_mode"]
+            current_mode = str(vac.get("oxygen_reference_mode", defaults["oxygen_reference_mode"]))
+            if current_mode not in modes:
+                current_mode = defaults["oxygen_reference_mode"]
+            vac["oxygen_reference_mode"] = st.selectbox(
+                "Oxygen reference mode", modes, index=modes.index(current_mode), key="vac_o_ref_mode"
+            )
+            if current_mode == "reference_file":
+                vac["oxygen_reference_file"] = st.text_input(
+                    "Reference energies JSON",
+                    value=str(vac.get("oxygen_reference_file", defaults["oxygen_reference_file"])),
+                    key="vac_o_ref_file",
+                )
+            elif current_mode == "same_calculator":
+                vac["oxygen_reference_structure"] = st.text_input(
+                    "O2 structure",
+                    value=str(vac.get("oxygen_reference_structure", defaults["oxygen_reference_structure"])),
+                    key="vac_o_ref_structure",
+                )
+                vac["oxygen_reference_relax"] = st.checkbox(
+                    "Relax O2 with the same calculator",
+                    value=bool(vac.get("oxygen_reference_relax", False)),
+                    key="vac_o_ref_relax",
+                )
+                st.warning("A solid-trained foundation model may describe isolated O2 inaccurately even when calculator-consistent.")
+            elif current_mode == "explicit":
+                vac["mu_O_reference_eV"] = float(st.number_input(
+                    "mu_O reference (eV per oxygen atom)",
+                    value=float(vac.get("mu_O_reference_eV", -4.8)),
+                    key="vac_mu_o_explicit",
+                ))
+            else:
+                st.info("Minima will be written, but no preferred vacancy count across oxygen contents will be claimed.")
+            vac["allow_unverified_oxygen_reference"] = st.checkbox(
+                "Allow an unverifiable reference (recorded as unverified)",
+                value=bool(vac.get("allow_unverified_oxygen_reference", False)),
+                key="vac_allow_unverified_ref",
+            )
+            c1, c2, c3 = st.columns(3)
+            vac["delta_mu_O_min_eV"] = float(c1.number_input("Minimum delta mu_O (eV)", value=float(vac.get("delta_mu_O_min_eV", -3.0)), max_value=0.0, key="vac_delta_mu_min"))
+            vac["delta_mu_O_max_eV"] = float(c2.number_input("Maximum delta mu_O (eV)", value=float(vac.get("delta_mu_O_max_eV", 0.0)), max_value=0.0, key="vac_delta_mu_max"))
+            vac["thermodynamic_tolerance_eV"] = float(c3.number_input("Tie tolerance (eV)", min_value=1.0e-12, value=float(vac.get("thermodynamic_tolerance_eV", 1.0e-8)), format="%.3e", key="vac_thermo_tol"))
+            points_text = st.text_input(
+                "Selected delta mu_O points (comma-separated eV)",
+                value=", ".join(str(value) for value in vac.get("delta_mu_O_points_eV", defaults["delta_mu_O_points_eV"])),
+                key="vac_delta_mu_points",
+            )
+            try:
+                vac["delta_mu_O_points_eV"] = [float(value.strip()) for value in points_text.split(",") if value.strip()]
+            except ValueError:
+                st.error("Selected delta mu_O points must be comma-separated numbers.")
+            sources = CHOICES["vacancies.analysis_energy_source"]
+            current_source = str(vac.get("analysis_energy_source", "relaxed_only"))
+            if current_source not in sources:
+                current_source = "relaxed_only"
+            c1, c2 = st.columns(2)
+            vac["analysis_energy_source"] = c1.selectbox("Analysis energy source", sources, index=sources.index(current_source), key="vac_analysis_source")
+            vac["exclude_unconverged"] = c2.checkbox("Exclude unconverged structures", value=bool(vac.get("exclude_unconverged", True)), key="vac_exclude_unconverged")
+
     # -----------------------------
     # SURFACE
     # -----------------------------
@@ -3311,6 +3378,9 @@ elif tab == "Results Explorer":
         "Main results database": default_csv,
         "Combined phase-diagram results": project_root / "phase_diagram_results.csv",
         "Vacancy results database": vacancy_results_root / "vacancies_database.csv",
+        "Vacancy composition minima": vacancy_results_root / "vacancy_minima_by_composition.csv",
+        "Vacancy stability intervals": vacancy_results_root / "vacancy_stability_intervals.csv",
+        "Vacancy best counts": vacancy_results_root / "vacancy_best_counts.csv",
     }
     phase_dir = project_root / "phase_diagrams"
     if phase_dir.exists():
@@ -3356,6 +3426,36 @@ elif tab == "Results Explorer":
     st.subheader("Filters")
 
     df_f = df.copy()
+
+    if csv_path.name in {
+        "vacancy_minima_by_composition.csv",
+        "vacancy_stability_intervals.csv",
+        "vacancy_best_counts.csv",
+    }:
+        with st.expander("Vacancy thermodynamic filters", expanded=True):
+            if "actual_composition_key" in df_f:
+                compositions = sorted(df_f["actual_composition_key"].dropna().astype(str).unique())
+                selected = st.multiselect("Actual composition", compositions, default=compositions, key="vac_result_compositions")
+                if selected:
+                    df_f = df_f[df_f["actual_composition_key"].astype(str).isin(selected)]
+            dopant_percent_columns = sorted(column for column in df_f if column.startswith("percent_"))
+            for column in dopant_percent_columns:
+                low, high = float(df_f[column].min()), float(df_f[column].max())
+                if low < high:
+                    selected_range = st.slider(column, low, high, (low, high), key=f"vac_filter_{column}")
+                    df_f = df_f[df_f[column].between(*selected_range)]
+            delta_column = "delta_mu_O_eV" if "delta_mu_O_eV" in df_f else None
+            if delta_column:
+                values = sorted(float(value) for value in df_f[delta_column].dropna().unique())
+                selected_values = st.multiselect("delta mu_O (eV)", values, default=values, key="vac_result_delta_mu")
+                if selected_values:
+                    df_f = df_f[df_f[delta_column].isin(selected_values)]
+            stable_column = "stable_n_vacancies" if "stable_n_vacancies" in df_f else "best_n_vacancies" if "best_n_vacancies" in df_f else None
+            if stable_column:
+                counts = sorted(df_f[stable_column].dropna().unique())
+                selected_counts = st.multiselect("Stable vacancy count", counts, default=counts, key="vac_result_stable_count")
+                if selected_counts:
+                    df_f = df_f[df_f[stable_column].isin(selected_counts)]
 
     with st.expander("Filter controls", expanded=True):
         cat_col = st.selectbox(

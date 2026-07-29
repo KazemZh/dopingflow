@@ -43,6 +43,19 @@ def test_parse_flat_vacancy_config(tmp_path):
     assert cfg.oxidation_states == {"Sb": (3, 5), "Nb": (5,)}
     assert cfg.relax_mode == "atoms"
     assert cfg.outdir == tmp_path / "out"
+    assert cfg.analysis.enabled is False
+
+
+def test_thermodynamic_analysis_requires_parent_reference(tmp_path):
+    with pytest.raises(ValueError, match="include_parent_reference"):
+        parse_vacancy_config(
+            vacancy_raw(
+                thermodynamic_analysis=True,
+                oxygen_reference_mode="none",
+                include_parent_reference=False,
+            ),
+            tmp_path,
+        )
 
 
 def test_parse_directory_parent_source(tmp_path):

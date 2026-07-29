@@ -141,8 +141,65 @@ written below the vacancy output without modifying the original parent.
 Raw totals across different vacancy counts are not defect formation energies,
 because the structures contain different numbers of oxygen atoms. Thermodynamic
 comparison requires an oxygen chemical potential, for example
-``E_defect - E_parent + n * mu_O``. This workflow does not calculate equilibrium
-oxygen deficiency or finite-temperature defect thermodynamics.
+``E_defect - E_parent + n * mu_O``.
+
+Composition-level thermodynamic analysis
+----------------------------------------
+
+Set ``thermodynamic_analysis = true`` to add the sixth analysis phase. The
+backward-compatible default is ``false``; generation, screening, and relaxation
+remain unchanged when it is disabled. Actual dopant counts are read from parent
+structures. Parents having the same rounded directory name are never combined
+unless their integer species counts and cation-site totals are identical.
+
+For actual composition :math:`c`, the analysis selects the lowest converged
+relaxed energy :math:`E_{min}(c,n)` across every selected parent and relaxed
+configuration at fixed vacancy count :math:`n`. Unconverged or missing relaxed
+energies are excluded by default; there is no silent single-point fallback.
+The cross-count intercept and oxygen grand potential are
+
+.. math::
+
+   A(c,n) = E_{min}(c,n) - E_{min}(c,0) + n\mu_O^{ref}
+
+.. math::
+
+   \Delta\Omega(c,n,\Delta\mu_O) = A(c,n) + n\Delta\mu_O
+
+and the preferred count is
+
+.. math::
+
+   n_{best}(c,\Delta\mu_O) = \operatorname*{argmin}_n \Delta\Omega(c,n,\Delta\mu_O).
+
+Thus there is no universal best vacancy count without a stated
+``delta_mu_O``. Exact pairwise line crossings—not a coarse grid—define the
+stability intervals, and ties are retained explicitly.
+
+``oxygen_reference_mode = "reference_file"`` reads O2 and the per-O
+``muO_shift_ev`` from ``reference_energies.json`` and verifies its
+backend/model/task metadata. Incompatible references fail. Metadata-free
+references fail unless ``allow_unverified_oxygen_reference = true`` is set
+deliberately, in which case outputs remain marked unverified.
+``same_calculator`` evaluates the configured O2 structure with the vacancy
+calculator; optional molecular relaxation uses atomic coordinates only, never a
+cell filter. Solid-trained foundation models may nevertheless describe isolated
+O2 poorly. ``explicit`` accepts a user-supplied per-O value. ``none`` writes
+composition minima but no stability intervals or best-count claims.
+
+The compact derived outputs are:
+
+- ``vacancy_minima_by_composition.csv/json``: one minimum per exact integer
+  composition and vacancy count.
+- ``vacancy_stability_intervals.csv/json``: exact lower-envelope windows.
+- ``vacancy_best_counts.csv/json``: preferred counts and ties at requested
+  oxygen chemical potentials.
+- ``vacancy_analysis_metadata.json``: reference verification, exclusions,
+  missing counts, failed compositions, checksum, and resolved settings.
+
+These results establish relative stability only within the generated doped-host
+structure family. They do not prove stability against decomposition into all
+competing phases; that requires a later oxygen-grand-potential convex hull.
 
 Outputs and resume
 ------------------
@@ -152,7 +209,8 @@ Each parent receives ``05_vacancies/`` containing ``parent_reference/``,
 ``V_O_NN/`` group per count. Each configuration retains ``00_generate``,
 ``01_scan``, and ``02_relax`` provenance. The structure output root also receives
 ``vacancies_database.csv`` and ``vacancies_database.json``. These remain
-separate from normal formation and phase-diagram databases.
+separate from normal formation and phase-diagram databases and retain every
+configuration for provenance. The compact files above are the plotting sources.
 
 Configuration and source checksums form a stable fingerprint. Compatible
 complete parents are skipped, compatible internal scan/relax metadata are
