@@ -15,20 +15,22 @@ root receives `vacancies_database.csv` and `vacancies_database.json`. Model
 weights are obtained by the selected backend on first use; choose a backend and
 model installed in your environment.
 
-The example enables compact thermodynamic analysis using the existing reference
-file. Its O2 backend/model/task metadata must match the resolved vacancy
-calculator. The detailed database keeps every configuration; the plotting-ready
-files keep composition/count minima, exact stability intervals, and best counts
-at selected `delta_mu_O` values. Raw totals must not be compared across oxygen
-contents.
+The example enables Level-1 static-lattice thermodynamic analysis using the
+existing reference file. Solid free energies are approximated by 0 K relaxed ML
+energies; temperature and pressure enter only through the oxygen reservoir. Raw
+totals must not be compared across oxygen contents. Without a user standard-state
+O2 correction, the pressure map is qualitative.
+The example selects the built-in NIST O2 Shomate equations, which support any
+requested temperature from 100 to 6000 K rather than only the discrete JANAF rows.
 
-Generate four figures using only those compact files:
+Generate five figures using only the new compact files:
 
 ```bash
-python plot_vacancy_analysis.py \
-  --minima random_structures/vacancy_minima_by_composition.csv \
-  --intervals random_structures/vacancy_stability_intervals.csv \
-  --best-counts random_structures/vacancy_best_counts.csv \
-  --composition Sb10_Ti5 --delta-mu-o -1.0 --x-dopant Sb \
-  --output-dir vacancy_plots
+python plot_static_vacancy_thermodynamics.py \
+  --minima random_structures/vacancy_static_minima.csv \
+  --intervals random_structures/vacancy_static_stability_intervals.csv \
+  --best-counts random_structures/vacancy_static_best_counts.csv \
+  --pressure-map random_structures/vacancy_static_pressure_map.csv \
+  --composition Sb10_Ti5 --delta-mu-o -1.0 --temperature 900 \
+  --x-dopant Sb --output-dir vacancy_static_plots
 ```

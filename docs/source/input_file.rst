@@ -126,7 +126,7 @@ M3GNet/CPU calculator with MACE/CUDA.
    max_steps = 300
    relax_mode = "atoms"
    cell_filter = "frechet"
-   thermodynamic_analysis = true
+   static_thermodynamic_analysis = true
    oxygen_reference_mode = "reference_file"
    oxygen_reference_file = "reference_structures/reference_energies.json"
    oxygen_reference_structure = "reference_structures/gas/O2.POSCAR"
@@ -136,8 +136,17 @@ M3GNet/CPU calculator with MACE/CUDA.
    delta_mu_O_max_eV = 0.0
    delta_mu_O_points_eV = [0.0, -0.5, -1.0, -1.5, -2.0, -2.5, -3.0]
    thermodynamic_tolerance_eV = 1.0e-8
-   analysis_energy_source = "relaxed_only"
+   static_energy_source = "relaxed_only"
    exclude_unconverged = true
+   pressure_mapping = true
+   temperatures_K = [300.0, 600.0, 900.0, 1200.0, 1500.0]
+   standard_oxygen_pressure_bar = 1.0
+   log10_pO2_min_bar = -30.0
+   log10_pO2_max_bar = 1.0
+   log10_pO2_step = 0.5
+   oxygen_standard_state_mode = "nist_shomate"
+   oxygen_standard_state_temperatures_K = []
+   oxygen_standard_state_delta_mu_eV_per_O = []
 
 The same resolved backend/model/task is used for parent energies, defective
 single points, and every relaxation. See :doc:`methods/vacancies` for the full
@@ -151,15 +160,18 @@ For a directory that already contains many composition subdirectories, use::
 Each subdirectory is discovered through its own ``selected_candidates.txt``.
 The directory path remains a flat key in ``[vacancies]``.
 
-Thermodynamic analysis is disabled by default for backward compatibility. When
+Static-lattice thermodynamic analysis is disabled by default for compatibility. When
 enabled, all keys remain in this same flat table. ``oxygen_reference_mode`` is
 ``reference_file``, ``same_calculator``, ``explicit``, or ``none``. Explicit
 mode requires ``mu_O_reference_eV`` per oxygen atom. Reference-file mode rejects
 incompatible or unverifiable backend/model/task metadata unless the latter is
 deliberately acknowledged with ``allow_unverified_oxygen_reference = true``.
 ``relaxed_only`` plus ``exclude_unconverged = true`` is the safe default energy
-policy. See :doc:`methods/vacancies` for equations, exact stability intervals,
-ties, outputs, and scientific limits.
+policy. ``oxygen_standard_state_mode = "nist_shomate"`` evaluates the published
+piecewise NIST O2 equations continuously at any requested temperature from 100
+to 6000 K. ``user_table`` accepts another convention; ``none`` is qualitative
+relative to the standard pressure at the same temperature. See
+:doc:`methods/vacancies` for equations, exact intervals, outputs, and limits.
 
 ---------------------------------------------------------------------
 

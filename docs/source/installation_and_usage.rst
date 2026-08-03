@@ -328,11 +328,16 @@ structures. Global tables remain separate from ``results_database.csv``::
    <structure.outdir>/vacancies_database.csv
    <structure.outdir>/vacancies_database.json
 
-With ``[vacancies].thermodynamic_analysis = true``, the same command also writes
-``vacancy_minima_by_composition.csv``, ``vacancy_stability_intervals.csv``, and
-``vacancy_best_counts.csv``. The first detailed database contains every
-configuration; the compact files contain minima and oxygen-chemical-potential
-stability results. Never compare raw totals across different oxygen contents.
+With ``[vacancies].static_thermodynamic_analysis = true``, the same command also
+writes ``vacancy_static_minima.csv``, ``vacancy_static_stability_intervals.csv``,
+``vacancy_static_best_counts.csv``, and ``vacancy_static_pressure_map.csv``. These
+are Level-1 static-lattice results: solids use 0 K relaxed ML energies, while
+temperature and pressure enter only through the oxygen reservoir. Never compare
+raw totals across different oxygen contents. Pressure mapping without a supplied
+O2 standard-state correction is qualitative.
+Use ``oxygen_standard_state_mode = "nist_shomate"`` for continuous NIST O2
+standard-state corrections over 100--6000 K, or ``user_table`` for another
+validated thermochemical convention.
 
 
 Optional surface workflow

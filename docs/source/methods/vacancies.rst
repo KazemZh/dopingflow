@@ -143,14 +143,20 @@ because the structures contain different numbers of oxygen atoms. Thermodynamic
 comparison requires an oxygen chemical potential, for example
 ``E_defect - E_parent + n * mu_O``.
 
-Composition-level thermodynamic analysis
-----------------------------------------
+Level-1 static-lattice thermodynamic analysis
+---------------------------------------------
 
-Set ``thermodynamic_analysis = true`` to add the sixth analysis phase. The
+Set ``static_thermodynamic_analysis = true`` to add the sixth analysis phase. The
 backward-compatible default is ``false``; generation, screening, and relaxation
 remain unchanged when it is disabled. Actual dopant counts are read from parent
 structures. Parents having the same rounded directory name are never combined
 unless their integer species counts and cation-site totals are identical.
+
+**Static-lattice approximation:** solid free energies are approximated by 0 K
+relaxed ML energies. Temperature and pressure enter only through the oxygen-gas
+chemical potential. Vibrational, zero-point, configurational, thermal electronic,
+magnetic, anharmonic, thermal-expansion, and solid-pV contributions are neglected.
+This is not a complete finite-temperature phase diagram.
 
 For actual composition :math:`c`, the analysis selects the lowest converged
 relaxed energy :math:`E_{min}(c,n)` across every selected parent and relaxed
@@ -176,6 +182,22 @@ Thus there is no universal best vacancy count without a stated
 ``delta_mu_O``. Exact pairwise line crossings—not a coarse grid—define the
 stability intervals, and ties are retained explicitly.
 
+For the optional ideal-gas reservoir map,
+
+.. math::
+
+   \Delta\mu_O(T,p) = \Delta\mu_O^{standard}(T)
+   + \frac{1}{2}k_BT\ln\left(\frac{p_{O_2}}{p^{standard}}\right).
+
+``oxygen_standard_state_mode = "nist_shomate"`` uses the published piecewise
+NIST Chemistry WebBook O2 Shomate equations (Chase 1998) for continuous
+``H(T)-H(298.15)`` and ``S(T)`` values between 100 and 6000 K at 1 bar. Thus the
+printed discrete JANAF temperatures do not limit the requested grid;
+extrapolation outside the coefficient ranges fails. This convention does not add
+an explicit O2 zero-point energy. ``user_table`` linearly interpolates a supplied
+per-O correction. With ``none``, the correction is zero and pressure results are
+marked qualitative relative to the standard pressure at the same temperature.
+
 ``oxygen_reference_mode = "reference_file"`` reads O2 and the per-O
 ``muO_shift_ev`` from ``reference_energies.json`` and verifies its
 backend/model/task metadata. Incompatible references fail. Metadata-free
@@ -187,19 +209,31 @@ cell filter. Solid-trained foundation models may nevertheless describe isolated
 O2 poorly. ``explicit`` accepts a user-supplied per-O value. ``none`` writes
 composition minima but no stability intervals or best-count claims.
 
-The compact derived outputs are:
+The Results Explorer keeps the stability map, grand-potential envelope,
+grand potential versus vacancy count, and preferred count versus doping in their
+original ``delta_mu_O``-based form. Their energies and axes are independent of
+the gas standard-state conversion. Only the complete T-pO2 map offers ``Include
+delta_mu_O_standard(T)`` and ``Omit delta_mu_O_standard(T)`` views. The omitted
+view uses only the ideal-gas pressure term and is explicitly labeled approximate.
 
-- ``vacancy_minima_by_composition.csv/json``: one minimum per exact integer
+The explicitly named static-lattice outputs are:
+
+- ``vacancy_static_minima.csv/json``: one minimum per exact integer
   composition and vacancy count.
-- ``vacancy_stability_intervals.csv/json``: exact lower-envelope windows.
-- ``vacancy_best_counts.csv/json``: preferred counts and ties at requested
+- ``vacancy_static_stability_intervals.csv/json``: exact lower-envelope windows.
+- ``vacancy_static_best_counts.csv/json``: preferred counts and ties at requested
   oxygen chemical potentials.
-- ``vacancy_analysis_metadata.json``: reference verification, exclusions,
+- ``vacancy_static_pressure_map.csv/json``: T-pO2 preferred counts, including
+  the oxygen standard-state mode, source, and approximation status used by plots.
+- ``vacancy_static_analysis_metadata.json``: reference verification, exclusions,
   missing counts, failed compositions, checksum, and resolved settings.
+
+The earlier compact filenames are also written as compatibility aliases.
 
 These results establish relative stability only within the generated doped-host
 structure family. They do not prove stability against decomposition into all
-competing phases; that requires a later oxygen-grand-potential convex hull.
+competing phases; that requires a later oxygen-grand-potential convex hull. Even
+with a gas standard-state correction, missing solid free-energy terms remain.
 
 Outputs and resume
 ------------------

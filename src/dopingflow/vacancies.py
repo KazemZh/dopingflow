@@ -33,10 +33,10 @@ from dopingflow.utils.symmetry import (
     build_sublattice_symmetry_permutations,
     canonical_occupancy_key,
 )
-from dopingflow.vacancy_analysis import (
-    VacancyAnalysisConfig,
-    analyze_vacancy_thermodynamics,
-    parse_vacancy_analysis_config,
+from dopingflow.vacancy_static_thermodynamics import (
+    StaticVacancyThermodynamicsConfig as VacancyAnalysisConfig,
+    analyze_static_vacancy_thermodynamics,
+    parse_static_vacancy_thermodynamics_config as parse_vacancy_analysis_config,
 )
 
 log = logging.getLogger(__name__)
@@ -207,7 +207,7 @@ def parse_vacancy_config(raw: dict[str, Any], root: Path) -> VacancyConfig:
     if analysis_config.enabled and not include_parent_reference:
         raise ValueError(
             "[vacancies].include_parent_reference must be true when "
-            "thermodynamic_analysis=true so E_min(c,0) is available"
+            "static_thermodynamic_analysis=true so E_min(c,0) is available"
         )
 
     parent_source = str(section.get("parent_source", "selected_candidates")).strip()
@@ -1384,10 +1384,10 @@ def run_vacancies(raw: dict[str, Any], root: Path, *, config_path: Path | None =
     _write_csv(csv_path, all_rows)
     _write_json(parent_root / "vacancies_database.json", all_rows)
     if cfg.analysis.enabled:
-        log.info("[6/7] Vacancy thermodynamic analysis")
-        analyze_vacancy_thermodynamics(
+        log.info("[6/7] Static-lattice vacancy thermodynamic analysis")
+        analyze_static_vacancy_thermodynamics(
             rows=all_rows,
-            analysis_cfg=cfg.analysis,
+            cfg=cfg.analysis,
             parent_root=parent_root,
             backend=cfg.backend,
             model=cfg.model,

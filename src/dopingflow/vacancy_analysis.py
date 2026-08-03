@@ -26,6 +26,35 @@ from dopingflow.ml_relaxation import (
 _REFERENCE_MODES = {"reference_file", "same_calculator", "explicit", "none"}
 _ENERGY_SOURCES = {"relaxed_only", "relaxed_or_single_point"}
 _DEFAULT_POINTS = (0.0, -0.5, -1.0, -1.5, -2.0, -2.5, -3.0)
+_DEFAULT_TEMPERATURES = (300.0, 600.0, 900.0, 1200.0, 1500.0)
+K_B_EV_PER_K = 8.617333262145e-5
+KJ_PER_MOL_PER_EV = 96.4853321233
+NIST_O2_H0_MINUS_H298_KJ_PER_MOL = -8.683
+NIST_O2_SHOMATE_SOURCE = (
+    "NIST Chemistry WebBook SRD 69; O2 gas Shomate coefficients, Chase 1998"
+)
+# (T_min, T_max, A, B, C, D, E, F, G, H); t = T / 1000.
+NIST_O2_SHOMATE_COEFFICIENTS = (
+    (100.0, 700.0, 31.32234, -20.23531, 57.86644, -36.50624, -0.007374, -8.903471, 246.7945, 0.0),
+    (700.0, 2000.0, 30.03235, 8.772972, -3.988133, 0.788313, -0.741599, -11.32468, 236.1663, 0.0),
+    (2000.0, 6000.0, 20.91111, 10.72071, -2.020498, 0.146449, 9.245722, 5.337651, 237.6185, 0.0),
+)
+STATIC_LATTICE_APPROXIMATION = (
+    "Static-lattice approximation: solid free energies are approximated by 0 K "
+    "relaxed ML energies. Temperature and pressure enter only through the "
+    "oxygen-gas chemical potential. Vibrational, configurational, electronic, "
+    "magnetic and anharmonic free-energy contributions of the solid are neglected."
+)
+NEGLECTED_SOLID_TERMS = (
+    "vibrational",
+    "zero_point",
+    "configurational",
+    "thermal_electronic",
+    "magnetic",
+    "anharmonic",
+    "thermal_expansion",
+    "solid_pV",
+)
 
 
 @dataclass(frozen=True)
@@ -43,12 +72,26 @@ class VacancyAnalysisConfig:
     thermodynamic_tolerance_eV: float
     analysis_energy_source: str
     exclude_unconverged: bool
+    pressure_mapping: bool
+    temperatures_K: tuple[float, ...]
+    standard_oxygen_pressure_bar: float
+    log10_pO2_min_bar: float
+    log10_pO2_max_bar: float
+    log10_pO2_step: float
+    oxygen_standard_state_mode: str
+    oxygen_standard_state_temperatures_K: tuple[float, ...]
+    oxygen_standard_state_delta_mu_eV_per_O: tuple[float, ...]
 
 
 def parse_vacancy_analysis_config(
     section: dict[str, Any], root: Path
 ) -> VacancyAnalysisConfig:
-    enabled = bool(section.get("thermodynamic_analysis", False))
+    enabled = bool(
+        section.get(
+            "static_thermodynamic_analysis",
+            section.get("thermodynamic_analysis", False),
+        )
+    )
     mode = str(section.get("oxygen_reference_mode", "reference_file")).strip().lower()
     if mode not in _REFERENCE_MODES:
         raise ValueError(
@@ -84,12 +127,73 @@ def parse_vacancy_analysis_config(
     tolerance = float(section.get("thermodynamic_tolerance_eV", 1.0e-8))
     if tolerance <= 0:
         raise ValueError("[vacancies].thermodynamic_tolerance_eV must be > 0")
-    source = str(section.get("analysis_energy_source", "relaxed_only")).strip().lower()
+    source = str(
+        section.get(
+            "static_energy_source",
+            section.get("analysis_energy_source", "relaxed_only"),
+        )
+    ).strip().lower()
     if source not in _ENERGY_SOURCES:
         raise ValueError(
-            "[vacancies].analysis_energy_source must be 'relaxed_only' or "
+            "[vacancies].static_energy_source must be 'relaxed_only' or "
             "'relaxed_or_single_point'"
         )
+    temperatures_raw = section.get("temperatures_K", list(_DEFAULT_TEMPERATURES))
+    if not isinstance(temperatures_raw, list) or not temperatures_raw:
+        raise ValueError("[vacancies].temperatures_K must be a non-empty array")
+    temperatures = tuple(float(value) for value in temperatures_raw)
+    if any(value <= 0 for value in temperatures):
+        raise ValueError("[vacancies].temperatures_K values must be > 0")
+    standard_pressure = float(section.get("standard_oxygen_pressure_bar", 1.0))
+    if standard_pressure <= 0:
+        raise ValueError("[vacancies].standard_oxygen_pressure_bar must be > 0")
+    pressure_min = float(section.get("log10_pO2_min_bar", -30.0))
+    pressure_max = float(section.get("log10_pO2_max_bar", 1.0))
+    pressure_step = float(section.get("log10_pO2_step", 0.5))
+    if pressure_min > pressure_max or pressure_step <= 0:
+        raise ValueError(
+            "[vacancies] pressure range requires log10_pO2_min_bar <= "
+            "log10_pO2_max_bar and log10_pO2_step > 0"
+        )
+    standard_mode = str(section.get("oxygen_standard_state_mode", "none")).strip().lower()
+    if standard_mode not in {"none", "nist_shomate", "user_table"}:
+        raise ValueError(
+            "[vacancies].oxygen_standard_state_mode must be 'none', "
+            "'nist_shomate', or 'user_table'"
+        )
+    table_temperatures = tuple(
+        float(value)
+        for value in section.get("oxygen_standard_state_temperatures_K", [])
+    )
+    table_values = tuple(
+        float(value)
+        for value in section.get("oxygen_standard_state_delta_mu_eV_per_O", [])
+    )
+    if standard_mode == "user_table":
+        if len(table_temperatures) < 2 or len(table_temperatures) != len(table_values):
+            raise ValueError(
+                "[vacancies] user_table requires equal arrays with at least two "
+                "oxygen standard-state temperatures and delta-mu values"
+            )
+        if any(right <= left for left, right in zip(table_temperatures, table_temperatures[1:])):
+            raise ValueError(
+                "[vacancies].oxygen_standard_state_temperatures_K must increase strictly"
+            )
+        if min(temperatures) < table_temperatures[0] or max(temperatures) > table_temperatures[-1]:
+            raise ValueError(
+                "[vacancies] oxygen standard-state user table must cover all temperatures_K"
+            )
+    if standard_mode == "nist_shomate":
+        if min(temperatures) < 100.0 or max(temperatures) > 6000.0:
+            raise ValueError(
+                "[vacancies] nist_shomate supports temperatures from 100 to 6000 K; "
+                "extrapolation is not allowed"
+            )
+        if not math.isclose(standard_pressure, 1.0, rel_tol=0.0, abs_tol=1.0e-12):
+            raise ValueError(
+                "[vacancies] nist_shomate uses the NIST 1 bar standard state; "
+                "standard_oxygen_pressure_bar must be 1.0"
+            )
     return VacancyAnalysisConfig(
         enabled=enabled,
         oxygen_reference_mode=mode,
@@ -110,6 +214,15 @@ def parse_vacancy_analysis_config(
         thermodynamic_tolerance_eV=tolerance,
         analysis_energy_source=source,
         exclude_unconverged=bool(section.get("exclude_unconverged", True)),
+        pressure_mapping=bool(section.get("pressure_mapping", True)),
+        temperatures_K=temperatures,
+        standard_oxygen_pressure_bar=standard_pressure,
+        log10_pO2_min_bar=pressure_min,
+        log10_pO2_max_bar=pressure_max,
+        log10_pO2_step=pressure_step,
+        oxygen_standard_state_mode=standard_mode,
+        oxygen_standard_state_temperatures_K=table_temperatures,
+        oxygen_standard_state_delta_mu_eV_per_O=table_values,
     )
 
 
@@ -196,6 +309,7 @@ def resolve_oxygen_reference(
         "oxygen_reference_mode": cfg.oxygen_reference_mode,
         "oxygen_reference_verified": False,
         "oxygen_reference_calculator_metadata": None,
+        "oxygen_reference_limitation": None,
     }
     if cfg.oxygen_reference_mode == "none":
         return {
@@ -271,6 +385,10 @@ def resolve_oxygen_reference(
         "oxygen_reference_relax_steps": steps,
         "oxygen_reference_final_force": final_force,
         "oxygen_reference_structure_dict": output_structure.as_dict(),
+        "oxygen_reference_limitation": (
+            "Calculator-consistent, but a solid-state foundation model may not "
+            "accurately describe isolated O2."
+        ),
     }
 
 
@@ -403,6 +521,121 @@ def exact_stability_intervals(
             else:
                 intervals.append(item)
     return intervals
+
+
+def oxygen_pressure_delta_mu_eV_per_O(
+    temperature_K: float,
+    oxygen_partial_pressure_bar: float,
+    standard_oxygen_pressure_bar: float = 1.0,
+) -> float:
+    """Ideal-gas oxygen pressure contribution per oxygen atom."""
+    if temperature_K <= 0 or oxygen_partial_pressure_bar <= 0:
+        raise ValueError("Temperature and oxygen partial pressure must be positive")
+    if standard_oxygen_pressure_bar <= 0:
+        raise ValueError("Standard oxygen pressure must be positive")
+    return 0.5 * K_B_EV_PER_K * temperature_K * math.log(
+        oxygen_partial_pressure_bar / standard_oxygen_pressure_bar
+    )
+
+
+def inverse_oxygen_pressure_log10(
+    delta_mu_O_total_eV_per_O: float,
+    temperature_K: float,
+    delta_mu_O_standard_eV_per_O: float = 0.0,
+) -> float:
+    """Return log10(pO2/p_standard) for a target oxygen chemical potential."""
+    if temperature_K <= 0:
+        raise ValueError("Temperature must be positive")
+    return 2.0 * (
+        delta_mu_O_total_eV_per_O - delta_mu_O_standard_eV_per_O
+    ) / (K_B_EV_PER_K * temperature_K * math.log(10.0))
+
+
+def nist_o2_standard_state_delta_mu_eV_per_O(temperature_K: float) -> float:
+    """Return the NIST O2 standard-state correction, excluding explicit ZPE."""
+    if not 100.0 <= temperature_K <= 6000.0:
+        raise ValueError(
+            "NIST O2 Shomate coefficients support 100 <= T <= 6000 K; "
+            "extrapolation is not allowed"
+        )
+    coefficients = None
+    for index, values in enumerate(NIST_O2_SHOMATE_COEFFICIENTS):
+        lower, upper, *_ = values
+        if lower <= temperature_K < upper or (
+            index == len(NIST_O2_SHOMATE_COEFFICIENTS) - 1
+            and temperature_K == upper
+        ):
+            coefficients = values
+            break
+    assert coefficients is not None
+    _, _, a, b, c, d, e, f, g, h = coefficients
+    reduced_temperature = temperature_K / 1000.0
+    enthalpy_minus_h298_kj_per_mol = (
+        a * reduced_temperature
+        + b * reduced_temperature**2 / 2.0
+        + c * reduced_temperature**3 / 3.0
+        + d * reduced_temperature**4 / 4.0
+        - e / reduced_temperature
+        + f
+        - h
+    )
+    entropy_j_per_mol_K = (
+        a * math.log(reduced_temperature)
+        + b * reduced_temperature
+        + c * reduced_temperature**2 / 2.0
+        + d * reduced_temperature**3 / 3.0
+        - e / (2.0 * reduced_temperature**2)
+        + g
+    )
+    enthalpy_minus_h0_kj_per_mol = (
+        enthalpy_minus_h298_kj_per_mol
+        - NIST_O2_H0_MINUS_H298_KJ_PER_MOL
+    )
+    correction_kj_per_mol_o2 = (
+        enthalpy_minus_h0_kj_per_mol
+        - temperature_K * entropy_j_per_mol_K / 1000.0
+    )
+    return correction_kj_per_mol_o2 / (2.0 * KJ_PER_MOL_PER_EV)
+
+
+def oxygen_standard_state_delta_mu(
+    cfg: VacancyAnalysisConfig, temperature_K: float
+) -> float:
+    """Interpolate the optional per-O standard-state thermal correction."""
+    if cfg.oxygen_standard_state_mode == "none":
+        return 0.0
+    if cfg.oxygen_standard_state_mode == "nist_shomate":
+        return nist_o2_standard_state_delta_mu_eV_per_O(temperature_K)
+    temperatures = cfg.oxygen_standard_state_temperatures_K
+    values = cfg.oxygen_standard_state_delta_mu_eV_per_O
+    if temperature_K < temperatures[0] or temperature_K > temperatures[-1]:
+        raise ValueError(
+            f"Oxygen standard-state table does not cover T={temperature_K:g} K"
+        )
+    for left, right, left_value, right_value in zip(
+        temperatures, temperatures[1:], values, values[1:]
+    ):
+        if left <= temperature_K <= right:
+            fraction = (temperature_K - left) / (right - left)
+            return left_value + fraction * (right_value - left_value)
+    return values[-1]
+
+
+def _pressure_grid(cfg: VacancyAnalysisConfig) -> list[float]:
+    count = int(
+        math.floor(
+            (cfg.log10_pO2_max_bar - cfg.log10_pO2_min_bar)
+            / cfg.log10_pO2_step
+            + 1.0e-12
+        )
+    )
+    values = [
+        cfg.log10_pO2_min_bar + index * cfg.log10_pO2_step
+        for index in range(count + 1)
+    ]
+    if not values or values[-1] < cfg.log10_pO2_max_bar - 1.0e-10:
+        values.append(cfg.log10_pO2_max_bar)
+    return values
 
 
 def _write_csv(path: Path, rows: Sequence[dict[str, Any]]) -> None:
@@ -615,6 +848,8 @@ def analyze_vacancy_thermodynamics(
                 "oxygen_reference_mode": analysis_cfg.oxygen_reference_mode,
                 "oxygen_reference_verified": reference["oxygen_reference_verified"],
                 "oxygen_reference_source": reference["oxygen_reference_source"],
+                "static_lattice_approximation": STATIC_LATTICE_APPROXIMATION,
+                "neglected_solid_terms": list(NEGLECTED_SOLID_TERMS),
                 "grand_potential_intercept_eV": (
                     0.0 if n_vacancies == 0 and mu is not None else intercept
                 ),
@@ -680,9 +915,136 @@ def analyze_vacancy_thermodynamics(
                         else None
                     ),
                     "minimum_delta_grand_potential_eV": min(values.values()),
+                    "minimum_static_grand_potential_eV": min(values.values()),
                     "is_tied": len(tied) > 1,
                     "tied_n_vacancies": tied,
                 })
+
+    pressure_rows: list[dict[str, Any]] = []
+    pressure_is_approximate = (
+        analysis_cfg.pressure_mapping
+        and analysis_cfg.oxygen_standard_state_mode == "none"
+    )
+    pressure_approximation = (
+        "O2 standard-state thermal correction omitted"
+        if pressure_is_approximate
+        else (
+            "NIST O2 Shomate standard-state correction evaluated continuously"
+            if analysis_cfg.oxygen_standard_state_mode == "nist_shomate"
+            else "User-supplied O2 standard-state thermal correction interpolated"
+        )
+    )
+    standard_state_source = (
+        NIST_O2_SHOMATE_SOURCE
+        if analysis_cfg.oxygen_standard_state_mode == "nist_shomate"
+        else (
+            "user-supplied table"
+            if analysis_cfg.oxygen_standard_state_mode == "user_table"
+            else None
+        )
+    )
+    warning_messages.append(STATIC_LATTICE_APPROXIMATION)
+    for composition, missing_counts in sorted(missing.items()):
+        if missing_counts:
+            missing_message = (
+                f"{composition}: no valid relaxed static energy for vacancy "
+                f"count(s) {missing_counts}; excluded from the lower envelope."
+            )
+            warning_messages.append(missing_message)
+            warnings.warn(missing_message, RuntimeWarning, stacklevel=2)
+    if analysis_cfg.pressure_mapping and pressure_is_approximate:
+        approximate_message = (
+            "Approximate pressure mapping: the O2 standard-state thermal "
+            "correction is omitted."
+        )
+        warning_messages.append(approximate_message)
+        warnings.warn(approximate_message, RuntimeWarning, stacklevel=2)
+    if (
+        analysis_cfg.pressure_mapping
+        and reference["mu_O_reference_eV"] is not None
+    ):
+        for key in sorted({row["actual_composition_key"] for row in minima}):
+            lines = [row for row in minima if row["actual_composition_key"] == key]
+            for temperature in analysis_cfg.temperatures_K:
+                standard_delta = oxygen_standard_state_delta_mu(
+                    analysis_cfg, temperature
+                )
+                for log10_pressure in _pressure_grid(analysis_cfg):
+                    pressure = 10.0**log10_pressure
+                    pressure_delta = oxygen_pressure_delta_mu_eV_per_O(
+                        temperature,
+                        pressure,
+                        analysis_cfg.standard_oxygen_pressure_bar,
+                    )
+                    total_delta = standard_delta + pressure_delta
+                    tied = _line_ties(
+                        lines,
+                        total_delta,
+                        analysis_cfg.thermodynamic_tolerance_eV,
+                    )
+                    values = {
+                        int(line["n_vacancies"]): float(
+                            line["grand_potential_intercept_eV"]
+                        )
+                        + int(line["n_vacancies"]) * total_delta
+                        for line in lines
+                    }
+                    representative = next(
+                        line
+                        for line in lines
+                        if int(line["n_vacancies"]) == tied[0]
+                    )
+                    pressure_rows.append(
+                        {
+                            **representative,
+                            "temperature_K": temperature,
+                            "oxygen_partial_pressure_bar": pressure,
+                            "log10_oxygen_partial_pressure_bar": log10_pressure,
+                            "standard_oxygen_pressure_bar": (
+                                analysis_cfg.standard_oxygen_pressure_bar
+                            ),
+                            "delta_mu_O_standard_eV_per_O": standard_delta,
+                            "delta_mu_O_pressure_eV_per_O": pressure_delta,
+                            "delta_mu_O_total_eV_per_O": total_delta,
+                            "best_n_vacancies": (
+                                tied[0] if len(tied) == 1 else None
+                            ),
+                            "best_vacancy_percent": (
+                                representative[
+                                    "vacancy_percent_of_parent_oxygen"
+                                ]
+                                if len(tied) == 1
+                                else None
+                            ),
+                            "best_vacancies_per_cation": (
+                                representative["vacancies_per_cation"]
+                                if len(tied) == 1
+                                else None
+                            ),
+                            "minimum_static_grand_potential_eV": min(
+                                values.values()
+                            ),
+                            "is_tied": len(tied) > 1,
+                            "tied_n_vacancies": tied,
+                            "pressure_mapping_is_approximate": (
+                                pressure_is_approximate
+                            ),
+                            "pressure_mapping_approximation": (
+                                pressure_approximation
+                            ),
+                            "oxygen_standard_state_mode": (
+                                analysis_cfg.oxygen_standard_state_mode
+                            ),
+                            "oxygen_standard_state_source": standard_state_source,
+                            "oxygen_standard_state_zpe_included": False,
+                            "oxygen_standard_state_valid_temperature_range_K": (
+                                [100.0, 6000.0]
+                                if analysis_cfg.oxygen_standard_state_mode
+                                == "nist_shomate"
+                                else None
+                            ),
+                        }
+                    )
 
     outputs: dict[str, Path] = {}
     compact_outputs = (
@@ -694,6 +1056,16 @@ def analyze_vacancy_thermodynamics(
         csv_path, json_path = _write_outputs(parent_root, name, output_rows)
         outputs[f"{name}_csv"] = csv_path
         outputs[f"{name}_json"] = json_path
+    static_outputs = (
+        ("vacancy_static_minima", minima),
+        ("vacancy_static_stability_intervals", intervals),
+        ("vacancy_static_best_counts", best),
+        ("vacancy_static_pressure_map", pressure_rows),
+    )
+    for name, output_rows in static_outputs:
+        csv_path, json_path = _write_outputs(parent_root, name, output_rows)
+        outputs[f"{name}_csv"] = csv_path
+        outputs[f"{name}_json"] = json_path
     source_checksum = None
     if source_database is not None and source_database.exists():
         source_checksum = hashlib.sha256(source_database.read_bytes()).hexdigest()
@@ -702,16 +1074,38 @@ def analyze_vacancy_thermodynamics(
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "source_vacancies_database": str(source_database) if source_database else None,
         "source_file_checksum": source_checksum,
+        "source_checksum": source_checksum,
         "resolved_analysis_config": {
             **asdict(analysis_cfg),
+            "static_thermodynamic_analysis": analysis_cfg.enabled,
+            "static_energy_source": analysis_cfg.analysis_energy_source,
             "oxygen_reference_file": str(analysis_cfg.oxygen_reference_file),
             "oxygen_reference_structure": str(
                 analysis_cfg.oxygen_reference_structure
             ),
         },
         **reference,
+        "oxygen_reference_energy": reference.get("oxygen_reference_energy_eV"),
+        "static_lattice_approximation": STATIC_LATTICE_APPROXIMATION,
+        "neglected_solid_terms": list(NEGLECTED_SOLID_TERMS),
         "delta_mu_O_range": [analysis_cfg.delta_mu_O_min_eV, analysis_cfg.delta_mu_O_max_eV],
         "delta_mu_O_points": list(analysis_cfg.delta_mu_O_points_eV),
+        "temperatures_K": list(analysis_cfg.temperatures_K),
+        "pressure_range": {
+            "log10_pO2_min_bar": analysis_cfg.log10_pO2_min_bar,
+            "log10_pO2_max_bar": analysis_cfg.log10_pO2_max_bar,
+            "log10_pO2_step": analysis_cfg.log10_pO2_step,
+            "standard_oxygen_pressure_bar": analysis_cfg.standard_oxygen_pressure_bar,
+        },
+        "oxygen_standard_state_mode": analysis_cfg.oxygen_standard_state_mode,
+        "oxygen_standard_state_source": standard_state_source,
+        "oxygen_standard_state_zpe_included": False,
+        "oxygen_standard_state_valid_temperature_range_K": (
+            [100.0, 6000.0]
+            if analysis_cfg.oxygen_standard_state_mode == "nist_shomate"
+            else None
+        ),
+        "pressure_mapping_is_approximate": pressure_is_approximate,
         "number_of_input_rows": len(rows),
         "number_of_converged_rows": sum(
             1
@@ -729,6 +1123,11 @@ def analyze_vacancy_thermodynamics(
     metadata_path = parent_root / "vacancy_analysis_metadata.json"
     metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
     outputs["metadata"] = metadata_path
+    static_metadata_path = parent_root / "vacancy_static_analysis_metadata.json"
+    static_metadata_path.write_text(
+        json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8"
+    )
+    outputs["static_metadata"] = static_metadata_path
     return outputs
 
 

@@ -15,6 +15,10 @@ VACANCY_ANALYSIS_FILES = [
     "vacancy_minima_by_composition.csv",
     "vacancy_stability_intervals.csv",
     "vacancy_best_counts.csv",
+    "vacancy_static_minima.csv",
+    "vacancy_static_stability_intervals.csv",
+    "vacancy_static_best_counts.csv",
+    "vacancy_static_pressure_map.csv",
 ]
 
 @dataclass

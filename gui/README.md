@@ -86,10 +86,26 @@ Supports:
 Selects `results_database.csv`, the combined phase-diagram result, an
 individual chemical-system result, the vacancy database, or a custom CSV path and allows:
 
-The known-source selector also detects vacancy composition minima, exact
-stability intervals, and selected-condition best counts. Dedicated filters cover
-actual composition, dynamic dopant percentages, ``delta_mu_O``, and stable
-vacancy count without traversing configuration directories.
+The known-source selector also detects static vacancy composition minima, exact
+stability intervals, selected-condition best counts, and the
+temperature-pressure map. Dedicated filters cover actual composition, dynamic
+dopant percentages, vacancy count, ``delta_mu_O``, temperature, and ``pO2``.
+
+When the compact static-lattice tables are present, a dedicated
+``Vacancy thermodynamic plots`` panel provides interactive Plotly views of the
+grand-potential envelope, grand potential versus vacancy count, preferred count
+versus doping, the composition/oxygen-chemical-potential stability map, and an
+T-pO2 map. The first four plots retain their original ``delta_mu_O``-based
+definitions and controls. The T-pO2 tab has a standard-state selector, so that
+map can be viewed with the configured ``delta_mu_O_standard(T)`` correction
+or with the term intentionally omitted. Stability maps use fixed colors and
+categorical legends. The temperature-pressure title and annotation identify whether the gas mapping uses
+the NIST Shomate correction, a user table, or is approximate because the
+standard-state thermal correction was omitted.
+The GUI states that solid free energies use 0 K relaxed ML energies and warns
+when the O2 standard-state thermal correction is omitted.
+The Input Builder offers a continuous ``nist_shomate`` mode over 100--6000 K,
+alongside custom ``user_table`` and qualitative ``none`` modes.
 
 - Column selection
 - Interactive Plotly plotting

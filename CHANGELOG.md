@@ -18,6 +18,18 @@ The format loosely follows semantic versioning.
 - Optional composition-level vacancy thermodynamics with verified/explicit O2
   references, exact lower-envelope intervals, selected-condition best counts,
   plotting-ready compact tables, GUI controls, and a four-figure matplotlib example
+- Explicit Level-1 static-lattice outputs and an ideal-gas temperature–oxygen-
+  pressure mapping. A user O2 standard-state table is supported; without one,
+  pressure results are labeled qualitative and approximate.
+- Built-in continuous NIST O2 Shomate standard-state corrections for arbitrary
+  temperatures from 100 to 6000 K, with extrapolation prohibited and the source
+  and zero-point-energy convention recorded in metadata.
+- Accuracy-aware GUI and example T-pO2 plots now identify NIST Shomate,
+  user-table, and approximate no-thermal-correction mappings; new GUI inputs
+  default to the NIST mode.
+- The four general Results Explorer vacancy plots retain their original
+  ``delta_mu_O`` axes and behavior; the T-pO2 map compares inclusion
+  versus omission of the configured O2 ``delta_mu_O_standard(T)`` term.
 - Vacancy controls, execution presets, result discovery, and three-way structure
   comparison in the Streamlit GUI
 - Dynamic discovery of the installed MACE ``mace_mp`` foundation-model aliases,

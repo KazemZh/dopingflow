@@ -140,6 +140,14 @@ dopingflow.vacancy_analysis module
    :show-inheritance:
    :undoc-members:
 
+dopingflow.vacancy_static_thermodynamics module
+-----------------------------------------------
+
+.. automodule:: dopingflow.vacancy_static_thermodynamics
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 dopingflow.utils.symmetry module
 --------------------------------
 

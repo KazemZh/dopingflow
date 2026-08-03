@@ -9,18 +9,49 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.colors import BoundaryNorm, ListedColormap
+from matplotlib.patches import Patch
+
+
+# Fixed semantic colors: a vacancy count keeps the same color in every plot,
+# even when some intermediate counts are absent from a particular dataset.
+VACANCY_COUNT_COLORS = {
+    0: "#d9d9d9",  # light gray
+    1: "#1f77b4",  # blue
+    2: "#ff7f0e",  # orange
+    3: "#2ca02c",  # green
+    4: "#d62728",  # red
+    5: "#9467bd",  # purple
+    6: "#8c564b",  # brown
+    7: "#e377c2",  # pink
+    8: "#bcbd22",  # olive
+    9: "#17becf",  # cyan
+    10: "#393b79",  # dark blue
+}
+
+
+def _vacancy_count_color(count: int) -> str:
+    """Return a stable color, including deterministic fallback counts above 10."""
+    if count in VACANCY_COUNT_COLORS:
+        return VACANCY_COUNT_COLORS[count]
+    return plt.get_cmap("turbo")((count * 0.61803398875) % 1.0)
 
 
 def _metadata_label(frame: pd.DataFrame) -> str:
     first = frame.iloc[0]
     mode = first.get("oxygen_reference_mode", "unknown reference")
     verified = first.get("oxygen_reference_verified", "")
-    model = "/".join(
-        str(first.get(key, ""))
-        for key in ("backend", "model", "task")
-        if str(first.get(key, ""))
+    model_parts = []
+    for key in ("backend", "model", "task"):
+        value = first.get(key, "")
+        if pd.notna(value) and str(value).strip():
+            model_parts.append(str(value).strip())
+    model = "/".join(model_parts)
+    return (
+        f"O reference: {mode} (verified={verified}); model: {model}\n"
+        "Static-lattice approximation: T and p enter only through the oxygen "
+        "reservoir; solid vibrational and entropic terms are neglected."
     )
-    return f"O reference: {mode} (verified={verified}); model: {model}"
 
 
 def plot_grand_potential_lines(
@@ -39,12 +70,9 @@ def plot_grand_potential_lines(
         x_max = float(selected["delta_mu_O_upper_eV"].max())
     x = np.linspace(x_min, x_max, 500)
     fig, axis = plt.subplots(figsize=(7.2, 4.8), constrained_layout=True)
-    values = []
     for item in data.itertuples():
         y = float(item.grand_potential_intercept_eV) + int(item.n_vacancies) * x
-        values.append(y)
         axis.plot(x, y, lw=1.4, label=f"n={int(item.n_vacancies)}")
-    axis.plot(x, np.min(np.vstack(values), axis=0), color="black", lw=3, label="lower envelope")
     selected = intervals[intervals["actual_composition_key"] == composition]
     boundaries = selected.get("delta_mu_O_upper_eV", pd.Series(dtype=float))
     for boundary in sorted(set(boundaries.dropna()))[:-1]:
@@ -124,16 +152,30 @@ def plot_stability_map(
         for item in subset.itertuples():
             mask = (y >= item.delta_mu_O_lower_eV) & (y <= item.delta_mu_O_upper_eV)
             grid[mask, column] = item.stable_n_vacancies
+    vacancy_counts = np.sort(intervals["stable_n_vacancies"].dropna().unique()).astype(int)
+    if vacancy_counts.size == 1:
+        boundaries = np.array([vacancy_counts[0] - 0.5, vacancy_counts[0] + 0.5])
+    else:
+        midpoints = (vacancy_counts[:-1] + vacancy_counts[1:]) / 2
+        boundaries = np.concatenate(
+            ([vacancy_counts[0] - 0.5], midpoints, [vacancy_counts[-1] + 0.5])
+        )
+    colormap = ListedColormap(
+        [_vacancy_count_color(int(count)) for count in vacancy_counts]
+    )
+    normalization = BoundaryNorm(boundaries, colormap.N)
     fig, axis = plt.subplots(
         figsize=(max(7.2, 0.45 * len(compositions)), 4.8),
         constrained_layout=True,
     )
-    image = axis.imshow(
+    axis.imshow(
         grid,
         origin="lower",
         aspect="auto",
         extent=(-0.5, len(compositions) - 0.5, y[0], y[-1]),
         interpolation="nearest",
+        cmap=colormap,
+        norm=normalization,
     )
     axis.set_xticks(
         range(len(compositions)),
@@ -146,7 +188,21 @@ def plot_stability_map(
         ylabel=r"$\Delta\mu_O$ (eV per O atom)",
         title=f"Stable oxygen-vacancy count\n{_metadata_label(intervals)}",
     )
-    fig.colorbar(image, ax=axis, label="Stable vacancy count")
+    legend_handles = [
+        Patch(
+            facecolor=_vacancy_count_color(int(count)),
+            edgecolor="black",
+            label=str(int(count)),
+        )
+        for count in vacancy_counts
+    ]
+    axis.legend(
+        handles=legend_handles,
+        title="Stable vacancy count",
+        loc="center left",
+        bbox_to_anchor=(1.01, 0.5),
+        frameon=True,
+    )
     fig.savefig(output, dpi=300)
     plt.close(fig)
 

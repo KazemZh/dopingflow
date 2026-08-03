@@ -148,7 +148,9 @@ Notes
 -----
 
 - The core workflow (Stages 0–9) focuses on bulk screening, database generation,
-  and thermodynamic analysis.
+  and explicitly labeled Level-1 static-lattice thermodynamic analysis. Its
+  optional temperature-pressure map changes only the oxygen-gas reservoir and
+  is not a complete finite-temperature phase diagram.
 - Surface generation is intentionally decoupled from the main pipeline and is executed separately.
 - This design allows users to:
   - inspect and validate bulk candidates before surface modeling
