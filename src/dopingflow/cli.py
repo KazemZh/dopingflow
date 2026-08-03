@@ -17,6 +17,7 @@ from dopingflow.formation import run_formation_from_toml
 from dopingflow.collect_relative import run_collect_from_toml
 from dopingflow.alloy_hull import run_alloy_hull_from_toml
 from dopingflow.phase_diagram import run_phase_diagram_from_toml
+from dopingflow.vacancies import run_vacancies_from_toml
 from dopingflow.sequential import run_sequential_from_toml
 
 app = typer.Typer(help="dopingflow: ML doping workflow pipeline")
@@ -134,13 +135,24 @@ def phase_diagram_cmd(
     typer.echo(f"\nWrote phase-diagram CSV: {out_path}")
 
 
+@app.command("vacancies")
+def vacancies_cmd(
+    config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
+    verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
+) -> None:
+    """Determine vacancy counts, enumerate, ML-screen, select top-k, and relax."""
+    _init(config, verbose)
+    out_path = run_vacancies_from_toml(config)
+    typer.echo(f"\nWrote vacancy database CSV: {out_path}")
+
+
 @app.command("run-all")
 def run_all_cmd(
     config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
     start: str = typer.Option(
         "refs",
         "--from",
-        help="Start step key (refs, generate, scan, relax, filter, bandgap, formation, collect, alloy-hull, phase-diagram)",
+        help="Start step key (refs, generate, scan, relax, filter, bandgap, formation, collect, alloy-hull, phase-diagram, vacancies)",
     ),
     stop: str = typer.Option("phase-diagram", "--until", help="Stop step key (inclusive)"),
     only: Optional[str] = typer.Option(
@@ -159,7 +171,7 @@ def run_all_cmd(
     Run the full pipeline in order, with optional step selection.
 
     Step keys:
-      refs -> generate -> scan -> relax -> filter -> bandgap -> formation -> collect -> alloy-hull -> phase-diagram
+      refs -> generate -> scan -> relax -> filter -> bandgap -> formation -> collect -> alloy-hull -> phase-diagram -> vacancies
     """
     _init(config, verbose)
 
@@ -176,6 +188,7 @@ def run_all_cmd(
         ("collect", "07 collect", lambda: run_collect_from_toml(config)),
         ("alloy-hull", "08 alloy-hull", lambda: run_alloy_hull_from_toml(config)),
         ("phase-diagram", "09 phase-diagram", lambda: run_phase_diagram_from_toml(config)),
+        ("vacancies", "10 vacancies", lambda: run_vacancies_from_toml(config)),
     ]
 
     key_to_idx = {k: i for i, (k, _, _) in enumerate(steps)}
@@ -199,9 +212,7 @@ def run_all_cmd(
         unknown = [k for k in only_keys if k not in key_to_idx]
         if unknown:
             raise typer.BadParameter(f"--only: unknown step(s) {unknown}. Valid: {valid_keys}")
-        selected_indices = [i for i in selected_indices if steps[i][0] in set(only_keys)]
-        if not selected_indices:
-            raise typer.BadParameter("--only removed all steps in the selected --from/--until range.")
+        selected_indices = [i for i, step in enumerate(steps) if step[0] in set(only_keys)]
 
     typer.echo("\nPlanned steps:")
     for i in selected_indices:
@@ -217,7 +228,7 @@ def run_all_cmd(
         typer.echo(f"\n=== {title} ({k}) ===")
         res = fn()
 
-        if k in {"collect", "alloy-hull", "phase-diagram"} and isinstance(res, Path):
+        if k in {"collect", "alloy-hull", "phase-diagram", "vacancies"} and isinstance(res, Path):
             typer.echo(f"\nWrote output CSV: {res}")
 
 

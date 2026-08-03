@@ -10,6 +10,17 @@ RANKING_FILES = [
     "ranking_relax_filtered.csv",
 ]
 
+VACANCY_DATABASE_FILES = ["vacancies_database.csv", "vacancies_database.json"]
+VACANCY_ANALYSIS_FILES = [
+    "vacancy_minima_by_composition.csv",
+    "vacancy_stability_intervals.csv",
+    "vacancy_best_counts.csv",
+    "vacancy_static_minima.csv",
+    "vacancy_static_stability_intervals.csv",
+    "vacancy_static_best_counts.csv",
+    "vacancy_static_pressure_map.csv",
+]
+
 @dataclass
 class ProjectIndex:
     root: Path
@@ -111,3 +122,47 @@ class ProjectIndex:
                 break
 
         return found
+
+    def vacancy_database(self) -> Path | None:
+        path = self.outdir / "vacancies_database.csv"
+        return path if path.exists() else None
+
+    def vacancy_analysis_files(self) -> dict[str, Path]:
+        return {
+            filename: self.outdir / filename
+            for filename in VACANCY_ANALYSIS_FILES
+            if (self.outdir / filename).exists()
+        }
+
+    def vacancy_parents(self, comp: str) -> list[str]:
+        base = self.composition_path(comp)
+        return sorted(
+            candidate.name
+            for candidate in base.glob("candidate_*")
+            if (candidate / "05_vacancies" / "vacancy_results.csv").exists()
+        )
+
+    def vacancy_rankings(self, comp: str, candidate: str) -> dict[str, Path]:
+        root = self.composition_path(comp) / candidate / "05_vacancies"
+        found: dict[str, Path] = {}
+        for group in sorted(root.glob("V_*_*")):
+            for filename in ("ranking_scan.csv", "ranking_relax.csv"):
+                path = group / filename
+                if path.exists():
+                    found[f"{group.name}/{filename}"] = path
+        return found
+
+    def find_vacancy_structure_files(
+        self, comp: str, candidate: str, vacancy_count: int, configuration: str
+    ) -> dict[str, Path]:
+        root = self.composition_path(comp) / candidate / "05_vacancies"
+        groups = sorted(root.glob(f"V_*_{vacancy_count:02d}"))
+        if not groups:
+            return {}
+        config_dir = groups[0] / configuration
+        candidates = {
+            "parent": root / "parent_reference" / "relaxed" / "POSCAR",
+            "generated": config_dir / "00_generate" / "POSCAR",
+            "relaxed": config_dir / "02_relax" / "POSCAR",
+        }
+        return {label: path for label, path in candidates.items() if path.exists()}

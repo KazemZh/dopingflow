@@ -9,6 +9,10 @@ The GUI provides an interactive way to:
 - Monitor logs
 - Visualize generated structures
 - Explore the main database and per-system phase-diagram CSVs with Plotly
+- Configure and run the unified vacancy workflow and explore its separate database
+- Compare relaxed parent, generated vacancy, and relaxed vacancy structures
+- Configure calculator-verified oxygen references and compact vacancy thermodynamics
+- Select either the normal structure output or an existing directory containing many composition subdirectories
 
 The GUI is optional. The CLI remains the primary interface for scripted and HPC workflows.
 
@@ -52,7 +56,7 @@ Interactive editor for `input.toml`.
 
 - Structure definition
 - Doping setup (explicit or enumerate mode)
-- Scan, Relax, Filter, Bandgap, Formation settings
+- Scan, Relax, Filter, Bandgap, Formation, and one flat Vacancies section
 - Live TOML preview
 - Save directly to `input.toml`
 
@@ -71,6 +75,7 @@ Supports:
 - Full workflow execution
 - Stage range execution
 - Single-stage execution
+- Full workflow including vacancies and vacancies-only execution
 - Optional overrides
 - Log monitoring
 
@@ -79,7 +84,28 @@ Supports:
 ### 3️⃣ Results Explorer
 
 Selects `results_database.csv`, the combined phase-diagram result, an
-individual chemical-system result, or a custom CSV path and allows:
+individual chemical-system result, the vacancy database, or a custom CSV path and allows:
+
+The known-source selector also detects static vacancy composition minima, exact
+stability intervals, selected-condition best counts, and the
+temperature-pressure map. Dedicated filters cover actual composition, dynamic
+dopant percentages, vacancy count, ``delta_mu_O``, temperature, and ``pO2``.
+
+When the compact static-lattice tables are present, a dedicated
+``Vacancy thermodynamic plots`` panel provides interactive Plotly views of the
+grand-potential envelope, grand potential versus vacancy count, preferred count
+versus doping, the composition/oxygen-chemical-potential stability map, and an
+T-pO2 map. The first four plots retain their original ``delta_mu_O``-based
+definitions and controls. The T-pO2 tab has a standard-state selector, so that
+map can be viewed with the configured ``delta_mu_O_standard(T)`` correction
+or with the term intentionally omitted. Stability maps use fixed colors and
+categorical legends. The temperature-pressure title and annotation identify whether the gas mapping uses
+the NIST Shomate correction, a user table, or is approximate because the
+standard-state thermal correction was omitted.
+The GUI states that solid free energies use 0 K relaxed ML energies and warns
+when the O2 standard-state thermal correction is omitted.
+The Input Builder offers a continuous ``nist_shomate`` mode over 100--6000 K,
+alongside custom ``user_table`` and qualitative ``none`` modes.
 
 - Column selection
 - Interactive Plotly plotting

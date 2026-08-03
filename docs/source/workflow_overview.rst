@@ -17,7 +17,7 @@ then optionally extend the analysis to surface structures.
 Pipeline Structure
 ------------------
 
-Reference Construction → Enumeration → Screening → Relaxation → Filtering → Band Gap → Formation Energy → Database → 1D Alloy Hull → Phase Diagram
+Reference Construction → Enumeration → Screening → Relaxation → Filtering → Band Gap → Formation Energy → Database → 1D Alloy Hull → Phase Diagram → Vacancies
 
 Optional Post-Processing:
 
@@ -106,14 +106,29 @@ Stages
    - Require one elemental terminal reference for every element
    - Write per-system CSV files plus a combined result table
 
-10. Surface generation (optional)
+10. Oxygen vacancies (optional run-all extension)
+
+   - Analyze actual selected-parent dopant counts and reachable formal charges
+   - Enumerate symmetry-distinct arrangements for every count through the maximum
+   - Screen and relax top-k arrangements with one shared ML calculator
+   - Keep vacancy results separate from normal thermodynamic databases
+   - Optionally aggregate exact integer compositions and converged count minima
+   - Verify an O2 reference and solve exact oxygen-grand-potential stability windows
+   - Write compact minima, interval, and selected-condition plotting tables
+
+The preferred vacancy count depends on ``delta_mu_O``. Raw total energy, energy
+per atom, and energy per vacancy cannot rank structures with different oxygen
+contents. The derived stability result is limited to generated doped-host
+structures and is not a full competing-phase grand-potential convex hull.
+
+11. Surface generation (optional)
 
    - Select candidates from the database
    - Generate slab structures for chosen Miller indices
    - Enumerate surface terminations
    - Optionally fix atoms in the slab
 
-11. Surface relaxation (optional)
+12. Surface relaxation (optional)
 
    - Relax slab structures using ML interatomic potentials
    - Apply atom constraints (e.g. fixed bottom layers)
@@ -133,7 +148,9 @@ Notes
 -----
 
 - The core workflow (Stages 0–9) focuses on bulk screening, database generation,
-  and thermodynamic analysis.
+  and explicitly labeled Level-1 static-lattice thermodynamic analysis. Its
+  optional temperature-pressure map changes only the oxygen-gas reservoir and
+  is not a complete finite-temperature phase diagram.
 - Surface generation is intentionally decoupled from the main pipeline and is executed separately.
 - This design allows users to:
   - inspect and validate bulk candidates before surface modeling

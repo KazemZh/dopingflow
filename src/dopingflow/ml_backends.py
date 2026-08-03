@@ -32,6 +32,13 @@ _MACE_FALLBACK_MODELS = (
     "mh-1",
 )
 
+# MACE multi-head checkpoints do not necessarily contain a head named
+# ``default``.  Supplying a known compatible head here makes an omitted/blank
+# task safe while still allowing users to select a different head explicitly.
+_MACE_DEFAULT_HEADS = {
+    "mh-1": "omat_pbe",
+}
+
 _GRACE_MODELS = {
     "GRACE-1L-OMAT",
     "GRACE-1L-OMAT-M-base",
@@ -163,6 +170,8 @@ def normalize_backend_config(
             )
         if _is_mace_checkpoint_reference(model):
             model = str(Path(model).expanduser())
+        if task == "":
+            task = _MACE_DEFAULT_HEADS.get(model, "")
         return backend, model, task
 
     if backend == "grace":
@@ -365,6 +374,7 @@ def build_ase_calculator(
             "device": device,
             "default_dtype": "float64",
         }
+        task = str(task).strip() or _MACE_DEFAULT_HEADS.get(str(model).strip(), "")
         if task:
             # Multi-head MACE models (for example mh-1) call this a ``head``.
             # Reusing the existing stage-level task field avoids new TOML sections.

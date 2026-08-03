@@ -124,8 +124,8 @@ configuration uses the same fields with a required UMA task:
 
 Notes:
 
-- ``task`` is required for UMA. For MACE it optionally selects a multi-head
-  model head; blank uses the model default.
+- ``task`` is required for UMA. For MACE it selects a multi-head model head;
+  blank ``task`` with ``mh-1`` is resolved to the compatible ``omat_pbe`` head.
 - The available MACE aliases are discovered from the installed ``mace-torch``
   package. A local checkpoint path can be used instead of an alias.
 - Models are typically downloaded and cached automatically on first use.

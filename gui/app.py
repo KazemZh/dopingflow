@@ -26,6 +26,9 @@ from gui_config import (
     DEFAULTS,
     CHOICES,
     MACE_MODEL_CHOICES,
+    UMA_MODEL_CHOICES,
+    UMA_TASK_CHOICES,
+    GRACE_MODEL_CHOICES,
 )
 from io_project import ProjectIndex
 from view_structure import show_structure
@@ -104,8 +107,9 @@ def mace_head_input(label: str, current_task: str, *, key: str) -> str:
         key=key,
         placeholder="Optional, e.g. omat_pbe for mh-1",
         help=(
-            "Optional MACE multi-head model head. Leave blank for the model default; "
-            "mh-1 defaults to omat_pbe. Stored in the existing task parameter."
+            "Optional MACE multi-head model head. Leave blank to use a compatible "
+            "dopingflow default; mh-1 resolves to omat_pbe. Stored in the existing "
+            "task parameter."
         ),
     ).strip()
 
@@ -310,6 +314,7 @@ if tab == "Input Builder":
         "formation",
         "database",
         "phase_diagram",
+        "vacancies",
         "surface",
     ]:
         cfg_edit.setdefault(secname, {})
@@ -1160,9 +1165,9 @@ if tab == "Input Builder":
                 "GRACE-2L-SMAX-OMAT-M",
                 "GRACE-2L-SMAX-OMAT-L",
             ]
-            current_model = str(cfg_edit["scan"].get("model", "GRACE-2L-OAM"))
+            current_model = str(cfg_edit["scan"].get("model", "GRACE-1L-OMAT"))
             if current_model not in grace_models:
-                current_model = "GRACE-2L-OAM"
+                current_model = "GRACE-1L-OMAT"
 
             cfg_edit["scan"]["task"] = ""
 
@@ -2071,7 +2076,7 @@ if tab == "Input Builder":
         st.subheader("Relative oxide-reference energies")
         cfg_edit["formation"]["relative_enabled"] = st.checkbox(
             "Write relative per-cation energy columns",
-            value=bool(cfg_edit["formation"].get("relative_enabled", True)),
+            value=bool(cfg_edit["formation"].get("relative_enabled", False)),
             help=(
                 "Writes one relative formation and mixing-energy column for each "
                 "oxide-reference scenario. All settings remain in [formation]."
@@ -2112,7 +2117,7 @@ if tab == "Input Builder":
 
         cfg_edit["phase_diagram"]["stable_threshold_eV_per_atom"] = st.number_input(
             "Stability threshold (eV/atom)",
-            value=float(cfg_edit["phase_diagram"].get("stable_threshold_eV_per_atom", 0.05)),
+            value=float(cfg_edit["phase_diagram"].get("stable_threshold_eV_per_atom", 1.0e-8)),
             min_value=0.0,
             step=0.01,
             format="%.3f",
@@ -2125,6 +2130,349 @@ if tab == "Input Builder":
             "combined phase_diagram_results.csv. Every element in a system requires an "
             "elemental terminal reference from refs-build."
         )
+
+    # -----------------------------
+    # VACANCIES (one flat TOML section)
+    # -----------------------------
+    with st.expander("Vacancies", expanded=False):
+        vac = cfg_edit.setdefault("vacancies", {})
+        defaults = DEFAULTS["vacancies"]
+        st.caption(
+            "One command performs formal-charge analysis, symmetry enumeration, ML "
+            "screening, top-k selection, and relaxation. All controls below are saved "
+            "directly under the single [vacancies] table."
+        )
+
+        st.markdown("#### General")
+        c1, c2, c3, c4 = st.columns(4)
+        vac["enabled"] = c1.checkbox("Enabled", bool(vac.get("enabled", defaults["enabled"])), key="vac_enabled")
+        vac["include_parent_reference"] = c2.checkbox(
+            "Include parent reference", bool(vac.get("include_parent_reference", True)), key="vac_parent_ref"
+        )
+        vac["skip_if_done"] = c3.checkbox("Skip compatible completed", bool(vac.get("skip_if_done", True)), key="vac_skip")
+        vac["resume"] = c4.checkbox("Resume compatible phases", bool(vac.get("resume", True)), key="vac_resume")
+        parent_source_options = list(CHOICES.get("vacancies.parent_source", []))
+        for supported_source in ("selected_candidates", "directory"):
+            if supported_source not in parent_source_options:
+                parent_source_options.append(supported_source)
+        current_parent_source = str(
+            vac.get("parent_source", "selected_candidates")
+        ).strip()
+        if current_parent_source not in parent_source_options:
+            current_parent_source = "selected_candidates"
+        vac["parent_source"] = st.selectbox(
+            "Parent source",
+            parent_source_options,
+            index=parent_source_options.index(current_parent_source),
+            key="vac_parent_source",
+        )
+        if vac["parent_source"] == "directory":
+            vac["parent_directory"] = st.text_input(
+                "Parent directory",
+                value=str(vac.get("parent_directory", "")),
+                key="vac_parent_directory",
+                help=(
+                    "Directory containing composition subdirectories with "
+                    "selected_candidates.txt and candidate_*/01_scan + 02_relax outputs. "
+                    "Relative paths are resolved from input.toml."
+                ),
+            )
+
+        st.markdown("#### Formal charge model")
+        c1, c2, c3, c4, c5 = st.columns(5)
+        vac["count_mode"] = c1.selectbox(
+            "Count mode", CHOICES["vacancies.count_mode"],
+            index=CHOICES["vacancies.count_mode"].index(vac.get("count_mode", "all_reachable")),
+            key="vac_count_mode",
+        )
+        vac["host_species"] = c2.text_input("Host species", str(vac.get("host_species", "Sn")), key="vac_host")
+        vac["host_oxidation_state"] = int(c3.number_input("Host oxidation state", value=int(vac.get("host_oxidation_state", 4)), step=1, key="vac_host_ox"))
+        vac["vacancy_species"] = c4.text_input("Vacancy species", str(vac.get("vacancy_species", "O")), key="vac_species")
+        vac["vacancy_compensation_charge"] = int(c5.number_input("Vacancy charge", min_value=1, value=int(vac.get("vacancy_compensation_charge", 2)), step=1, key="vac_charge"))
+        elements = list(vac.get("oxidation_state_elements", defaults["oxidation_state_elements"]))
+        state_values = list(vac.get("oxidation_state_values", defaults["oxidation_state_values"]))
+        pair_rows = [
+            {"element": str(element), "oxidation_states": ", ".join(str(x) for x in states)}
+            for element, states in zip(elements, state_values)
+        ]
+        st.caption(
+            "Enter comma-separated integer oxidation states. Rows are saved as "
+            "two flat parallel arrays in [vacancies]."
+        )
+        edited_pairs = st.data_editor(
+            pd.DataFrame(pair_rows, columns=["element", "oxidation_states"]),
+            num_rows="dynamic", use_container_width=True, key="vac_oxidation_pairs",
+        )
+        parsed_elements, parsed_states, pair_errors = [], [], []
+        for row_number, row in edited_pairs.iterrows():
+            element = str(row.get("element", "")).strip()
+            state_text = str(row.get("oxidation_states", "")).strip()
+            if not element and not state_text:
+                continue
+            try:
+                states = [int(value.strip()) for value in state_text.split(",") if value.strip()]
+            except ValueError:
+                states = []
+            if not element or not states:
+                pair_errors.append(f"Row {row_number + 1} needs an element and integer oxidation states.")
+            parsed_elements.append(element)
+            parsed_states.append(states)
+        duplicates = sorted({element for element in parsed_elements if parsed_elements.count(element) > 1})
+        if duplicates:
+            pair_errors.append("Duplicate elements: " + ", ".join(duplicates))
+        if pair_errors:
+            st.error(" ".join(pair_errors))
+        else:
+            vac["oxidation_state_elements"] = parsed_elements
+            vac["oxidation_state_values"] = parsed_states
+
+        st.markdown("#### Vacancy range")
+        c1, c2 = st.columns(2)
+        vac["extra_vacancies"] = int(c1.number_input("Extra vacancies", min_value=0, value=int(vac.get("extra_vacancies", 0)), key="vac_extra"))
+        vac["max_vacancies_cap"] = int(c2.number_input("Maximum vacancy cap", min_value=1, value=int(vac.get("max_vacancies_cap", 8)), key="vac_cap"))
+
+        st.markdown("#### Enumeration")
+        c1, c2, c3, c4 = st.columns(4)
+        vac["enumeration_mode"] = c1.selectbox("Mode", CHOICES["vacancies.enumeration_mode"], index=CHOICES["vacancies.enumeration_mode"].index(vac.get("enumeration_mode", "auto")), key="vac_enum_mode")
+        vac["symprec"] = float(c2.number_input("Symmetry precision", min_value=1e-8, value=float(vac.get("symprec", 1e-3)), format="%.6g", key="vac_symprec"))
+        vac["angle_tolerance"] = float(c3.number_input("Angle tolerance", min_value=0.01, value=float(vac.get("angle_tolerance", 5.0)), key="vac_angle"))
+        vac["mapping_tolerance"] = float(c4.number_input("Mapping tolerance (Å)", min_value=0.001, value=float(vac.get("mapping_tolerance", 1.0)), key="vac_mapping"))
+        numeric_keys = [
+            ("max_exact_raw_configs", "Max exact raw"), ("max_exact_unique_configs", "Max exact unique"),
+            ("sample_budget", "Sample budget"), ("sample_batch_size", "Sample batch"),
+            ("sample_patience", "Sample patience"), ("sample_seed", "Sample seed"),
+            ("sample_max_saved", "Max sampled saved"),
+        ]
+        columns = st.columns(4)
+        for index, (key, label) in enumerate(numeric_keys):
+            minimum = None if key == "sample_seed" else 1
+            vac[key] = int(columns[index % 4].number_input(label, min_value=minimum, value=int(vac.get(key, defaults[key])), step=1, key=f"vac_{key}"))
+        vac["minimum_vacancy_distance"] = float(st.number_input("Minimum vacancy distance (Å)", min_value=0.0, value=float(vac.get("minimum_vacancy_distance", 0.0)), key="vac_min_distance"))
+
+        st.markdown("#### ML calculator")
+        c1, c2, c3 = st.columns(3)
+        backend_choices = CHOICES["vacancies.backend"]
+        current_backend = str(vac.get("backend", defaults["backend"]))
+        if current_backend not in backend_choices:
+            current_backend = defaults["backend"]
+        vac["backend"] = c1.selectbox("Backend", backend_choices, index=backend_choices.index(current_backend), key="vac_backend")
+        vac["device"] = c2.selectbox("Device", CHOICES["vacancies.device"], index=CHOICES["vacancies.device"].index(vac.get("device", defaults["device"])), key="vac_device")
+        vac["gpu_id"] = int(c3.number_input("GPU id", min_value=0, value=int(vac.get("gpu_id", 0)), key="vac_gpu"))
+        if vac["backend"] == "mace":
+            vac["model"] = mace_model_input("Model", vac.get("model", "small"), key="vac_model")
+            vac["task"] = mace_head_input("Task/head", vac.get("task", ""), key="vac_task")
+        elif vac["backend"] == "uma":
+            current_model = str(vac.get("model", "uma-s-1p2"))
+            if current_model not in UMA_MODEL_CHOICES:
+                current_model = "uma-s-1p2"
+            current_task = str(vac.get("task", "omat"))
+            if current_task not in UMA_TASK_CHOICES:
+                current_task = "omat"
+            c1, c2 = st.columns(2)
+            vac["model"] = c1.selectbox(
+                "UMA model", UMA_MODEL_CHOICES,
+                index=UMA_MODEL_CHOICES.index(current_model), key="vac_uma_model"
+            )
+            vac["task"] = c2.selectbox(
+                "UMA task", UMA_TASK_CHOICES,
+                index=UMA_TASK_CHOICES.index(current_task), key="vac_uma_task"
+            )
+        elif vac["backend"] == "grace":
+            current_model = str(vac.get("model", "GRACE-1L-OMAT"))
+            if current_model not in GRACE_MODEL_CHOICES:
+                current_model = "GRACE-1L-OMAT"
+            vac["model"] = st.selectbox(
+                "GRACE model", GRACE_MODEL_CHOICES,
+                index=GRACE_MODEL_CHOICES.index(current_model), key="vac_grace_model"
+            )
+            vac["task"] = ""
+        else:
+            vac["model"] = "default"
+            vac["task"] = ""
+            st.caption("M3GNet uses its default pretrained model and has no task selector.")
+
+        st.markdown("#### Screening")
+        c1, c2 = st.columns(2)
+        vac["topk_per_vacancy_count"] = int(c1.number_input("Top-k per vacancy count", min_value=1, value=int(vac.get("topk_per_vacancy_count", 15)), key="vac_topk"))
+        vac["energy_normalization"] = c2.selectbox("Reported normalization", CHOICES["vacancies.energy_normalization"], index=CHOICES["vacancies.energy_normalization"].index(vac.get("energy_normalization", "per_vacancy")), key="vac_norm")
+
+        st.markdown("#### Relaxation")
+        c1, c2, c3, c4, c5 = st.columns(5)
+        vac["optimizer"] = c1.selectbox("Optimizer", CHOICES["vacancies.optimizer"], index=CHOICES["vacancies.optimizer"].index(vac.get("optimizer", "bfgs")), key="vac_opt")
+        vac["fmax"] = float(c2.number_input("fmax", min_value=0.0001, value=float(vac.get("fmax", 0.05)), key="vac_fmax"))
+        vac["max_steps"] = int(c3.number_input("Max steps", min_value=1, value=int(vac.get("max_steps", 300)), key="vac_steps"))
+        vac["relax_mode"] = c4.selectbox("Relax mode", CHOICES["vacancies.relax_mode"], index=CHOICES["vacancies.relax_mode"].index(vac.get("relax_mode", "atoms")), key="vac_relax_mode")
+        vac["cell_filter"] = c5.selectbox("Cell filter", CHOICES["vacancies.cell_filter"], index=CHOICES["vacancies.cell_filter"].index(vac.get("cell_filter", "frechet")), key="vac_cell_filter")
+
+        st.markdown("#### Execution")
+        columns = st.columns(4)
+        for index, key in enumerate(("n_workers", "tf_threads", "omp_threads", "chunksize")):
+            vac[key] = int(columns[index].number_input(key.replace("_", " ").title(), min_value=1, value=int(vac.get(key, defaults[key])), key=f"vac_exec_{key}"))
+
+        st.markdown("#### Level-1 static-lattice thermodynamic analysis")
+        vac["static_thermodynamic_analysis"] = st.checkbox(
+            "Create static-lattice vacancy thermodynamic outputs",
+            value=bool(
+                vac.get(
+                    "static_thermodynamic_analysis",
+                    vac.get("thermodynamic_analysis", defaults["static_thermodynamic_analysis"]),
+                )
+            ),
+            key="vac_static_thermodynamic_analysis",
+            help="Disabled by default for backward compatibility. Enable only after choosing an oxygen-reference policy.",
+        )
+        if vac["static_thermodynamic_analysis"]:
+            st.warning(
+                "Static-lattice approximation: solid free energies are approximated by "
+                "0 K relaxed ML energies. Temperature and pressure enter only through "
+                "the oxygen-gas chemical potential. Vibrational, configurational, "
+                "electronic, magnetic and anharmonic free-energy contributions of the "
+                "solid are neglected."
+            )
+            modes = CHOICES["vacancies.oxygen_reference_mode"]
+            current_mode = str(vac.get("oxygen_reference_mode", defaults["oxygen_reference_mode"]))
+            if current_mode not in modes:
+                current_mode = defaults["oxygen_reference_mode"]
+            vac["oxygen_reference_mode"] = st.selectbox(
+                "Oxygen reference mode", modes, index=modes.index(current_mode), key="vac_o_ref_mode"
+            )
+            if current_mode == "reference_file":
+                vac["oxygen_reference_file"] = st.text_input(
+                    "Reference energies JSON",
+                    value=str(vac.get("oxygen_reference_file", defaults["oxygen_reference_file"])),
+                    key="vac_o_ref_file",
+                )
+            elif current_mode == "same_calculator":
+                vac["oxygen_reference_structure"] = st.text_input(
+                    "O2 structure",
+                    value=str(vac.get("oxygen_reference_structure", defaults["oxygen_reference_structure"])),
+                    key="vac_o_ref_structure",
+                )
+                vac["oxygen_reference_relax"] = st.checkbox(
+                    "Relax O2 with the same calculator",
+                    value=bool(vac.get("oxygen_reference_relax", False)),
+                    key="vac_o_ref_relax",
+                )
+                st.warning("A solid-trained foundation model may describe isolated O2 inaccurately even when calculator-consistent.")
+            elif current_mode == "explicit":
+                vac["mu_O_reference_eV"] = float(st.number_input(
+                    "mu_O reference (eV per oxygen atom)",
+                    value=float(vac.get("mu_O_reference_eV", -4.8)),
+                    key="vac_mu_o_explicit",
+                ))
+            else:
+                st.info("Minima will be written, but no preferred vacancy count across oxygen contents will be claimed.")
+            vac["allow_unverified_oxygen_reference"] = st.checkbox(
+                "Allow an unverifiable reference (recorded as unverified)",
+                value=bool(vac.get("allow_unverified_oxygen_reference", False)),
+                key="vac_allow_unverified_ref",
+            )
+            c1, c2, c3 = st.columns(3)
+            vac["delta_mu_O_min_eV"] = float(c1.number_input("Minimum delta mu_O (eV)", value=float(vac.get("delta_mu_O_min_eV", -3.0)), max_value=0.0, key="vac_delta_mu_min"))
+            vac["delta_mu_O_max_eV"] = float(c2.number_input("Maximum delta mu_O (eV)", value=float(vac.get("delta_mu_O_max_eV", 0.0)), max_value=0.0, key="vac_delta_mu_max"))
+            vac["thermodynamic_tolerance_eV"] = float(c3.number_input("Tie tolerance (eV)", min_value=1.0e-12, value=float(vac.get("thermodynamic_tolerance_eV", 1.0e-8)), format="%.3e", key="vac_thermo_tol"))
+            points_text = st.text_input(
+                "Selected delta mu_O points (comma-separated eV)",
+                value=", ".join(str(value) for value in vac.get("delta_mu_O_points_eV", defaults["delta_mu_O_points_eV"])),
+                key="vac_delta_mu_points",
+            )
+            try:
+                vac["delta_mu_O_points_eV"] = [float(value.strip()) for value in points_text.split(",") if value.strip()]
+            except ValueError:
+                st.error("Selected delta mu_O points must be comma-separated numbers.")
+            sources = CHOICES["vacancies.static_energy_source"]
+            current_source = str(
+                vac.get(
+                    "static_energy_source",
+                    vac.get("analysis_energy_source", "relaxed_only"),
+                )
+            )
+            if current_source not in sources:
+                current_source = "relaxed_only"
+            c1, c2 = st.columns(2)
+            vac["static_energy_source"] = c1.selectbox("Static energy source", sources, index=sources.index(current_source), key="vac_static_source")
+            vac["exclude_unconverged"] = c2.checkbox("Exclude unconverged structures", value=bool(vac.get("exclude_unconverged", True)), key="vac_exclude_unconverged")
+
+            st.markdown("##### Temperature–pressure mapping")
+            vac["pressure_mapping"] = st.checkbox(
+                "Create T–pO2 map",
+                value=bool(vac.get("pressure_mapping", True)),
+                key="vac_pressure_mapping",
+            )
+            if vac["pressure_mapping"]:
+                temperatures_text = st.text_input(
+                    "Temperatures (K, comma-separated)",
+                    value=", ".join(str(value) for value in vac.get("temperatures_K", defaults["temperatures_K"])),
+                    key="vac_temperatures",
+                )
+                try:
+                    vac["temperatures_K"] = [
+                        float(value.strip())
+                        for value in temperatures_text.split(",")
+                        if value.strip()
+                    ]
+                except ValueError:
+                    st.error("Temperatures must be comma-separated numbers.")
+                c1, c2, c3, c4 = st.columns(4)
+                vac["standard_oxygen_pressure_bar"] = float(c1.number_input(
+                    "Standard pO2 (bar)", min_value=1.0e-30,
+                    value=float(vac.get("standard_oxygen_pressure_bar", 1.0)),
+                    format="%.6g", key="vac_standard_pressure",
+                ))
+                vac["log10_pO2_min_bar"] = float(c2.number_input(
+                    "Minimum log10(pO2/bar)", value=float(vac.get("log10_pO2_min_bar", -30.0)),
+                    key="vac_pressure_min",
+                ))
+                vac["log10_pO2_max_bar"] = float(c3.number_input(
+                    "Maximum log10(pO2/bar)", value=float(vac.get("log10_pO2_max_bar", 1.0)),
+                    key="vac_pressure_max",
+                ))
+                vac["log10_pO2_step"] = float(c4.number_input(
+                    "log10 pressure step", min_value=1.0e-6,
+                    value=float(vac.get("log10_pO2_step", 0.5)), key="vac_pressure_step",
+                ))
+                standard_modes = CHOICES["vacancies.oxygen_standard_state_mode"]
+                standard_mode = str(
+                    vac.get(
+                        "oxygen_standard_state_mode",
+                        defaults["oxygen_standard_state_mode"],
+                    )
+                )
+                if standard_mode not in standard_modes:
+                    standard_mode = defaults["oxygen_standard_state_mode"]
+                vac["oxygen_standard_state_mode"] = st.selectbox(
+                    "O2 standard-state correction", standard_modes,
+                    index=standard_modes.index(standard_mode), key="vac_standard_state_mode",
+                )
+                if vac["oxygen_standard_state_mode"] == "none":
+                    st.warning(
+                        "Approximate pressure mapping: the O2 standard-state thermal "
+                        "correction is omitted. Pressures are qualitative relative to "
+                        "the standard pressure at the same temperature."
+                    )
+                elif vac["oxygen_standard_state_mode"] == "nist_shomate":
+                    st.info(
+                        "NIST O2 Shomate equations provide continuous standard-state "
+                        "enthalpy and entropy corrections from 100 to 6000 K at 1 bar. "
+                        "Extrapolation and explicit O2 zero-point energy are excluded."
+                    )
+                    vac["standard_oxygen_pressure_bar"] = 1.0
+                else:
+                    table_temperatures = st.text_input(
+                        "Standard-state table temperatures (K)",
+                        value=", ".join(str(value) for value in vac.get("oxygen_standard_state_temperatures_K", [])),
+                        key="vac_standard_table_temperatures",
+                    )
+                    table_values = st.text_input(
+                        "Standard-state delta mu (eV per O)",
+                        value=", ".join(str(value) for value in vac.get("oxygen_standard_state_delta_mu_eV_per_O", [])),
+                        key="vac_standard_table_values",
+                    )
+                    try:
+                        vac["oxygen_standard_state_temperatures_K"] = [float(value.strip()) for value in table_temperatures.split(",") if value.strip()]
+                        vac["oxygen_standard_state_delta_mu_eV_per_O"] = [float(value.strip()) for value in table_values.split(",") if value.strip()]
+                    except ValueError:
+                        st.error("Standard-state table entries must be comma-separated numbers.")
 
     # -----------------------------
     # SURFACE
@@ -2836,7 +3184,7 @@ elif tab == "Run":
 """)
 
     # Surface is a separate CLI command, not part of run-all
-    BULK_STEP_KEYS = ["refs", "generate", "scan", "relax", "filter", "bandgap", "formation", "collect"]
+    BULK_STEP_KEYS = ["refs", "generate", "scan", "relax", "filter", "bandgap", "formation", "collect", "alloy-hull", "phase-diagram", "vacancies"]
     STEP_KEYS = BULK_STEP_KEYS + ["surface"]
 
     st.divider()
@@ -2850,6 +3198,8 @@ elif tab == "Run":
         "What do you want to run?",
         options=[
             "Full workflow",
+            "Full workflow including vacancies",
+            "Vacancies only",
             "Sequential workflow",
             "Stage range",
             "Single stage",
@@ -2871,8 +3221,17 @@ elif tab == "Run":
     only_steps: list[str] = []
 
     if run_mode == "Full workflow":
-        st.success("Will run: refs → collect (bulk workflow).")
-        step_from, step_until = "refs", "collect"
+        st.success("Will run: refs → phase-diagram (bulk workflow).")
+        step_from, step_until = "refs", "phase-diagram"
+
+    elif run_mode == "Full workflow including vacancies":
+        st.success("Will run: refs → phase-diagram → vacancies.")
+        step_from, step_until = "refs", "vacancies"
+
+    elif run_mode == "Vacancies only":
+        st.success("Will run: dopingflow vacancies -c input.toml")
+        only_steps = ["vacancies"]
+        step_from, step_until = "vacancies", "vacancies"
 
     elif run_mode == "Sequential workflow":
         st.success(
@@ -2884,7 +3243,9 @@ elif tab == "Run":
         with colA:
             step_from = st.selectbox("Start stage", options=STEP_KEYS, index=0)
         with colB:
-            step_until = st.selectbox("End stage", options=STEP_KEYS, index=len(STEP_KEYS) - 2)  # collect by default
+            step_until = st.selectbox(
+                "End stage", options=STEP_KEYS, index=STEP_KEYS.index("phase-diagram")
+            )
 
         # Allow "surface" to appear only as a conceptual end stage in the UI
         idx_from = STEP_KEYS.index(step_from)
@@ -2970,6 +3331,11 @@ elif tab == "Run":
             str(input_toml_path),
         ]
 
+        if verbose:
+            cmd += ["--verbose"]
+
+    elif run_mode in {"Vacancies only", "Single stage"} and only_steps == ["vacancies"]:
+        cmd = ["dopingflow", "vacancies", "-c", str(input_toml_path)]
         if verbose:
             cmd += ["--verbose"]
 
@@ -3095,9 +3461,28 @@ elif tab == "Results Explorer":
     st.subheader("Data source")
 
     default_csv = project_root / "results_database.csv"
+    results_cfg = load_toml(input_toml_path)
+    results_outdir = project_root / results_cfg.get("structure", {}).get("outdir", "random_structures")
+    results_vacancy_cfg = results_cfg.get("vacancies", {}) or {}
+    vacancy_results_root = results_outdir
+    if results_vacancy_cfg.get("parent_source") == "directory":
+        configured_parent_root = Path(str(results_vacancy_cfg.get("parent_directory", ""))).expanduser()
+        vacancy_results_root = (
+            configured_parent_root
+            if configured_parent_root.is_absolute()
+            else project_root / configured_parent_root
+        ).resolve()
     known_sources = {
         "Main results database": default_csv,
         "Combined phase-diagram results": project_root / "phase_diagram_results.csv",
+        "Vacancy results database": vacancy_results_root / "vacancies_database.csv",
+        "Vacancy composition minima": vacancy_results_root / "vacancy_minima_by_composition.csv",
+        "Vacancy stability intervals": vacancy_results_root / "vacancy_stability_intervals.csv",
+        "Vacancy best counts": vacancy_results_root / "vacancy_best_counts.csv",
+        "Static vacancy minima": vacancy_results_root / "vacancy_static_minima.csv",
+        "Static vacancy stability intervals": vacancy_results_root / "vacancy_static_stability_intervals.csv",
+        "Static vacancy best counts": vacancy_results_root / "vacancy_static_best_counts.csv",
+        "Static vacancy pressure map": vacancy_results_root / "vacancy_static_pressure_map.csv",
     }
     phase_dir = project_root / "phase_diagrams"
     if phase_dir.exists():
@@ -3133,6 +3518,196 @@ elif tab == "Results Explorer":
 
     st.success(f"Loaded {len(df):,} rows × {len(df.columns)} columns from `{csv_path.name}`")
 
+    static_compact_paths = {
+        "minima": vacancy_results_root / "vacancy_static_minima.csv",
+        "intervals": vacancy_results_root / "vacancy_static_stability_intervals.csv",
+        "best": vacancy_results_root / "vacancy_static_best_counts.csv",
+        "pressure": vacancy_results_root / "vacancy_static_pressure_map.csv",
+    }
+    legacy_compact_paths = {
+        "minima": vacancy_results_root / "vacancy_minima_by_composition.csv",
+        "intervals": vacancy_results_root / "vacancy_stability_intervals.csv",
+        "best": vacancy_results_root / "vacancy_best_counts.csv",
+    }
+    compact_vacancy_paths = (
+        static_compact_paths
+        if all(path.exists() for path in static_compact_paths.values())
+        else legacy_compact_paths
+    )
+    if all(path.exists() for path in compact_vacancy_paths.values()):
+        # Streamlit may rerun app.py while retaining an older helper module in
+        # sys.modules. Reload it so newly added plot functions are immediately
+        # available without leaving the Results Explorer in a broken state.
+        import importlib
+        import vacancy_thermo_plots
+
+        vacancy_thermo_plots = importlib.reload(vacancy_thermo_plots)
+        grand_potential_lines = vacancy_thermo_plots.grand_potential_lines
+        grand_potential_vs_count = vacancy_thermo_plots.grand_potential_vs_count
+        preferred_count_vs_doping = vacancy_thermo_plots.preferred_count_vs_doping
+        pressure_stability_map = vacancy_thermo_plots.pressure_stability_map
+        stability_map = vacancy_thermo_plots.stability_map
+
+        try:
+            vacancy_minima = pd.read_csv(compact_vacancy_paths["minima"])
+            vacancy_intervals = pd.read_csv(compact_vacancy_paths["intervals"])
+            vacancy_best = pd.read_csv(compact_vacancy_paths["best"])
+            vacancy_pressure = (
+                pd.read_csv(compact_vacancy_paths["pressure"])
+                if "pressure" in compact_vacancy_paths
+                else pd.DataFrame()
+            )
+        except Exception as exc:
+            st.warning(f"Could not load compact vacancy-analysis tables: {exc}")
+        else:
+            compact_tables_ready = not any(
+                table.empty
+                for table in (vacancy_minima, vacancy_intervals, vacancy_best)
+            )
+            if compact_tables_ready:
+                with st.expander("Vacancy thermodynamic plots", expanded=True):
+                    st.caption(
+                        "Interactive plots use the compact minima, exact stability "
+                        "interval, and selected-condition best-count tables."
+                    )
+                    st.info(
+                        "Static-lattice approximation: solid free energies are "
+                        "approximated by 0 K relaxed ML energies. Temperature and "
+                        "pressure enter only through the oxygen-gas chemical potential. "
+                        "Vibrational, configurational, electronic, magnetic and "
+                        "anharmonic solid free-energy contributions are neglected."
+                    )
+                    compositions = sorted(
+                        vacancy_intervals["actual_composition_key"]
+                        .dropna()
+                        .astype(str)
+                        .unique()
+                    )
+                    dopants = sorted(
+                        column.removeprefix("percent_")
+                        for column in vacancy_intervals
+                        if column.startswith("percent_")
+                    )
+                    control_a, control_b, control_c = st.columns(3)
+                    composition = control_a.selectbox(
+                        "Composition",
+                        compositions,
+                        key="vac_plot_composition",
+                    )
+                    delta_values = sorted(
+                        float(value)
+                        for value in vacancy_best["delta_mu_O_eV"].dropna().unique()
+                    )
+                    default_delta_index = min(
+                        range(len(delta_values)),
+                        key=lambda index: abs(delta_values[index] + 2.0),
+                    )
+                    delta_mu_o = control_b.selectbox(
+                        "ΔμO (eV per O atom)",
+                        delta_values,
+                        index=default_delta_index,
+                        key="vac_plot_delta_mu",
+                    )
+                    dopant_axis = control_c.selectbox(
+                        "Dopant percentage axis",
+                        ["Total dopant", *dopants],
+                        key="vac_plot_dopant_axis",
+                    )
+                    selected_dopant = None if dopant_axis == "Total dopant" else dopant_axis
+                    plot_tabs = st.tabs(
+                        [
+                            "Stability map",
+                            "Grand-potential envelope",
+                            "Potential vs vacancy count",
+                            "Preferred count vs doping",
+                            "T–pO2 map",
+                        ]
+                    )
+                    with plot_tabs[0]:
+                        st.plotly_chart(
+                            stability_map(vacancy_intervals, selected_dopant),
+                            use_container_width=True,
+                        )
+                    with plot_tabs[1]:
+                        st.plotly_chart(
+                            grand_potential_lines(
+                                vacancy_minima, vacancy_intervals, composition
+                            ),
+                            use_container_width=True,
+                        )
+                    with plot_tabs[2]:
+                        st.plotly_chart(
+                            grand_potential_vs_count(
+                                vacancy_minima, composition, delta_mu_o
+                            ),
+                            use_container_width=True,
+                        )
+                    with plot_tabs[3]:
+                        st.plotly_chart(
+                            preferred_count_vs_doping(
+                                vacancy_best, delta_mu_o, selected_dopant
+                            ),
+                            use_container_width=True,
+                        )
+                    with plot_tabs[4]:
+                        if vacancy_pressure.empty:
+                            st.info(
+                                "Enable pressure_mapping and rerun vacancies to create "
+                                "the T–pO2 map."
+                            )
+                        else:
+                            correction_mode = st.radio(
+                                "O2 standard-state term",
+                                [
+                                    "Include ΔμOstandard(T)",
+                                    "Omit ΔμOstandard(T)",
+                                ],
+                                horizontal=True,
+                                key="vac_plot_standard_state_mode",
+                                help=(
+                                    "Include uses the configured NIST Shomate or "
+                                    "user-table correction. Omit uses only the ideal-gas "
+                                    "pressure term and is intentionally approximate."
+                                ),
+                            )
+                            include_standard_state = correction_mode.startswith("Include")
+                            st.warning(
+                                "Static-lattice approximation: solid free energies are "
+                                "approximated by 0 K relaxed ML energies. Temperature and "
+                                "pressure enter only through the oxygen-gas chemical potential. "
+                                "Solid vibrational and entropic contributions are neglected."
+                            )
+                            if (not include_standard_state) or vacancy_pressure.get(
+                                "pressure_mapping_is_approximate",
+                                pd.Series(False, index=vacancy_pressure.index),
+                            ).astype(str).str.lower().isin({"true", "1"}).any():
+                                st.warning(
+                                    "Approximate pressure mapping: "
+                                    "ΔμOstandard(T) is omitted."
+                                )
+                            st.plotly_chart(
+                                pressure_stability_map(
+                                    vacancy_pressure,
+                                    composition,
+                                    vacancy_minima,
+                                    include_standard_state,
+                                ),
+                                use_container_width=True,
+                            )
+                    convergence = vacancy_minima.get(
+                        "converged", pd.Series(False, index=vacancy_minima.index)
+                    ).astype(str).str.lower().isin({"true", "1"})
+                    if not convergence.all():
+                        st.warning(
+                            "Some minima, including possible zero-vacancy references, "
+                            "are marked unconverged. Treat the plotted boundaries as provisional."
+                        )
+            else:
+                st.info(
+                    "Compact vacancy-analysis files were found but at least one is empty; "
+                    "plots will appear after valid thermodynamic minima and intervals exist."
+                )
+
     # ============================================================
     # Generic filters (optional)
     # ============================================================
@@ -3143,6 +3718,57 @@ elif tab == "Results Explorer":
     st.subheader("Filters")
 
     df_f = df.copy()
+
+    if csv_path.name in {
+        "vacancy_minima_by_composition.csv",
+        "vacancy_stability_intervals.csv",
+        "vacancy_best_counts.csv",
+        "vacancy_static_minima.csv",
+        "vacancy_static_stability_intervals.csv",
+        "vacancy_static_best_counts.csv",
+        "vacancy_static_pressure_map.csv",
+    }:
+        with st.expander("Vacancy thermodynamic filters", expanded=True):
+            if "actual_composition_key" in df_f:
+                compositions = sorted(df_f["actual_composition_key"].dropna().astype(str).unique())
+                selected = st.multiselect("Actual composition", compositions, default=compositions, key="vac_result_compositions")
+                if selected:
+                    df_f = df_f[df_f["actual_composition_key"].astype(str).isin(selected)]
+            dopant_percent_columns = sorted(column for column in df_f if column.startswith("percent_"))
+            for column in dopant_percent_columns:
+                low, high = float(df_f[column].min()), float(df_f[column].max())
+                if low < high:
+                    selected_range = st.slider(column, low, high, (low, high), key=f"vac_filter_{column}")
+                    df_f = df_f[df_f[column].between(*selected_range)]
+            delta_column = "delta_mu_O_eV" if "delta_mu_O_eV" in df_f else None
+            if delta_column:
+                values = sorted(float(value) for value in df_f[delta_column].dropna().unique())
+                selected_values = st.multiselect("delta mu_O (eV)", values, default=values, key="vac_result_delta_mu")
+                if selected_values:
+                    df_f = df_f[df_f[delta_column].isin(selected_values)]
+            stable_column = "stable_n_vacancies" if "stable_n_vacancies" in df_f else "best_n_vacancies" if "best_n_vacancies" in df_f else None
+            if stable_column:
+                counts = sorted(df_f[stable_column].dropna().unique())
+                selected_counts = st.multiselect("Stable vacancy count", counts, default=counts, key="vac_result_stable_count")
+                if selected_counts:
+                    df_f = df_f[df_f[stable_column].isin(selected_counts)]
+            if "temperature_K" in df_f:
+                temperatures = sorted(float(value) for value in df_f["temperature_K"].dropna().unique())
+                selected_temperatures = st.multiselect(
+                    "Temperature (K)", temperatures, default=temperatures,
+                    key="vac_result_temperatures",
+                )
+                if selected_temperatures:
+                    df_f = df_f[df_f["temperature_K"].isin(selected_temperatures)]
+            if "log10_oxygen_partial_pressure_bar" in df_f and not df_f.empty:
+                pressure_low = float(df_f["log10_oxygen_partial_pressure_bar"].min())
+                pressure_high = float(df_f["log10_oxygen_partial_pressure_bar"].max())
+                if pressure_low < pressure_high:
+                    pressure_range = st.slider(
+                        "log10(pO2/bar)", pressure_low, pressure_high,
+                        (pressure_low, pressure_high), key="vac_result_pressure",
+                    )
+                    df_f = df_f[df_f["log10_oxygen_partial_pressure_bar"].between(*pressure_range)]
 
     with st.expander("Filter controls", expanded=True):
         cat_col = st.selectbox(
@@ -3180,13 +3806,28 @@ elif tab == "Results Explorer":
 
     # Table
     st.subheader("Table")
-    st.dataframe(df_f, use_container_width=True, height=360)
+    table_limit = 2_000
+    table_df = df_f.head(table_limit)
+    if len(df_f) > table_limit:
+        st.info(
+            f"Displaying the first {table_limit:,} of {len(df_f):,} filtered rows "
+            "to keep the browser response below Streamlit's message-size limit."
+        )
+    st.dataframe(table_df, use_container_width=True, height=360)
+    download_limit = 50_000
+    download_df = df_f.head(download_limit)
+    download_is_preview = len(df_f) > download_limit
     st.download_button(
-        "⬇ Download filtered CSV",
-        data=df_f.to_csv(index=False).encode("utf-8"),
-        file_name="results_filtered.csv",
+        "⬇ Download filtered CSV preview" if download_is_preview else "⬇ Download filtered CSV",
+        data=download_df.to_csv(index=False).encode("utf-8"),
+        file_name="results_filtered_preview.csv" if download_is_preview else "results_filtered.csv",
         mime="text/csv",
     )
+    if download_is_preview:
+        st.caption(
+            f"The download is capped at {download_limit:,} rows. The complete source "
+            f"remains available on disk at `{csv_path}`; apply filters to export a smaller full selection."
+        )
 
     # ============================================================
     # Dopant parsing (only if available)
@@ -3396,21 +4037,31 @@ elif tab == "Results Explorer":
         y_min_v = to_float_or_none(y_min)
         y_max_v = to_float_or_none(y_max)
 
+    plot_limit = 20_000
+    if len(plot_df) > plot_limit:
+        plot_render_df = plot_df.sample(plot_limit, random_state=42).sort_index()
+        st.info(
+            f"Plotting a reproducible sample of {plot_limit:,} from "
+            f"{len(plot_df):,} selected rows. Apply filters for an unsampled plot."
+        )
+    else:
+        plot_render_df = plot_df
+
     # FULL hover: include all columns EXCEPT non-serializable/internal ones
     internal_cols = {"_dopant_dict"}  # <- dict is serializable, but can get large; keep it out of hover
-    hover_cols = [c for c in plot_df.columns.tolist() if c not in internal_cols]
+    hover_cols = [c for c in plot_render_df.columns.tolist() if c not in internal_cols]
 
     # Decide which column to use as hover title
     hover_name_col = None
     for c in ["candidate", "composition_tag"]:
-        if c in plot_df.columns:
+        if c in plot_render_df.columns:
             hover_name_col = c
             break
 
     # Build scatter plot safely
     if color_by == "(none)":
         fig = px.scatter(
-            plot_df,
+            plot_render_df,
             x=x_col,
             y=y_col,
             hover_name=hover_name_col,
@@ -3419,7 +4070,7 @@ elif tab == "Results Explorer":
         )
     else:
         fig = px.scatter(
-            plot_df,
+            plot_render_df,
             x=x_col,
             y=y_col,
             color=color_by,
@@ -3565,7 +4216,7 @@ else:
 
     view_mode = st.radio(
         "View mode",
-        options=["Bulk candidate", "Surface slab"],
+        options=["Bulk candidate", "Vacancy configurations", "Surface slab"],
         horizontal=True,
         help="Choose whether to inspect bulk workflow structures or generated surface slabs.",
     )
@@ -3637,6 +4288,61 @@ else:
                 )
             else:
                 st.info("No 'after' structure file found.")
+
+    # ============================================================
+    # VACANCY VIEWER
+    # ============================================================
+    elif view_mode == "Vacancy configurations":
+        cfg_now = load_toml(input_toml_path)
+        outdir_now = cfg_now.get("structure", {}).get("outdir", "random_structures")
+        vacancy_cfg_now = cfg_now.get("vacancies", {}) or {}
+        vacancy_outdir = project_root / outdir_now
+        if vacancy_cfg_now.get("parent_source") == "directory":
+            configured_parent_root = Path(str(vacancy_cfg_now.get("parent_directory", ""))).expanduser()
+            vacancy_outdir = (
+                configured_parent_root
+                if configured_parent_root.is_absolute()
+                else project_root / configured_parent_root
+            ).resolve()
+        proj = ProjectIndex(root=project_root, outdir=vacancy_outdir)
+        comps = [comp for comp in proj.compositions() if proj.vacancy_parents(comp)]
+        if not comps:
+            st.warning("No 05_vacancies results were found.")
+            st.stop()
+        comp = st.selectbox("Composition", comps, key="vac_view_comp")
+        candidate = st.selectbox(
+            "Parent candidate", proj.vacancy_parents(comp), key="vac_view_parent"
+        )
+        vacancy_root = proj.composition_path(comp) / candidate / "05_vacancies"
+        groups = sorted(path for path in vacancy_root.glob("V_*_*") if path.is_dir())
+        if not groups:
+            st.info("This parent has only the zero-vacancy reference.")
+            parent_path = vacancy_root / "parent_reference" / "relaxed" / "POSCAR"
+            if parent_path.exists():
+                show_structure(parent_path, title="Relaxed parent", viewer_mode="bulk")
+            st.stop()
+        group = st.selectbox("Vacancy count", groups, format_func=lambda path: path.name, key="vac_view_count")
+        config_dirs = sorted(path for path in group.glob("config_*") if path.is_dir())
+        configuration = st.selectbox(
+            "Configuration", config_dirs, format_func=lambda path: path.name, key="vac_view_config"
+        )
+        count = int(group.name.rsplit("_", 1)[1])
+        files = proj.find_vacancy_structure_files(comp, candidate, count, configuration.name)
+        st.json({label: str(path) for label, path in files.items()})
+        columns = st.columns(3)
+        for column, label in zip(columns, ("parent", "generated", "relaxed")):
+            with column:
+                st.subheader(label.title())
+                if label in files:
+                    show_structure(
+                        files[label],
+                        title=f"{candidate} — {label}",
+                        viewer_mode="bulk",
+                        width=500,
+                        height=450,
+                    )
+                else:
+                    st.info(f"No {label} structure available.")
 
     # ============================================================
     # SURFACE VIEWER
