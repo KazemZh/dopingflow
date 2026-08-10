@@ -67,6 +67,15 @@ def _coverage(records: Sequence[ExperimentalRecord], element: str) -> dict[str, 
     }
 
 
+def _record_identity(record: ExperimentalRecord) -> tuple[str, str]:
+    """Return the stable experimental/material identity used for strict-pool skips."""
+
+    return (
+        record.reduced_formula,
+        str(record.likely_mpid or "").strip().lower(),
+    )
+
+
 def _is_binary_target_oxide(record: ExperimentalRecord, element: str) -> bool:
     try:
         composition = _composition(record)
@@ -153,6 +162,7 @@ def select_undercovered_binary_kingsbury_records(
 
     selected: list[ExperimentalRecord] = []
     per_element: dict[str, dict[str, Any]] = {}
+    strict_identities = {_record_identity(record) for record in strict_records}
 
     for element in normalized_targets:
         before = _coverage(strict_records, element)
@@ -177,6 +187,11 @@ def select_undercovered_binary_kingsbury_records(
                 if not _is_kingsbury_record(record):
                     continue
                 if not _is_binary_target_oxide(record, element):
+                    continue
+                # The strict records are the baseline, not failed gap-fill
+                # candidates. Skip their exact material identities silently so
+                # rejection accounting only describes *additional* records.
+                if _record_identity(record) in strict_identities:
                     continue
                 if record.reduced_formula in current_formulas:
                     reject("already_in_strict_pool")
