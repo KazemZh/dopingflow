@@ -111,6 +111,7 @@ def select_undercovered_binary_kingsbury_records(
     *,
     min_compounds: int,
     min_stoichiometries: int,
+    force_elements: Sequence[str] = (),
 ) -> GapFillSelection:
     """Select generic-phase binary Kingsbury oxides for under-covered cations.
 
@@ -126,8 +127,12 @@ def select_undercovered_binary_kingsbury_records(
     * not be one of the known peroxide/superoxide binary formulas; and
     * add a reduced formula not already present in the strict calibration pool.
 
-    Candidates are chosen only until the configured formula and independent
-    stoichiometry targets are met, or until no more eligible records remain.
+    Normally candidates are chosen only until the configured formula and
+    independent-stoichiometry targets are met.  ``force_elements`` is used by a
+    second pass after the *final* quality filters: for those still-undercovered
+    elements, every remaining eligible binary Kingsbury fallback is exposed so
+    the fitting stage gets one last scientifically auditable chance to improve
+    coverage.
     """
 
     if min_compounds < 1:
@@ -135,7 +140,17 @@ def select_undercovered_binary_kingsbury_records(
     if min_stoichiometries < 1:
         raise ValueError("min_stoichiometries must be >= 1")
 
-    normalized_targets = tuple(sorted({str(value).strip() for value in target_elements if str(value).strip()}))
+    normalized_targets = tuple(
+        sorted({str(value).strip() for value in target_elements if str(value).strip()})
+    )
+    forced = {str(value).strip() for value in force_elements if str(value).strip()}
+    outside_targets = sorted(forced - set(normalized_targets))
+    if outside_targets:
+        raise ValueError(
+            "force_elements must be a subset of target_elements; outside target scope: "
+            f"{outside_targets}"
+        )
+
     selected: list[ExperimentalRecord] = []
     per_element: dict[str, dict[str, Any]] = {}
 
@@ -143,9 +158,11 @@ def select_undercovered_binary_kingsbury_records(
         before = _coverage(strict_records, element)
         current_formulas = set(before["formulas"])
         current_ratios = set(float(value) for value in before["oxygen_ratios"])
+        force_all_candidates = element in forced
 
         needs_gap_fill = (
-            len(current_formulas) < min_compounds
+            force_all_candidates
+            or len(current_formulas) < min_compounds
             or len(current_ratios) < min_stoichiometries
         )
         candidates: list[ExperimentalRecord] = []
@@ -177,7 +194,10 @@ def select_undercovered_binary_kingsbury_records(
                 if not _MATERIAL_ID_RE.fullmatch(material_id):
                     reject("missing_or_invalid_likely_mpid")
                     continue
-                if str(record.formula).replace(" ", "") in NON_ORDINARY_BINARY_OXIDE_FORMULAS:
+                if (
+                    str(record.formula).replace(" ", "")
+                    in NON_ORDINARY_BINARY_OXIDE_FORMULAS
+                ):
                     reject("known_peroxide_or_superoxide_formula")
                     continue
                 seen_candidate_formulas.add(record.reduced_formula)
@@ -186,7 +206,8 @@ def select_undercovered_binary_kingsbury_records(
         chosen: list[ExperimentalRecord] = []
         remaining = list(candidates)
         while remaining and (
-            len(current_formulas) < min_compounds
+            force_all_candidates
+            or len(current_formulas) < min_compounds
             or len(current_ratios) < min_stoichiometries
         ):
             remaining.sort(
@@ -209,7 +230,11 @@ def select_undercovered_binary_kingsbury_records(
             "oxygen_ratios": sorted(current_ratios),
         }
         per_element[element] = {
-            "undercovered_before_gap_fill": needs_gap_fill,
+            "undercovered_before_gap_fill": (
+                before["unique_formulas"] < min_compounds
+                or before["unique_oxygen_ratios"] < min_stoichiometries
+            ),
+            "forced_after_final_filter_undercoverage": force_all_candidates,
             "required_unique_formulas": int(min_compounds),
             "required_unique_oxygen_ratios": int(min_stoichiometries),
             "coverage_before": before,
@@ -266,10 +291,11 @@ def select_undercovered_binary_kingsbury_records(
         unique_selected.append(record)
 
     report = {
-        "schema_version": 1,
+        "schema_version": 2,
         "policy": "undercovered_workflow_cations_binary_kingsbury_likely_mpid_gap_fill",
         "phase_status": "generic_phase_label_likely_mpid_fallback_not_phase_verified",
         "target_elements": list(normalized_targets),
+        "forced_elements": sorted(forced),
         "minimum_unique_formulas": int(min_compounds),
         "minimum_unique_oxygen_ratios": int(min_stoichiometries),
         "selected_count": len(unique_selected),
