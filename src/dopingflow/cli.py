@@ -9,7 +9,7 @@ import typer
 from dopingflow.alloy_hull import run_alloy_hull_from_toml
 from dopingflow.bandgap import run_bandgap_from_toml
 from dopingflow.collect_relative import run_collect_from_toml
-from dopingflow.correction_calibration import run_corrections_fit_from_toml
+from dopingflow.correction_calibration_extensions import run_corrections_fit_from_toml
 from dopingflow.corrections import load_correction_model
 from dopingflow.filtering import run_filtering_from_toml
 from dopingflow.formation import run_formation_from_toml
