@@ -37,9 +37,6 @@ def _record(formula: str, phase: str, material_id: str = "mp-1") -> Experimental
 
 
 def _structure_for_formula(formula: str, crystal_system: str) -> Structure:
-    # Two-site structures are sufficient for deterministic crystal-system tests.
-    # The species are chosen from the requested formula when possible, while the
-    # reduced composition is kept exact for phase-candidate selection tests.
     from pymatgen.core import Composition
 
     composition = Composition(formula)
@@ -105,14 +102,16 @@ def test_unique_formula_phase_candidate_is_selected_without_energy_ranking():
 
 
 def test_multiple_phase_compatible_candidates_are_left_ambiguous():
-    record = _record("Sb2O3", "cubic")
+    # Use a simple rocksalt-like 1:1 composition so the synthetic structures
+    # retain cubic symmetry under SpacegroupAnalyzer.
+    record = _record("MnO", "cubic")
     first = SimpleNamespace(
         material_id="mp-1",
-        structure=_structure_for_formula("Sb2O3", "cubic"),
+        structure=_structure_for_formula("MnO", "cubic"),
     )
     second = SimpleNamespace(
         material_id="mp-2",
-        structure=_structure_for_formula("Sb2O3", "cubic"),
+        structure=_structure_for_formula("MnO", "cubic"),
     )
 
     selected, compatible_ids = select_unique_phase_compatible_document(
