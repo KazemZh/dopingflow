@@ -1,27 +1,23 @@
 """Runtime extensions for automatic correction-calibration expansion.
 
-This module keeps the large calibration/fitting implementation in
-``correction_calibration`` unchanged while extending three narrowly scoped
-behaviors used by the CLI:
+This module extends the base correction-calibration implementation with four
+narrow behaviors:
 
 1. failed structure acquisitions are recorded and skipped instead of aborting
    an otherwise usable calibration run;
 2. automatic M1 calibration can gap-fill under-covered workflow cations with
-   additional binary Kingsbury oxides carrying a curated ``likely_mpid``; and
-3. after the normal quality filters and first model-selection pass, elements
-   that are *still* under-covered trigger one second pass that exposes every
-   remaining eligible binary Kingsbury fallback for those elements.
+   additional binary Kingsbury oxides carrying a curated ``likely_mpid``;
+3. after normal quality filters, elements that remain under-covered trigger one
+   second pass exposing every remaining eligible binary Kingsbury fallback; and
+4. strict phase identity is verified against an immutable source structure,
+   independently of the subsequently relaxed/reused same-backend energy
+   geometry.  If the curated OPTIMADE structure is unavailable or incompatible
+   with the Kingsbury phase label, the official Materials Project API may be
+   used to find a unique phase-compatible structure of the same formula.
 
-Gap-fill records with generic phase labels are explicitly tagged as
-phase-unverified ``likely_mpid`` fallbacks.  They still pass through the same
-ML-backend relaxation, phase-preservation, oxide classification, same-backend
-hull, uncertainty, identifiability, and cross-validation gates as strict
-phase-resolved records.
-
-Importing this module installs the two internal extensions into
-``dopingflow.correction_calibration`` before exposing public fit entry points.
-Serialized correction models and the downstream formation/phase-diagram APIs
-remain unchanged.
+Materials Project data are used here only for structure/identity information.
+All calibration energies are still evaluated with the active dopingflow ML
+backend (or reused from an exact same-backend structure match).
 """
 
 from __future__ import annotations
@@ -51,12 +47,28 @@ from dopingflow.corrections import (
     content_hash,
     parse_correction_config,
 )
+from dopingflow.phase_structure_fallback import (
+    fetch_materials_project_phase_structure,
+    phase_diagnostics,
+    phase_matches_structure,
+)
 from dopingflow.refs import _file_sha256
 
 log = logging.getLogger(__name__)
 
 _BASE_MATCH_EXPERIMENTAL_RECORD = _base._match_experimental_record
 _FORCED_GAP_FILL_ELEMENTS: set[str] = set()
+
+_PHASE_REFERENCE_FIELDS = (
+    "phase_match_policy",
+    "experimental_likely_mpid",
+    "phase_reference_material_id",
+    "phase_reference_structure_path",
+    "phase_reference_structure_sha256",
+    "phase_reference_source",
+    "phase_reference_verified",
+    "phase_reference_diagnostics",
+)
 
 
 def _gap_fill_identity(record: ExperimentalRecord) -> tuple[str, str]:
@@ -66,15 +78,58 @@ def _gap_fill_identity(record: ExperimentalRecord) -> tuple[str, str]:
     )
 
 
+def _annotate_phase_reference(
+    record: dict[str, Any],
+    experimental_record: ExperimentalRecord,
+    *,
+    structure_path: Path,
+    material_id: str,
+    source: str,
+) -> dict[str, Any]:
+    """Attach immutable source-phase identity independently of energy geometry."""
+
+    structure = Structure.from_file(str(structure_path))
+    diagnostics = phase_diagnostics(experimental_record.phase, structure)
+    record.update(
+        {
+            "phase_match_policy": "verified_phase_reference_structure",
+            "experimental_likely_mpid": str(experimental_record.likely_mpid or ""),
+            "phase_reference_material_id": str(material_id),
+            "phase_reference_structure_path": str(structure_path.resolve()),
+            "phase_reference_structure_sha256": _file_sha256(structure_path),
+            "phase_reference_source": source,
+            "phase_reference_verified": bool(diagnostics["matches"]),
+            "phase_reference_diagnostics": diagnostics,
+            # structure_id identifies the geometry actually used as the immutable
+            # phase reference.  For an MP formula-search fallback this may differ
+            # from the historical Kingsbury likely_mpid.
+            "structure_id": str(material_id),
+        }
+    )
+    return record
+
+
+def _copy_phase_reference_fields(
+    source: Mapping[str, Any],
+    destination: dict[str, Any],
+) -> None:
+    for key in _PHASE_REFERENCE_FIELDS:
+        if key in source:
+            destination[key] = source[key]
+    if "phase_reference_material_id" in source:
+        destination["structure_id"] = source["phase_reference_material_id"]
+
+
 def _match_experimental_record_extended(
     calculated: Mapping[str, Any],
     experimental: Sequence[ExperimentalRecord],
     *,
     allow_phase_mismatch: bool,
 ) -> tuple[ExperimentalRecord | None, str | None]:
-    """Permit only explicitly tagged Kingsbury likely-mpid gap-fill matches."""
+    """Match generic gap-fill and verified-source strict records safely."""
 
-    if str(calculated.get("phase_match_policy") or "") == "kingsbury_likely_mpid_gap_fill":
+    policy = str(calculated.get("phase_match_policy") or "")
+    if policy == "kingsbury_likely_mpid_gap_fill":
         formula_matches = [
             record
             for record in experimental
@@ -91,6 +146,35 @@ def _match_experimental_record_extended(
         if len(id_matches) > 1:
             return None, "ambiguous_kingsbury_likely_mpid_gap_fill"
         return None, "kingsbury_likely_mpid_gap_fill_not_verified"
+
+    if policy == "verified_phase_reference_structure":
+        if calculated.get("phase_reference_verified") is not True:
+            return None, "phase_reference_structure_not_verified"
+        formula_matches = [
+            record
+            for record in experimental
+            if record.reduced_formula == calculated["reduced_formula"]
+        ]
+        experimental_id = str(
+            calculated.get("experimental_likely_mpid") or ""
+        ).strip().lower()
+        if experimental_id:
+            formula_matches = [
+                record
+                for record in formula_matches
+                if str(record.likely_mpid or "").strip().lower() == experimental_id
+            ]
+        if len(formula_matches) == 1:
+            phase_source = str(calculated.get("phase_reference_source") or "")
+            note = (
+                "phase_verified_materials_project_formula_fallback"
+                if "formula_phase_unique" in phase_source
+                else "phase_verified_from_immutable_source_structure"
+            )
+            return formula_matches[0], note
+        if len(formula_matches) > 1:
+            return None, "ambiguous_verified_phase_reference_record"
+        return None, "verified_phase_reference_experimental_record_not_found"
 
     return _BASE_MATCH_EXPERIMENTAL_RECORD(
         calculated,
@@ -128,7 +212,7 @@ def _reuse_same_backend_reference_if_matching(
     reference_data: Mapping[str, Any],
     relaxation_signature: Mapping[str, Any],
 ) -> tuple[dict[str, Any], bool]:
-    """Reuse an already-relaxed same-backend reference only for an exact structure match."""
+    """Reuse a same-backend energy without replacing immutable phase identity."""
 
     reference_entry = (reference_data.get("references", {}) or {}).get(
         experimental_record.reduced_formula
@@ -176,6 +260,7 @@ def _reuse_same_backend_reference_if_matching(
             },
         },
     )
+    _copy_phase_reference_fields(automatic_record, reused)
     reused.update(
         {
             "energy_total_eV": float(reference_entry["E_total_eV"]),
@@ -250,7 +335,7 @@ def _materialize_phase_resolved_candidates_extended(
 
     selected: list[dict[str, Any]] = []
     materializations: list[dict[str, Any]] = []
-    acquisition_failures: list[dict[str, str]] = []
+    acquisition_failures: list[dict[str, Any]] = []
     structure_base_url = config.optimade_base_url
     if not structure_base_url.rstrip("/").endswith("/structures"):
         structure_base_url = f"{structure_base_url.rstrip('/')}/structures"
@@ -291,6 +376,18 @@ def _materialize_phase_resolved_candidates_extended(
                     source="phase_resolved_gap_fill_manifest_likely_mpid",
                     element_requirements=gap_requirements,
                 )
+                phase_verified = False
+                phase_status = "generic_phase_gap_fill_not_verified"
+            else:
+                local_record = _annotate_phase_reference(
+                    local_record,
+                    experimental_record,
+                    structure_path=Path(local_record["structure_path"]),
+                    material_id=str(experimental_record.likely_mpid),
+                    source="phase_verified_manifest",
+                )
+                phase_verified = local_record["phase_reference_verified"] is True
+                phase_status = "verified" if phase_verified else "failed"
             selected.append(local_record)
             materializations.append(
                 {
@@ -303,7 +400,13 @@ def _materialize_phase_resolved_candidates_extended(
                     ),
                     "structure_path": str(local_record["structure_path"]),
                     "structure_sha256": _file_sha256(Path(local_record["structure_path"])),
-                    "phase_verified": not is_gap_fill,
+                    "phase_verified": phase_verified,
+                    "phase_verification_status": phase_status,
+                    "phase_reference": {
+                        key: local_record.get(key)
+                        for key in _PHASE_REFERENCE_FIELDS
+                        if key in local_record
+                    },
                 }
             )
             continue
@@ -323,6 +426,12 @@ def _materialize_phase_resolved_candidates_extended(
             )
             continue
 
+        fetched_path: Path | None = None
+        fetched_material_id = str(experimental_record.likely_mpid or "")
+        fetched_source = ""
+        provenance: dict[str, Any] = {}
+        primary_problem: dict[str, Any] | None = None
+
         try:
             fetched = fetch_optimade_structure(
                 experimental_record.likely_mpid,
@@ -330,28 +439,97 @@ def _materialize_phase_resolved_candidates_extended(
                 output_dir / "phase_structures",
                 base_url=structure_base_url,
             )
+            provenance = fetched.to_dict()
+            provenance.pop("from_cache", None)
+            fetched_path = fetched.structure_path
+            fetched_source = "materials_project_optimade"
+            if not is_gap_fill:
+                source_structure = Structure.from_file(str(fetched_path))
+                if not phase_matches_structure(experimental_record.phase, source_structure):
+                    primary_problem = {
+                        "reason": "optimade_structure_phase_mismatch",
+                        "diagnostics": phase_diagnostics(
+                            experimental_record.phase,
+                            source_structure,
+                        ),
+                    }
+                    fetched_path = None
         except Exception as exc:
+            primary_problem = {
+                "reason": "optimade_structure_acquisition_failed",
+                "error": str(exc),
+            }
+
+        # Strict records get a second, official MP-API route.  It first retries
+        # the curated material ID and then performs a formula search, accepting
+        # only one phase-compatible polymorph.  Generic gap-fill records remain
+        # tied to their curated likely_mpid and are not phase-searched.
+        fallback_problem: str | None = None
+        if fetched_path is None and not is_gap_fill:
+            try:
+                fallback = fetch_materials_project_phase_structure(
+                    experimental_record,
+                    output_dir / "phase_structures",
+                )
+                fetched_path = fallback.structure_path
+                fetched_material_id = fallback.material_id
+                fetched_source = fallback.source
+                provenance = fallback.to_dict()
+                provenance.pop("from_cache", None)
+                if primary_problem is not None:
+                    provenance["primary_optimade_problem"] = primary_problem
+            except Exception as exc:
+                fallback_problem = str(exc)
+
+        if fetched_path is None:
             acquisition_failures.append(
                 {
                     "formula": experimental_record.reduced_formula,
                     "likely_mpid": experimental_record.likely_mpid,
                     "selection": "gap_fill" if is_gap_fill else "strict_phase_resolved",
-                    "reason": f"structure_acquisition_failed:{exc}",
+                    "reason": (
+                        "structure_acquisition_failed"
+                        if is_gap_fill
+                        else "phase_compatible_structure_acquisition_failed"
+                    ),
+                    "optimade": primary_problem,
+                    "materials_project_api": fallback_problem,
                 }
             )
             continue
 
-        provenance = fetched.to_dict()
-        provenance.pop("from_cache", None)
         automatic_record = _base._automatic_manifest_record(
             experimental_record,
-            fetched.structure_path,
+            fetched_path,
             provenance,
         )
+        if not is_gap_fill:
+            automatic_record = _annotate_phase_reference(
+                automatic_record,
+                experimental_record,
+                structure_path=fetched_path,
+                material_id=fetched_material_id,
+                source=fetched_source,
+            )
+            if automatic_record["phase_reference_verified"] is not True:
+                acquisition_failures.append(
+                    {
+                        "formula": experimental_record.reduced_formula,
+                        "likely_mpid": experimental_record.likely_mpid,
+                        "selection": "strict_phase_resolved",
+                        "reason": "phase_reference_verification_failed_after_acquisition",
+                        "phase_reference_material_id": fetched_material_id,
+                        "phase_reference_diagnostics": automatic_record[
+                            "phase_reference_diagnostics"
+                        ],
+                    }
+                )
+                continue
+
         automatic_record, reused_reference = _reuse_same_backend_reference_if_matching(
             automatic_record,
             experimental_record,
-            fetched.structure_path,
+            fetched_path,
             provenance,
             reference_data,
             relaxation_signature,
@@ -369,10 +547,20 @@ def _materialize_phase_resolved_candidates_extended(
             )
 
         selected.append(automatic_record)
+        phase_verified = (
+            automatic_record.get("phase_reference_verified") is True
+            if not is_gap_fill
+            else False
+        )
         materializations.append(
             {
                 "formula": experimental_record.reduced_formula,
                 "likely_mpid": experimental_record.likely_mpid,
+                "actual_phase_reference_material_id": (
+                    automatic_record.get("phase_reference_material_id")
+                    if not is_gap_fill
+                    else experimental_record.likely_mpid
+                ),
                 "source": (
                     "gap_fill_likely_mpid_optimade_plus_same_backend_reference_reuse"
                     if is_gap_fill and reused_reference
@@ -380,20 +568,33 @@ def _materialize_phase_resolved_candidates_extended(
                         "gap_fill_likely_mpid_optimade"
                         if is_gap_fill
                         else (
-                            "materials_project_optimade_plus_same_backend_reference_reuse"
+                            f"{fetched_source}_plus_same_backend_reference_reuse"
                             if reused_reference
-                            else "materials_project_optimade"
+                            else fetched_source
                         )
                     )
                 ),
-                "phase_verified": not is_gap_fill,
+                "phase_verified": phase_verified,
+                "phase_verification_status": (
+                    "verified"
+                    if phase_verified
+                    else "generic_phase_gap_fill_not_verified"
+                ),
+                "phase_reference": {
+                    key: automatic_record.get(key)
+                    for key in _PHASE_REFERENCE_FIELDS
+                    if key in automatic_record
+                },
                 **dict(automatic_record.get("expansion_provenance") or provenance),
             }
         )
 
     snapshot = {
-        "schema_version": 2,
-        "policy": "strict_phase_resolved_plus_undercoverage_binary_kingsbury_gap_fill",
+        "schema_version": 3,
+        "policy": (
+            "strict_phase_reference_plus_mp_phase_fallback_plus_"
+            "undercoverage_binary_kingsbury_gap_fill"
+        ),
         "target_elements": list(config.target_elements),
         "discovery": dict(discovery.report),
         "gap_fill": dict(gap_fill.report),
@@ -404,17 +605,20 @@ def _materialize_phase_resolved_candidates_extended(
         "materializations": materializations,
         "acquisition_failures": acquisition_failures,
         "scientific_note": (
-            "Gap-fill records with generic experimental phase labels are not treated as "
-            "phase verified. Their curated Kingsbury likely_mpid is used only to obtain a "
-            "candidate geometry; all normal same-backend quality and validation gates remain active."
+            "Strict experimental phase identity is verified from an immutable source "
+            "structure and is kept separate from the relaxed/reused ML energy geometry. "
+            "If the curated OPTIMADE ID is unavailable or phase-incompatible, the official "
+            "Materials Project API may supply a unique formula- and phase-compatible "
+            "structure. Materials Project energies are never used in the correction fit. "
+            "Generic-phase gap-fill records remain explicitly phase-unverified."
         ),
     }
     if acquisition_failures:
         _base._write_json(output_dir / CALIBRATION_EXPANSION_FILENAME, snapshot)
         log.warning(
-            "Could not materialize %d of %d correction-calibration candidates. "
-            "Continuing with %d successfully materialized compounds; failures remain "
-            "auditable in %s",
+            "Could not materialize/phase-verify %d of %d correction-calibration "
+            "candidates. Continuing with %d successfully materialized compounds; "
+            "failures remain auditable in %s",
             len(acquisition_failures),
             len(candidates),
             len(selected),
@@ -524,8 +728,9 @@ def run_corrections_fit(
             if still_undercovered:
                 log.warning(
                     "M1 remains under-covered for %s after exhausting eligible binary "
-                    "Kingsbury gap-fill candidates. Those cation terms remain unavailable; "
-                    "the model selector will retain the scientifically supported family.",
+                    "Kingsbury gap-fill candidates and phase-compatible MP structure "
+                    "fallbacks. Those cation terms remain unavailable; the model selector "
+                    "will retain the scientifically supported family.",
                     sorted(still_undercovered),
                 )
         return output
