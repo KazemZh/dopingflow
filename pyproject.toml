@@ -44,6 +44,11 @@ mp = [
   "mp-api>=0.40",
 ]
 
+corrections = [
+  "matminer>=0.10.1,<0.11; python_version>='3.11'",
+  "matminer>=0.9.3,<0.10; python_version<'3.11'",
+]
+
 alignn = [
   "torch==2.1.2",
   "dgl==1.1.2",

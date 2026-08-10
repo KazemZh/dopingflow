@@ -26,6 +26,7 @@ generated_surfaces/
 *.csv
 scaling_test.dat
 Sb*/
+Ti*
 sampling_convergence/
 sequential_structures/
 Mn*/

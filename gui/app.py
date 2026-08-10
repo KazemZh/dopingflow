@@ -312,6 +312,7 @@ if tab == "Input Builder":
         "filter",
         "bandgap",
         "formation",
+        "energy_correction",
         "database",
         "phase_diagram",
         "vacancies",
@@ -2101,6 +2102,443 @@ if tab == "Input Builder":
                 st.error("endpoint_x must be 'auto' or a number in (0, 1].")
 
     # -----------------------------
+    # OPTIONAL ENERGY CORRECTION
+    # -----------------------------
+    with st.expander("Energy correction (optional)", expanded=False):
+        correction = cfg_edit.setdefault("energy_correction", {})
+        # Streamlit may hot-reload app.py while retaining an older gui_config
+        # module in sys.modules. Keep this panel usable until the server is
+        # restarted instead of failing on a newly introduced defaults section.
+        correction_defaults = DEFAULTS.get("energy_correction") or {
+            "enabled": False,
+            "experimental_source": "kingsbury",
+            "calibration_manifest": (
+                "reference_structures/corrections/calibration_manifest.csv"
+            ),
+            "correction_terms": ["oxide"],
+            "model_family": "manual",
+            "m1_elements": "workflow",
+            "calibration_selection": "manifest",
+            "auto_fetch_phase_structures": False,
+            "optimade_base_url": "https://optimade.materialsproject.org/v1",
+            "min_element_compounds": 3,
+            "min_element_stoichiometries": 3,
+            "min_cv_improvement_eV_per_atom": 0.01,
+            "require_cv_one_standard_error": True,
+            "exclude_polyanions": [
+                "SO4", "SO3", "CO3", "NO3", "NO2", "OCl3", "ClO3",
+                "ClO4", "HO", "ClO", "SeO3", "TiO3", "TiO4", "WO4",
+                "SiO3", "SiO4", "Si2O5", "PO3", "PO4", "P2O7",
+            ],
+            "max_relative_experimental_uncertainty": 0.10,
+            "max_calculated_e_above_hull_eV_per_atom": 0.10,
+            "min_degrees_of_freedom": 1,
+            "min_term_support": 2,
+            "max_condition_number": 1.0e8,
+            "allow_legacy_candidate_provenance": False,
+            "reuse_fitted": True,
+        }
+        correction["enabled"] = st.checkbox(
+            "Enable backend-specific experimental energy correction",
+            value=bool(correction.get("enabled", correction_defaults["enabled"])),
+            help=(
+                "Fits new coefficients using energies from the selected references "
+                "backend. It never applies the pre-fitted MP2020 numbers."
+            ),
+        )
+
+        if correction["enabled"]:
+            refs_backend = cfg_edit.get("references", {})
+            relax_backend = cfg_edit.get("relax", {})
+            refs_identity = tuple(
+                str(refs_backend.get(key, "")).strip()
+                for key in ("backend", "model", "task")
+            )
+            relax_identity = tuple(
+                str(relax_backend.get(key, "")).strip()
+                for key in ("backend", "model", "task")
+            )
+            st.caption(
+                "Calibration backend: "
+                f"{refs_backend.get('backend', '')} / {refs_backend.get('model', '')} / "
+                f"{refs_backend.get('task', '') or '(no task)'}. Raw energies are retained."
+            )
+            st.caption(
+                "Candidate-relaxation backend: "
+                f"{relax_backend.get('backend', '')} / {relax_backend.get('model', '')} / "
+                f"{relax_backend.get('task', '') or '(no task)'}."
+            )
+            if refs_identity != relax_identity:
+                st.error(
+                    "Energy correction requires [references] and [relax] to use "
+                    "the same backend, model, and task. Align these settings and "
+                    "rerun relaxation before formation-energy analysis."
+                )
+            st.warning(
+                "Package-version or local-checkpoint changes also invalidate energy "
+                "provenance. Rerun refs-build, correction fitting, and any stale "
+                "candidate relaxations after such a change."
+            )
+            source_choices = CHOICES.get(
+                "energy_correction.experimental_source",
+                ["kingsbury", "kingsbury+custom", "custom"],
+            )
+            current_source = str(
+                correction.get(
+                    "experimental_source",
+                    correction_defaults["experimental_source"],
+                )
+            )
+            if current_source not in source_choices:
+                current_source = "kingsbury"
+            correction["experimental_source"] = st.selectbox(
+                "Experimental formation-enthalpy source",
+                source_choices,
+                index=source_choices.index(current_source),
+            )
+            if correction["experimental_source"] in {"custom", "kingsbury+custom"}:
+                correction["experimental_data"] = st.text_input(
+                    "Custom experimental CSV",
+                    value=str(correction.get("experimental_data", "")),
+                    help="Project-relative or absolute path; units must be explicit per row.",
+                )
+
+            family_choices = CHOICES.get(
+                "energy_correction.model_family",
+                ["manual", "m0", "m1", "auto"],
+            )
+            current_family = str(
+                correction.get("model_family", correction_defaults["model_family"])
+            ).lower()
+            if current_family not in family_choices:
+                current_family = "manual"
+            correction["model_family"] = st.selectbox(
+                "Correction model family",
+                family_choices,
+                index=family_choices.index(current_family),
+                help=(
+                    "M0 fits only the ordinary-oxide oxygen term. M1 adds only "
+                    "independently supported oxide-cation terms. Auto compares both "
+                    "on identical cross-validation folds and prefers M0 unless M1 wins."
+                ),
+            )
+
+            selection_choices = CHOICES.get(
+                "energy_correction.calibration_selection",
+                ["manifest", "phase_resolved"],
+            )
+            current_selection = str(
+                correction.get(
+                    "calibration_selection",
+                    correction_defaults["calibration_selection"],
+                )
+            ).lower()
+            if current_selection not in selection_choices:
+                current_selection = "manifest"
+            correction["calibration_selection"] = st.selectbox(
+                "Calibration selection",
+                selection_choices,
+                index=selection_choices.index(current_selection),
+                help=(
+                    "phase_resolved discovers every strict ordinary binary oxide for "
+                    "the host/dopant elements in the experimental dataset."
+                ),
+            )
+
+            correction["calibration_manifest"] = st.text_input(
+                "Calibration manifest",
+                value=str(
+                    correction.get(
+                        "calibration_manifest",
+                        correction_defaults["calibration_manifest"],
+                    )
+                ),
+                help=(
+                    "Separate list of phase-matched calibration structures/energies. "
+                    "This is not [references].oxides_ref."
+                ),
+            )
+            if correction["model_family"] == "manual":
+                term_text = st.text_input(
+                    "Correction terms",
+                    value=", ".join(
+                        correction.get(
+                            "correction_terms",
+                            correction_defaults["correction_terms"],
+                        )
+                    ),
+                    help=(
+                        "Default: oxide. element:<symbol> is global; "
+                        "oxide_cation:<symbol> is restricted to ordinary oxides."
+                    ),
+                )
+                correction["correction_terms"] = [
+                    term.strip() for term in term_text.split(",") if term.strip()
+                ]
+                if not correction["correction_terms"]:
+                    st.error("At least one correction term is required.")
+                explicit_element_terms = any(
+                    term.lower().startswith(("element:", "oxide_cation:"))
+                    for term in correction["correction_terms"]
+                )
+                correction["allow_element_terms"] = (
+                    st.checkbox(
+                        "I explicitly accept and validated manual composition terms",
+                        value=bool(correction.get("allow_element_terms", False)),
+                    )
+                    if explicit_element_terms
+                    else False
+                )
+            else:
+                correction["correction_terms"] = ["oxide"]
+                correction["allow_element_terms"] = False
+                m1_text = st.text_input(
+                    "M1 cation scope",
+                    value=(
+                        correction.get("m1_elements", "workflow")
+                        if isinstance(correction.get("m1_elements", "workflow"), str)
+                        else ", ".join(correction.get("m1_elements", []))
+                    ),
+                    help=(
+                        "Use 'workflow' to infer elements from the host formula and the "
+                        "actual explicit/enumerated dopants, or enter symbols separated by commas."
+                    ),
+                ).strip()
+                correction["m1_elements"] = (
+                    "workflow"
+                    if m1_text.lower() == "workflow"
+                    else [item.strip() for item in m1_text.split(",") if item.strip()]
+                )
+
+            if correction["calibration_selection"] == "phase_resolved":
+                correction["auto_fetch_phase_structures"] = st.checkbox(
+                    "Fetch missing curated structures from Materials Project OPTIMADE",
+                    value=bool(
+                        correction.get(
+                            "auto_fetch_phase_structures",
+                            correction_defaults["auto_fetch_phase_structures"],
+                        )
+                    ),
+                    help=(
+                        "Downloads only structures named by curated likely MP IDs, then "
+                        "caches the exact response and computes energies with your backend."
+                    ),
+                )
+            else:
+                correction["auto_fetch_phase_structures"] = False
+
+            with st.expander("Advanced correction controls", expanded=False):
+                excluded_text = st.text_input(
+                    "Excluded polyanion formula tokens",
+                    value=", ".join(
+                        correction.get(
+                            "exclude_polyanions",
+                            correction_defaults["exclude_polyanions"],
+                        )
+                    ),
+                    help=(
+                        "Comma-separated tokens excluded from calibration by default "
+                        "because their oxygen chemistry is outside the simple oxide basis. "
+                        "Change this expert setting only with a validated correction basis."
+                    ),
+                )
+                correction["exclude_polyanions"] = [
+                    token.strip() for token in excluded_text.split(",") if token.strip()
+                ]
+                correction["max_relative_experimental_uncertainty"] = st.number_input(
+                    "Maximum relative experimental uncertainty",
+                    value=float(
+                        correction.get(
+                            "max_relative_experimental_uncertainty",
+                            correction_defaults[
+                                "max_relative_experimental_uncertainty"
+                            ],
+                        )
+                    ),
+                    step=0.01,
+                )
+                if correction["max_relative_experimental_uncertainty"] <= 0:
+                    st.error("Maximum relative experimental uncertainty must be > 0.")
+                hull_limit_raw = correction.get(
+                    "max_calculated_e_above_hull_eV_per_atom",
+                    correction_defaults[
+                        "max_calculated_e_above_hull_eV_per_atom"
+                    ],
+                )
+                hull_filter_configured = not (
+                    hull_limit_raw is None
+                    or hull_limit_raw is False
+                    or str(hull_limit_raw).strip().lower() in {"", "none", "false"}
+                )
+                hull_filter_enabled = st.checkbox(
+                    "Filter calibration phases by same-backend energy above hull",
+                    value=hull_filter_configured,
+                    help=(
+                        "When disabled, the TOML value is written as false. When enabled, "
+                        "the manifest must provide the hull value, provenance, and an exact "
+                        "backend/model/task, backend-version, and settings-hash identity."
+                    ),
+                )
+                if hull_filter_enabled:
+                    hull_limit_value = (
+                        float(hull_limit_raw)
+                        if hull_filter_configured
+                        else float(
+                            correction_defaults[
+                                "max_calculated_e_above_hull_eV_per_atom"
+                            ]
+                        )
+                    )
+                    correction[
+                        "max_calculated_e_above_hull_eV_per_atom"
+                    ] = st.number_input(
+                        "Maximum calibration energy above hull (eV/atom)",
+                        min_value=0.0,
+                        value=hull_limit_value,
+                        step=0.01,
+                    )
+                else:
+                    correction["max_calculated_e_above_hull_eV_per_atom"] = False
+                correction["min_degrees_of_freedom"] = int(
+                    st.number_input(
+                        "Minimum residual degrees of freedom",
+                        min_value=1,
+                        value=int(
+                            correction.get(
+                                "min_degrees_of_freedom",
+                                correction_defaults["min_degrees_of_freedom"],
+                            )
+                        ),
+                        step=1,
+                    )
+                )
+                correction["min_term_support"] = int(
+                    st.number_input(
+                        "Minimum calibration compounds per fitted term",
+                        min_value=2,
+                        value=int(
+                            correction.get(
+                                "min_term_support",
+                                correction_defaults["min_term_support"],
+                            )
+                        ),
+                        step=1,
+                        help=(
+                            "Every fitted correction term must be represented by at "
+                            "least this many accepted calibration compounds."
+                        ),
+                    )
+                )
+                if correction["model_family"] in {"m1", "auto"}:
+                    correction["min_element_compounds"] = int(
+                        st.number_input(
+                            "Minimum independent compounds per M1 cation",
+                            min_value=3,
+                            value=int(
+                                correction.get(
+                                    "min_element_compounds",
+                                    correction_defaults["min_element_compounds"],
+                                )
+                            ),
+                            step=1,
+                        )
+                    )
+                    correction["min_element_stoichiometries"] = int(
+                        st.number_input(
+                            "Minimum distinct O:cation stoichiometries",
+                            min_value=2,
+                            value=int(
+                                correction.get(
+                                    "min_element_stoichiometries",
+                                    correction_defaults[
+                                        "min_element_stoichiometries"
+                                    ],
+                                )
+                            ),
+                            step=1,
+                        )
+                    )
+                    correction["min_cv_improvement_eV_per_atom"] = st.number_input(
+                        "Minimum M1 cross-validation RMSE improvement (eV/atom)",
+                        min_value=0.0,
+                        value=float(
+                            correction.get(
+                                "min_cv_improvement_eV_per_atom",
+                                correction_defaults[
+                                    "min_cv_improvement_eV_per_atom"
+                                ],
+                            )
+                        ),
+                        step=0.005,
+                        format="%.3f",
+                    )
+                    correction["require_cv_one_standard_error"] = st.checkbox(
+                        "Require improvement beyond one cross-validation standard error",
+                        value=bool(
+                            correction.get(
+                                "require_cv_one_standard_error",
+                                correction_defaults[
+                                    "require_cv_one_standard_error"
+                                ],
+                            )
+                        ),
+                    )
+                correction["max_condition_number"] = st.number_input(
+                    "Maximum weighted-design condition number",
+                    value=float(
+                        correction.get(
+                            "max_condition_number",
+                            correction_defaults["max_condition_number"],
+                        )
+                    ),
+                    step=1.0e6,
+                    format="%.3e",
+                    help=(
+                        "The fit fails above this limit; the conservative default is 1e8."
+                    ),
+                )
+                if correction["max_condition_number"] <= 1:
+                    st.error("Maximum weighted-design condition number must be > 1.")
+                correction["reuse_fitted"] = st.checkbox(
+                    "Reuse an exactly matching fitted model",
+                    value=bool(
+                        correction.get(
+                            "reuse_fitted", correction_defaults["reuse_fitted"]
+                        )
+                    ),
+                )
+                correction["allow_phase_mismatch"] = st.checkbox(
+                    "Allow an explicitly reviewed phase mismatch",
+                    value=bool(correction.get("allow_phase_mismatch", False)),
+                    help=(
+                        "Unsafe by default. Formula or likely Materials Project ID alone "
+                        "does not establish polymorph identity."
+                    ),
+                )
+                correction["allow_legacy_candidate_provenance"] = st.checkbox(
+                    "Explicitly accept legacy candidate energy provenance",
+                    value=bool(
+                        correction.get(
+                            "allow_legacy_candidate_provenance",
+                            correction_defaults[
+                                "allow_legacy_candidate_provenance"
+                            ],
+                        )
+                    ),
+                    help=(
+                        "Allows already-relaxed candidates made before package/hash "
+                        "metadata was recorded. Known backend/model/task, convergence, "
+                        "optimizer, fmax, and max_steps must still match. Missing "
+                        "original package and POSCAR-hash provenance is retained as an "
+                        "explicit assumption in outputs."
+                    ),
+                )
+            st.warning(
+                "A corrected hull is produced only when every participating "
+                "non-elemental entry is compatible with the fitted model."
+            )
+
+    # -----------------------------
     # PHASE DIAGRAM
     # -----------------------------
 
@@ -2128,7 +2566,8 @@ if tab == "Input Builder":
             "This step builds a separate phase diagram for every exact candidate chemical "
             "system, writes per-system CSV files under phase_diagrams/, and also writes a "
             "combined phase_diagram_results.csv. Every element in a system requires an "
-            "elemental terminal reference from refs-build."
+            "elemental terminal reference from refs-build. When correction is enabled, "
+            "raw and corrected hulls are rebuilt independently from complete entry sets."
         )
 
     # -----------------------------
@@ -3184,7 +3623,7 @@ elif tab == "Run":
 """)
 
     # Surface is a separate CLI command, not part of run-all
-    BULK_STEP_KEYS = ["refs", "generate", "scan", "relax", "filter", "bandgap", "formation", "collect", "alloy-hull", "phase-diagram", "vacancies"]
+    BULK_STEP_KEYS = ["refs", "corrections", "generate", "scan", "relax", "filter", "bandgap", "formation", "collect", "alloy-hull", "phase-diagram", "vacancies"]
     STEP_KEYS = BULK_STEP_KEYS + ["surface"]
 
     st.divider()
@@ -3206,7 +3645,7 @@ elif tab == "Run":
         ],
         horizontal=True,
         help=(
-            "Full workflow runs the standard bulk pipeline (refs → generate → scan → "
+            "Full workflow runs the standard bulk pipeline (refs → optional corrections → generate → scan → "
             "relax → filter → bandgap → formation → collect). "
             "Sequential workflow performs gradual sequential doping using the settings "
             "defined in the [sequential] section of input.toml. "
@@ -3474,7 +3913,7 @@ elif tab == "Results Explorer":
         ).resolve()
     known_sources = {
         "Main results database": default_csv,
-        "Combined phase-diagram results": project_root / "phase_diagram_results.csv",
+        "Phase diagram (energy above hull)": project_root / "phase_diagram_results.csv",
         "Vacancy results database": vacancy_results_root / "vacancies_database.csv",
         "Vacancy composition minima": vacancy_results_root / "vacancy_minima_by_composition.csv",
         "Vacancy stability intervals": vacancy_results_root / "vacancy_stability_intervals.csv",
@@ -3484,10 +3923,6 @@ elif tab == "Results Explorer":
         "Static vacancy best counts": vacancy_results_root / "vacancy_static_best_counts.csv",
         "Static vacancy pressure map": vacancy_results_root / "vacancy_static_pressure_map.csv",
     }
-    phase_dir = project_root / "phase_diagrams"
-    if phase_dir.exists():
-        for phase_csv in sorted(phase_dir.glob("phase_diagram_*.csv")):
-            known_sources[f"Phase diagram: {phase_csv.stem.removeprefix('phase_diagram_')}"] = phase_csv
     source_choice = st.selectbox(
         "Known result source",
         options=list(known_sources) + ["Custom path"],
@@ -3517,6 +3952,113 @@ elif tab == "Results Explorer":
         st.stop()
 
     st.success(f"Loaded {len(df):,} rows × {len(df.columns)} columns from `{csv_path.name}`")
+
+    is_phase_result = {
+        "chemical_system",
+        "candidate_path",
+        "energy_above_hull_eV_per_atom",
+        "stable",
+    }.issubset(df.columns)
+    if is_phase_result:
+        from phase_diagram_plots import (
+            build_phase_diagram_figure,
+            find_codoped_system,
+            prepare_phase_diagram_plot_data,
+        )
+
+        st.subheader("Energy above hull by dopant concentration")
+        try:
+            combined_phase_path = project_root / "phase_diagram_results.csv"
+            phase_plot_raw = (
+                pd.read_csv(combined_phase_path)
+                if combined_phase_path.exists()
+                else df
+            )
+            hull_options = ["Raw"]
+            if "energy_above_hull_corrected_eV_per_atom" in phase_plot_raw.columns:
+                hull_options.append("Corrected")
+            hull_quantity = st.radio(
+                "Hull energy shown",
+                hull_options,
+                horizontal=True,
+                key="phase_hull_quantity",
+            )
+            if hull_quantity == "Corrected":
+                phase_plot_raw = phase_plot_raw.copy()
+                phase_plot_raw["energy_above_hull_eV_per_atom"] = phase_plot_raw[
+                    "energy_above_hull_corrected_eV_per_atom"
+                ]
+                if "stable_corrected" in phase_plot_raw.columns:
+                    phase_plot_raw["stable"] = phase_plot_raw["stable_corrected"]
+            phase_metadata_columns = {
+                "candidate_path",
+                "effective_pct_json",
+                "requested_pct_json",
+            }
+            database_for_phase = pd.read_csv(
+                default_csv,
+                usecols=lambda column: column in phase_metadata_columns,
+            )
+            phase_plot_data, phase_dopants = prepare_phase_diagram_plot_data(
+                phase_plot_raw,
+                database_for_phase,
+            )
+        except Exception as exc:
+            st.error(f"Could not prepare phase-diagram plot: {exc}")
+            st.stop()
+
+        if len(phase_dopants) < 2:
+            st.info("At least two dopants are required for the co-doping plot.")
+            st.stop()
+
+        control_x, control_fixed = st.columns(2)
+        default_x = "Sb" if "Sb" in phase_dopants else phase_dopants[0]
+        dopant_x = control_x.selectbox(
+            "Dopant on x-axis",
+            phase_dopants,
+            index=phase_dopants.index(default_x),
+            key="phase_simple_x_dopant",
+        )
+        fixed_options = [element for element in phase_dopants if element != dopant_x]
+        default_fixed = "Ti" if "Ti" in fixed_options else fixed_options[0]
+        dopant_fixed = control_fixed.selectbox(
+            "Dopant defining the curves",
+            fixed_options,
+            index=fixed_options.index(default_fixed),
+            key="phase_simple_fixed_dopant",
+        )
+
+        try:
+            selected_system = find_codoped_system(
+                phase_plot_data,
+                dopant_x,
+                dopant_fixed,
+            )
+            phase_figure, phase_best = build_phase_diagram_figure(
+                phase_plot_data,
+                chemical_system=selected_system,
+                x_dopant=dopant_x,
+                series_dopant=dopant_fixed,
+                host_formula=str(
+                    results_cfg.get("references", {}).get("host", "Host")
+                ),
+            )
+        except ValueError as exc:
+            st.warning(str(exc))
+            st.stop()
+
+        st.plotly_chart(
+            phase_figure,
+            use_container_width=True,
+            key="phase_diagram_dopant_plot",
+        )
+        st.caption(
+            f"System: {selected_system}. Each curve shows a fixed {dopant_fixed} "
+            f"concentration; each point is the lowest-energy candidate at that exact "
+            f"{dopant_x}/{dopant_fixed} composition. Compatible single-dopant phase "
+            "diagrams supply the 0% boundary curves."
+        )
+        st.stop()
 
     static_compact_paths = {
         "minima": vacancy_results_root / "vacancy_static_minima.csv",

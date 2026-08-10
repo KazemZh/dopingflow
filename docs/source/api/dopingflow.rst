@@ -12,6 +12,14 @@ dopingflow.bandgap module
    :show-inheritance:
    :undoc-members:
 
+dopingflow.calibration_expansion module
+----------------------------------------
+
+.. automodule:: dopingflow.calibration_expansion
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 dopingflow.cli module
 ---------------------
 
@@ -24,6 +32,30 @@ dopingflow.collect module
 -------------------------
 
 .. automodule:: dopingflow.collect
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+dopingflow.corrections module
+-----------------------------
+
+.. automodule:: dopingflow.corrections
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+dopingflow.correction_calibration module
+----------------------------------------
+
+.. automodule:: dopingflow.correction_calibration
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+dopingflow.correction_model_selection module
+---------------------------------------------
+
+.. automodule:: dopingflow.correction_model_selection
    :members:
    :show-inheritance:
    :undoc-members:

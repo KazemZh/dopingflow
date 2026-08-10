@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import time
@@ -12,6 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from pymatgen.core import Structure
 from pymatgen.io.vasp import Poscar
 
+from dopingflow.corrections import backend_runtime_provenance
 from dopingflow.ml_backends import (
     build_ase_calculator,
     check_backend_dependency,
@@ -22,6 +24,14 @@ from dopingflow.ml_backends import (
 from dopingflow.ml_relaxation import relax_structure_with_calculator
 
 log = logging.getLogger(__name__)
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 set_default_runtime_env(tf_threads=1, omp_threads=1)
 
@@ -245,6 +255,7 @@ def _relax_one_candidate(
         str,  # optimizer
         str,  # relax_mode
         str,  # cell_filter
+        str,  # project root for local-checkpoint provenance
     ]
 ) -> Dict[str, Any]:
     (
@@ -263,6 +274,7 @@ def _relax_one_candidate(
         optimizer,
         relax_mode,
         cell_filter,
+        project_root,
     ) = job
 
     cand_path = Path(candidate_dir_str)
@@ -320,7 +332,8 @@ def _relax_one_candidate(
             cell_filter=cell_filter,
         )
 
-        _safe_write_poscar(s_rel, out_dir / "POSCAR", order=order)
+        relaxed_poscar = out_dir / "POSCAR"
+        _safe_write_poscar(s_rel, relaxed_poscar, order=order)
 
         meta_relax = {
             "stage": "02_relax",
@@ -328,6 +341,7 @@ def _relax_one_candidate(
             "backend": backend,
             "model": model,
             "task": task,
+            **backend_runtime_provenance(backend, model, root=Path(project_root)),
             "relax_mode": relax_mode,
             "cell_filter": cell_filter,
             "optimizer": optimizer,
@@ -340,6 +354,7 @@ def _relax_one_candidate(
             "converged": bool(converged),
             "walltime_s": float(time.time() - t0),
             "energy_relaxed_eV": float(e_rel),
+            "relaxed_poscar_sha256": _file_sha256(relaxed_poscar),
             "species_counts_total": _species_counts(s_rel),
             "source_scan": {
                 "rank_sp": meta_scan.get("rank_sp"),
@@ -425,7 +440,7 @@ def _write_ranking_csv(folder: Path, rows: List[Dict[str, Any]]) -> Path:
     return ranking_path
 
 
-def _run_folder(folder: Path, cfg: RelaxConfig) -> None:
+def _run_folder(folder: Path, cfg: RelaxConfig, root: Path) -> None:
     candidates = sorted([p for p in folder.glob("candidate_*") if p.is_dir()])
 
     if not candidates:
@@ -481,6 +496,7 @@ def _run_folder(folder: Path, cfg: RelaxConfig) -> None:
             cfg.optimizer,
             cfg.relax_mode,
             cfg.cell_filter,
+            str(root),
         )
         for c in candidates
     ]
@@ -510,7 +526,8 @@ def _run_folder(folder: Path, cfg: RelaxConfig) -> None:
 
             if r.get("status") == "ok":
                 log.info(
-                    "OK   %s/%s  E_rel=%.6f eV  converged=%s  fmax_final=%.6f  steps=%s  wall=%.1fs",
+                    "OK   %s/%s  E_rel=%.6f eV  converged=%s  "
+                    "fmax_final=%.6f  steps=%s  wall=%.1fs",
                     folder.name,
                     r["candidate"],
                     r["energy_relaxed_eV"],
@@ -577,7 +594,7 @@ def run_relax(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None =
 
     for i, folder in enumerate(folders, start=1):
         log.info("RUN (%d/%d) %s", i, len(folders), folder.name)
-        _run_folder(folder, cfg)
+        _run_folder(folder, cfg, root)
 
     log.info("DONE Step 03 relax for all structure folders.")
 

@@ -105,6 +105,15 @@ pip install -e ".[gui]"
 pip install -e ".[mp]"
 ```
 
+#### Energy-correction support (optional):
+
+``` bash
+pip install -e ".[corrections]"
+```
+
+Configuration, scientific assumptions, and compatibility guidance are covered
+in the full user documentation.
+
 #### Development tools:
 
 ``` bash
@@ -135,6 +144,7 @@ Each stage can be run individually:
 
 ``` bash
 dopingflow refs-build -c input.toml
+dopingflow corrections-fit -c input.toml
 dopingflow generate -c input.toml
 dopingflow scan -c input.toml
 dopingflow relax -c input.toml
@@ -212,6 +222,7 @@ The GUI allows you to:
 - Run workflow stages interactively
 - Visualize generated structures
 - Explore `results_database.csv` and per-system phase-diagram CSVs with Plotly
+- Configure optional formation-energy corrections
 - Configure, run, explore, and compare parent/generated/relaxed vacancy structures
 
 Relative-energy controls remain inside the existing `[formation]` section:

@@ -21,6 +21,7 @@ Additional reference structure files may be required depending on:
 - the selected reference configuration
 - whether formation energies are computed
 - whether local structure files are used for references
+- whether the optional experimental energy correction is enabled
 
 All file paths are interpreted relative to the directory
 containing ``input.toml`` unless absolute paths are used.
@@ -62,6 +63,11 @@ Structured layouts are also supported, for example:
                Ti.POSCAR
            gas/
                O2.POSCAR
+           corrections/                 # only when energy correction is enabled
+               calibration_manifest.csv # required by manifest selection
+               calibration_structures/
+                   TiO2.POSCAR
+                   ZrO2.POSCAR
 
 The exact directory organization is user-defined.
 
@@ -121,6 +127,48 @@ or, in a more explicit chemistry-based naming style:
 
 These files are interpreted according to the settings in ``input.toml``.
 
+Optional Energy-Correction Inputs
+---------------------------------
+
+When ``[energy_correction].enabled = true``, the additional inputs depend on
+``calibration_selection``:
+
+- With ``calibration_selection = "manifest"``, ``calibration_manifest`` is
+  required. Every included row must point to an existing ``structure_path`` so
+  composition, phase, space group, and oxygen environment can be checked. Paths
+  are resolved relative to the manifest first and then relative to the project.
+- With ``calibration_selection = "phase_resolved"``, dopingflow selects all
+  strict non-generic ordinary oxide records whose non-oxygen elements are in
+  the workflow's complete host-and-dopant scope. Exact phase-matched manifest structures are
+  reused when present. If ``auto_fetch_phase_structures = true``, missing
+  structures are retrieved by curated ``likely_mpid`` from the configured
+  OPTIMADE endpoint, so the manifest itself may be absent. If fetching is false,
+  the manifest must materialize every selected record.
+- ``experimental_data`` is required only for
+  ``experimental_source = "custom"`` or ``"kingsbury+custom"``. It is not
+  required for the curated Kingsbury-only source.
+
+The calibration structures are independent of the competing phases listed in
+``[references].oxides_ref``. A structure remains mandatory even when its
+``energy_total_eV`` is precomputed. Such a row must also provide exact
+backend/model/task, installed backend version, calculation-settings text and
+signature hash, plus ``converged = true``. If the energy-above-hull filter is
+enabled, it additionally requires same-backend hull provenance and matching
+hull backend/model/task, backend-version, and calculation-settings-hash
+columns. See :doc:`methods/energy_corrections` for the complete schema.
+
+Automatically acquired OPTIMADE geometry is stored as an immutable response
+and POSCAR pair under the backend-specific correction directory. A complete
+hash-matching pair is reused; a partial or changed cache fails rather than being
+overwritten. The structure is relaxed with the active reference backend, and
+its chemical-system calibration hull is built only from same-backend energies. No
+Materials Project energy or hull value is imported. This process does not
+fetch or rerelax doped candidate structures.
+
+The curated Kingsbury source requires the optional installation extra::
+
+   pip install "dopingflow[corrections]"
+
 ALIGNN Model Directory (Environment Variable)
 ---------------------------------------------
 
@@ -167,3 +215,9 @@ To enable full workflow including formation energies and bandgaps:
 
 - Reference structure files as required by your reference setup
 - ALIGNN model directory
+
+To additionally enable experimental energy correction:
+
+- Calibration manifest and every referenced structure in ``manifest`` mode; or
+  complete local/immutable OPTIMADE structures in ``phase_resolved`` mode
+- Custom experimental CSV only when a custom source mode is selected

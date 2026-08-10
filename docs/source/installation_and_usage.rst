@@ -18,6 +18,11 @@ Clone the repository and install in editable mode:
    pip install -U pip
    pip install -e .
 
+To use the optional curated experimental correction source, install the
+corrections extra instead::
+
+   pip install -e ".[corrections]"
+
 Verify the CLI is available:
 
 ::
@@ -48,7 +53,12 @@ To run the complete workflow in order:
 
 This executes:
 
-``refs -> generate -> scan -> relax -> filter -> bandgap -> formation -> collect -> alloy-hull -> phase-diagram``
+``refs -> corrections (optional) -> generate -> scan -> relax -> filter -> bandgap -> formation -> collect -> alloy-hull -> phase-diagram``
+
+The ``corrections`` stage is a no-op unless ``[energy_correction].enabled`` is
+true. It can also be run directly after reference construction::
+
+   dopingflow corrections-fit -c input.toml
 
 Vacancies are an optional final run-all step, leaving the default stop unchanged::
 
@@ -90,7 +100,7 @@ You can run only a subset of steps inside a selected range:
 
 ::
 
-   dopingflow run-all -c input.toml --from refs --until collect --only refs,generate,scan
+   dopingflow run-all -c input.toml --from refs --until collect --only refs,corrections,generate,scan
 
 
 Filtering controls inside run-all
@@ -126,6 +136,12 @@ Step 00: build and relax thermodynamic reference structures:
 ::
 
    dopingflow refs-build -c input.toml
+
+Optional Step 00b: fit or exactly reuse a backend-specific correction model:
+
+::
+
+   dopingflow corrections-fit -c input.toml
 
 Step 01: structure generation:
 
@@ -213,6 +229,22 @@ Additional outputs:
 - ``reference_structures/relaxed/host_unit_relaxed.POSCAR``
 - ``reference_structures/relaxed/host_supercell_<a>x<b>x<c>_relaxed.POSCAR``
 - ``reference_structures/relaxed/refs/<name>_relaxed.POSCAR``
+
+
+Optional Step 00b (corrections-fit)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When ``[energy_correction].enabled = true``, writes a signature-specific
+directory of the form::
+
+   reference_structures/corrections/<backend-model-task>-<signature-hash>/
+
+The final 10 hexadecimal characters hash the complete resolved backend
+signature. Main files include ``correction_parameters.json``,
+``correction_fit_report.json``, ``correction_metadata.json``,
+``experimental_calibration_used.json``, calculated/rejected calibration JSON,
+and any relaxed calibration structures. When correction is disabled, this
+stage is a no-op.
 
 
 Step 01 (generate)
@@ -424,6 +456,12 @@ Command
 
    dopingflow sequential-run -c input.toml
 
+With ``[energy_correction].enabled = true``, ``sequential-run`` automatically
+fits or exactly reuses the active signature-specific correction once before
+the composition loop. It does not fit one model per step. Build references
+first, and ensure ``[references]`` and ``[relax]`` use the same backend, model,
+and task.
+
 Execution Logic
 ---------------
 
@@ -443,6 +481,9 @@ In ``mode = "full"``, each step runs:
 ::
 
    generate -> scan -> relax -> filter -> optional bandgap -> formation -> collect
+
+The optional correction fit is a one-time preflight and is not part of this
+repeated per-composition sequence.
 
 After relaxation, the lowest-energy relaxed candidate is copied to:
 

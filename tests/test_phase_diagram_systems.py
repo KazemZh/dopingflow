@@ -21,6 +21,29 @@ def test_phase_diagram_honors_skip_if_done(tmp_path):
     assert output.read_text(encoding="utf-8") == "existing\n"
 
 
+def test_raw_phase_diagram_cache_hit_removes_obsolete_system_outputs(tmp_path):
+    output = tmp_path / "phase_diagram_results.csv"
+    output.write_text(
+        "chemical_system,candidate\nO-Sn,candidate_001\n",
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "phase_diagrams"
+    output_dir.mkdir()
+    current = output_dir / "phase_diagram_O-Sn.csv"
+    obsolete = output_dir / "phase_diagram_O-Sb-Sn.csv"
+    current.write_text("current\n", encoding="utf-8")
+    obsolete.write_text("obsolete\n", encoding="utf-8")
+
+    result = phase_module.run_phase_diagram(
+        {"phase_diagram": {"skip_if_done": True}},
+        tmp_path,
+    )
+
+    assert result == output
+    assert current.exists()
+    assert not obsolete.exists()
+
+
 def test_phase_diagram_writes_one_file_per_exact_system_and_uses_threshold(
     tmp_path, monkeypatch
 ):
@@ -34,6 +57,11 @@ def test_phase_diagram_writes_one_file_per_exact_system_and_uses_threshold(
     ]
     candidate_dir = tmp_path / "Sn10" / "candidate_001"
     candidate = PDEntry(Composition("SnO2"), -3.0, name="Sn10/candidate_001")
+    obsolete_output = (
+        tmp_path / "phase_diagrams" / "phase_diagram_O-Sb-Sn.csv"
+    )
+    obsolete_output.parent.mkdir(parents=True)
+    obsolete_output.write_text("stale\n", encoding="utf-8")
 
     monkeypatch.setattr(phase_module, "_reference_entries_from_ref", lambda ref: references)
     monkeypatch.setattr(
@@ -67,6 +95,7 @@ def test_phase_diagram_writes_one_file_per_exact_system_and_uses_threshold(
     system_output = tmp_path / "phase_diagrams" / "phase_diagram_O-Sn.csv"
     assert output.exists()
     assert system_output.exists()
+    assert not obsolete_output.exists()
 
     with output.open(newline="", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))

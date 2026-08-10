@@ -1,5 +1,12 @@
 # Changelog
 
+- Reference construction now relaxes configured metal and oxide phase-diagram
+  entries in either formation-reference mode and incrementally reuses entries
+  whose source structures and relaxation settings are unchanged.
+- Selecting the phase-diagram source in the GUI Results Explorer now provides
+  two dopant selectors and a direct composition-minimum energy-above-hull plot
+  with compatible boundary curves, stable markers, and the host reference.
+
 All notable changes to this project will be documented in this file.
 
 The format loosely follows semantic versioning.
@@ -8,6 +15,19 @@ The format loosely follows semantic versioning.
 
 ## [Unreleased]
 ### Added
+- Optional backend-specific, uncertainty-weighted energy-correction fitting
+  from the curated Kingsbury dataset or explicit custom measurements, with
+  phase-matched calibration manifests and reproducibility artifacts
+- Conservative M0/M1 correction families with workflow-scoped oxide-cation
+  terms, forced-family modes, and automatic leave-one-out selection that falls
+  back to M0 unless M1 clears independent coverage, improvement, conditioning,
+  family non-worsening, and optional one-standard-error gates
+- Phase-resolved calibration expansion across the complete host-and-dopant
+  scope, with strict curated phase/`likely_mpid` selection, immutable OPTIMADE
+  structure caches, same-backend calibration relaxation and chemical-system hulls, and
+  hashed expansion, candidate-model, and selection artifacts
+- Separately retained raw/corrected formation energies and independently
+  rebuilt raw/corrected multicomponent phase diagrams
 - A complete one-command oxygen-vacancy workflow, exposed only as
   ``dopingflow vacancies -c input.toml`` and configured in one flat
   ``[vacancies]`` table
@@ -55,6 +75,12 @@ The format loosely follows semantic versioning.
   `relative_enabled` and `endpoint_x`
 - Formation-stage oxide tie-line values are preserved during collection and
   sequential database merging
+- Sequential formation/collection now rebuild per composition and merge only
+  the current invocation's steps, preventing stale project-level databases and
+  obsolete historical steps from leaking into recomputed results
+- Correction provenance now verifies convergence, identical relaxation
+  signatures, and stored structure hashes for host, elemental, gas, and
+  compound references before fitting or application
 - `[phase_diagram].skip_if_done` and
   `stable_threshold_eV_per_atom` are now honored by the implementation
 - Formation, database, phase-diagram, GUI, and example documentation now

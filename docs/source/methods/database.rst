@@ -63,6 +63,11 @@ The per-candidate formation metadata is preferred because it retains the full
 multi-reference result mapping. ``formation_energies.csv`` is used as a
 backward-compatible fallback.
 
+When an energy correction is enabled, this authoritative metadata also carries
+the raw/corrected formation values, correction uncertainty, applicability,
+dataset, backend signature, parameter set, and fit ID. The collector adds those
+fields dynamically; correction-disabled databases retain the legacy schema.
+
 
 Selection Policy
 ----------------

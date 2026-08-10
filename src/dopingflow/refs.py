@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import time
 from dataclasses import dataclass
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -76,6 +78,89 @@ def _ensure_dirs(root: Path) -> None:
     (root / REF_DIR).mkdir(parents=True, exist_ok=True)
     (root / RELAXED_DIR).mkdir(parents=True, exist_ok=True)
     (root / RELAXED_REFS_DIR).mkdir(parents=True, exist_ok=True)
+
+
+def _file_sha256(path: Path) -> str:
+    if not path.exists():
+        raise FileNotFoundError(f"POSCAR not found: {path}")
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _backend_package(backend: str) -> str:
+    return {
+        "mace": "mace-torch",
+        "uma": "fairchem-core",
+        "m3gnet": "m3gnet",
+        "grace": "tensorpotential",
+    }.get(str(backend).lower(), "unknown")
+
+
+def _backend_package_version(backend: str) -> str:
+    package = _backend_package(backend)
+    if package == "unknown":
+        return "unknown"
+    try:
+        return version(package)
+    except PackageNotFoundError:
+        return "not-installed"
+
+
+def _model_checkpoint_sha256(model: str, root: Path | None = None) -> str | None:
+    path = Path(str(model)).expanduser()
+    if not path.is_absolute() and root is not None:
+        path = root / path
+    return _file_sha256(path) if path.is_file() else None
+
+
+def _relaxation_signature(
+    cfg: RefConfig,
+    *,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    """Settings that must match before a relaxed structure can be reused."""
+    signature = {
+        "schema_version": 2,
+        "backend": cfg.backend,
+        "model": cfg.model,
+        "task": cfg.task,
+        "backend_package": _backend_package(cfg.backend),
+        "backend_package_version": _backend_package_version(cfg.backend),
+        "optimizer": cfg.optimizer,
+        "fmax": cfg.fmax,
+        "max_steps": cfg.max_steps,
+        "device": cfg.device,
+        "gpu_id": cfg.gpu_id if cfg.device == "cuda" else None,
+        "tf_threads": cfg.tf_threads,
+        "omp_threads": cfg.omp_threads,
+    }
+    checkpoint_hash = _model_checkpoint_sha256(cfg.model, root)
+    if checkpoint_hash is not None:
+        signature["model_checkpoint_sha256"] = checkpoint_hash
+    return signature
+
+
+def _cache_entry_matches(
+    entry: Any,
+    *,
+    source_path: Path,
+    relaxed_path: Path,
+    signature: dict[str, Any],
+    ref_type: str | None = None,
+    relaxed_hash_key: str = "relaxed_sha256",
+) -> bool:
+    if not isinstance(entry, dict) or not relaxed_path.exists():
+        return False
+    if ref_type is not None and entry.get("type") != ref_type:
+        return False
+    return (
+        entry.get("source_sha256") == _file_sha256(source_path)
+        and entry.get("relaxation_signature") == signature
+        and entry.get(relaxed_hash_key) == _file_sha256(relaxed_path)
+    )
 
 
 def _parse_ref_config(raw: dict[str, Any], root: Path) -> RefConfig:
@@ -292,76 +377,132 @@ def run_refs_build(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | N
       - reference_structures/relaxed/refs/<name>_relaxed.POSCAR
     """
     cfg = _parse_ref_config(raw_cfg, root)
-    check_backend_dependency(cfg.backend, stage_name="References")
-
     out_json = root / REF_JSON
-
-    if cfg.skip_if_done and out_json.exists():
-        log.info("Step refs.build: SKIP (exists): %s", out_json)
-        log.info("Set [references].skip_if_done=false to force recomputation.")
-        return out_json
-
     _ensure_dirs(root)
+
+    cached: dict[str, Any] = {}
+    if cfg.skip_if_done and out_json.exists():
+        try:
+            cached = json.loads(out_json.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            log.warning("Ignoring unreadable reference cache: %s", out_json)
+
+    signature = _relaxation_signature(cfg, root=root)
 
     host_path = (cfg.host_dir / f"{cfg.host}.POSCAR").resolve()
     log.info("Host POSCAR: %s", host_path)
 
-    # --- 1) Host unit cell ---
-    host_unit = _read_poscar(host_path)
-    t0 = time.time()
-    host_unit_relaxed, E_host_unit, nsteps_unit, fmax_unit, conv_unit = _relax_structure_and_energy(host_unit, cfg)
-    t_unit = time.time() - t0
-
     host_unit_relaxed_path = (root / RELAXED_DIR / "host_unit_relaxed.POSCAR").resolve()
-    _write_poscar(host_unit_relaxed, host_unit_relaxed_path)
-
-    log.info(
-        "HOST unit relaxed: E=%.6f eV (steps=%d, final_fmax=%.6f, converged=%s, wall=%.1fs)",
-        E_host_unit,
-        nsteps_unit,
-        fmax_unit,
-        conv_unit,
-        t_unit,
-    )
-
-    # --- 2) Host supercell ---
-    host_super = host_unit_relaxed.copy()
-    host_super.make_supercell(cfg.supercell)
-
     sc_tag = f"{cfg.supercell[0]}x{cfg.supercell[1]}x{cfg.supercell[2]}"
-    t1 = time.time()
-    host_super_relaxed, E_host_super, nsteps_super, fmax_super, conv_super = _relax_structure_and_energy(host_super, cfg)
-    t_super = time.time() - t1
-
-    host_super_relaxed_path = (root / RELAXED_DIR / f"host_supercell_{sc_tag}_relaxed.POSCAR").resolve()
-    _write_poscar(host_super_relaxed, host_super_relaxed_path)
-
-    log.info(
-        "HOST supercell relaxed: E=%.6f eV (steps=%d, final_fmax=%.6f, converged=%s, wall=%.1fs)",
-        E_host_super,
-        nsteps_super,
-        fmax_super,
-        conv_super,
-        t_super,
+    host_super_relaxed_path = (
+        root / RELAXED_DIR / f"host_supercell_{sc_tag}_relaxed.POSCAR"
+    ).resolve()
+    cached_host = cached.get("host", {})
+    reuse_host = (
+        cached_host.get("name") == cfg.host
+        and cached_host.get("supercell") == list(cfg.supercell)
+        and _cache_entry_matches(
+            cached_host,
+            source_path=host_path,
+            relaxed_path=host_unit_relaxed_path,
+            signature=signature,
+            relaxed_hash_key="relaxed_unit_sha256",
+        )
+        and host_super_relaxed_path.exists()
+        and cached_host.get("relaxed_supercell_sha256")
+        == _file_sha256(host_super_relaxed_path)
     )
-    log.info("Saved relaxed host supercell for doping: %s", host_super_relaxed_path)
+
+    if reuse_host:
+        host_data = dict(cached_host)
+        log.info("REF cache hit: host %s", cfg.host)
+    else:
+        check_backend_dependency(cfg.backend, stage_name="References")
+        host_unit = _read_poscar(host_path)
+        t0 = time.time()
+        (
+            host_unit_relaxed,
+            E_host_unit,
+            nsteps_unit,
+            fmax_unit,
+            conv_unit,
+        ) = _relax_structure_and_energy(host_unit, cfg)
+        t_unit = time.time() - t0
+        _write_poscar(host_unit_relaxed, host_unit_relaxed_path)
+
+        host_super = host_unit_relaxed.copy()
+        host_super.make_supercell(cfg.supercell)
+        t1 = time.time()
+        (
+            host_super_relaxed,
+            E_host_super,
+            nsteps_super,
+            fmax_super,
+            conv_super,
+        ) = _relax_structure_and_energy(host_super, cfg)
+        t_super = time.time() - t1
+        _write_poscar(host_super_relaxed, host_super_relaxed_path)
+
+        host_data = {
+            "name": cfg.host,
+            "source_poscar": str(host_path),
+            "source_sha256": _file_sha256(host_path),
+            "relaxation_signature": signature,
+            "supercell": list(cfg.supercell),
+            "relaxed_unit_poscar": str(host_unit_relaxed_path),
+            "relaxed_supercell_poscar": str(host_super_relaxed_path),
+            "relaxed_unit_sha256": _file_sha256(host_unit_relaxed_path),
+            "relaxed_supercell_sha256": _file_sha256(host_super_relaxed_path),
+            "n_atoms_unit": int(len(host_unit_relaxed)),
+            "n_atoms_supercell": int(len(host_super_relaxed)),
+            "E_unit_total_eV": float(E_host_unit),
+            "E_supercell_total_eV": float(E_host_super),
+            "E_unit_per_atom_eV": float(E_host_unit) / float(len(host_unit_relaxed)),
+            "E_supercell_per_atom_eV": float(E_host_super) / float(len(host_super_relaxed)),
+            "unit_optimizer_steps": int(nsteps_unit),
+            "supercell_optimizer_steps": int(nsteps_super),
+            "unit_final_fmax_eV_per_A": float(fmax_unit),
+            "supercell_final_fmax_eV_per_A": float(fmax_super),
+            "unit_converged": bool(conv_unit),
+            "supercell_converged": bool(conv_super),
+            "unit_walltime_s": float(t_unit),
+            "supercell_walltime_s": float(t_super),
+        }
+        log.info("HOST relaxed and cached: %s", cfg.host)
 
     # --- 3) Relax reference structures ---
     references: Dict[str, dict] = {}
+    cached_references = cached.get("references", {}) or {}
 
     def relax_ref(name: str, poscar_path: Path, ref_type: str) -> None:
+        out_poscar = (root / RELAXED_REFS_DIR / f"{name}_relaxed.POSCAR").resolve()
+        cached_entry = cached_references.get(name)
+        if _cache_entry_matches(
+            cached_entry,
+            source_path=poscar_path,
+            relaxed_path=out_poscar,
+            signature=signature,
+            ref_type=ref_type,
+        ):
+            references[name] = dict(cached_entry)
+            log.info("REF cache hit: %s (%s)", name, ref_type)
+            return
+
+        check_backend_dependency(cfg.backend, stage_name="References")
         s = _read_poscar(poscar_path)
         t = time.time()
         s_relaxed, E, nsteps, fmax_final, converged = _relax_structure_and_energy(s, cfg)
         wall = time.time() - t
 
-        out_poscar = (root / RELAXED_REFS_DIR / f"{name}_relaxed.POSCAR").resolve()
         _write_poscar(s_relaxed, out_poscar)
 
         entry: dict[str, Any] = {
             "type": ref_type,
             "source_poscar": str(poscar_path),
+            "source_sha256": _file_sha256(poscar_path),
+            "relaxation_signature": signature,
             "relaxed_poscar": str(out_poscar),
+            "relaxed_sha256": _file_sha256(out_poscar),
             "n_atoms": int(len(s_relaxed)),
             "E_total_eV": float(E),
             "E_per_atom_eV": float(E) / float(len(s_relaxed)),
@@ -403,24 +544,21 @@ def run_refs_build(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | N
             out_poscar,
         )
 
-    if cfg.reference_mode == "metal":
-        for el in cfg.metal_ref:
-            p = (cfg.metals_dir / f"{el}.POSCAR").resolve()
-            relax_ref(el, p, ref_type="metal")
-    else:
-        # relax metal endpoints too, needed for full phase diagram
-        for el in cfg.metal_ref:
-            p = (cfg.metals_dir / f"{el}.POSCAR").resolve()
-            relax_ref(el, p, ref_type="metal")
+    # Both lists feed the phase diagram regardless of the formation-energy
+    # reference mode. The mode still controls formation-energy semantics.
+    for el in cfg.metal_ref:
+        p = (cfg.metals_dir / f"{el}.POSCAR").resolve()
+        relax_ref(el, p, ref_type="metal")
 
-        for ox in cfg.oxides_ref:
-            p = (cfg.oxides_dir / f"{ox}.POSCAR").resolve()
-            relax_ref(ox, p, ref_type="oxide")
+    for ox in cfg.oxides_ref:
+        p = (cfg.oxides_dir / f"{ox}.POSCAR").resolve()
+        relax_ref(ox, p, ref_type="oxide")
 
+    # Oxygen closes oxide-containing phase diagrams. Preserve the old metal
+    # mode behavior when no oxide references were requested.
+    if cfg.reference_mode == "oxide" or cfg.oxides_ref:
         p_g = (cfg.gas_dir / f"{cfg.gas_ref}.POSCAR").resolve()
         relax_ref(cfg.gas_ref, p_g, ref_type="gas")
-
-
 
     # --- 4) Write JSON cache ---
     out: dict[str, Any] = {
@@ -430,32 +568,30 @@ def run_refs_build(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | N
         "backend": cfg.backend,
         "model": cfg.model,
         "task": cfg.task,
+        "backend_package": signature["backend_package"],
+        "backend_package_version": signature["backend_package_version"],
         "optimizer": cfg.optimizer,
         "device": cfg.device,
         "gpu_id": cfg.gpu_id if cfg.device == "cuda" else None,
         "fmax": cfg.fmax,
         "max_steps": cfg.max_steps,
+        "tf_threads": cfg.tf_threads,
+        "omp_threads": cfg.omp_threads,
         "supercell": list(cfg.supercell),
-        "host": {
-            "name": cfg.host,
-            "source_poscar": str(host_path),
-            "relaxed_unit_poscar": str(host_unit_relaxed_path),
-            "relaxed_supercell_poscar": str(host_super_relaxed_path),
-            "n_atoms_unit": int(len(host_unit_relaxed)),
-            "n_atoms_supercell": int(len(host_super_relaxed)),
-            "E_unit_total_eV": float(E_host_unit),
-            "E_supercell_total_eV": float(E_host_super),
-            "E_unit_per_atom_eV": float(E_host_unit) / float(len(host_unit_relaxed)),
-            "E_supercell_per_atom_eV": float(E_host_super) / float(len(host_super_relaxed)),
-            "unit_optimizer_steps": int(nsteps_unit),
-            "supercell_optimizer_steps": int(nsteps_super),
-            "unit_final_fmax_eV_per_A": float(fmax_unit),
-            "supercell_final_fmax_eV_per_A": float(fmax_super),
-            "unit_converged": bool(conv_unit),
-            "supercell_converged": bool(conv_super),
-        },
+        "host": host_data,
         "references": references,
+        "reference_inventory": {
+            "metal_ref": cfg.metal_ref,
+            "oxides_ref": cfg.oxides_ref,
+            "gas_ref": (
+                cfg.gas_ref
+                if (cfg.reference_mode == "oxide" or cfg.oxides_ref)
+                else None
+            ),
+        },
     }
+    if "model_checkpoint_sha256" in signature:
+        out["model_checkpoint_sha256"] = signature["model_checkpoint_sha256"]
 
     if cfg.reference_mode == "oxide":
         out["oxide_mode"] = {

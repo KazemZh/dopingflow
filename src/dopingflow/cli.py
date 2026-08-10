@@ -6,19 +6,21 @@ from typing import Optional
 
 import typer
 
-from dopingflow.logging import setup_logging
-from dopingflow.refs import run_refs_build_from_toml
-from dopingflow.generate import run_generate_from_toml
-from dopingflow.scan import run_scan_from_toml
-from dopingflow.relax import run_relax_from_toml
-from dopingflow.filtering import run_filtering_from_toml
-from dopingflow.bandgap import run_bandgap_from_toml
-from dopingflow.formation import run_formation_from_toml
-from dopingflow.collect_relative import run_collect_from_toml
 from dopingflow.alloy_hull import run_alloy_hull_from_toml
+from dopingflow.bandgap import run_bandgap_from_toml
+from dopingflow.collect_relative import run_collect_from_toml
+from dopingflow.correction_calibration import run_corrections_fit_from_toml
+from dopingflow.corrections import load_correction_model
+from dopingflow.filtering import run_filtering_from_toml
+from dopingflow.formation import run_formation_from_toml
+from dopingflow.generate import run_generate_from_toml
+from dopingflow.logging import setup_logging
 from dopingflow.phase_diagram import run_phase_diagram_from_toml
-from dopingflow.vacancies import run_vacancies_from_toml
+from dopingflow.refs import run_refs_build_from_toml
+from dopingflow.relax import run_relax_from_toml
+from dopingflow.scan import run_scan_from_toml
 from dopingflow.sequential import run_sequential_from_toml
+from dopingflow.vacancies import run_vacancies_from_toml
 
 app = typer.Typer(help="dopingflow: ML doping workflow pipeline")
 
@@ -46,6 +48,25 @@ def generate_cmd(
     """Step 01: Generate random doped structures."""
     _init(config, verbose)
     run_generate_from_toml(config)
+
+
+@app.command("corrections-fit")
+def corrections_fit_cmd(
+    config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
+    verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
+) -> None:
+    """Optional: fit/reuse a same-backend experimental energy correction."""
+    _init(config, verbose)
+    output = run_corrections_fit_from_toml(config)
+    if output is None:
+        typer.echo("Energy correction is disabled; no model was fitted.")
+    else:
+        model = load_correction_model(output)
+        typer.echo(
+            f"\nWrote correction model: {output}\n"
+            f"Selected family: {model.model_family.upper()}\n"
+            f"Terms: {', '.join(model.correction_terms)}"
+        )
 
 
 @app.command("scan")
@@ -152,7 +173,10 @@ def run_all_cmd(
     start: str = typer.Option(
         "refs",
         "--from",
-        help="Start step key (refs, generate, scan, relax, filter, bandgap, formation, collect, alloy-hull, phase-diagram, vacancies)",
+        help=(
+            "Start step key (refs, corrections, generate, scan, relax, filter, "
+            "bandgap, formation, collect, alloy-hull, phase-diagram, vacancies)"
+        ),
     ),
     stop: str = typer.Option("phase-diagram", "--until", help="Stop step key (inclusive)"),
     only: Optional[str] = typer.Option(
@@ -171,12 +195,18 @@ def run_all_cmd(
     Run the full pipeline in order, with optional step selection.
 
     Step keys:
-      refs -> generate -> scan -> relax -> filter -> bandgap -> formation -> collect -> alloy-hull -> phase-diagram -> vacancies
+      refs -> corrections -> generate -> scan -> relax -> filter -> bandgap
+      -> formation -> collect -> alloy-hull -> phase-diagram -> vacancies
     """
     _init(config, verbose)
 
     steps = [
         ("refs", "00 refs-build", lambda: run_refs_build_from_toml(config)),
+        (
+            "corrections",
+            "00b corrections-fit (optional)",
+            lambda: run_corrections_fit_from_toml(config),
+        ),
         ("generate", "01 generate", lambda: run_generate_from_toml(config)),
         ("scan", "02 scan", lambda: run_scan_from_toml(config)),
         ("relax", "03 relax", lambda: run_relax_from_toml(config)),

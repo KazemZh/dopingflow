@@ -16,6 +16,14 @@ Only candidates belonging to the exact system are reported in that system's
 CSV. This prevents unrelated dopants from being combined in one artificial
 high-dimensional hull.
 
+When ``[energy_correction].enabled = true``, the same system selection is used
+to construct a second complete entry set. Every applicable non-elemental
+reference, lower-dimensional candidate, and evaluated candidate is corrected.
+Elemental terminals remain unchanged. A separate pymatgen ``PhaseDiagram`` is
+then built from the corrected entries. The raw hull is never shifted after the
+fact, and a mixture of corrected candidates with raw competing compounds is
+never labeled a corrected hull. See :doc:`energy_corrections`.
+
 Terminal References
 -------------------
 
@@ -37,8 +45,12 @@ All settings remain in the existing ``[phase_diagram]`` section::
    stable_threshold_eV_per_atom = 0.05
 
 ``skip_if_done`` returns the existing combined output without rebuilding the
-diagrams. ``stable_threshold_eV_per_atom`` controls the boolean ``stable``
-column and must be non-negative.
+diagrams on the correction-disabled path. With correction enabled, corrected
+hulls are always rebuilt because a fit ID alone does not fingerprint candidate
+structures, energies, membership, or the stability threshold. Disabling
+correction also rebuilds an existing file that contains corrected columns.
+``stable_threshold_eV_per_atom`` controls the boolean raw and corrected
+stability columns and must be non-negative.
 
 Energy Above Hull
 -----------------
@@ -52,6 +64,24 @@ For each candidate:
 
 where :math:`E_\mathrm{hull}` is the lowest-energy combination of the available
 entries with the same overall composition.
+
+Raw and corrected energy above hull are calculated from their respective
+independently constructed hulls:
+
+.. math::
+
+   E_{\mathrm{above\ hull}}^{\mathrm{raw}}
+   = E_{\mathrm{candidate}}^{\mathrm{raw}}-E_{\mathrm{hull}}^{\mathrm{raw}},
+
+.. math::
+
+   E_{\mathrm{above\ hull}}^{\mathrm{corrected}}
+   = E_{\mathrm{candidate}}^{\mathrm{corrected}}
+   -E_{\mathrm{hull}}^{\mathrm{corrected}}.
+
+It is scientifically incorrect to add a phase correction directly to raw
+energy above hull because correction can change the hull facets and
+decomposition itself.
 
 Outputs
 -------
@@ -74,3 +104,31 @@ Columns include:
 - ``energy_above_hull_eV_per_atom``
 - ``stable``
 - ``decomposition``
+
+These legacy columns remain raw. When correction is enabled, additional
+columns include:
+
+- ``energy_raw_eV``, ``energy_correction_eV``, and ``energy_corrected_eV``
+- ``correction_uncertainty_eV``
+- ``energy_above_hull_raw_eV_per_atom``
+- ``energy_above_hull_corrected_eV_per_atom``
+- ``energy_above_hull_correction_eV_per_atom`` (corrected minus raw hull
+  distance, including any facet change)
+- ``energy_above_hull_parameter_shift_eV_per_atom``
+- ``energy_above_hull_correction_uncertainty_eV_per_atom`` and its combined
+  reaction ``q`` vector
+- ``stable_raw`` and ``stable_corrected``
+- ``decomposition_raw`` and ``decomposition_corrected``
+- applicability reason, method, fit ID, parameter set, experimental dataset,
+  and backend/model/task provenance
+
+If any required non-elemental entry has no structure, an incompatible
+backend/model/task/settings provenance, lacks positive convergence, or has an
+oxygen environment absent from the fitted basis, the corrected diagram for
+that system fails explicitly. Raw results are not overwritten.
+
+The correction uncertainty is evaluated as
+:math:`\sqrt{\mathbf q^T C_\beta\mathbf q}` for the candidate minus the phases
+on its corrected-hull decomposition. This is a fixed-corrected-facet
+linearization: it retains coefficient correlations, but it does not yet sample
+coefficient uncertainty to estimate the probability of a different hull facet.

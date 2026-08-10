@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import itertools
 import json
 import logging
@@ -9,6 +10,20 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
+
+from pymatgen.core import Composition
+
+from dopingflow.corrections import (
+    CorrectionApplication,
+    CorrectionModel,
+    apply_energy_correction,
+    combine_feature_vectors,
+    content_hash,
+    evaluate_feature_vector,
+    load_active_correction_model,
+    parse_correction_config,
+    validate_candidate_energy_provenance,
+)
 
 log = logging.getLogger(__name__)
 
@@ -40,6 +55,7 @@ class CandidateRecord:
     dopant_counts: Dict[str, int]
     x_dopant: float
     reference_results: Dict[str, Dict[str, Any]]
+    energy_provenance: Dict[str, Any] | None = None
 
 
 def _parse_formation_config(raw: dict[str, Any], root: Path) -> FormationConfig:
@@ -98,6 +114,58 @@ def _get_pristine_energy_and_natoms(ref: dict[str, Any]) -> tuple[float, int]:
         h = ref["host"]
         return float(h["E_supercell_total_eV"]), int(h["n_atoms_supercell"])
     raise KeyError("reference_energies.json missing 'host' or 'pristine' block.")
+
+
+def _get_pristine_counts(
+    host_formula: str,
+    n_atoms_supercell: int,
+) -> Dict[str, int]:
+    """Infer the conserved pristine stoichiometry without adding a file dependency."""
+    reduced = Composition(host_formula).reduced_composition
+    atoms_per_formula = float(reduced.num_atoms)
+    multiplier = float(n_atoms_supercell) / atoms_per_formula
+    counts: Dict[str, int] = {}
+    for element, amount in reduced.get_el_amt_dict().items():
+        count = float(amount) * multiplier
+        rounded = int(round(count))
+        if abs(count - rounded) > 1.0e-8:
+            raise ValueError(
+                "Could not infer integral pristine-supercell stoichiometry from "
+                f"host formula {host_formula!r} and {n_atoms_supercell} atoms"
+            )
+        counts[str(element)] = rounded
+    return counts
+
+
+def _stoichiometric_deltas(
+    counts: Dict[str, int],
+    pristine_counts: Dict[str, int],
+) -> Dict[str, int]:
+    return {
+        element: int(counts.get(element, 0) - pristine_counts.get(element, 0))
+        for element in sorted(set(counts) | set(pristine_counts))
+        if counts.get(element, 0) != pristine_counts.get(element, 0)
+    }
+
+
+def _chemical_potential_term(
+    deltas: Dict[str, int],
+    chemical_potentials: Dict[str, float],
+) -> float:
+    missing = sorted(
+        element
+        for element, delta in deltas.items()
+        if delta and element not in chemical_potentials
+    )
+    if missing:
+        raise KeyError(
+            "Missing chemical potentials for non-stoichiometric species: "
+            + ", ".join(missing)
+        )
+    return -sum(
+        float(delta) * float(chemical_potentials[element])
+        for element, delta in deltas.items()
+    )
 
 
 def _read_selected_candidates(path: Path) -> List[str]:
@@ -168,6 +236,7 @@ def _formula_unit_energy_from_host(ref: dict[str, Any], host_formula: str) -> di
         "formula": host_formula,
         "reduced_composition": composition,
         "E_per_formula_unit_eV": float(host["E_unit_total_eV"]) / n_fu,
+        "relaxed_poscar": host.get("relaxed_unit_poscar"),
     }
 
 
@@ -209,11 +278,17 @@ def _oxygen_mu(ref: dict[str, Any]) -> tuple[float, float]:
         E_O2_effective = E_O2_raw + 2 * muO_shift_ev
     """
     oxide_mode = ref.get("oxide_mode", {}) or {}
+    inventory = ref.get("reference_inventory", {}) or {}
     refs = ref.get("references", {}) or {}
-    gas_ref = str(oxide_mode.get("gas_ref", "O2")).strip()
+    gas_ref = str(
+        oxide_mode.get("gas_ref") or inventory.get("gas_ref") or "O2"
+    ).strip()
     gas = refs.get(gas_ref)
     if not isinstance(gas, dict):
-        raise KeyError(f"oxide mode: missing gas reference '{gas_ref}'")
+        raise KeyError(
+            f"Missing gas reference {gas_ref!r}; an oxygen-nonstoichiometric "
+            "formation reaction requires a same-backend O2 reference"
+        )
 
     if "E_per_molecule_eV" in gas:
         E_o2_raw = float(gas["E_per_molecule_eV"])
@@ -439,6 +514,7 @@ def _formation_result(
     E_pristine: float,
     n_atoms_supercell: int,
     counts: Dict[str, int],
+    pristine_counts: Dict[str, int],
     dopant_counts: Dict[str, int],
     host_species: str,
     anion: str,
@@ -456,9 +532,8 @@ def _formation_result(
         raise ValueError("Candidate has no cations.")
 
     mus = {host_species: host_mu_value, anion: oxygen_mu_value}
-    correction = 0.0
     oxide_references: Dict[str, str] = {}
-    for dopant, count in sorted(dopant_counts.items()):
+    for dopant in sorted(dopant_counts):
         oxide_name, oxide = selected_oxides[dopant]
         mu_dopant = _mu_from_oxide(
             oxide,
@@ -468,9 +543,10 @@ def _formation_result(
         )
         mus[dopant] = mu_dopant
         oxide_references[dopant] = oxide_name
-        correction += float(count) * (host_mu_value - mu_dopant)
 
-    E_form_total = float(E_doped - E_pristine + correction)
+    deltas = _stoichiometric_deltas(counts, pristine_counts)
+    chemical_potential_term = _chemical_potential_term(deltas, mus)
+    E_form_total = float(E_doped - E_pristine + chemical_potential_term)
     endpoint_by_dopant = _oxide_endpoint_energies_per_cation(
         host_ref=host_ref,
         host_species=host_species,
@@ -488,6 +564,8 @@ def _formation_result(
     result: Dict[str, Any] = {
         "oxide_references": oxide_references,
         "mu_eV_per_atom_used": mus,
+        "stoichiometric_delta_atoms": deltas,
+        "chemical_potential_term_eV": chemical_potential_term,
         "oxide_endpoint_eV_per_cation_by_dopant": endpoint_by_dopant,
         "oxide_endpoint_correction_eV_per_cation": endpoint_correction_eV_per_cation,
         # Backward-compatible scalar. For a single dopant this is the pure endpoint;
@@ -529,6 +607,262 @@ def _formation_result(
     return result
 
 
+def _validate_candidate_backend(
+    relax_metadata: Dict[str, Any],
+    model: CorrectionModel,
+    *,
+    metadata_path: Path,
+    allow_legacy: bool = False,
+) -> Dict[str, Any]:
+    relaxed_poscar = metadata_path.parent / "POSCAR"
+    return validate_candidate_energy_provenance(
+        relax_metadata,
+        relaxed_poscar,
+        model,
+        label=str(metadata_path),
+        allow_legacy=allow_legacy,
+    )
+
+
+def _application_from_path(
+    model: CorrectionModel,
+    path: Path,
+) -> CorrectionApplication:
+    from pymatgen.core import Structure
+
+    structure = Structure.from_file(str(path))
+    return apply_energy_correction(model, structure.composition, structure=structure)
+
+
+def _formula_application(
+    model: CorrectionModel,
+    composition: Dict[str, Any],
+    path: Path,
+) -> CorrectionApplication:
+    from pymatgen.core import Composition, Structure
+
+    structure = Structure.from_file(str(path))
+    return apply_energy_correction(
+        model,
+        Composition(composition),
+        structure=structure,
+    )
+
+
+def _normalization_payloads(
+    *,
+    raw_total: float,
+    corrected_total: float,
+    uncertainty_total: float,
+    n_atoms: int,
+    n_cations: int,
+    n_dopants: int,
+    n_atoms_supercell: int,
+    normalize: str,
+) -> dict[str, Any]:
+    corrected = {
+        "E_form_corrected_eV_total": corrected_total,
+        "E_form_corrected_eV_per_atom": corrected_total / n_atoms,
+        "E_form_corrected_eV_per_cation": corrected_total / n_cations,
+        "E_form_corrected_eV_per_dopant": (
+            corrected_total / n_dopants if n_dopants else corrected_total
+        ),
+        "correction_uncertainty_eV_total": uncertainty_total,
+        "correction_uncertainty_eV_per_atom": uncertainty_total / n_atoms,
+        "correction_uncertainty_eV_per_cation": uncertainty_total / n_cations,
+        "correction_uncertainty_eV_per_dopant": (
+            uncertainty_total / n_dopants if n_dopants else uncertainty_total
+        ),
+    }
+    if normalize == "total":
+        corrected["reported_corrected"] = {
+            "value": corrected_total,
+            "uncertainty": uncertainty_total,
+            "unit": "total_eV",
+        }
+    elif normalize == "per_host":
+        corrected["reported_corrected"] = {
+            "value": corrected_total / n_atoms_supercell,
+            "uncertainty": uncertainty_total / n_atoms_supercell,
+            "unit": "eV_per_supercell_atom",
+        }
+    else:
+        divisor = n_dopants or 1
+        corrected["reported_corrected"] = {
+            "value": corrected_total / divisor,
+            "uncertainty": uncertainty_total / divisor,
+            "unit": "eV_per_dopant_atom" if n_dopants else "total_eV",
+        }
+    corrected["formation_energy_raw_eV_total"] = raw_total
+    return corrected
+
+
+def _attach_corrected_result(
+    result: Dict[str, Any],
+    *,
+    model: CorrectionModel,
+    formation_vector: Iterable[float],
+    mixing_vector: Iterable[float] | None,
+    counts: Dict[str, int],
+    dopant_counts: Dict[str, int],
+    anion: str,
+    n_atoms_supercell: int,
+    normalize: str,
+) -> None:
+    formation_application = evaluate_feature_vector(
+        model,
+        tuple(formation_vector),
+        reason="balanced_formation_reaction",
+    )
+    raw_total = float(result["E_form_eV_total"])
+    n_atoms = int(sum(counts.values()))
+    n_cations = int(sum(count for element, count in counts.items() if element != anion))
+    n_dopants = int(sum(dopant_counts.values()))
+    result.update(
+        _normalization_payloads(
+            raw_total=raw_total,
+            corrected_total=raw_total + formation_application.correction_eV,
+            uncertainty_total=formation_application.uncertainty_eV,
+            n_atoms=n_atoms,
+            n_cations=n_cations,
+            n_dopants=n_dopants,
+            n_atoms_supercell=n_atoms_supercell,
+            normalize=normalize,
+        )
+    )
+    result["energy_correction_eV_total"] = formation_application.correction_eV
+    result["energy_correction"] = {
+        **formation_application.to_dict(),
+        "method": model.method,
+        "fit_id": model.fit_id,
+        "parameter_set": model.fit_id,
+        "experimental_dataset": model.experimental_dataset,
+        "experimental_dataset_version": model.experimental_dataset_version,
+        "backend_signature": dict(model.backend_signature),
+        "applicability_signature": model.applicability_signature,
+        "activation_input_hash": model.activation_input_hash,
+        "model_family": model.model_family,
+        "selection_run_hash": model.selection_run_hash,
+        "target_elements": list(model.target_elements),
+        "selection_metadata": dict(model.selection_metadata or {}),
+        "backend": model.backend_signature.get("backend"),
+        "model": model.backend_signature.get("model"),
+        "task": model.backend_signature.get("task"),
+    }
+
+    if mixing_vector is not None and isinstance(result.get("mixing"), dict):
+        mixing_application = evaluate_feature_vector(
+            model,
+            tuple(mixing_vector),
+            reason="balanced_mixing_reaction",
+        )
+        mixing = result["mixing"]
+        raw_mixing = float(mixing["E_mix_eV_total"])
+        corrected_mixing = raw_mixing + mixing_application.correction_eV
+        mixing.update(
+            {
+                "E_mix_raw_eV_total": raw_mixing,
+                "energy_correction_eV_total": mixing_application.correction_eV,
+                "correction_uncertainty_eV_total": mixing_application.uncertainty_eV,
+                "E_mix_corrected_eV_total": corrected_mixing,
+                "E_mix_corrected_eV_per_atom": corrected_mixing / n_atoms,
+                "E_mix_corrected_eV_per_cation": corrected_mixing / n_cations,
+                "E_mix_corrected_eV_per_dopant": (
+                    corrected_mixing / n_dopants if n_dopants else corrected_mixing
+                ),
+                "correction_feature_vector": list(mixing_application.feature_vector),
+            }
+        )
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _formation_correction_input_hash(
+    poscar: Path,
+    model: CorrectionModel,
+    formation_config: Dict[str, Any],
+    reference_input_hash: str,
+) -> str:
+    relax_meta = poscar.parents[1] / RELAX_META
+    return content_hash(
+        {
+            "candidate_poscar_sha256": _file_sha256(poscar),
+            "relax_meta_sha256": _file_sha256(relax_meta),
+            "correction_fit_id": model.fit_id,
+            "formation_config": formation_config,
+            "reference_input_hash": reference_input_hash,
+        }
+    )
+
+
+def _folder_has_current_corrections(
+    folder: Path,
+    model: CorrectionModel,
+    formation_config: Dict[str, Any],
+    reference_input_hash: str,
+) -> bool:
+    poscars = _get_candidate_poscars(folder)
+    if not poscars:
+        return False
+    for poscar in poscars:
+        metadata = poscar.parents[1] / "04_formation" / "meta.json"
+        if not metadata.exists():
+            return False
+        try:
+            data = json.loads(metadata.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
+        if (data.get("energy_correction") or {}).get("fit_id") != model.fit_id:
+            return False
+        try:
+            expected_hash = _formation_correction_input_hash(
+                poscar,
+                model,
+                formation_config,
+                reference_input_hash,
+            )
+        except OSError:
+            return False
+        if (data.get("energy_correction") or {}).get(
+            "formation_input_hash"
+        ) != expected_hash:
+            return False
+    return True
+
+
+def _folder_contains_corrections(folder: Path) -> bool:
+    for poscar in _get_candidate_poscars(folder):
+        metadata = poscar.parents[1] / "04_formation" / "meta.json"
+        try:
+            data = json.loads(metadata.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(data.get("energy_correction"), dict):
+            return True
+    return False
+
+
+def _csv_contains_corrections(path: Path) -> bool:
+    if not path.exists():
+        return False
+    try:
+        with path.open(newline="", encoding="utf-8") as handle:
+            return any(
+                field.startswith("correction_")
+                or "_corrected_" in field
+                or field.startswith("energy_correction_")
+                for field in (next(csv.reader(handle), []) or [])
+            )
+    except OSError:
+        return False
+
+
 def _write_candidate_meta(candidate_dir: Path, payload: Dict[str, Any]) -> None:
     out_dir = candidate_dir / "04_formation"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -543,7 +877,11 @@ def _fmt(value: Any) -> str:
     return str(value)
 
 
-def _flat_columns(reference_results: Dict[str, Dict[str, Any]], *, relative_enabled: bool) -> Dict[str, Any]:
+def _flat_columns(
+    reference_results: Dict[str, Dict[str, Any]],
+    *,
+    relative_enabled: bool,
+) -> Dict[str, Any]:
     values: Dict[str, Any] = {}
     for label, result in sorted(reference_results.items()):
         mixing = result.get("mixing", {}) or {}
@@ -566,12 +904,66 @@ def _flat_columns(reference_results: Dict[str, Dict[str, Any]], *, relative_enab
         values[f"E_form_eV_per_cation__{label}"] = result.get("E_form_eV_per_cation")
         values[f"E_form_eV_per_dopant__{label}"] = result.get("E_form_eV_per_dopant")
 
+        for key in (
+            "formation_energy_raw_eV_total",
+            "energy_correction_eV_total",
+            "correction_uncertainty_eV_total",
+            "correction_uncertainty_eV_per_atom",
+            "correction_uncertainty_eV_per_cation",
+            "correction_uncertainty_eV_per_dopant",
+            "E_form_corrected_eV_total",
+            "E_form_corrected_eV_per_atom",
+            "E_form_corrected_eV_per_cation",
+            "E_form_corrected_eV_per_dopant",
+        ):
+            if key in result:
+                values[f"{key}__{label}"] = result.get(key)
+        correction_metadata = result.get("energy_correction")
+        if isinstance(correction_metadata, dict):
+            values[f"correction_applied__{label}"] = correction_metadata.get("applied")
+            values[f"correction_reason__{label}"] = correction_metadata.get("reason")
+            values[f"correction_method__{label}"] = correction_metadata.get("method")
+            values[f"correction_fit_id__{label}"] = correction_metadata.get("fit_id")
+            values[f"correction_model_family__{label}"] = correction_metadata.get(
+                "model_family"
+            )
+            values[f"correction_selection_run_hash__{label}"] = (
+                correction_metadata.get("selection_run_hash")
+            )
+            values[f"correction_experimental_dataset__{label}"] = (
+                correction_metadata.get("experimental_dataset")
+            )
+            values[f"correction_experimental_dataset_version__{label}"] = (
+                correction_metadata.get("experimental_dataset_version")
+            )
+            values[f"correction_backend__{label}"] = correction_metadata.get("backend")
+            values[f"correction_model__{label}"] = correction_metadata.get("model")
+            values[f"correction_task__{label}"] = correction_metadata.get("task")
+            values[f"correction_feature_vector_json__{label}"] = json.dumps(
+                correction_metadata.get("feature_vector", [])
+            )
+            values[f"correction_applicability_signature_json__{label}"] = json.dumps(
+                correction_metadata.get("applicability_signature") or {},
+                sort_keys=True,
+            )
+
         values[f"E_mix_eV_total__{label}"] = mixing.get("E_mix_eV_total")
         values[f"E_mix_eV_per_atom__{label}"] = mixing.get("E_mix_eV_per_atom")
         values[f"E_mix_eV_per_cation__{label}"] = mixing.get("E_mix_eV_per_cation")
         values[f"E_mix_eV_per_dopant__{label}"] = mixing.get("E_mix_eV_per_dopant")
         values[f"n_O2_out__{label}"] = mixing.get("n_O2_out")
         values[f"mixing_reaction_reference__{label}"] = mixing.get("reaction_reference", "")
+        for key in (
+            "E_mix_raw_eV_total",
+            "energy_correction_eV_total",
+            "correction_uncertainty_eV_total",
+            "E_mix_corrected_eV_total",
+            "E_mix_corrected_eV_per_atom",
+            "E_mix_corrected_eV_per_cation",
+            "E_mix_corrected_eV_per_dopant",
+        ):
+            if key in mixing:
+                values[f"mixing_{key}__{label}"] = mixing.get(key)
 
         if relative_enabled:
             relative = result.get("relative", {}) or {}
@@ -699,11 +1091,18 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
     per reference scenario (for example ``__SbO2`` and ``__Sb2O5``).
     """
     cfg = _parse_formation_config(raw_cfg, root)
+    correction_config = parse_correction_config(raw_cfg, root)
     ref = _load_ref_json(root)
+    correction_model = load_active_correction_model(raw_cfg, root, ref)
     E_pristine, n_atoms_supercell = _get_pristine_energy_and_natoms(ref)
     host_formula = str((ref.get("host") or {}).get("name", "")).strip()
     if not host_formula:
         raise KeyError("reference JSON missing host.name")
+    pristine_counts = _get_pristine_counts(
+        host_formula,
+        n_atoms_supercell,
+    )
+    reference_input_hash = content_hash(ref)
 
     reference_mode = str(ref.get("reference_mode", "metal")).strip().lower()
     if reference_mode not in {"metal", "oxide"}:
@@ -742,12 +1141,29 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
             )
 
     folders = sorted(path for path in cfg.outdir.iterdir() if path.is_dir())
+    formation_config_for_hash = dict(raw_cfg.get("formation", {}) or {})
     active_folders: List[Path] = []
     for folder in folders:
         out_csv = folder / OUT_CSV
-        if cfg.skip_if_done and out_csv.exists():
+        # Applying a correction is inexpensive compared with relaxation. Rebuild
+        # each enabled result so candidate selection and structures can never be
+        # hidden behind a fit-ID-only cache hit.
+        correction_cache_current = correction_model is None and not (
+            _folder_contains_corrections(folder) or _csv_contains_corrections(out_csv)
+        )
+        if cfg.skip_if_done and out_csv.exists() and correction_cache_current:
             log.info("SKIP %s: %s exists", folder.name, OUT_CSV)
         else:
+            if cfg.skip_if_done and out_csv.exists():
+                log.info(
+                    "REBUILD %s: refresh correction-sensitive formation output%s",
+                    folder.name,
+                    (
+                        f" for fit {correction_model.fit_id}"
+                        if correction_model is not None
+                        else " after corrections were disabled"
+                    ),
+                )
             active_folders.append(folder)
 
     if not active_folders:
@@ -757,16 +1173,64 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
     records_by_folder: Dict[Path, List[CandidateRecord]] = {}
     all_records: List[CandidateRecord] = []
 
+    pristine_application: CorrectionApplication | None = None
+    host_formula_application: CorrectionApplication | None = None
+    oxide_applications: Dict[str, CorrectionApplication] = {}
+    if correction_model is not None:
+        host_data = ref.get("host", {}) or {}
+        pristine_path = Path(str(host_data.get("relaxed_supercell_poscar", "")))
+        host_unit_path = Path(str(host_data.get("relaxed_unit_poscar", "")))
+        if not pristine_path.is_absolute():
+            pristine_path = root / pristine_path
+        if not host_unit_path.is_absolute():
+            host_unit_path = root / host_unit_path
+        if not pristine_path.is_file() or not host_unit_path.is_file():
+            raise FileNotFoundError(
+                "Correction application requires both relaxed host unit and supercell POSCARs"
+            )
+        pristine_application = _application_from_path(correction_model, pristine_path)
+        host_formula_composition = (
+            host_ref["reduced_composition"]
+            if host_ref is not None
+            else Composition(host_formula).reduced_composition.as_dict()
+        )
+        host_formula_application = _formula_application(
+            correction_model,
+            host_formula_composition,
+            host_unit_path,
+        )
+
     for folder in active_folders:
         folder_records: List[CandidateRecord] = []
         for poscar in _get_candidate_poscars(folder):
             candidate_dir = poscar.parents[1]
             meta_path = candidate_dir / RELAX_META
             if not meta_path.exists():
-                log.warning("%s/%s: missing %s -> skip", folder.name, candidate_dir.name, RELAX_META)
+                log.warning(
+                    "%s/%s: missing %s -> skip",
+                    folder.name,
+                    candidate_dir.name,
+                    RELAX_META,
+                )
                 continue
 
+            relax_metadata = json.loads(meta_path.read_text(encoding="utf-8"))
             E_doped = _load_relax_energy(meta_path)
+            candidate_application: CorrectionApplication | None = None
+            candidate_energy_provenance: Dict[str, Any] | None = None
+            if correction_model is not None:
+                candidate_energy_provenance = _validate_candidate_backend(
+                    relax_metadata,
+                    correction_model,
+                    metadata_path=meta_path,
+                    allow_legacy=(
+                        correction_config.allow_legacy_candidate_provenance
+                    ),
+                )
+                candidate_application = _application_from_path(
+                    correction_model,
+                    poscar,
+                )
             counts = _count_species_from_poscar(poscar)
             dopant_counts = _compute_substitution_dopant_counts(
                 counts,
@@ -782,6 +1246,7 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
                 log.warning("%s/%s: no cations identified -> skip", folder.name, candidate_dir.name)
                 continue
 
+            stoichiometric_deltas = _stoichiometric_deltas(counts, pristine_counts)
             x_dopant = sum(dopant_counts.values()) / float(n_cations)
             reference_results: Dict[str, Dict[str, Any]] = {}
 
@@ -791,12 +1256,16 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
                 assert E_O2 is not None
                 assert mu_host is not None
 
-                for label, selected_oxides in _iter_oxide_scenarios(dopant_counts, reference_groups):
-                    reference_results[label] = _formation_result(
+                for label, selected_oxides in _iter_oxide_scenarios(
+                    dopant_counts,
+                    reference_groups,
+                ):
+                    result = _formation_result(
                         E_doped=E_doped,
                         E_pristine=E_pristine,
                         n_atoms_supercell=n_atoms_supercell,
                         counts=counts,
+                        pristine_counts=pristine_counts,
                         dopant_counts=dopant_counts,
                         host_species=cfg.host_species,
                         anion=anion,
@@ -807,18 +1276,116 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
                         E_O2=E_O2,
                         normalize=cfg.normalize,
                     )
+                    if correction_model is not None:
+                        assert candidate_application is not None
+                        assert pristine_application is not None
+                        assert host_formula_application is not None
+                        formation_components: List[tuple[float, Iterable[float]]] = [
+                            (1.0, candidate_application.feature_vector),
+                            (-1.0, pristine_application.feature_vector),
+                        ]
+                        host_comp = host_ref["reduced_composition"]
+                        formation_components.append(
+                            (
+                                -float(stoichiometric_deltas.get(cfg.host_species, 0))
+                                / float(host_comp[cfg.host_species]),
+                                host_formula_application.feature_vector,
+                            )
+                        )
+                        mixing_components: List[tuple[float, Iterable[float]]] = [
+                            (1.0, candidate_application.feature_vector),
+                            (
+                                -float(counts.get(cfg.host_species, 0))
+                                / float(host_comp[cfg.host_species]),
+                                host_formula_application.feature_vector,
+                            ),
+                        ]
+                        corrected_mus = dict(result.get("mu_eV_per_atom_used", {}))
+                        host_delta_mu = (
+                            host_formula_application.correction_eV
+                            / float(host_comp[cfg.host_species])
+                        )
+                        corrected_mus[cfg.host_species] = (
+                            float(corrected_mus[cfg.host_species]) + host_delta_mu
+                        )
+                        for dopant, count in sorted(dopant_counts.items()):
+                            oxide_name, oxide = selected_oxides[dopant]
+                            oxide_path = Path(str(oxide.get("relaxed_poscar", "")))
+                            if not oxide_path.is_absolute():
+                                oxide_path = root / oxide_path
+                            if not oxide_path.is_file():
+                                raise FileNotFoundError(
+                                    "Correction requires relaxed structure for oxide "
+                                    f"{oxide_name}: "
+                                    f"{oxide_path}"
+                                )
+                            if oxide_name not in oxide_applications:
+                                oxide_applications[oxide_name] = _formula_application(
+                                    correction_model,
+                                    oxide["reduced_composition"],
+                                    oxide_path,
+                                )
+                            oxide_application = oxide_applications[oxide_name]
+                            oxide_comp = oxide["reduced_composition"]
+                            formation_components.append(
+                                (
+                                    -float(count) / float(oxide_comp[dopant]),
+                                    oxide_application.feature_vector,
+                                )
+                            )
+                            mixing_components.append(
+                                (
+                                    -float(count) / float(oxide_comp[dopant]),
+                                    oxide_application.feature_vector,
+                                )
+                            )
+                            corrected_mus[dopant] = (
+                                float(corrected_mus[dopant])
+                                + oxide_application.correction_eV
+                                / float(oxide_comp[dopant])
+                            )
+                        result["mu_corrected_eV_per_atom_used"] = corrected_mus
+                        _attach_corrected_result(
+                            result,
+                            model=correction_model,
+                            formation_vector=combine_feature_vectors(
+                                correction_model.correction_terms,
+                                formation_components,
+                            ),
+                            mixing_vector=combine_feature_vectors(
+                                correction_model.correction_terms,
+                                mixing_components,
+                            ),
+                            counts=counts,
+                            dopant_counts=dopant_counts,
+                            anion=anion,
+                            n_atoms_supercell=n_atoms_supercell,
+                            normalize=cfg.normalize,
+                        )
+                    reference_results[label] = result
             else:
                 missing = [dopant for dopant in dopant_counts if dopant not in metal_mus]
                 if missing:
                     raise KeyError(
-                        "Missing metal chemical potentials for dopant(s): " + ", ".join(sorted(missing))
+                        "Missing metal chemical potentials for dopant(s): "
+                        + ", ".join(sorted(missing))
                     )
 
-                correction = sum(
-                    float(count) * (float(mu_host) - metal_mus[dopant])
-                    for dopant, count in dopant_counts.items()
+                metal_formation_mus = {
+                    cfg.host_species: float(mu_host),
+                    **{dopant: metal_mus[dopant] for dopant in dopant_counts},
+                }
+                if stoichiometric_deltas.get(anion, 0):
+                    if mu_oxygen is None:
+                        mu_oxygen, E_O2 = _oxygen_mu(ref)
+                    metal_formation_mus[anion] = float(mu_oxygen)
+                chemical_potential_term = _chemical_potential_term(
+                    stoichiometric_deltas,
+                    metal_formation_mus,
                 )
-                E_form_total = float(E_doped - E_pristine + correction)
+                E_form_total = float(
+                    E_doped - E_pristine + chemical_potential_term
+                )
                 n_atoms = sum(counts.values())
                 n_dopants = sum(dopant_counts.values())
                 report_value = E_form_total if cfg.normalize == "total" else (
@@ -833,10 +1400,9 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
                 )
                 reference_results["metal"] = {
                     "oxide_references": {},
-                    "mu_eV_per_atom_used": {
-                        cfg.host_species: float(mu_host),
-                        **{dopant: metal_mus[dopant] for dopant in dopant_counts},
-                    },
+                    "mu_eV_per_atom_used": metal_formation_mus,
+                    "stoichiometric_delta_atoms": stoichiometric_deltas,
+                    "chemical_potential_term_eV": chemical_potential_term,
                     "E_form_eV_total": E_form_total,
                     "E_form_eV_per_atom": E_form_total / n_atoms if n_atoms else E_form_total,
                     "E_form_eV_per_cation": E_form_total / n_cations,
@@ -844,6 +1410,26 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
                     "reported": {"value": report_value, "unit": report_unit},
                     "mixing": {},
                 }
+                if correction_model is not None:
+                    assert candidate_application is not None
+                    assert pristine_application is not None
+                    _attach_corrected_result(
+                        reference_results["metal"],
+                        model=correction_model,
+                        formation_vector=combine_feature_vectors(
+                            correction_model.correction_terms,
+                            [
+                                (1.0, candidate_application.feature_vector),
+                                (-1.0, pristine_application.feature_vector),
+                            ],
+                        ),
+                        mixing_vector=None,
+                        counts=counts,
+                        dopant_counts=dopant_counts,
+                        anion=anion,
+                        n_atoms_supercell=n_atoms_supercell,
+                        normalize=cfg.normalize,
+                    )
 
             record = CandidateRecord(
                 folder=folder,
@@ -854,16 +1440,23 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
                 dopant_counts=dopant_counts,
                 x_dopant=x_dopant,
                 reference_results=reference_results,
+                energy_provenance=candidate_energy_provenance,
             )
             folder_records.append(record)
             all_records.append(record)
 
-        if folder_records:
-            records_by_folder[folder] = folder_records
-        else:
+        records_by_folder[folder] = folder_records
+        if not folder_records:
             log.info("SKIP %s: no valid candidates", folder.name)
 
     if not all_records:
+        for folder in active_folders:
+            _write_folder_csv(
+                folder,
+                [],
+                reference_mode=reference_mode,
+                relative_enabled=False,
+            )
         log.info("DONE Step 06 formation: no valid candidates.")
         return
 
@@ -904,6 +1497,47 @@ def run_formation(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | No
             "reported": primary["reported"],
             "mixing": primary["mixing"],
         }
+        if correction_model is not None:
+            formation_input_hash = _formation_correction_input_hash(
+                record.candidate_dir / RELAX_POSCAR,
+                correction_model,
+                formation_config_for_hash,
+                reference_input_hash,
+            )
+            payload["energy_correction"] = {
+                "enabled": True,
+                "fit_id": correction_model.fit_id,
+                "method": correction_model.method,
+                "parameter_set": correction_model.fit_id,
+                "experimental_dataset": correction_model.experimental_dataset,
+                "experimental_dataset_version": (
+                    correction_model.experimental_dataset_version
+                ),
+                "backend_signature": dict(correction_model.backend_signature),
+                "correction_terms": list(correction_model.correction_terms),
+                "applicability_signature": correction_model.applicability_signature,
+                "activation_input_hash": correction_model.activation_input_hash,
+                "model_family": correction_model.model_family,
+                "selection_run_hash": correction_model.selection_run_hash,
+                "target_elements": list(correction_model.target_elements),
+                "selection_metadata": dict(
+                    correction_model.selection_metadata or {}
+                ),
+                "formation_input_hash": formation_input_hash,
+                "candidate_energy_provenance": record.energy_provenance,
+                "applied": bool(primary["energy_correction"].get("applied")),
+                "reason": primary["energy_correction"].get("reason"),
+            }
+            payload["E_form_corrected_eV_total"] = primary[
+                "E_form_corrected_eV_total"
+            ]
+            payload["energy_correction_eV_total"] = primary[
+                "energy_correction_eV_total"
+            ]
+            payload["correction_uncertainty_eV_total"] = primary[
+                "correction_uncertainty_eV_total"
+            ]
+            payload["reported_corrected"] = primary["reported_corrected"]
         _write_candidate_meta(record.candidate_dir, payload)
 
     for folder, folder_records in records_by_folder.items():

@@ -13,6 +13,12 @@ Command
 
    dopingflow sequential-run -c input.toml
 
+If ``[energy_correction].enabled = true``, the command first fits or reuses the
+signature-matched correction model once, before any composition step. It does
+not refit for each composition. Run ``refs-build`` first so the active
+reference cache exists, and keep ``[references]`` and ``[relax]`` aligned in
+backend, model, and task.
+
 Execution Logic
 ---------------
 
@@ -32,6 +38,17 @@ In ``mode = "full"``, each step runs:
 ::
 
    generate -> scan -> relax -> filter -> optional bandgap -> formation -> collect
+
+The optional correction fit described above is a one-time preflight stage and
+is therefore not repeated in this per-step sequence.
+
+Formation and collection caches are forced off inside each step because those
+stages publish project-level files before the workflow copies them into the
+step directory. This guarantees that a later composition cannot reuse the
+previous composition's database. The final merge includes only the exact steps
+from the current invocation, so obsolete historical step directories are not
+silently reintroduced. If the legacy global-endpoint relative-energy fallback
+is enabled, it is evaluated once after this merge.
 
 After relaxation, the lowest-energy relaxed candidate is copied to:
 
@@ -59,6 +76,10 @@ recompute_energies
 
 Reuses existing relaxed sequential structures and reruns only formation-energy
 evaluation and database collection.
+
+Both stages are rebuilt even if their normal ``skip_if_done`` settings are
+true, so changed reference energies or formation settings are applied to every
+step.
 
 This is useful when changing the thermodynamic reference, for example:
 

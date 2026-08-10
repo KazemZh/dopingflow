@@ -13,14 +13,15 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     import tomli as tomllib
 
-from dopingflow.generate import run_generate, enumerate_compositions
-from dopingflow.scan import run_scan
-from dopingflow.relax import run_relax
-from dopingflow.filtering import run_filtering
 from dopingflow.bandgap import run_bandgap
+from dopingflow.collect import run_collect
+from dopingflow.correction_calibration import run_corrections_fit
+from dopingflow.filtering import run_filtering
 from dopingflow.formation import run_formation
-from dopingflow.collect_relative import run_collect
+from dopingflow.generate import enumerate_compositions, run_generate
 from dopingflow.relative_energy import populate_relative_energy_columns, relative_energy_enabled
+from dopingflow.relax import run_relax
+from dopingflow.scan import run_scan
 
 log = logging.getLogger(__name__)
 
@@ -98,10 +99,16 @@ def _merge_step_databases(
     sequential_root: Path,
     root: Path,
     raw_cfg: dict[str, Any],
+    *,
+    step_databases: List[Path] | None = None,
 ) -> Path:
     import pandas as pd
 
-    csv_files = sorted(sequential_root.glob("step_*/results_database.csv"))
+    csv_files = (
+        list(step_databases)
+        if step_databases is not None
+        else sorted(sequential_root.glob("step_*/results_database.csv"))
+    )
     if not csv_files:
         raise FileNotFoundError("No step results_database.csv files found to merge.")
 
@@ -116,12 +123,29 @@ def _merge_step_databases(
         dfs.append(df)
 
     merged = pd.concat(dfs, ignore_index=True)
+    for column in (
+        "correction_model_family",
+        "correction_selection_run_hash",
+    ):
+        if column not in merged.columns:
+            continue
+        values = {
+            str(value).strip()
+            for value in merged[column].dropna().tolist()
+            if str(value).strip()
+        }
+        if len(values) > 1:
+            raise ValueError(
+                "Sequential databases contain mixed correction provenance in "
+                f"{column}: {sorted(values)}"
+            )
     out = root / "results_database.csv"
     merged.to_csv(out, index=False)
 
     # Preserve formation-stage oxide tie-line values. For legacy step databases
     # without relative columns, calculate the old global-endpoint fallback only
-    # when relative output was explicitly requested.
+    # when relative output was explicitly requested. This must happen after the
+    # current run's steps are merged so the endpoint is global, not step-local.
     if relative_energy_enabled(raw_cfg):
         populate_relative_energy_columns(out, raw_cfg)
     return out
@@ -148,12 +172,17 @@ def run_sequential(
     compositions = _get_sequential_compositions(raw_cfg)
 
     previous_best: Path | None = None
+    step_databases: List[Path] = []
 
     log.info("Starting sequential doping workflow")
     log.info("Sequential mode: %s", seq_mode)
     log.info("Sequential output directory: %s", sequential_root)
     log.info("Compositions are taken from [doping] section.")
     log.info("Number of sequential steps: %d", len(compositions))
+
+    # Fit once at project scope. Every step then applies the exact same model,
+    # avoiding a silent mixture of parameter sets across the merged database.
+    run_corrections_fit(raw_cfg, root, config_path=config_path)
 
     for step_index, comp in enumerate(compositions, start=1):
         comp_label = _composition_label(comp)
@@ -172,6 +201,8 @@ def run_sequential(
         cfg.setdefault("doping", {})
         cfg.setdefault("scan", {})
         cfg.setdefault("relax", {})
+        cfg.setdefault("formation", {})
+        cfg.setdefault("database", {})
 
         step_outdir = step_root / "random_structures"
         cfg["structure"]["outdir"] = str(step_outdir)
@@ -197,6 +228,11 @@ def run_sequential(
         cfg["scan"]["skip_if_done"] = False
         cfg["relax"]["skip_if_done"] = False
         cfg["relax"]["skip_candidate_if_done"] = False
+        # Formation and collection both write project-level outputs. Every step
+        # must rebuild them from its own step_outdir before the result is copied;
+        # otherwise later steps can silently reuse the first step's database.
+        cfg["formation"]["skip_if_done"] = False
+        cfg["database"]["skip_if_done"] = False
 
         step_config_path = step_root / "input_step.json"
         step_config_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
@@ -227,7 +263,11 @@ def run_sequential(
                     f"Recompute mode requires existing step output directory: {step_outdir}"
                 )
 
-            log.info("Recompute mode: skipping generate, scan, relax, filter, and bandgap for %s", comp_label)
+            log.info(
+                "Recompute mode: skipping generate, scan, relax, filter, "
+                "and bandgap for %s",
+                comp_label,
+            )
 
         log.info("Running formation for %s", comp_label)
         run_formation(cfg, root)
@@ -242,6 +282,7 @@ def run_sequential(
 
         step_db = step_root / "results_database.csv"
         shutil.copy2(project_db, step_db)
+        step_databases.append(step_db)
 
         if seq_mode == "full":
             comp_dirs = sorted([p for p in step_outdir.iterdir() if p.is_dir()])
@@ -299,7 +340,12 @@ def run_sequential(
         log.info("Step database copied to: %s", step_db)
 
     log.info("Sequential doping workflow finished.")
-    merged_csv = _merge_step_databases(sequential_root, root, raw_cfg)
+    merged_csv = _merge_step_databases(
+        sequential_root,
+        root,
+        raw_cfg,
+        step_databases=step_databases,
+    )
     log.info("Merged sequential database written to: %s", merged_csv)
 
     return sequential_root

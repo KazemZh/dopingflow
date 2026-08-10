@@ -8,6 +8,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from dopingflow.corrections import (
+    content_hash,
+    load_active_correction_model,
+    parse_correction_config,
+)
+from dopingflow.formation import RELAX_POSCAR as FORMATION_RELAX_POSCAR
+from dopingflow.formation import _formation_correction_input_hash
+
 log = logging.getLogger(__name__)
 
 OUT_CSV = "results_database.csv"
@@ -276,6 +284,45 @@ def _flatten_reference_results(reference_results: Any) -> Dict[str, Any]:
             if key in result:
                 values[f"{key}__{label}"] = result.get(key)
 
+        for key in (
+            "formation_energy_raw_eV_total",
+            "energy_correction_eV_total",
+            "correction_uncertainty_eV_total",
+            "correction_uncertainty_eV_per_atom",
+            "correction_uncertainty_eV_per_cation",
+            "correction_uncertainty_eV_per_dopant",
+            "E_form_corrected_eV_total",
+            "E_form_corrected_eV_per_atom",
+            "E_form_corrected_eV_per_cation",
+            "E_form_corrected_eV_per_dopant",
+        ):
+            if key in result:
+                values[f"{key}__{label}"] = result.get(key)
+        correction = result.get("energy_correction", {}) or {}
+        if isinstance(correction, dict) and correction:
+            for output_key, source_key in (
+                ("correction_applied", "applied"),
+                ("correction_reason", "reason"),
+                ("correction_method", "method"),
+                ("correction_fit_id", "fit_id"),
+                ("correction_model_family", "model_family"),
+                ("correction_selection_run_hash", "selection_run_hash"),
+                ("correction_experimental_dataset", "experimental_dataset"),
+                (
+                    "correction_experimental_dataset_version",
+                    "experimental_dataset_version",
+                ),
+                ("correction_backend", "backend"),
+                ("correction_model", "model"),
+                ("correction_task", "task"),
+                ("correction_feature_vector_json", "feature_vector"),
+                (
+                    "correction_applicability_signature_json",
+                    "applicability_signature",
+                ),
+            ):
+                values[f"{output_key}__{label}"] = correction.get(source_key)
+
         mixing = result.get("mixing", {}) or {}
         if isinstance(mixing, dict):
             for key in (
@@ -287,6 +334,17 @@ def _flatten_reference_results(reference_results: Any) -> Dict[str, Any]:
             ):
                 if key in mixing:
                     values[f"{key}__{label}"] = mixing.get(key)
+            for key in (
+                "E_mix_raw_eV_total",
+                "energy_correction_eV_total",
+                "correction_uncertainty_eV_total",
+                "E_mix_corrected_eV_total",
+                "E_mix_corrected_eV_per_atom",
+                "E_mix_corrected_eV_per_cation",
+                "E_mix_corrected_eV_per_dopant",
+            ):
+                if key in mixing:
+                    values[f"mixing_{key}__{label}"] = mixing.get(key)
             if "reaction_reference" in mixing:
                 values[f"mixing_reaction_reference__{label}"] = mixing.get("reaction_reference", "")
 
@@ -354,6 +412,21 @@ def read_formation_meta(path: Path) -> Dict[str, Any]:
         "mixing_reaction_reference": mixing.get("reaction_reference", ""),
         # full multi-oxide/wide output
         "wide_reference_results": wide,
+        "energy_correction": data.get("energy_correction", None),
+        "E_form_corrected_eV_total": data.get("E_form_corrected_eV_total", None),
+        "energy_correction_eV_total": data.get("energy_correction_eV_total", None),
+        "correction_uncertainty_eV_total": data.get(
+            "correction_uncertainty_eV_total", None
+        ),
+        "E_form_corrected_norm": safe_get(
+            data, "reported_corrected", "value", default=None
+        ),
+        "E_form_corrected_norm_uncertainty": safe_get(
+            data, "reported_corrected", "uncertainty", default=None
+        ),
+        "E_form_corrected_norm_unit": safe_get(
+            data, "reported_corrected", "unit", default=""
+        ),
     }
 
 
@@ -365,6 +438,37 @@ def _format_csv_value(value: Any) -> Any:
     return value
 
 
+_ENERGY_CORRECTION_COLUMN_PREFIXES = (
+    "formation_energy_raw_",
+    "formation_correction_",
+    "energy_correction_",
+    "correction_",
+    "E_form_corrected_",
+    "E_mix_raw_",
+    "E_mix_corrected_",
+    "mixing_E_mix_raw_",
+    "mixing_energy_correction_",
+    "mixing_correction_",
+    "mixing_E_mix_corrected_",
+    "experimental_dataset",
+)
+
+
+def _is_energy_correction_column(name: str) -> bool:
+    return str(name).startswith(_ENERGY_CORRECTION_COLUMN_PREFIXES)
+
+
+def _database_has_correction_columns(path: Path) -> bool:
+    if not path.exists():
+        return False
+    try:
+        with path.open(newline="", encoding="utf-8") as handle:
+            fieldnames = csv.DictReader(handle).fieldnames or []
+    except (OSError, csv.Error):
+        return False
+    return any(_is_energy_correction_column(field) for field in fieldnames)
+
+
 def run_collect(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None = None) -> Path:
     """
     Step 07: Collect results into ONE flat CSV database (results_database.csv),
@@ -374,12 +478,42 @@ def run_collect(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None
     for every oxide-reference scenario found in formation.py's ``reference_results``.
     """
     cfg = _parse_db_config(raw_cfg, root)
+    correction_config = parse_correction_config(raw_cfg, root)
+    correction_model = None
+    reference_input_hash = ""
+    if correction_config.enabled:
+        reference_path = root / "reference_structures" / "reference_energies.json"
+        reference_data = read_json(reference_path)
+        if reference_data is None:
+            raise FileNotFoundError(
+                "Energy correction is enabled but reference_energies.json is missing "
+                "or invalid; run refs-build and corrections-fit first"
+            )
+        correction_model = load_active_correction_model(
+            raw_cfg,
+            root,
+            reference_data,
+        )
+        reference_input_hash = content_hash(reference_data)
 
     out_csv = (root / OUT_CSV).resolve()
     if cfg.skip_if_done and out_csv.exists():
-        log.info("SKIP %s already exists: %s", OUT_CSV, out_csv)
-        log.info("Set [database].skip_if_done=false to overwrite.")
-        return out_csv
+        if correction_config.enabled:
+            log.info(
+                "REBUILD %s: energy correction is enabled and formation inputs "
+                "may have changed",
+                OUT_CSV,
+            )
+        elif _database_has_correction_columns(out_csv):
+            log.info(
+                "REBUILD %s: energy correction is disabled but the existing "
+                "database contains corrected columns",
+                OUT_CSV,
+            )
+        else:
+            log.info("SKIP %s already exists: %s", OUT_CSV, out_csv)
+            log.info("Set [database].skip_if_done=false to overwrite.")
+            return out_csv
 
     if not cfg.outdir.exists():
         raise FileNotFoundError(f"[structure].outdir not found: {cfg.outdir}")
@@ -549,10 +683,157 @@ def run_collect(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None
                 "dopant_counts": dop_counts_legacy,
             }
 
+            correction_metadata = fmeta.get("energy_correction")
+            if correction_config.enabled:
+                if not isinstance(correction_metadata, dict) or not correction_metadata:
+                    raise ValueError(
+                        f"Correction-enabled collection requires corrected formation "
+                        f"metadata for {cand_dir}; rerun the formation stage"
+                    )
+                assert correction_model is not None
+                if correction_metadata.get("fit_id") != correction_model.fit_id:
+                    raise ValueError(
+                        f"Formation correction fit for {cand_dir} is stale; rerun "
+                        "the formation stage before collect"
+                    )
+                try:
+                    expected_formation_hash = _formation_correction_input_hash(
+                        cand_dir / FORMATION_RELAX_POSCAR,
+                        correction_model,
+                        dict(raw_cfg.get("formation", {}) or {}),
+                        reference_input_hash,
+                    )
+                except OSError as exc:
+                    raise ValueError(
+                        f"Cannot validate correction inputs for {cand_dir}; rerun "
+                        "the formation stage"
+                    ) from exc
+                if (
+                    correction_metadata.get("formation_input_hash")
+                    != expected_formation_hash
+                ):
+                    raise ValueError(
+                        f"Formation correction inputs for {cand_dir} changed; rerun "
+                        "the formation stage before collect"
+                    )
+                primary_correction_values = {
+                    "formation_energy_raw_eV_total": _to_float(E_form_total),
+                    "energy_correction_eV_total": _to_float(
+                        fmeta.get("energy_correction_eV_total")
+                    ),
+                    "correction_uncertainty_eV_total": _to_float(
+                        fmeta.get("correction_uncertainty_eV_total")
+                    ),
+                    "E_form_corrected_eV_total": _to_float(
+                        fmeta.get("E_form_corrected_eV_total")
+                    ),
+                    "E_form_corrected_norm": _to_float(
+                        fmeta.get("E_form_corrected_norm")
+                    ),
+                    "E_form_corrected_norm_uncertainty": _to_float(
+                        fmeta.get("E_form_corrected_norm_uncertainty")
+                    ),
+                    "E_form_corrected_norm_unit": str(
+                        fmeta.get("E_form_corrected_norm_unit") or ""
+                    ),
+                    "correction_applied": correction_metadata.get("applied", False),
+                    "correction_reason": correction_metadata.get("reason", ""),
+                    "correction_method": correction_metadata.get("method", ""),
+                    "correction_fit_id": correction_metadata.get("fit_id", ""),
+                    "correction_model_family": correction_metadata.get(
+                        "model_family", ""
+                    ),
+                    "correction_selection_run_hash": correction_metadata.get(
+                        "selection_run_hash", ""
+                    ),
+                    "correction_parameter_set": correction_metadata.get(
+                        "parameter_set", ""
+                    ),
+                    "experimental_dataset": correction_metadata.get(
+                        "experimental_dataset", ""
+                    ),
+                    "experimental_dataset_version": correction_metadata.get(
+                        "experimental_dataset_version", ""
+                    ),
+                    "correction_activation_input_hash": correction_metadata.get(
+                        "activation_input_hash", ""
+                    ),
+                    "formation_correction_input_hash": correction_metadata.get(
+                        "formation_input_hash", ""
+                    ),
+                    "candidate_energy_provenance_mode": safe_get(
+                        correction_metadata,
+                        "candidate_energy_provenance",
+                        "mode",
+                        default="",
+                    ),
+                    "candidate_energy_provenance_assumptions_json": safe_get(
+                        correction_metadata,
+                        "candidate_energy_provenance",
+                        "assumptions",
+                        default=[],
+                    ),
+                    "candidate_energy_execution_differences_json": safe_get(
+                        correction_metadata,
+                        "candidate_energy_provenance",
+                        "execution_differences",
+                        default=[],
+                    ),
+                    "candidate_energy_current_poscar_sha256": safe_get(
+                        correction_metadata,
+                        "candidate_energy_provenance",
+                        "current_relaxed_poscar_sha256",
+                        default="",
+                    ),
+                    "candidate_energy_original_poscar_sha256": safe_get(
+                        correction_metadata,
+                        "candidate_energy_provenance",
+                        "original_relaxed_poscar_sha256",
+                        default="",
+                    ),
+                    "correction_applicability_signature_json": (
+                        correction_metadata.get("applicability_signature", {})
+                    ),
+                    "correction_backend": safe_get(
+                        correction_metadata, "backend_signature", "backend", default=""
+                    ),
+                    "correction_model": safe_get(
+                        correction_metadata, "backend_signature", "model", default=""
+                    ),
+                    "correction_task": safe_get(
+                        correction_metadata, "backend_signature", "task", default=""
+                    ),
+                    "correction_backend_package": safe_get(
+                        correction_metadata,
+                        "backend_signature",
+                        "backend_package",
+                        default="",
+                    ),
+                    "correction_backend_package_version": safe_get(
+                        correction_metadata,
+                        "backend_signature",
+                        "backend_package_version",
+                        default="",
+                    ),
+                    "correction_model_checkpoint_sha256": safe_get(
+                        correction_metadata,
+                        "backend_signature",
+                        "model_checkpoint_sha256",
+                        default="",
+                    ),
+                }
+                row.update(primary_correction_values)
+                dynamic_fields.update(primary_correction_values)
+
             # Add multi-oxide wide columns from meta.json first.
             wide = fmeta.get("wide_reference_results", {})
             if isinstance(wide, dict):
                 for key, value in wide.items():
+                    if (
+                        not correction_config.enabled
+                        and _is_energy_correction_column(key)
+                    ):
+                        continue
                     row[key] = value
                     dynamic_fields.add(key)
 
@@ -575,6 +856,11 @@ def run_collect(raw_cfg: dict[str, Any], root: Path, *, config_path: Path | None
                     }:
                         continue
                     if "__" in key:
+                        if (
+                            not correction_config.enabled
+                            and _is_energy_correction_column(key)
+                        ):
+                            continue
                         row[key] = value
                         dynamic_fields.add(key)
 

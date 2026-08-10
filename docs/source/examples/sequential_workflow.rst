@@ -23,6 +23,11 @@ Run the sequential workflow:
 
    dopingflow sequential-run -c input.toml
 
+If ``[energy_correction].enabled = true``, this command fits or reuses one
+signature-matched correction model before starting the composition loop. It
+does not refit at every step. Run ``refs-build`` first and use matching
+``[references]`` and ``[relax]`` backend/model/task settings.
+
 In ``mode = "full"``, each composition step runs:
 
 ::

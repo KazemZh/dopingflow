@@ -36,6 +36,17 @@ The stage performs the following tasks:
 
 The resulting reference data are later used by the formation-energy stage.
 
+If backend-specific correction fitting is enabled, these same backend/model/task
+settings and elemental terminal energies also define calculated calibration
+formation enthalpies. Calibration compounds themselves come from a separate
+manifest and are never inferred from ``oxides_ref``. See
+:doc:`energy_corrections`.
+
+For correction application, ``[relax]`` must use the same backend, model, and
+task as ``[references]``. Runtime provenance is also exact: after a backend
+package or local-checkpoint change, rebuild references and rerun stale
+candidate relaxations before refitting and applying the model.
+
 
 Inputs
 ------
@@ -292,9 +303,14 @@ If:
 
    skip_if_done = true
 
-and ``reference_energies.json`` already exists, this stage is skipped.
+the stage validates each cached host/reference against its source-file hash,
+relaxed-output hash, and relaxation signature. Compatible entries are reused;
+a new, changed, tampered, or incompatible entry is relaxed.
+``skip_if_done = false`` forces recomputation.
 
-This ensures deterministic behavior and avoids unnecessary recomputation.
+Correction models have a separate fit-input hash under
+``reference_structures/corrections`` and are never treated as part of the oxide
+reference inventory.
 
 
 Outputs
@@ -368,3 +384,5 @@ Notes and Limitations
 - No charge-state corrections are included
 - No entropy or temperature effects are considered
 - No competing phase stability analysis is performed
+- Experimental calibration selection and fitting are performed by the optional
+  ``corrections-fit`` stage, not by ``refs-build``

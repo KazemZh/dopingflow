@@ -17,7 +17,7 @@ then optionally extend the analysis to surface structures.
 Pipeline Structure
 ------------------
 
-Reference Construction → Enumeration → Screening → Relaxation → Filtering → Band Gap → Formation Energy → Database → 1D Alloy Hull → Phase Diagram → Vacancies
+Reference Construction → Optional Correction Fit → Enumeration → Screening → Relaxation → Filtering → Band Gap → Formation Energy → Database → 1D Alloy Hull → Phase Diagram → Vacancies
 
 Optional Post-Processing:
 
@@ -31,6 +31,11 @@ For gradual doping studies, ``dopingflow`` also provides a sequential workflow:
 ::
 
    dopingflow sequential-run -c input.toml
+
+When energy correction is enabled, ``sequential-run`` performs the correction
+fit/reuse once as a preflight before the composition loop. The model is not
+refitted per composition; it uses the existing references and the same
+backend/model/task required for candidate relaxation.
 
 In this mode, the workflow processes the composition list step by step. For example,
 a sequence such as 2.5%, 5%, 7.5%, and 10% Sb is treated as a gradual doping path.
@@ -56,6 +61,13 @@ Stages
    - Relax host structure (unit cell and supercell)
    - Relax reference phases (metal or oxide mode)
    - Build thermodynamic reference dataset
+
+0b. Backend-specific energy correction (optional)
+
+   - Load curated Kingsbury or explicitly unit-tagged custom measurements
+   - Match a separate calibration manifest to same-backend calculated structures
+   - Fit an uncertainty-weighted, identifiable correction model
+   - Save exact calibration records, covariance, fit report, and backend provenance
 
 1. Symmetry-reduced dopant enumeration
 
@@ -87,6 +99,8 @@ Stages
 
    - Compute formation energies using reference structures
    - Supports metal and oxide reference schemes
+   - Retain the legacy raw reaction energy and, when enabled, add a separately
+     corrected balanced-reaction energy and coefficient uncertainty
 
 7. Database assembly
 
@@ -105,6 +119,8 @@ Stages
    - Include compatible reference phases and lower-dimensional candidates
    - Require one elemental terminal reference for every element
    - Write per-system CSV files plus a combined result table
+   - When correction is enabled, build independent complete raw and corrected
+     entry sets and reconstruct both hulls
 
 10. Oxygen vacancies (optional run-all extension)
 

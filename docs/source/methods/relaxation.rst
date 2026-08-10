@@ -234,6 +234,20 @@ already exist, that individual candidate is skipped.
 
 This enables safe restart of interrupted runs.
 
+Skipping is a file-existence optimization, not a guarantee that an old energy
+was produced by the currently installed backend package or current local
+checkpoint contents. This provenance is strict when experimental energy
+correction is enabled. After a backend-package upgrade or checkpoint-content
+change, rerun relaxation with both settings disabled::
+
+   [relax]
+   skip_if_done = false
+   skip_candidate_if_done = false
+
+Otherwise formation/correction validation can correctly reject the stale
+``02_relax/meta.json`` records. Rerun scanning as well when its single-point
+ranking used the changed backend or checkpoint.
+
 
 Outputs
 -------

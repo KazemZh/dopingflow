@@ -44,6 +44,8 @@ This stage uses settings from the following sections of ``input.toml``:
 - ``[doping]``: defines the substitution host species.
 - ``[scan]``: provides the anion species list used to identify dopants.
 - ``[formation]``: controls skipping, normalization, and optional relative columns.
+- ``[energy_correction]``: optionally selects a fitted, backend-compatible
+  correction model. See :doc:`energy_corrections`.
 
 It also requires the reference-energy JSON from Step 00:
 
@@ -69,14 +71,16 @@ The set of dopant counts :math:`n_i` is extracted from each candidate POSCAR.
 Formation energy definition
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The formation energy is defined as:
+For every species :math:`\alpha`, let :math:`\Delta n_\alpha` be its candidate
+atom count minus its pristine-supercell atom count. The general atom-balanced
+definition is:
 
 .. math::
 
    E_{\mathrm{form}} =
    E_{\mathrm{doped}}
    - E_{\mathrm{pristine}}
-   + \sum_i n_i \left( \mu_{\mathrm{host}} - \mu_i \right)
+   - \sum_\alpha \Delta n_\alpha \mu_\alpha.
 
 where:
 
@@ -84,13 +88,74 @@ where:
 - :math:`E_{\mathrm{pristine}}` is the relaxed total energy of the pristine supercell
 - :math:`\mu_{\mathrm{host}}` is the host chemical potential (per atom)
 - :math:`\mu_i` is the dopant chemical potential (per atom)
-- :math:`n_i` is the number of dopant atoms of species :math:`i` in the supercell
+- :math:`\Delta n_\alpha` is the signed stoichiometric change for species
+  :math:`\alpha`
 
-This corresponds to replacing :math:`n_i` host atoms by :math:`n_i` dopant atoms
-for each dopant species :math:`i`, while keeping the same supercell size.
+For a purely substitutional candidate at fixed oxygen content this reduces to
+
+.. math::
+
+   E_{\mathrm{form}} = E_{\mathrm{doped}}-E_{\mathrm{pristine}}
+   +\sum_i n_i(\mu_{\mathrm{host}}-\mu_i).
+
+Using the general form is essential for a doped structure that also contains
+host or oxygen vacancies. In particular, an oxygen change contributes
+:math:`-\Delta n_\mathrm{O}\mu_\mathrm{O}` rather than being silently treated as
+stoichiometric SnO2.
+
+In metal-reference mode, such an oxygen-nonstoichiometric reaction requires a
+same-backend O2 entry in ``reference_energies.json``. If it is absent, the stage
+fails rather than assuming an oxygen chemical potential.
 
 Reference energies are taken from Step 00 and must be consistent with the
 supercell size and host species used here.
+
+Raw and corrected quantities
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The existing ``E_form_*`` fields remain the raw formation energies defined
+above. They are never overwritten.
+
+When ``[energy_correction].enabled = true``, the stage loads the fitted model
+whose backend/model/task and fit terms match the current references. Candidate
+relaxation metadata must use the same backend/model/task. The correction is
+then evaluated for the complete balanced reaction rather than added only to the
+final scalar.
+
+Compatibility also includes resolved runtime provenance such as the installed
+backend package version and a local checkpoint's content hash. Existing relax
+outputs are not made current merely by editing ``input.toml``. After a package
+or checkpoint change, set both ``[relax].skip_if_done`` and
+``[relax].skip_candidate_if_done`` to ``false`` and rerun relaxation before
+formation analysis.
+
+For metal-reference mode, elemental chemical potentials are not corrected, so
+the reaction correction is
+
+.. math::
+
+   \Delta C_{\mathrm{form}} = C_{\mathrm{doped}} - C_{\mathrm{pristine}}.
+
+For each oxide-reference scenario, the corrected host and dopant chemical
+potentials are derived from corrected host/oxide compound energies. If the
+host formula contains :math:`a` host atoms and dopant oxide :math:`i` contains
+:math:`d_i` dopant atoms, then
+
+.. math::
+
+   \Delta C_{\mathrm{form}} = C_{\mathrm{doped}}-C_{\mathrm{pristine}}
+   -\Delta n_{\mathrm{host}}\frac{C_{\mathrm{host, FU}}}{a}
+   -\sum_i n_i\frac{C_{\mathrm{oxide},i,\mathrm{FU}}}{d_i}.
+
+Co-dopants are included in the same sum; no special Sb/Ti lookup is used. The
+mixing reaction is corrected using its own atom-balanced reaction vector. Full
+fit covariance is propagated through that combined vector, preserving exact
+correlation and cancellation between constituents.
+
+The default ordinary-oxide O term cancels for metal-reference substitution at
+fixed oxygen content. Such an explicit zero is expected and is not silently
+replaced by a dopant-specific parameter. See :doc:`energy_corrections` for the
+model's scientific scope and limitations.
 
 
 Method Summary
@@ -118,8 +183,10 @@ For each structure folder inside ``[structure].outdir``:
    b. Read species counts from ``candidate_*/02_relax/POSCAR`` and infer dopant
       counts under the substitutional model.
    c. Evaluate :math:`E_{\mathrm{form}}` using the equation above.
-   d. Apply the requested normalization (see below).
-   e. Write ``candidate_*/04_formation/meta.json``.
+   d. If enabled, validate the active fit and evaluate the corrected balanced
+      reaction and its coefficient uncertainty.
+   e. Apply raw and corrected normalizations separately (see below).
+   f. Write ``candidate_*/04_formation/meta.json``.
 
 4. Write ``formation_energies.csv`` in the folder, sorted by total formation
    energy.
@@ -207,6 +274,12 @@ suffix, including formation energies, mixing energies, relative values, oxide
 endpoint energies, reaction text, and JSON endpoint provenance. Rows remain one
 candidate per row and are sorted by relaxed doped energy.
 
+When correction is enabled, each scenario additionally includes explicit raw,
+correction, corrected, and correction-uncertainty columns. Legacy unsuffixed and
+``E_form_*__<scenario>`` values remain raw. Corrected fields use names such as
+``E_form_corrected_eV_total__<scenario>`` and include method, fit ID, dataset,
+and applicability provenance.
+
 Per-candidate metadata
 ~~~~~~~~~~~~~~~~~~~~~~
 
@@ -221,11 +294,15 @@ This file includes:
 - full formation-energy definition string from the reference JSON
 - :math:`E_{\mathrm{doped}}`, :math:`E_{\mathrm{pristine}}`
 - chemical potentials used for the involved species
+- signed candidate-minus-pristine stoichiometric changes and their total
+  chemical-potential contribution
 - inferred dopant counts
 - total formation energy and the reported normalized value
 - the full ``reference_results`` mapping for all oxide scenarios
 - the primary reference label used for backward-compatible top-level fields
 - relative-energy and oxide-endpoint provenance
+- when enabled, the correction reaction vector, raw/corrected values,
+  coefficient uncertainty, backend signature, dataset, parameter set, and fit ID
 
 
 Reproducibility and Skipping
@@ -238,7 +315,12 @@ If:
    [formation].skip_if_done = true
 
 and ``formation_energies.csv`` already exists for a folder, that folder is
-skipped.
+skipped on the legacy correction-disabled path. When correction is enabled, an
+existing result is rebuilt from the current selected candidates, POSCARs,
+relaxation metadata, references, configuration, and active fit. Formation is a
+cheap analysis stage compared with relaxation, and this avoids a stale
+fit-ID-only cache. Disabling correction also rebuilds output that still contains
+corrected fields.
 
 Given unchanged relaxed energies, POSCARs, reference JSON, and configuration,
 this stage is deterministic.
@@ -247,9 +329,14 @@ this stage is deterministic.
 Notes and Limitations
 ---------------------
 
-- This stage assumes substitutional doping and uses a simple species-based
-  dopant identification rule (host vs anions vs dopants).
+- This stage requires at least one identified dopant and uses a simple
+  species-based rule (host vs anions vs dopants). Signed host/anion deviations
+  are nevertheless included in the balanced reaction, so mixed
+  dopant--vacancy candidates are not forced to pristine stoichiometry.
 - No charged-defect corrections, finite-size corrections, entropy terms, or
   competing-phase chemical potential bounds are included.
+- The correction application uses the actual composition of every processed
+  structure, but the separate vacancy workflow does not yet publish corrected
+  vacancy thermodynamics automatically.
 - The absolute values depend on the reference energies and the chosen bulk
   phases used to define :math:`\mu_i`.

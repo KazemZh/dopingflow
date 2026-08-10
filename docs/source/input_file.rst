@@ -59,6 +59,7 @@ The following sections are supported:
 - ``[relax]``
 - ``[filter]``
 - ``[bandgap]``
+- ``[energy_correction]`` (optional)
 - ``[formation]``
 - ``[database]`` (optional)
 - ``[vacancies]`` (required only by the vacancy workflow)
@@ -266,10 +267,18 @@ Oxide Reference Mode
 
 Used when ``reference_mode = "oxide"``.
 
-oxides_ref (array of strings, required in oxide mode)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+oxides_ref (array of strings; required in oxide mode, optional in metal mode)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-List of dopant oxide formulas (e.g. ``"Sb2O5"``).
+List of oxide formulas (e.g. ``"Sb2O5"``, ``"SnO"``, or ``"Sn3O4"``).
+These structures are also relaxed when ``reference_mode = "metal"`` so they
+can serve as competing phases in the phase diagram without changing the
+formation-energy reference scheme.
+
+With ``skip_if_done = true``, reference construction checks each source
+POSCAR and the relaxation settings independently. Compatible cached results
+are reused, while newly added or changed references are relaxed. Setting
+``skip_if_done = false`` forces all host and reference relaxations to run.
 
 oxides_dir (string, default: "reference_structures/oxides")
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -298,6 +307,270 @@ muO_shift_ev (float, default: 0.0)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Optional chemical potential shift applied to oxygen (eV).
+
+---------------------------------------------------------------------
+
+[energy_correction]
+-------------------
+
+Optional backend-specific formation-energy correction fitting. The section may
+be omitted. ``enabled = false`` is a hard no-op and preserves the legacy raw
+workflow. No pre-fitted MP2020 coefficient is applied.
+
+Minimal curated configuration::
+
+   [energy_correction]
+   enabled = true
+   experimental_source = "kingsbury"
+   calibration_manifest = "reference_structures/corrections/calibration_manifest.csv"
+   correction_terms = ["oxide"]
+
+Automatic M0/M1 selection with complete phase-resolved calibration is an
+explicit opt-in::
+
+   [energy_correction]
+   enabled = true
+   experimental_source = "kingsbury"
+   correction_terms = ["oxide"]
+   model_family = "auto"
+   m1_elements = "workflow"
+   calibration_selection = "phase_resolved"
+   auto_fetch_phase_structures = true
+   optimade_base_url = "https://optimade.materialsproject.org/v1"
+   min_element_compounds = 3
+   min_element_stoichiometries = 3
+   min_cv_improvement_eV_per_atom = 0.01
+   require_cv_one_standard_error = true
+
+enabled (boolean, default: false)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Enables fitting/reuse, corrected balanced formation reactions, and an
+independently rebuilt corrected full phase diagram. Raw values remain present.
+The ``[references]`` and ``[relax]`` backend, model, and task must agree. The
+stored package version and local-checkpoint hash are also part of the energy
+provenance; rerun references, correction fitting, and stale candidate
+relaxations after either changes.
+
+experimental_source (string, default: "kingsbury")
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+One of ``"kingsbury"``, ``"kingsbury+custom"``, or ``"custom"``. The curated
+source is matminer's ``expt_formation_enthalpy_kingsbury`` dataset.
+
+experimental_data (string, conditionally required)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Custom experimental CSV used by ``custom`` or ``kingsbury+custom``. It requires
+``formula``, ``formation_enthalpy``, ``uncertainty``, ``phase``, ``temperature``,
+``units``, and ``source``. Units must explicitly be eV/atom or eV/formula unit.
+The current model accepts standard-temperature values near 298 K and rejects a
+custom table that would mix another temperature into that population.
+
+dataset_cache_dir (string, optional)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Optional matminer dataset cache directory. Matminer's normal local cache is
+used when omitted. Every fit also saves the exact accepted records in the
+project correction directory.
+
+model_family (string, default: "manual")
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+One of ``"manual"``, ``"m0"``, ``"m1"``, or ``"auto"``:
+
+- ``manual`` fits exactly ``correction_terms`` and preserves the previous
+  behavior.
+- ``m0`` forces one ordinary-oxide coefficient per O atom.
+- ``m1`` forces an admissible M0-plus-``oxide_cation:<Element>`` model and fails
+  when no M1 candidate passes the support and validation gates.
+- ``auto`` compares admissible M0 and M1 fits on identical leave-one-out
+  observations and publishes M1 only when it clears every configured gate;
+  otherwise it falls back deterministically to M0.
+
+The non-manual modes require ``correction_terms = ["oxide"]``. They record the
+automatic decision even when ``m0`` or ``m1`` forces the published family.
+
+m1_elements (string or array, default: "workflow")
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``"workflow"`` derives candidate M1 cations from the non-oxygen host and all
+configured dopants. An explicit array such as ``["Sn", "Sb"]`` overrides the
+candidate M1 elements. Elements without independent support are excluded and
+reported rather than assigned guessed coefficients. The array does not narrow
+the complete host-and-dopant scope used by phase-resolved discovery.
+
+calibration_selection (string, default: "manifest")
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``"manifest"`` uses only the explicitly listed calibration rows.
+``"phase_resolved"`` considers every strict non-generic ordinary oxide
+experimental record whose non-oxygen elements are all in the complete
+host-and-dopant target scope. A selected
+record must have a specific phase and valid curated ``likely_mpid``; known or
+structure-classified peroxide/superoxide records are excluded. All selections,
+rejections, coverage, and materialized structures are snapshotted.
+
+auto_fetch_phase_structures (boolean, default: false)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Only valid with ``calibration_selection = "phase_resolved"``. When true, a
+selected record without an exact phase-matched manifest structure is retrieved
+by ``likely_mpid`` from OPTIMADE. The response and POSCAR form an immutable,
+hash-validated cache under the backend-specific correction directory. When
+false, all selected records must be materialized by the manifest. Missing,
+partial, mismatched, or changed inputs fail explicitly. Fetching and relaxation
+apply only to calibration structures; doped workflow candidates are not
+rerelaxed.
+
+optimade_base_url (string, default: Materials Project OPTIMADE v1)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Base endpoint used for automatic structure acquisition. The default is
+``https://optimade.materialsproject.org/v1``; ``/structures/<likely_mpid>`` is
+appended as needed. OPTIMADE contributes geometry only, never a DFT correction
+coefficient, calculated formation energy, or hull distance.
+
+calibration_manifest (string, default shown above)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+CSV containing the phase-matched calibration structures and same-backend
+energies. This is deliberately separate from ``[references].oxides_ref``.
+Formula, actual structure composition, phase/space-group information, energy
+provenance, and same-backend energy-above-hull provenance are validated.
+Generic labels such as ``solid``, ``crystalline``, or an empty phase do not
+constitute a phase match unless the explicit ``allow_phase_mismatch`` expert
+override is used for an unambiguous formula. The file is required in
+``manifest`` mode. It may be absent in ``phase_resolved`` mode only when every
+selected structure can be acquired automatically; otherwise it supplies exact
+phase-verified local structures.
+
+correction_terms (array of strings, default: ["oxide"])
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Supported oxygen-environment terms are ``oxide``, ``peroxide``, and
+``superoxide``. Each named term must be identifiable from the accepted
+calibration set. Advanced ``element:<symbol>`` composition terms are rejected
+unless ``allow_element_terms = true`` is also set. Explicit element or
+``oxide_cation`` terms are manual-mode controls; M0/M1 derives scoped
+``oxide_cation`` terms from admitted calibration evidence.
+
+allow_element_terms (boolean, default: false)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Explicit expert acceptance of a FERE-like term applied to every non-elemental
+compound containing the named element. This is not an automatically inferred
+dopant correction and requires separate scientific justification/validation.
+
+exclude_polyanions (array of strings, conservative list by default)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Formula tokens excluded from calibration before fitting because sulfate,
+carbonate, nitrate, phosphate, silicate, and related oxygen chemistries are not
+represented reliably by the simple ordinary-oxide basis. Set ``[]`` or change
+the list only after validating a correction basis that covers those compounds.
+
+max_relative_experimental_uncertainty (float, default: 0.10)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Rejects measurements whose reported relative uncertainty exceeds the limit.
+Missing uncertainty is imputed from the final accepted calibration population,
+never assigned zero.
+
+max_calculated_e_above_hull_eV_per_atom (float, default: 0.10)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Rejects unstable calibration polymorphs. The manifest must give explicit
+same-backend provenance plus matching ``e_above_hull_backend``,
+``e_above_hull_model``, ``e_above_hull_task``,
+``e_above_hull_backend_version``, and
+``e_above_hull_calculation_settings_hash`` fields. Set the option
+explicitly to ``false`` only after deliberately choosing not to apply this
+filter. Omitting the key does **not** disable it; omission selects the default
+limit of 0.10 eV/atom. For materialized phase-resolved rows without a supplied
+hull value, dopingflow builds the chemical-system hull from same-backend relaxed
+calibration energies, compatible ``reference_energies.json`` entries, and the
+elemental terminals before applying this filter. Materials Project hull values
+are not treated as same-backend ML values.
+
+allow_phase_mismatch (boolean, default: false)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Expert override for a reviewed experimental/calculated phase mismatch. The
+mismatch remains recorded. Formula and ``likely_mpid`` alone do not establish
+polymorph identity.
+
+allow_legacy_candidate_provenance (boolean, default: false)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Explicitly accepts existing candidate energies from older dopingflow metadata
+that lacks the original backend-package and relaxed-POSCAR hash fields. Known
+backend/model/task, optimizer, force tolerance, maximum steps, positive
+convergence, energy, and POSCAR availability are still required and checked.
+All unprovable assumptions are written to corrected formation and phase-diagram
+outputs. This option does not alter or rerelax the structure.
+
+reuse_fitted (boolean, default: true)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Reuses a model only when its backend signature, terms, calibration inputs,
+dataset/filter settings, and fit-input hash match exactly.
+
+min_degrees_of_freedom (integer, default: 1)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Minimum number of accepted compounds beyond the number of fitted terms.
+
+min_term_support (integer, default: 2)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Minimum number of accepted calibration compounds with nonzero support for
+each fitted term. This is enforced in addition to full-rank and residual-
+degrees-of-freedom checks.
+
+min_element_compounds (integer, default: 3; minimum: 3)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Minimum independent formula/oxygen-ratio support required before an M1
+``oxide_cation:<Element>`` term is admitted.
+
+min_element_stoichiometries (integer, default: 3; minimum: 2)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Minimum number of distinct O/cation ratios required for each admitted M1
+element.
+
+min_cv_improvement_eV_per_atom (float, default: 0.01)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+M1 must improve identical-observation leave-one-out RMSE over M0 by strictly
+more than this non-negative value. An exact threshold tie selects M0.
+
+require_cv_one_standard_error (boolean, default: true)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When true, M1's paired improvement in squared leave-one-out loss must also
+exceed one standard error. Failure selects the parsimonious M0 model in
+``auto`` mode; forced ``m1`` still cannot bypass M1 admission and identifiability
+requirements.
+
+max_condition_number (float, default: 1e8)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Maximum allowed weighted-design condition number. A rank-deficient or
+ill-conditioned correction basis fails rather than overfitting. Automatic
+M0/M1 selection uses the stricter of this value and ``1e4``.
+
+poor_fit_rmse_warning_eV_per_atom (float, default: 0.20)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Adds a prominent fit-quality warning without conflating residual error with
+coefficient uncertainty. The diagnostic model is saved, but a
+``quality_warning`` in ``correction_fit_report.json`` should be treated as a
+stop condition for production correction application.
+
+See :doc:`methods/energy_corrections` for the manifest schema, equations,
+outputs, phase-diagram consistency rules, and scientific limitations.
 
 ---------------------------------------------------------------------
 
@@ -391,6 +664,11 @@ Controls the gradual sequential doping workflow executed with:
 ::
 
    dopingflow sequential-run -c input.toml
+
+When ``[energy_correction].enabled = true``, ``sequential-run`` fits or reuses
+the correction model once before entering the composition loop. It does not
+refit separately for every sequential step. The reference cache and calibration
+inputs must therefore already be valid for the active backend signature.
 
 outdir (string, default: "sequential_structures")
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
