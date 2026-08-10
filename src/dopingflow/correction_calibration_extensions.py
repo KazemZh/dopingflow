@@ -1,13 +1,16 @@
 """Runtime extensions for automatic correction-calibration expansion.
 
 This module keeps the large calibration/fitting implementation in
-``correction_calibration`` unchanged while extending two narrowly scoped
+``correction_calibration`` unchanged while extending three narrowly scoped
 behaviors used by the CLI:
 
 1. failed structure acquisitions are recorded and skipped instead of aborting
-   an otherwise usable calibration run; and
+   an otherwise usable calibration run;
 2. automatic M1 calibration can gap-fill under-covered workflow cations with
-   additional binary Kingsbury oxides carrying a curated ``likely_mpid``.
+   additional binary Kingsbury oxides carrying a curated ``likely_mpid``; and
+3. after the normal quality filters and first model-selection pass, elements
+   that are *still* under-covered trigger one second pass that exposes every
+   remaining eligible binary Kingsbury fallback for those elements.
 
 Gap-fill records with generic phase labels are explicitly tagged as
 phase-unverified ``likely_mpid`` fallbacks.  They still pass through the same
@@ -15,14 +18,15 @@ ML-backend relaxation, phase-preservation, oxide classification, same-backend
 hull, uncertainty, identifiability, and cross-validation gates as strict
 phase-resolved records.
 
-Importing this module installs the two extensions into
-``dopingflow.correction_calibration`` before exposing its public fit entry
-points.  This is intentionally narrow so existing callers and serialized model
-formats remain unchanged.
+Importing this module installs the two internal extensions into
+``dopingflow.correction_calibration`` before exposing public fit entry points.
+Serialized correction models and the downstream formation/phase-diagram APIs
+remain unchanged.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -41,15 +45,18 @@ from dopingflow.calibration_gap_fill import (
 )
 from dopingflow.corrections import (
     CALIBRATION_EXPANSION_FILENAME,
+    MODEL_SELECTION_FILENAME,
     CorrectionConfig,
     ExperimentalRecord,
     content_hash,
+    parse_correction_config,
 )
 from dopingflow.refs import _file_sha256
 
 log = logging.getLogger(__name__)
 
 _BASE_MATCH_EXPERIMENTAL_RECORD = _base._match_experimental_record
+_FORCED_GAP_FILL_ELEMENTS: set[str] = set()
 
 
 def _gap_fill_identity(record: ExperimentalRecord) -> tuple[str, str]:
@@ -196,7 +203,7 @@ def _gap_fill_selection(
         return GapFillSelection(
             (),
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "policy": "undercovered_workflow_cations_binary_kingsbury_likely_mpid_gap_fill",
                 "enabled": False,
                 "reason": "gap filling is only needed for automatic/forced M1 model families",
@@ -210,9 +217,11 @@ def _gap_fill_selection(
         config.m1_elements,
         min_compounds=config.min_element_compounds,
         min_stoichiometries=config.min_element_stoichiometries,
+        force_elements=tuple(sorted(_FORCED_GAP_FILL_ELEMENTS)),
     )
     report = dict(result.report)
     report["enabled"] = True
+    report["second_pass_forced_elements"] = sorted(_FORCED_GAP_FILL_ELEMENTS)
     return GapFillSelection(result.records, report)
 
 
@@ -264,7 +273,9 @@ def _materialize_phase_resolved_candidates_extended(
             ]
         else:
             local_matches = [
-                record for record in local_pool if _base._phase_matches(record, experimental_record)
+                record
+                for record in local_pool
+                if _base._phase_matches(record, experimental_record)
             ]
 
         if len(local_matches) > 1:
@@ -427,8 +438,108 @@ def install_extensions() -> None:
     )
 
 
-install_extensions()
+def _coverage_limited_elements(selection_report: Mapping[str, Any]) -> set[str]:
+    """Return elements rejected specifically because independent coverage is lacking."""
 
-# Public API mirrors the base module after installing the extended behavior.
-run_corrections_fit = _base.run_corrections_fit
-run_corrections_fit_from_toml = _base.run_corrections_fit_from_toml
+    result: set[str] = set()
+    excluded = selection_report.get("excluded_m1_elements", {}) or {}
+    if not isinstance(excluded, Mapping):
+        return result
+    coverage_reasons = {
+        "insufficient_independent_formula_ratio_support",
+        "insufficient_unique_oxygen_ratios",
+    }
+    for element, reasons in excluded.items():
+        if isinstance(reasons, str):
+            reason_set = {reasons}
+        elif isinstance(reasons, Sequence):
+            reason_set = {str(reason) for reason in reasons}
+        else:
+            continue
+        if reason_set & coverage_reasons:
+            result.add(str(element))
+    return result
+
+
+def _read_selection_report(path: Path) -> dict[str, Any] | None:
+    if not path.is_file():
+        return None
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def run_corrections_fit(
+    raw_cfg: Mapping[str, Any],
+    root: Path,
+    *,
+    config_path: Path | None = None,
+) -> Path | None:
+    """Run the base fit and retry once if final accepted coverage is insufficient."""
+
+    global _FORCED_GAP_FILL_ELEMENTS
+    config = parse_correction_config(raw_cfg, root)
+    _FORCED_GAP_FILL_ELEMENTS = set()
+    try:
+        output = _base.run_corrections_fit(
+            raw_cfg,
+            root,
+            config_path=config_path,
+        )
+        if output is None:
+            return None
+        if not (
+            config.model_family == "auto"
+            and config.calibration_selection == "phase_resolved"
+            and config.m1_elements
+        ):
+            return output
+
+        report_path = output.parent / MODEL_SELECTION_FILENAME
+        first_report = _read_selection_report(report_path)
+        if first_report is None:
+            return output
+        undercovered = _coverage_limited_elements(first_report)
+        if not undercovered:
+            return output
+
+        _FORCED_GAP_FILL_ELEMENTS = set(undercovered)
+        log.info(
+            "Final M1 coverage is insufficient for %s after the first calibration pass. "
+            "Searching all remaining eligible binary Kingsbury likely_mpid fallbacks "
+            "for those elements and retrying once.",
+            sorted(undercovered),
+        )
+        output = _base.run_corrections_fit(
+            raw_cfg,
+            root,
+            config_path=config_path,
+        )
+
+        second_report = _read_selection_report(output.parent / MODEL_SELECTION_FILENAME)
+        if second_report is not None:
+            still_undercovered = _coverage_limited_elements(second_report)
+            if still_undercovered:
+                log.warning(
+                    "M1 remains under-covered for %s after exhausting eligible binary "
+                    "Kingsbury gap-fill candidates. Those cation terms remain unavailable; "
+                    "the model selector will retain the scientifically supported family.",
+                    sorted(still_undercovered),
+                )
+        return output
+    finally:
+        _FORCED_GAP_FILL_ELEMENTS = set()
+
+
+def run_corrections_fit_from_toml(config_path: Path) -> Path | None:
+    raw = _base.tomllib.loads(config_path.read_text(encoding="utf-8"))
+    return run_corrections_fit(
+        raw,
+        config_path.resolve().parent,
+        config_path=config_path,
+    )
+
+
+install_extensions()
