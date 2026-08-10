@@ -139,3 +139,41 @@ def test_gap_fill_skips_element_when_strict_coverage_already_satisfies_targets()
     ce = result.report["per_element"]["Ce"]
     assert ce["undercovered_before_gap_fill"] is False
     assert ce["eligible_gap_fill_candidates"] == []
+
+
+def test_forced_second_pass_exposes_reserve_candidates_after_final_filter_losses():
+    # Pre-calculation strict coverage already satisfies 3/3, so the first pass
+    # does not need a fallback.  If one strict phase is later rejected by the
+    # hull/uncertainty/relaxation filters, the second pass can force this element
+    # and expose all remaining generic-phase binary Kingsbury candidates.
+    strict = [
+        _record("SnO", phase="orthorhombic", material_id="mp-40"),
+        _record("Sn2O3", phase="monoclinic", material_id="mp-41"),
+        _record("SnO2", phase="tetragonal", material_id="mp-42"),
+    ]
+    experimental = strict + [
+        _record("Sn3O4", phase="solid", material_id="mp-43"),
+        _record("Sn2O", phase="crystal", material_id="mp-44"),
+    ]
+
+    first = select_undercovered_binary_kingsbury_records(
+        experimental,
+        strict,
+        ["Sn"],
+        min_compounds=3,
+        min_stoichiometries=3,
+    )
+    assert first.records == ()
+
+    forced = select_undercovered_binary_kingsbury_records(
+        experimental,
+        strict,
+        ["Sn"],
+        min_compounds=3,
+        min_stoichiometries=3,
+        force_elements=["Sn"],
+    )
+    assert {record.reduced_formula for record in forced.records} == {"Sn3O4", "Sn2O"}
+    sn = forced.report["per_element"]["Sn"]
+    assert sn["forced_after_final_filter_undercoverage"] is True
+    assert forced.report["forced_elements"] == ["Sn"]
