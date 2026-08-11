@@ -9,17 +9,17 @@ import typer
 from dopingflow.alloy_hull import run_alloy_hull_from_toml
 from dopingflow.bandgap import run_bandgap_from_toml
 from dopingflow.collect_relative import run_collect_from_toml
-from dopingflow.correction_calibration_extensions import run_corrections_fit_from_toml
+from dopingflow.correction_workflow import run_corrections_fit_from_toml
 from dopingflow.corrections import load_correction_model
 from dopingflow.filtering import run_filtering_from_toml
-from dopingflow.formation import run_formation_from_toml
+from dopingflow.formation_oxygen_extensions import run_formation_from_toml
 from dopingflow.generate import run_generate_from_toml
 from dopingflow.logging import setup_logging
 from dopingflow.phase_diagram import run_phase_diagram_from_toml
-from dopingflow.refs import run_refs_build_from_toml
+from dopingflow.refs_oxygen_extensions import run_refs_build_from_toml
 from dopingflow.relax import run_relax_from_toml
 from dopingflow.scan import run_scan_from_toml
-from dopingflow.sequential import run_sequential_from_toml
+from dopingflow.sequential_extensions import run_sequential_from_toml
 from dopingflow.vacancies import run_vacancies_from_toml
 
 app = typer.Typer(help="dopingflow: ML doping workflow pipeline")
