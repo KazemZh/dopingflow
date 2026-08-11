@@ -15,7 +15,7 @@ from dopingflow.filtering import run_filtering_from_toml
 from dopingflow.formation_oxygen_extensions import run_formation_from_toml
 from dopingflow.generate import run_generate_from_toml
 from dopingflow.logging import setup_logging
-from dopingflow.phase_diagram import run_phase_diagram_from_toml
+from dopingflow.phase_diagram_convergence_extensions import run_phase_diagram_from_toml
 from dopingflow.refs_oxygen_extensions import run_refs_build_from_toml
 from dopingflow.relax import run_relax_from_toml
 from dopingflow.scan import run_scan_from_toml
