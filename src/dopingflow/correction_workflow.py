@@ -8,9 +8,11 @@ from typing import Any, Mapping
 # Import for side effects before the calibration expansion module is used:
 # - recognize safe Kingsbury crystal-system abbreviations;
 # - preserve phase structures across backend changes while invalidating stale
-#   backend-specific energies and hulls.
+#   backend-specific energies and hulls;
+# - keep unconverged relaxations out of ranking/filter/formation paths.
 from dopingflow import phase_alias_extensions as _phase_alias_extensions  # noqa: F401
 from dopingflow import calibration_backend_invalidation as _calibration_backend_invalidation  # noqa: F401
+from dopingflow import workflow_convergence_guards as _workflow_convergence_guards  # noqa: F401
 from dopingflow.correction_calibration_extensions import (
     run_corrections_fit as _run_corrections_fit,
 )
