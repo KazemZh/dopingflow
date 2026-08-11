@@ -50,6 +50,7 @@ Each stage can be executed independently and uses its own configuration block.
    :maxdepth: 1
 
    methods/references
+   methods/oxygen_thermodynamics
    methods/generation
    methods/sequential
    methods/scanning
