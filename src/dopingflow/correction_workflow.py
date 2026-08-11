@@ -1,10 +1,14 @@
-"""Public correction-fit entry point with oxygen-reference compatibility checks."""
+"""Public correction-fit entry point with compatibility checks."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Mapping
 
+# Import for side effect: phase-resolved manifest structures remain reusable
+# across backend/head changes, while stale backend-specific energies and hulls
+# are invalidated and recomputed with the active reference signature.
+from dopingflow import calibration_backend_invalidation as _calibration_backend_invalidation  # noqa: F401
 from dopingflow.correction_calibration_extensions import (
     run_corrections_fit as _run_corrections_fit,
 )
