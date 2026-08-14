@@ -29,8 +29,21 @@ def test_vacancy_gui_defaults_are_one_flat_section():
     assert CHOICES["vacancies.parent_source"] == ["selected_candidates", "directory"]
     assert CHOICES["vacancies.enumeration_mode"] == ["auto", "exact", "sample"]
     assert CHOICES["vacancies.oxygen_reference_mode"] == [
-        "reference_file", "same_calculator", "explicit", "none"
+        "global",
+        "chemistry-specific",
+        "reference_file",
+        "same_calculator",
+        "explicit",
+        "none",
     ]
+    assert CHOICES["vacancies.oxygen_calibration_experimental_source"] == [
+        "kingsbury", "kingsbury+custom", "custom"
+    ]
+    assert CHOICES["vacancies.solid_configurational_entropy"] == ["none", "ideal"]
+    assert section["oxygen_calibration_experimental_source"] == "kingsbury"
+    assert section["oxygen_calibration_min_references"] == 2
+    assert section["oxygen_calibration_include_host_oxide"] is True
+    assert section["solid_configurational_entropy"] == "none"
     assert section["static_thermodynamic_analysis"] is False
     assert section["static_energy_source"] == "relaxed_only"
     assert section["pressure_mapping"] is True
@@ -52,6 +65,8 @@ def test_vacancy_toml_round_trip_stays_flat():
     assert loaded["vacancies"]["delta_mu_O_points_eV"] == [
         0.0, -0.5, -1.0, -1.5, -2.0, -2.5, -3.0
     ]
+    assert loaded["vacancies"]["oxygen_calibration_min_references"] == 2
+    assert loaded["vacancies"]["solid_configurational_entropy"] == "none"
     assert "static_thermodynamic_analysis" in loaded["vacancies"]
 
 
