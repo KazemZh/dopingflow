@@ -15,15 +15,54 @@ root receives `vacancies_database.csv` and `vacancies_database.json`. Model
 weights are obtained by the selected backend on first use; choose a backend and
 model installed in your environment.
 
-The example enables Level-1 static-lattice thermodynamic analysis using the
-existing reference file. Solid free energies are approximated by 0 K relaxed ML
-energies; temperature and pressure enter only through the oxygen reservoir. Raw
-totals must not be compared across oxygen contents. Without a user standard-state
-O2 correction, the pressure map is qualitative.
-The example selects the built-in NIST O2 Shomate equations, which support any
-requested temperature from 100 to 6000 K rather than only the discrete JANAF rows.
+The checked-in example keeps the backward-compatible `reference_file` oxygen
+reference so it can be used with an existing `reference_energies.json`. The same
+flat section now also supports:
 
-Generate five figures using only the new compact files:
+```toml
+oxygen_reference_mode = "global"
+# or
+oxygen_reference_mode = "chemistry-specific"
+```
+
+These calibrated modes do **not** reuse a universal O2 correction. They derive
+an effective per-O reference from real ordinary binary oxides already calculated
+by `refs-build`, matching bulk-metal references, and experimental 298 K
+formation enthalpies. `global` uses all eligible reference oxides;
+`chemistry-specific` uses only oxides of the actual host/dopant cations in each
+vacancy composition. The full audit trail is written to
+`oxygen_calibration_report.json`.
+
+The default automatic experimental source is the curated Kingsbury dataset and
+requires:
+
+```bash
+pip install -e ".[corrections]"
+```
+
+A project may instead select `custom` or `kingsbury+custom` and provide an
+explicit experimental CSV.
+
+The example selects the built-in NIST O2 Shomate equations, which support any
+requested temperature from 100 to 6000 K rather than only discrete JANAF rows.
+For calibrated oxygen references, the T-pO2 map uses the 298 K enthalpy origin
+consistent with the experimental formation-enthalpy fit, then adds the gas-phase
+O2 enthalpy/entropy and pressure terms.
+
+Solid configurational entropy remains optional:
+
+```toml
+solid_configurational_entropy = "none"   # default
+# solid_configurational_entropy = "ideal"
+```
+
+`ideal` adds the binary occupied/vacant oxygen-site mixing entropy only to the
+explicitly temperature-dependent T-pO2 map. The direct delta-mu intervals remain
+static-lattice quantities. Vibrational, zero-point, magnetic,
+thermal-electronic, anharmonic, thermal-expansion and solid-pV contributions
+are not part of this screening level.
+
+Generate five figures using only the compact files:
 
 ```bash
 python plot_static_vacancy_thermodynamics.py \
