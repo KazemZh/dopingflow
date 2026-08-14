@@ -21,7 +21,7 @@ T-independent delta-mu stability intervals.
 from __future__ import annotations
 
 import csv
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, fields
 import json
 import math
 from pathlib import Path
@@ -141,6 +141,29 @@ def parse_static_vacancy_thermodynamics_config(
 # Backward-compatible alias used by vacancies.py.
 VacancyAnalysisConfig = StaticVacancyThermodynamicsConfig
 parse_vacancy_analysis_config = parse_static_vacancy_thermodynamics_config
+
+
+def _base_analysis_config(
+    cfg: StaticVacancyThermodynamicsConfig,
+    *,
+    oxygen_reference_mode: str | None = None,
+) -> BaseVacancyAnalysisConfig:
+    """Strip enhanced fields before delegating to the legacy analysis core.
+
+    The core serializes ``asdict(analysis_cfg)`` into metadata and only knows
+    about fields from its own dataclass.  Passing the enhanced subclass would
+    leak calibration-only ``Path`` values into that JSON payload.  Constructing
+    a pure base config keeps legacy metadata stable and calibrated metadata is
+    added explicitly during post-processing.
+    """
+
+    values = {
+        item.name: getattr(cfg, item.name)
+        for item in fields(BaseVacancyAnalysisConfig)
+    }
+    if oxygen_reference_mode is not None:
+        values["oxygen_reference_mode"] = oxygen_reference_mode
+    return BaseVacancyAnalysisConfig(**values)
 
 
 def ideal_vacancy_configurational_entropy_eV_per_K(
@@ -559,7 +582,7 @@ def analyze_static_vacancy_thermodynamics(
     if requested not in _CALIBRATED_MODES:
         return analyze_vacancy_thermodynamics(
             rows=rows,
-            analysis_cfg=cfg,
+            analysis_cfg=_base_analysis_config(cfg),
             parent_root=parent_root,
             backend=backend,
             model=model,
@@ -574,7 +597,7 @@ def analyze_static_vacancy_thermodynamics(
     # First let the established analysis core select minimum-energy structures
     # for every vacancy count.  It deliberately makes no cross-count stability
     # claim because the calibrated oxygen reference is applied below.
-    base_cfg = replace(cfg, oxygen_reference_mode="none")
+    base_cfg = _base_analysis_config(cfg, oxygen_reference_mode="none")
     outputs = analyze_vacancy_thermodynamics(
         rows=rows,
         analysis_cfg=base_cfg,
