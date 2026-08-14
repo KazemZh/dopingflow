@@ -11,7 +11,7 @@ The GUI provides an interactive way to:
 - Explore the main database and per-system phase-diagram CSVs with Plotly
 - Configure and run the unified vacancy workflow and explore its separate database
 - Compare relaxed parent, generated vacancy, and relaxed vacancy structures
-- Configure calculator-verified oxygen references and compact vacancy thermodynamics
+- Configure calculator-verified, global-calibrated, or chemistry-specific oxygen references for vacancy thermodynamics
 - Select either the normal structure output or an existing directory containing many composition subdirectories
 
 The GUI is optional. The CLI remains the primary interface for scripted and HPC workflows.
@@ -26,6 +26,13 @@ From the project root:
 
 ```bash
 pip install -e ".[gui]"
+```
+
+If the vacancy oxygen calibration should automatically use the curated
+experimental 298 K formation-enthalpy dataset, also install:
+
+```bash
+pip install -e ".[corrections]"
 ```
 
 If you also need ML models:
@@ -58,8 +65,14 @@ Interactive editor for `input.toml`.
 - Doping setup (explicit or enumerate mode)
 - Scan, Relax, Filter, Bandgap, Formation, optional Energy correction, and one
   flat Vacancies section
+- Vacancy oxygen-reference selector including `global` and `chemistry-specific`
+  calibration in addition to the existing raw/reference modes
 - Live TOML preview
 - Save directly to `input.toml`
+
+The GUI defaults also preserve the advanced vacancy calibration keys in the
+saved TOML. The full input file remains the authoritative interface for custom
+experimental CSV paths and less frequently changed calibration controls.
 
 ---
 
@@ -140,8 +153,20 @@ or with the term intentionally omitted. Stability maps use fixed colors and
 categorical legends. The temperature-pressure title and annotation identify whether the gas mapping uses
 the NIST Shomate correction, a user table, or is approximate because the
 standard-state thermal correction was omitted.
-The GUI states that solid free energies use 0 K relaxed ML energies and warns
-when the O2 standard-state thermal correction is omitted.
+
+For calibrated oxygen-reference runs, every minima/pressure row records the
+calibration scope, target chemistry, number of accepted reference oxides and fit
+spread. `oxygen_calibration_report.json` provides the complete included/excluded
+reference audit trail. The `global` mode uses all eligible ordinary binary
+reference oxides; `chemistry-specific` refits using only oxides of the actual
+host and present dopants. Neither mode invents a missing oxide stoichiometry.
+
+The T-pO2 map combines the calibrated 298 K oxygen enthalpy reference with NIST
+O2 gas enthalpy/entropy and pressure corrections. If
+`solid_configurational_entropy = "ideal"`, the ideal occupied/vacant oxygen-site
+mixing term is also applied in this T-dependent map; direct delta-mu plots remain
+static-lattice quantities.
+
 The Input Builder offers a continuous ``nist_shomate`` mode over 100--6000 K,
 alongside custom ``user_table`` and qualitative ``none`` modes.
 
