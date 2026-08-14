@@ -44,12 +44,35 @@ fmax = 0.05
 max_steps = 300
 relax_mode = "atoms"
 cell_filter = "frechet"
+
+# Level-1 vacancy thermodynamics.
 static_thermodynamic_analysis = true
+
+# Backward-compatible raw O2 reference from refs-build.
 oxygen_reference_mode = "reference_file"
 oxygen_reference_file = "reference_structures/reference_energies.json"
 oxygen_reference_structure = "reference_structures/gas/O2.POSCAR"
 oxygen_reference_relax = false
 allow_unverified_oxygen_reference = false
+
+# To fit the oxygen reference from real reference oxides + experimental 298 K
+# formation enthalpies, replace the mode above with either:
+# oxygen_reference_mode = "global"
+# oxygen_reference_mode = "chemistry-specific"
+# The calibrated modes require the refs-build backend/model/task to match this
+# vacancy calculator and require the optional `corrections` dependency for the
+# default Kingsbury experimental dataset.
+oxygen_calibration_experimental_source = "kingsbury"
+oxygen_calibration_experimental_data = ""
+oxygen_calibration_dataset_cache_dir = ""
+oxygen_calibration_min_references = 2
+oxygen_calibration_include_host_oxide = true
+
+# Optional ideal occupied/vacant oxygen-site entropy. It is applied only to the
+# explicitly temperature-dependent T-pO2 map. Keep "none" for static-lattice
+# screening or select "ideal" to include the configurational contribution.
+solid_configurational_entropy = "none"
+
 delta_mu_O_min_eV = -3.0
 delta_mu_O_max_eV = 0.0
 delta_mu_O_points_eV = [0.0, -0.5, -1.0, -1.5, -2.0, -2.5, -3.0]
