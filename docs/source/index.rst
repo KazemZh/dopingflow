@@ -51,6 +51,7 @@ Each stage can be executed independently and uses its own configuration block.
 
    methods/references
    methods/oxygen_thermodynamics
+   methods/oxygen_calibration
    methods/generation
    methods/sequential
    methods/scanning
