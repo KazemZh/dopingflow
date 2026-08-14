@@ -152,11 +152,15 @@ remain unchanged when it is disabled. Actual dopant counts are read from parent
 structures. Parents having the same rounded directory name are never combined
 unless their integer species counts and cation-site totals are identical.
 
-**Static-lattice approximation:** solid free energies are approximated by 0 K
-relaxed ML energies. Temperature and pressure enter only through the oxygen-gas
-chemical potential. Vibrational, zero-point, configurational, thermal electronic,
-magnetic, anharmonic, thermal-expansion, and solid-pV contributions are neglected.
-This is not a complete finite-temperature phase diagram.
+The default solid treatment is static-lattice: solid free energies are
+approximated by 0 K relaxed ML energies. Solid vibrational, zero-point,
+thermal-electronic, magnetic, anharmonic, thermal-expansion, and solid-pV terms
+are not included. Configurational entropy is also omitted by default. If
+``solid_configurational_entropy = "ideal"`` is selected, an ideal occupied/
+vacant oxygen-site mixing entropy is included only in the explicitly
+T-dependent pressure map. The direct ``delta_mu_O`` stability intervals remain
+static-lattice quantities because they do not define a unique temperature. This
+is not a complete finite-temperature phase diagram.
 
 For actual composition :math:`c`, the analysis selects the lowest converged
 relaxed energy :math:`E_{min}(c,n)` across every selected parent and relaxed
@@ -182,27 +186,101 @@ Thus there is no universal best vacancy count without a stated
 ``delta_mu_O``. Exact pairwise line crossings—not a coarse grid—define the
 stability intervals, and ties are retained explicitly.
 
+Calibrated oxygen references
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Two reference modes improve the absolute oxygen scale using the existing
+``refs-build`` calculations and experimental 298 K oxide formation enthalpies:
+
+.. code-block:: toml
+
+   oxygen_reference_mode = "global"
+   # or: oxygen_reference_mode = "chemistry-specific"
+
+   oxygen_reference_file = "reference_structures/reference_energies.json"
+   oxygen_calibration_experimental_source = "kingsbury"
+   oxygen_calibration_min_references = 2
+   oxygen_calibration_include_host_oxide = true
+
+For every eligible ordinary binary oxide :math:`M_xO_y`,
+
+.. math::
+
+   \mu_{O,i}^{0,cal} =
+   \frac{E^{ML}(M_xO_y)-xE^{ML}(M)-\Delta H_{f,i}^{exp}(298\,K)}{y}.
+
+``global`` averages the per-O values from all eligible reference oxides.
+``chemistry-specific`` repeats the fit for each vacancy composition and retains
+only oxides whose cation belongs to the actual host/dopant chemistry. A Sn-Sb-O
+parent therefore does not use a Ti oxide merely because Ti is present elsewhere
+in ``oxides_ref``. Conversely, no Sn or Sb oxide is invented if it was not
+calculated and does not have a matching experimental record.
+
+The backend/model/task stored by ``refs-build`` must match the vacancy
+calculator. The host oxide may be included from the calculated host reference;
+duplicate reduced formulas are counted only once. Each accepted oxide also
+requires the corresponding elemental bulk-metal reference.
+
+The default ``kingsbury`` source uses the curated experimental dataset loaded by
+``matminer`` and therefore requires the optional ``corrections`` installation
+extra. ``custom`` and ``kingsbury+custom`` use the same explicit experimental
+CSV schema documented in :doc:`oxygen_calibration`.
+
+The full accepted/excluded reference list, experimental provenance, individual
+per-O values, fitted value, spread, and formation-enthalpy residuals are written
+to ``oxygen_calibration_report.json``. A large spread is therefore visible and
+can be used to judge whether one global scalar oxygen reference is sufficiently
+transferable.
+
+Temperature, gas entropy, and pressure
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 For the optional ideal-gas reservoir map,
 
 .. math::
 
-   \Delta\mu_O(T,p) = \Delta\mu_O^{standard}(T)
+   \mu_O(T,p) = \mu_O^{ref}
+   + \Delta\mu_O^{standard}(T)
    + \frac{1}{2}k_BT\ln\left(\frac{p_{O_2}}{p^{standard}}\right).
 
 ``oxygen_standard_state_mode = "nist_shomate"`` uses the published piecewise
-NIST Chemistry WebBook O2 Shomate equations (Chase 1998) for continuous
-``H(T)-H(298.15)`` and ``S(T)`` values between 100 and 6000 K at 1 bar. Thus the
-printed discrete JANAF temperatures do not limit the requested grid;
-extrapolation outside the coefficient ranges fails. This convention does not add
-an explicit O2 zero-point energy. ``user_table`` linearly interpolates a supplied
-per-O correction. With ``none``, the correction is zero and pressure results are
-marked qualitative relative to the standard pressure at the same temperature.
+NIST Chemistry WebBook O2 Shomate equations (Chase 1998) for continuous gas
+enthalpy and entropy between 100 and 6000 K at 1 bar. For the calibrated
+``global`` and ``chemistry-specific`` modes, the oxygen reference was fitted to
+experimental 298 K formation enthalpies, so the enthalpy term is referenced as
+:math:`H_{O_2}(T)-H_{O_2}(298)` before :math:`-TS_{O_2}(T)` and the pressure
+term are added. This is distinct from the legacy raw isolated-O2 convention.
+The printed discrete JANAF temperatures therefore do not limit the requested
+grid; extrapolation outside the Shomate coefficient ranges fails. No explicit
+O2 zero-point energy is added.
+
+``user_table`` linearly interpolates a supplied per-O correction. With ``none``,
+the standard-state correction is zero and pressure results are marked
+qualitative relative to the standard pressure at the same temperature.
+
+Optional ideal vacancy configurational entropy
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+With ``solid_configurational_entropy = "ideal"``, the T-pO2 map also includes
+
+.. math::
+
+   S_{config} = -k_BN_O\left[x_v\ln x_v+(1-x_v)\ln(1-x_v)\right],
+
+where :math:`x_v=N_v/N_O`. The pressure-map grand potential receives
+:math:`-TS_{config}`. The term is zero for the fully occupied and fully vacant
+limits. It is not added to the temperature-independent ``delta_mu_O`` interval
+or selected-point outputs.
+
+Legacy oxygen-reference modes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``oxygen_reference_mode = "reference_file"`` reads O2 and the per-O
 ``muO_shift_ev`` from ``reference_energies.json`` and verifies its
 backend/model/task metadata. Incompatible references fail. Metadata-free
 references fail unless ``allow_unverified_oxygen_reference = true`` is set
 deliberately, in which case outputs remain marked unverified.
+
 ``same_calculator`` evaluates the configured O2 structure with the vacancy
 calculator; optional molecular relaxation uses atomic coordinates only, never a
 cell filter. Solid-trained foundation models may nevertheless describe isolated
@@ -224,9 +302,13 @@ The explicitly named static-lattice outputs are:
 - ``vacancy_static_best_counts.csv/json``: preferred counts and ties at requested
   oxygen chemical potentials.
 - ``vacancy_static_pressure_map.csv/json``: T-pO2 preferred counts, including
-  the oxygen standard-state mode, source, and approximation status used by plots.
-- ``vacancy_static_analysis_metadata.json``: reference verification, exclusions,
-  missing counts, failed compositions, checksum, and resolved settings.
+  the oxygen standard-state mode, source, calibration and optional
+  configurational-entropy metadata used by plots.
+- ``vacancy_static_analysis_metadata.json``: reference verification,
+  calibration scope, exclusions, missing counts, failed compositions, checksum,
+  and resolved settings.
+- ``oxygen_calibration_report.json``: written by calibrated modes and containing
+  the complete experimental-reference audit trail and fit diagnostics.
 
 The earlier compact filenames are also written as compatibility aliases.
 
@@ -234,6 +316,9 @@ These results establish relative stability only within the generated doped-host
 structure family. They do not prove stability against decomposition into all
 competing phases; that requires a later oxygen-grand-potential convex hull. Even
 with a gas standard-state correction, missing solid free-energy terms remain.
+
+See :doc:`oxygen_calibration` for a focused description of calibration scope,
+experimental data selection, equations, and recommended settings.
 
 Outputs and resume
 ------------------
