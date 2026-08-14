@@ -1,0 +1,52 @@
+name: Vacancy calibration tests
+
+on:
+  push:
+    branches: ["debug/extended-energy-correction"]
+    paths:
+      - "src/dopingflow/oxygen_calibration.py"
+      - "src/dopingflow/vacancy_static_thermodynamics.py"
+      - "src/dopingflow/vacancy_analysis.py"
+      - "src/dopingflow/vacancies.py"
+      - "gui/gui_config.py"
+      - "gui/vacancy_thermo_plots.py"
+      - "tests/test_oxygen_calibration.py"
+      - "tests/test_vacancy_static_thermodynamics.py"
+      - "tests/test_vacancies_gui.py"
+      - ".github/workflows/vacancy-calibration-tests.yml"
+  pull_request:
+    paths:
+      - "src/dopingflow/oxygen_calibration.py"
+      - "src/dopingflow/vacancy_static_thermodynamics.py"
+      - "src/dopingflow/vacancy_analysis.py"
+      - "src/dopingflow/vacancies.py"
+      - "gui/gui_config.py"
+      - "gui/vacancy_thermo_plots.py"
+      - "tests/test_oxygen_calibration.py"
+      - "tests/test_vacancy_static_thermodynamics.py"
+      - "tests/test_vacancies_gui.py"
+  workflow_dispatch:
+
+jobs:
+  targeted-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install targeted test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,corrections,gui]"
+
+      - name: Run vacancy calibration tests
+        run: |
+          pytest -q \
+            tests/test_oxygen_calibration.py \
+            tests/test_vacancy_static_thermodynamics.py \
+            tests/test_vacancies_gui.py
