@@ -17,10 +17,10 @@ from dopingflow.vacancy_analysis import (
     nist_o2_standard_state_delta_mu_eV_per_O,
     oxygen_pressure_delta_mu_eV_per_O,
     oxygen_standard_state_delta_mu,
-    parse_vacancy_analysis_config,
 )
 from dopingflow.vacancy_static_thermodynamics import (
     analyze_static_vacancy_thermodynamics,
+    parse_static_vacancy_thermodynamics_config as parse_vacancy_analysis_config,
 )
 
 
