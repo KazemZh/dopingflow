@@ -105,11 +105,16 @@ pip install -e ".[gui]"
 pip install -e ".[mp]"
 ```
 
-#### Energy-correction support (optional):
+#### Energy-correction and automatic oxygen-calibration support (optional):
 
 ``` bash
 pip install -e ".[corrections]"
 ```
+
+The same optional extra supplies the curated experimental 298 K formation-
+enthalpy dataset used by the vacancy ``global`` and ``chemistry-specific``
+oxygen-reference calibration modes. A custom experimental CSV can be used
+instead when a project must remain independent of the curated dataset.
 
 Configuration, scientific assumptions, and compatibility guidance are covered
 in the full user documentation.
@@ -175,10 +180,39 @@ potential; raw ML total-energy differences alone are not vacancy formation energ
 
 Optional `[vacancies].static_thermodynamic_analysis = true` adds Level-1
 static-lattice composition minima, exact oxygen-grand-potential intervals,
-preferred counts, and a temperature–oxygen-pressure map. Solid
-free energies are approximated by 0 K relaxed ML energies; temperature and
-pressure enter only through the oxygen reservoir. These results compare only
-the generated doped-host family, not all competing decomposition phases.
+preferred counts, and a temperature–oxygen-pressure map. Legacy raw-reference
+modes remain available, while two calibrated modes improve the absolute oxygen
+reference without hard-coding a universal O2 correction:
+
+```toml
+[vacancies]
+static_thermodynamic_analysis = true
+oxygen_reference_mode = "global"            # or "chemistry-specific"
+oxygen_reference_file = "reference_structures/reference_energies.json"
+oxygen_calibration_experimental_source = "kingsbury"
+oxygen_calibration_min_references = 2
+solid_configurational_entropy = "none"       # optional: "ideal"
+oxygen_standard_state_mode = "nist_shomate"
+```
+
+``global`` fits one backend/model/task-specific oxygen reference from every
+eligible real ordinary binary oxide already calculated by `refs-build` and
+having a matching experimental 298 K formation enthalpy. ``chemistry-specific``
+performs the same fit separately for each vacancy chemistry, using only oxides
+of the host and actually present dopant cations. Missing stoichiometries are
+never invented. The fitted per-O values, included/excluded references, spread,
+and formation-enthalpy residuals are written to
+`oxygen_calibration_report.json`.
+
+For calibrated references, the T-pO2 map adds the NIST O2 gas enthalpy/entropy
+correction with a 298 K enthalpy origin and the ideal-gas pressure term. This is
+separate from the zero-temperature/backend oxygen calibration.
+``solid_configurational_entropy = "ideal"`` optionally adds the ideal binary
+occupied/vacant oxygen-site mixing entropy to T-dependent pressure maps only;
+T-independent delta-mu stability intervals remain static-lattice quantities.
+All other solid vibrational, zero-point, magnetic, electronic and anharmonic
+terms remain outside this screening level.
+
 ``oxygen_standard_state_mode = "nist_shomate"`` evaluates continuous NIST O2
 enthalpy/entropy corrections from 100 to 6000 K; ``user_table`` remains available
 for alternative conventions and ``none`` remains a qualitative, approximate
@@ -190,7 +224,9 @@ the omitted-correction view is explicitly labeled approximate.
 Existing multi-composition trees can be processed directly with
 `parent_source = "directory"` and a flat `parent_directory` path under
 `[vacancies]`. UMA model/task choices and the full supported GRACE model list are
-available in the GUI.
+available in the GUI. The GUI oxygen-reference selector also exposes the new
+``global`` and ``chemistry-specific`` modes; advanced calibration data-source
+fields can still be edited directly in `input.toml`.
 
 For gradual composition-by-composition doping, use sequential-run. This reuses the lowest-energy relaxed structure from each composition as the base for the next composition:
 
@@ -224,6 +260,7 @@ The GUI allows you to:
 - Explore `results_database.csv` and per-system phase-diagram CSVs with Plotly
 - Configure optional formation-energy corrections
 - Configure, run, explore, and compare parent/generated/relaxed vacancy structures
+- Select raw, global-calibrated, or chemistry-specific oxygen references for vacancy thermodynamics
 
 Relative-energy controls remain inside the existing `[formation]` section:
 
@@ -257,7 +294,6 @@ After launching, a local browser window will open automatically.
 │       ├── api
 │       │   ├── dopingflow.rst
 │       │   └── modules.rst
-│       ├── conf.py
 │       ├── examples
 │       │   ├── enumerate_screening.rst
 │       │   ├── explicit_batch.rst
@@ -275,6 +311,7 @@ After launching, a local browser window will open automatically.
 │       │   ├── filtering.rst
 │       │   ├── formation_energy.rst
 │       │   ├── generation.rst
+│       │   ├── oxygen_calibration.rst
 │       │   ├── phase_diagram.rst
 │       │   ├── references.rst
 │       │   ├── relaxation.rst
@@ -326,6 +363,7 @@ After launching, a local browser window will open automatically.
 │       ├── logging.py
 │       ├── ml_backends.py
 │       ├── ml_relaxation.py
+│       ├── oxygen_calibration.py
 │       ├── phase_diagram.py
 │       ├── refs.py
 │       ├── relax.py
@@ -334,6 +372,7 @@ After launching, a local browser window will open automatically.
 │       ├── surface.py
 │       ├── vacancies.py
 │       ├── vacancy_analysis.py
+│       ├── vacancy_static_thermodynamics.py
 │       └── utils
 │           ├── io.py
 │           ├── parallel.py
