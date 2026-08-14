@@ -38,12 +38,22 @@ The format loosely follows semantic versioning.
 - Optional composition-level vacancy thermodynamics with verified/explicit O2
   references, exact lower-envelope intervals, selected-condition best counts,
   plotting-ready compact tables, GUI controls, and a four-figure matplotlib example
+- Global and chemistry-specific vacancy oxygen-reference calibration from real
+  refs-build ordinary binary oxides, matching same-backend bulk metals, and
+  experimental 298 K formation enthalpies. Calibration reports retain every
+  included/excluded oxide, individual per-O value, fit spread, and residual.
+- Optional ideal occupied/vacant oxygen-site configurational entropy for the
+  explicitly temperature-dependent vacancy T-pO2 map, while direct delta-mu
+  intervals remain static-lattice quantities.
 - Explicit Level-1 static-lattice outputs and an ideal-gas temperature–oxygen-
   pressure mapping. A user O2 standard-state table is supported; without one,
   pressure results are labeled qualitative and approximate.
 - Built-in continuous NIST O2 Shomate standard-state corrections for arbitrary
   temperatures from 100 to 6000 K, with extrapolation prohibited and the source
   and zero-point-energy convention recorded in metadata.
+- Built-in 298 K enthalpy-origin handling for NIST O2 gas thermochemistry when
+  the oxygen reference itself was fitted to experimental 298 K formation
+  enthalpies.
 - Accuracy-aware GUI and example T-pO2 plots now identify NIST Shomate,
   user-table, and approximate no-thermal-correction mappings; new GUI inputs
   default to the NIST mode.
@@ -63,6 +73,11 @@ The format loosely follows semantic versioning.
 - Tests for flat formation configuration, metadata flattening, and per-system phase diagrams
 
 ### Changed
+- Vacancy oxygen-reference selection now exposes ``global`` and
+  ``chemistry-specific`` calibrated modes alongside the existing
+  ``reference_file``, ``same_calculator``, ``explicit``, and ``none`` modes.
+- Calibrated vacancy references are backend/model/task-specific and never
+  hard-code a literature O2 correction or invent a missing calibration oxide.
 - Blank or omitted MACE ``task`` values now resolve to the compatible
   ``omat_pbe`` head for ``model = "mh-1"`` instead of requesting MACE's
   nonexistent ``default`` head
