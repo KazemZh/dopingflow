@@ -1,0 +1,527 @@
+from __future__ import annotations
+
+import importlib.util
+import py_compile
+from pathlib import Path
+
+
+def replace_once(text: str, old: str, new: str, *, label: str) -> str:
+    count = text.count(old)
+    if count != 1:
+        raise RuntimeError(f"{label}: expected exactly one anchor, found {count}")
+    return text.replace(old, new, 1)
+
+
+# ------------------------------------------------------------------
+# gui/app.py -- update only References oxygen controls and the
+# energy-correction panel. The vacancy UI is snapshotted and must be
+# byte-identical after the patch.
+# ------------------------------------------------------------------
+app_path = Path("gui/app.py")
+app = app_path.read_text(encoding="utf-8")
+vac_start = app.index('    # VACANCIES (one flat TOML section)')
+vac_end = app.index('    # SURFACE', vac_start)
+vacancy_block_before = app[vac_start:vac_end]
+
+old_oxygen = '''            oxygen_choices = ["O-rich", "O-poor"]
+            current_oxygen_mode = str(
+                cfg_edit["references"].get("oxygen_mode", "O-rich")
+            ).strip()
+            if current_oxygen_mode not in oxygen_choices:
+                current_oxygen_mode = "O-rich"
+
+            cfg_edit["references"]["oxygen_mode"] = st.radio(
+                "oxygen_mode",
+                options=oxygen_choices,
+                index=oxygen_choices.index(current_oxygen_mode),
+                horizontal=True,
+            )
+
+            cfg_edit["references"]["muO_shift_ev"] = st.number_input(
+                "muO_shift_ev",
+                value=float(cfg_edit["references"].get("muO_shift_ev", 0.0)),
+                step=0.1,
+                format="%.3f",
+                help="Optional oxygen chemical potential shift in eV.",
+            )
+'''
+new_oxygen = '''            oxygen_choices = ["O-rich", "O-poor"]
+            current_oxygen_mode = str(
+                cfg_edit["references"].get("oxygen_mode", "O-rich")
+            ).strip()
+            if current_oxygen_mode not in oxygen_choices:
+                current_oxygen_mode = "O-rich"
+
+            cfg_edit["references"]["oxygen_mode"] = st.radio(
+                "oxygen_mode",
+                options=oxygen_choices,
+                index=oxygen_choices.index(current_oxygen_mode),
+                horizontal=True,
+                help=(
+                    "O-rich fixes the physical oxygen chemical-potential shift to zero. "
+                    "O-poor permits delta_mu_O_ev <= 0."
+                ),
+            )
+
+            correction_enabled = bool(
+                cfg_edit.get("energy_correction", {}).get("enabled", False)
+            )
+            legacy_mu_present = "muO_shift_ev" in cfg_edit["references"]
+            try:
+                legacy_mu_value = float(
+                    cfg_edit["references"].get("muO_shift_ev", 0.0)
+                )
+            except (TypeError, ValueError):
+                legacy_mu_value = 0.0
+
+            if legacy_mu_present and abs(legacy_mu_value) > 1.0e-12:
+                # A non-zero legacy value is intentionally not mixed with the
+                # explicit new keys. This preserves the core migration policy
+                # instead of guessing whether an old user meant a reference
+                # correction or a physical O-poor chemical-potential shift.
+                cfg_edit["references"].pop("oxygen_reference_correction_ev", None)
+                cfg_edit["references"].pop("delta_mu_O_ev", None)
+                st.warning(
+                    "This input contains the legacy non-zero muO_shift_ev setting. "
+                    "Its historical meaning is ambiguous, so the GUI will not convert "
+                    "it automatically. Set it to 0, save/reload, then use the explicit "
+                    "oxygen reference and delta-mu controls below."
+                )
+                cfg_edit["references"]["muO_shift_ev"] = st.number_input(
+                    "Legacy muO_shift_ev",
+                    value=legacy_mu_value,
+                    step=0.1,
+                    format="%.3f",
+                    help=(
+                        "Migration-only legacy setting. A non-zero value cannot be "
+                        "combined with the fitted energy-correction model."
+                    ),
+                )
+                if correction_enabled:
+                    st.error(
+                        "A non-zero legacy muO_shift_ev is incompatible with enabled "
+                        "experimental energy correction. Set it to 0 and migrate to the "
+                        "explicit oxygen settings before running corrections-fit."
+                    )
+            else:
+                # Drop a harmless zero legacy alias from newly saved input files.
+                cfg_edit["references"].pop("muO_shift_ev", None)
+
+                cfg_edit["references"]["oxygen_reference_correction_ev"] = st.number_input(
+                    "oxygen_reference_correction_ev (eV per O)",
+                    value=float(
+                        cfg_edit["references"].get(
+                            "oxygen_reference_correction_ev", 0.0
+                        )
+                    ),
+                    step=0.05,
+                    format="%.3f",
+                    help=(
+                        "Empirical/electronic shift of the raw same-backend O2 reference, "
+                        "per O atom. Keep this at 0 when experimental energy correction "
+                        "is enabled to avoid double counting."
+                    ),
+                )
+                if (
+                    correction_enabled
+                    and abs(
+                        float(
+                            cfg_edit["references"][
+                                "oxygen_reference_correction_ev"
+                            ]
+                        )
+                    ) > 1.0e-12
+                ):
+                    st.error(
+                        "oxygen_reference_correction_ev must be 0 when "
+                        "[energy_correction].enabled = true."
+                    )
+
+                delta_mu_value = float(
+                    cfg_edit["references"].get("delta_mu_O_ev", 0.0)
+                )
+                if cfg_edit["references"]["oxygen_mode"] == "O-poor":
+                    cfg_edit["references"]["delta_mu_O_ev"] = st.number_input(
+                        "delta_mu_O_ev (eV per O)",
+                        value=min(delta_mu_value, 0.0),
+                        max_value=0.0,
+                        step=0.05,
+                        format="%.3f",
+                        help=(
+                            "Physical thermodynamic oxygen chemical-potential shift "
+                            "relative to O-rich conditions. O-poor values must be <= 0."
+                        ),
+                    )
+                else:
+                    cfg_edit["references"]["delta_mu_O_ev"] = st.number_input(
+                        "delta_mu_O_ev (eV per O)",
+                        value=delta_mu_value,
+                        step=0.05,
+                        format="%.3f",
+                        help=(
+                            "Physical thermodynamic oxygen chemical-potential shift. "
+                            "O-rich conditions require this value to be exactly 0."
+                        ),
+                    )
+                    if abs(float(cfg_edit["references"]["delta_mu_O_ev"])) > 1.0e-12:
+                        st.error("O-rich conditions require delta_mu_O_ev = 0.")
+
+                st.caption(
+                    "These [references] oxygen settings control formation/reference "
+                    "thermodynamics. The [vacancies] section keeps its own independent "
+                    "delta-mu grid and T-pO2 controls; those settings are not changed here."
+                )
+'''
+app = replace_once(app, old_oxygen, new_oxygen, label="references oxygen GUI")
+
+old_fallback = '''            "enabled": False,
+            "experimental_source": "kingsbury",
+            "calibration_manifest": (
+'''
+new_fallback = '''            "enabled": False,
+            "experimental_source": "kingsbury",
+            "experimental_data": "",
+            "dataset_cache_dir": "",
+            "calibration_manifest": (
+'''
+app = replace_once(app, old_fallback, new_fallback, label="correction fallback data defaults")
+
+old_quality_fallback = '''            "min_term_support": 2,
+            "max_condition_number": 1.0e8,
+            "allow_legacy_candidate_provenance": False,
+'''
+new_quality_fallback = '''            "min_term_support": 2,
+            "max_condition_number": 1.0e8,
+            "poor_fit_rmse_warning_eV_per_atom": 0.20,
+            "allow_legacy_candidate_provenance": False,
+'''
+app = replace_once(app, old_quality_fallback, new_quality_fallback, label="correction fallback quality default")
+
+old_source_tail = '''            if correction["experimental_source"] in {"custom", "kingsbury+custom"}:
+                correction["experimental_data"] = st.text_input(
+                    "Custom experimental CSV",
+                    value=str(correction.get("experimental_data", "")),
+                    help="Project-relative or absolute path; units must be explicit per row.",
+                )
+
+            family_choices = CHOICES.get(
+'''
+new_source_tail = '''            if correction["experimental_source"] in {"custom", "kingsbury+custom"}:
+                correction["experimental_data"] = st.text_input(
+                    "Custom experimental CSV",
+                    value=str(correction.get("experimental_data", "")),
+                    help="Project-relative or absolute path; units must be explicit per row.",
+                )
+
+            correction["dataset_cache_dir"] = st.text_input(
+                "Experimental dataset cache directory (optional)",
+                value=str(
+                    correction.get(
+                        "dataset_cache_dir",
+                        correction_defaults["dataset_cache_dir"],
+                    )
+                ),
+                help=(
+                    "Optional project-relative or absolute matminer cache directory. "
+                    "Leave blank to use matminer's normal local cache."
+                ),
+            )
+
+            family_choices = CHOICES.get(
+'''
+app = replace_once(app, old_source_tail, new_source_tail, label="dataset cache GUI")
+
+old_phase_fetch = '''            if correction["calibration_selection"] == "phase_resolved":
+                correction["auto_fetch_phase_structures"] = st.checkbox(
+                    "Fetch missing curated structures from Materials Project OPTIMADE",
+                    value=bool(
+                        correction.get(
+                            "auto_fetch_phase_structures",
+                            correction_defaults["auto_fetch_phase_structures"],
+                        )
+                    ),
+                    help=(
+                        "Downloads only structures named by curated likely MP IDs, then "
+                        "caches the exact response and computes energies with your backend."
+                    ),
+                )
+            else:
+                correction["auto_fetch_phase_structures"] = False
+'''
+new_phase_fetch = '''            if correction["calibration_selection"] == "phase_resolved":
+                correction["auto_fetch_phase_structures"] = st.checkbox(
+                    "Fetch missing curated structures from Materials Project OPTIMADE",
+                    value=bool(
+                        correction.get(
+                            "auto_fetch_phase_structures",
+                            correction_defaults["auto_fetch_phase_structures"],
+                        )
+                    ),
+                    help=(
+                        "Downloads only structures named by curated likely MP IDs, then "
+                        "caches the exact response and computes energies with your backend."
+                    ),
+                )
+                correction["optimade_base_url"] = st.text_input(
+                    "OPTIMADE base URL",
+                    value=str(
+                        correction.get(
+                            "optimade_base_url",
+                            correction_defaults["optimade_base_url"],
+                        )
+                    ),
+                    help=(
+                        "Structure-discovery endpoint used only by phase-resolved automatic "
+                        "fetching. It supplies geometry, never correction energies or hull values."
+                    ),
+                ).strip()
+                if not correction["optimade_base_url"]:
+                    st.error("OPTIMADE base URL must not be empty in phase_resolved mode.")
+            else:
+                correction["auto_fetch_phase_structures"] = False
+'''
+app = replace_once(app, old_phase_fetch, new_phase_fetch, label="OPTIMADE URL GUI")
+
+old_condition_tail = '''                if correction["max_condition_number"] <= 1:
+                    st.error("Maximum weighted-design condition number must be > 1.")
+                correction["reuse_fitted"] = st.checkbox(
+'''
+new_condition_tail = '''                if correction["max_condition_number"] <= 1:
+                    st.error("Maximum weighted-design condition number must be > 1.")
+                correction["poor_fit_rmse_warning_eV_per_atom"] = st.number_input(
+                    "Poor-fit RMSE warning threshold (eV/atom)",
+                    min_value=1.0e-6,
+                    value=float(
+                        correction.get(
+                            "poor_fit_rmse_warning_eV_per_atom",
+                            correction_defaults[
+                                "poor_fit_rmse_warning_eV_per_atom"
+                            ],
+                        )
+                    ),
+                    step=0.01,
+                    format="%.3f",
+                    help=(
+                        "Diagnostic warning threshold only. It does not change coefficient "
+                        "uncertainty or silently reject a fitted model."
+                    ),
+                )
+                correction["reuse_fitted"] = st.checkbox(
+'''
+app = replace_once(app, old_condition_tail, new_condition_tail, label="poor-fit RMSE GUI")
+
+vac_start_after = app.index('    # VACANCIES (one flat TOML section)')
+vac_end_after = app.index('    # SURFACE', vac_start_after)
+vacancy_block_after = app[vac_start_after:vac_end_after]
+if vacancy_block_before != vacancy_block_after:
+    raise RuntimeError("Vacancies GUI block changed unexpectedly; aborting patch")
+
+app_path.write_text(app, encoding="utf-8")
+
+# ------------------------------------------------------------------
+# docs/source/input_file.rst -- replace stale legacy oxygen semantics.
+# ------------------------------------------------------------------
+input_path = Path("docs/source/input_file.rst")
+input_text = input_path.read_text(encoding="utf-8")
+old_input_oxygen = '''oxygen_mode (string, default: "O-rich")
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Currently supports:
+
+- ``"O-rich"``
+- ``"O-poor"``
+
+muO_shift_ev (float, default: 0.0)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Optional chemical potential shift applied to oxygen (eV).
+'''
+new_input_oxygen = '''oxygen_mode (string, default: "O-rich")
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Selects the oxygen thermodynamic convention:
+
+- ``"O-rich"`` requires ``delta_mu_O_ev = 0.0``.
+- ``"O-poor"`` permits ``delta_mu_O_ev <= 0.0``.
+
+oxygen_reference_correction_ev (float, default: 0.0)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Empirical/electronic correction to the raw same-backend oxygen reference, in
+eV per O atom. If the raw molecular energy is :math:`E_{O_2}^{raw}`, then
+
+.. math::
+
+   E_{O_2}^{ref} = E_{O_2}^{raw} + 2\,\Delta E_O^{ref}.
+
+When ``[energy_correction].enabled = true``, this value must be zero because the
+fitted formation-energy correction is already calibrated against the raw
+same-backend oxygen reference. A second empirical oxygen shift would double
+count an oxygen-linear correction.
+
+delta_mu_O_ev (float, default: 0.0)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Physical thermodynamic oxygen chemical-potential shift relative to the O-rich
+reference, in eV per O atom:
+
+.. math::
+
+   \mu_O = \frac{1}{2} E_{O_2}^{ref} + \Delta\mu_O.
+
+This quantity may be used together with a fitted formation-energy correction.
+It must be exactly zero in ``O-rich`` mode and zero or negative in ``O-poor``
+mode.
+
+Legacy ``muO_shift_ev``
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+``muO_shift_ev`` is retained only as a migration aid. A zero value is harmless.
+A non-zero legacy value is interpreted conservatively as the historical
+empirical oxygen-reference shift when energy correction is disabled, and is
+rejected when ``[energy_correction].enabled = true``. A non-zero legacy value
+must not be mixed with either explicit new oxygen key. New input files should
+use ``oxygen_reference_correction_ev`` and ``delta_mu_O_ev`` instead.
+
+These ``[references]`` settings are distinct from the independent oxygen
+chemical-potential grid and temperature/pressure controls in ``[vacancies]``.
+'''
+input_text = replace_once(input_text, old_input_oxygen, new_input_oxygen, label="input-file oxygen docs")
+input_path.write_text(input_text, encoding="utf-8")
+
+# ------------------------------------------------------------------
+# docs/source/methods/references.rst -- synchronize equations.
+# ------------------------------------------------------------------
+refs_path = Path("docs/source/methods/references.rst")
+refs_text = refs_path.read_text(encoding="utf-8")
+old_refs_oxygen = '''The oxygen chemical potential is obtained from the gas reference
+(typically :math:`O_2`):
+
+.. math::
+
+   \mu_O = \frac{1}{2}E_{O_2} + \Delta\mu_O
+
+where:
+
+- :math:`E_{O_2}` is the relaxed total energy of the oxygen molecule
+- :math:`\Delta\mu_O` is the optional shift defined by ``muO_shift_ev``
+
+The setting ``oxygen_mode`` is stored for traceability.
+For example, ``O-rich`` usually corresponds to:
+
+.. math::
+
+   \Delta\mu_O = 0
+
+while more oxygen-poor conditions may be represented by a negative shift.
+'''
+new_refs_oxygen = '''The oxygen convention is resolved in two explicit steps. First, an optional
+electronic/reference correction is applied to the raw same-backend gas energy:
+
+.. math::
+
+   E_{O_2}^{ref} = E_{O_2}^{raw} + 2\,\Delta E_O^{ref}.
+
+Then the physical oxygen chemical potential is
+
+.. math::
+
+   \mu_O = \frac{1}{2}E_{O_2}^{ref} + \Delta\mu_O.
+
+Here ``oxygen_reference_correction_ev`` is :math:`\Delta E_O^{ref}` in eV per
+O atom, whereas ``delta_mu_O_ev`` is the physical thermodynamic
+:math:`\Delta\mu_O` relative to O-rich conditions. ``oxygen_mode = "O-rich"``
+requires :math:`\Delta\mu_O=0`; ``oxygen_mode = "O-poor"`` permits only zero or
+negative values.
+
+When ``[energy_correction].enabled = true``, ``oxygen_reference_correction_ev``
+must be zero. The experimental correction model is fitted against the raw
+same-backend oxygen reference, so an additional empirical oxygen-reference
+shift would double count an oxygen-linear correction. ``delta_mu_O_ev`` remains
+allowed because it describes the physical thermodynamic environment rather
+than an electronic-structure correction.
+
+The legacy ``muO_shift_ev`` key is retained only for migration; new inputs
+should use the two explicit quantities above. See :doc:`oxygen_thermodynamics`
+for the complete compatibility rules.
+'''
+refs_text = replace_once(refs_text, old_refs_oxygen, new_refs_oxygen, label="references-method oxygen docs")
+refs_text = replace_once(
+    refs_text,
+    "The oxygen chemical potential is computed from the gas reference and\nthe optional oxygen shift. The cation chemical potentials are then\nderived from the oxide stoichiometry.",
+    "The oxygen chemical potential is computed from the explicitly resolved gas\nreference and physical ``delta_mu_O_ev``. The cation chemical potentials are\nthen derived from the oxide stoichiometry.",
+    label="references-method later oxygen wording",
+)
+refs_path.write_text(refs_text, encoding="utf-8")
+
+# ------------------------------------------------------------------
+# GUI README -- document synchronized controls and vacancy isolation.
+# ------------------------------------------------------------------
+readme_path = Path("gui/README.md")
+readme = readme_path.read_text(encoding="utf-8")
+old_readme = '''The GUI defaults also preserve the advanced vacancy calibration keys in the
+saved TOML. The full input file remains the authoritative interface for custom
+experimental CSV paths and less frequently changed calibration controls.
+'''
+new_readme = '''The Energy-correction panel exposes the experimental source, optional custom
+CSV and matminer cache path, model family, M1 scope, manifest/phase-resolved
+selection, OPTIMADE endpoint, support/CV thresholds, conditioning, fit-quality
+warning threshold, phase-mismatch override, provenance compatibility, and exact
+fit reuse.
+
+For oxide references the Input Builder uses the explicit oxygen convention:
+`oxygen_reference_correction_ev` changes the electronic O2 reference, while
+`delta_mu_O_ev` changes the physical oxygen chemical potential. The former must
+remain zero when experimental energy correction is enabled. O-rich requires
+`delta_mu_O_ev = 0`; O-poor permits values <= 0. A non-zero legacy
+`muO_shift_ev` is shown only as a migration case and is never silently mixed
+with the new keys.
+
+These `[references]` oxygen controls are deliberately independent of the
+`[vacancies]` oxygen-reference mode, delta-mu grid, and T-pO2 mapping controls.
+The GUI defaults continue to preserve those vacancy-analysis settings unchanged.
+'''
+readme = replace_once(readme, old_readme, new_readme, label="GUI README correction/oxygen note")
+readme_path.write_text(readme, encoding="utf-8")
+
+# ------------------------------------------------------------------
+# Static safety checks. These intentionally do not import Streamlit app.py.
+# ------------------------------------------------------------------
+py_compile.compile("gui/app.py", doraise=True)
+py_compile.compile("gui/gui_config.py", doraise=True)
+
+config_path = Path("gui/gui_config.py")
+spec = importlib.util.spec_from_file_location("gui_config_check", config_path)
+module = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(module)
+
+refs = module.DEFAULTS["references"]
+assert refs["oxygen_reference_correction_ev"] == 0.0
+assert refs["delta_mu_O_ev"] == 0.0
+assert "muO_shift_ev" not in refs
+
+corr = module.DEFAULTS["energy_correction"]
+assert corr["dataset_cache_dir"] == ""
+assert corr["poor_fit_rmse_warning_eV_per_atom"] == 0.20
+
+vac = module.DEFAULTS["vacancies"]
+assert vac["oxygen_reference_mode"] == "reference_file"
+assert vac["oxygen_reference_file"] == "reference_structures/reference_energies.json"
+assert vac["delta_mu_O_min_eV"] == -3.0
+assert vac["delta_mu_O_max_eV"] == 0.0
+assert vac["delta_mu_O_points_eV"] == [0.0, -0.5, -1.0, -1.5, -2.0, -2.5, -3.0]
+
+patched_app = app_path.read_text(encoding="utf-8")
+for token in (
+    '"oxygen_reference_correction_ev"',
+    '"delta_mu_O_ev"',
+    '"dataset_cache_dir"',
+    '"poor_fit_rmse_warning_eV_per_atom"',
+    'vac["oxygen_reference_mode"]',
+    'vac["delta_mu_O_min_eV"]',
+    'vac["delta_mu_O_max_eV"]',
+):
+    assert token in patched_app, token
+
+print("Guarded GUI/docs synchronization and vacancy-isolation checks passed")
