@@ -143,26 +143,35 @@ which gives:
 
    \mu_M = \frac{E_{M_xO_y} - y\mu_O}{x}
 
-The oxygen chemical potential is obtained from the gas reference
-(typically :math:`O_2`):
+The oxygen convention is resolved in two explicit steps. First, an optional
+electronic/reference correction is applied to the raw same-backend gas energy:
 
 .. math::
 
-   \mu_O = \frac{1}{2}E_{O_2} + \Delta\mu_O
+   E_{O_2}^{ref} = E_{O_2}^{raw} + 2\,\Delta E_O^{ref}.
 
-where:
-
-- :math:`E_{O_2}` is the relaxed total energy of the oxygen molecule
-- :math:`\Delta\mu_O` is the optional shift defined by ``muO_shift_ev``
-
-The setting ``oxygen_mode`` is stored for traceability.
-For example, ``O-rich`` usually corresponds to:
+Then the physical oxygen chemical potential is
 
 .. math::
 
-   \Delta\mu_O = 0
+   \mu_O = \frac{1}{2}E_{O_2}^{ref} + \Delta\mu_O.
 
-while more oxygen-poor conditions may be represented by a negative shift.
+Here ``oxygen_reference_correction_ev`` is :math:`\Delta E_O^{ref}` in eV per
+O atom, whereas ``delta_mu_O_ev`` is the physical thermodynamic
+:math:`\Delta\mu_O` relative to O-rich conditions. ``oxygen_mode = "O-rich"``
+requires :math:`\Delta\mu_O=0`; ``oxygen_mode = "O-poor"`` permits only zero or
+negative values.
+
+When ``[energy_correction].enabled = true``, ``oxygen_reference_correction_ev``
+must be zero. The experimental correction model is fitted against the raw
+same-backend oxygen reference, so an additional empirical oxygen-reference
+shift would double count an oxygen-linear correction. ``delta_mu_O_ev`` remains
+allowed because it describes the physical thermodynamic environment rather
+than an electronic-structure correction.
+
+The legacy ``muO_shift_ev`` key is retained only for migration; new inputs
+should use the two explicit quantities above. See :doc:`oxygen_thermodynamics`
+for the complete compatibility rules.
 
 
 Method Summary
@@ -251,9 +260,9 @@ Oxide-Derived Chemical Potentials
 When ``reference_mode = "oxide"``, the workflow stores relaxed oxide
 reference energies and the oxygen gas reference energy.
 
-The oxygen chemical potential is computed from the gas reference and
-the optional oxygen shift. The cation chemical potentials are then
-derived from the oxide stoichiometry.
+The oxygen chemical potential is computed from the explicitly resolved gas
+reference and physical ``delta_mu_O_ev``. The cation chemical potentials are
+then derived from the oxide stoichiometry.
 
 For a reduced oxide composition :math:`M_xO_y`:
 

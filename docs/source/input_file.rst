@@ -298,15 +298,52 @@ Directory containing gas POSCAR file.
 oxygen_mode (string, default: "O-rich")
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Currently supports:
+Selects the oxygen thermodynamic convention:
 
-- ``"O-rich"``
-- ``"O-poor"``
+- ``"O-rich"`` requires ``delta_mu_O_ev = 0.0``.
+- ``"O-poor"`` permits ``delta_mu_O_ev <= 0.0``.
 
-muO_shift_ev (float, default: 0.0)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+oxygen_reference_correction_ev (float, default: 0.0)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Optional chemical potential shift applied to oxygen (eV).
+Empirical/electronic correction to the raw same-backend oxygen reference, in
+eV per O atom. If the raw molecular energy is :math:`E_{O_2}^{raw}`, then
+
+.. math::
+
+   E_{O_2}^{ref} = E_{O_2}^{raw} + 2\,\Delta E_O^{ref}.
+
+When ``[energy_correction].enabled = true``, this value must be zero because the
+fitted formation-energy correction is already calibrated against the raw
+same-backend oxygen reference. A second empirical oxygen shift would double
+count an oxygen-linear correction.
+
+delta_mu_O_ev (float, default: 0.0)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Physical thermodynamic oxygen chemical-potential shift relative to the O-rich
+reference, in eV per O atom:
+
+.. math::
+
+   \mu_O = \frac{1}{2} E_{O_2}^{ref} + \Delta\mu_O.
+
+This quantity may be used together with a fitted formation-energy correction.
+It must be exactly zero in ``O-rich`` mode and zero or negative in ``O-poor``
+mode.
+
+Legacy ``muO_shift_ev``
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+``muO_shift_ev`` is retained only as a migration aid. A zero value is harmless.
+A non-zero legacy value is interpreted conservatively as the historical
+empirical oxygen-reference shift when energy correction is disabled, and is
+rejected when ``[energy_correction].enabled = true``. A non-zero legacy value
+must not be mixed with either explicit new oxygen key. New input files should
+use ``oxygen_reference_correction_ev`` and ``delta_mu_O_ev`` instead.
+
+These ``[references]`` settings are distinct from the independent oxygen
+chemical-potential grid and temperature/pressure controls in ``[vacancies]``.
 
 ---------------------------------------------------------------------
 

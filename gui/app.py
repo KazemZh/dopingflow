@@ -679,15 +679,120 @@ if tab == "Input Builder":
                 options=oxygen_choices,
                 index=oxygen_choices.index(current_oxygen_mode),
                 horizontal=True,
+                help=(
+                    "O-rich fixes the physical oxygen chemical-potential shift to zero. "
+                    "O-poor permits delta_mu_O_ev <= 0."
+                ),
             )
 
-            cfg_edit["references"]["muO_shift_ev"] = st.number_input(
-                "muO_shift_ev",
-                value=float(cfg_edit["references"].get("muO_shift_ev", 0.0)),
-                step=0.1,
-                format="%.3f",
-                help="Optional oxygen chemical potential shift in eV.",
+            correction_enabled = bool(
+                cfg_edit.get("energy_correction", {}).get("enabled", False)
             )
+            legacy_mu_present = "muO_shift_ev" in cfg_edit["references"]
+            try:
+                legacy_mu_value = float(
+                    cfg_edit["references"].get("muO_shift_ev", 0.0)
+                )
+            except (TypeError, ValueError):
+                legacy_mu_value = 0.0
+
+            if legacy_mu_present and abs(legacy_mu_value) > 1.0e-12:
+                # A non-zero legacy value is intentionally not mixed with the
+                # explicit new keys. This preserves the core migration policy
+                # instead of guessing whether an old user meant a reference
+                # correction or a physical O-poor chemical-potential shift.
+                cfg_edit["references"].pop("oxygen_reference_correction_ev", None)
+                cfg_edit["references"].pop("delta_mu_O_ev", None)
+                st.warning(
+                    "This input contains the legacy non-zero muO_shift_ev setting. "
+                    "Its historical meaning is ambiguous, so the GUI will not convert "
+                    "it automatically. Set it to 0, save/reload, then use the explicit "
+                    "oxygen reference and delta-mu controls below."
+                )
+                cfg_edit["references"]["muO_shift_ev"] = st.number_input(
+                    "Legacy muO_shift_ev",
+                    value=legacy_mu_value,
+                    step=0.1,
+                    format="%.3f",
+                    help=(
+                        "Migration-only legacy setting. A non-zero value cannot be "
+                        "combined with the fitted energy-correction model."
+                    ),
+                )
+                if correction_enabled:
+                    st.error(
+                        "A non-zero legacy muO_shift_ev is incompatible with enabled "
+                        "experimental energy correction. Set it to 0 and migrate to the "
+                        "explicit oxygen settings before running corrections-fit."
+                    )
+            else:
+                # Drop a harmless zero legacy alias from newly saved input files.
+                cfg_edit["references"].pop("muO_shift_ev", None)
+
+                cfg_edit["references"]["oxygen_reference_correction_ev"] = st.number_input(
+                    "oxygen_reference_correction_ev (eV per O)",
+                    value=float(
+                        cfg_edit["references"].get(
+                            "oxygen_reference_correction_ev", 0.0
+                        )
+                    ),
+                    step=0.05,
+                    format="%.3f",
+                    help=(
+                        "Empirical/electronic shift of the raw same-backend O2 reference, "
+                        "per O atom. Keep this at 0 when experimental energy correction "
+                        "is enabled to avoid double counting."
+                    ),
+                )
+                if (
+                    correction_enabled
+                    and abs(
+                        float(
+                            cfg_edit["references"][
+                                "oxygen_reference_correction_ev"
+                            ]
+                        )
+                    ) > 1.0e-12
+                ):
+                    st.error(
+                        "oxygen_reference_correction_ev must be 0 when "
+                        "[energy_correction].enabled = true."
+                    )
+
+                delta_mu_value = float(
+                    cfg_edit["references"].get("delta_mu_O_ev", 0.0)
+                )
+                if cfg_edit["references"]["oxygen_mode"] == "O-poor":
+                    cfg_edit["references"]["delta_mu_O_ev"] = st.number_input(
+                        "delta_mu_O_ev (eV per O)",
+                        value=min(delta_mu_value, 0.0),
+                        max_value=0.0,
+                        step=0.05,
+                        format="%.3f",
+                        help=(
+                            "Physical thermodynamic oxygen chemical-potential shift "
+                            "relative to O-rich conditions. O-poor values must be <= 0."
+                        ),
+                    )
+                else:
+                    cfg_edit["references"]["delta_mu_O_ev"] = st.number_input(
+                        "delta_mu_O_ev (eV per O)",
+                        value=delta_mu_value,
+                        step=0.05,
+                        format="%.3f",
+                        help=(
+                            "Physical thermodynamic oxygen chemical-potential shift. "
+                            "O-rich conditions require this value to be exactly 0."
+                        ),
+                    )
+                    if abs(float(cfg_edit["references"]["delta_mu_O_ev"])) > 1.0e-12:
+                        st.error("O-rich conditions require delta_mu_O_ev = 0.")
+
+                st.caption(
+                    "These [references] oxygen settings control formation/reference "
+                    "thermodynamics. The [vacancies] section keeps its own independent "
+                    "delta-mu grid and T-pO2 controls; those settings are not changed here."
+                )
 
 
 
@@ -2112,6 +2217,8 @@ if tab == "Input Builder":
         correction_defaults = DEFAULTS.get("energy_correction") or {
             "enabled": False,
             "experimental_source": "kingsbury",
+            "experimental_data": "",
+            "dataset_cache_dir": "",
             "calibration_manifest": (
                 "reference_structures/corrections/calibration_manifest.csv"
             ),
@@ -2135,6 +2242,7 @@ if tab == "Input Builder":
             "min_degrees_of_freedom": 1,
             "min_term_support": 2,
             "max_condition_number": 1.0e8,
+            "poor_fit_rmse_warning_eV_per_atom": 0.20,
             "allow_legacy_candidate_provenance": False,
             "reuse_fitted": True,
         }
@@ -2202,6 +2310,20 @@ if tab == "Input Builder":
                     value=str(correction.get("experimental_data", "")),
                     help="Project-relative or absolute path; units must be explicit per row.",
                 )
+
+            correction["dataset_cache_dir"] = st.text_input(
+                "Experimental dataset cache directory (optional)",
+                value=str(
+                    correction.get(
+                        "dataset_cache_dir",
+                        correction_defaults["dataset_cache_dir"],
+                    )
+                ),
+                help=(
+                    "Optional project-relative or absolute matminer cache directory. "
+                    "Leave blank to use matminer's normal local cache."
+                ),
+            )
 
             family_choices = CHOICES.get(
                 "energy_correction.model_family",
@@ -2324,6 +2446,21 @@ if tab == "Input Builder":
                         "caches the exact response and computes energies with your backend."
                     ),
                 )
+                correction["optimade_base_url"] = st.text_input(
+                    "OPTIMADE base URL",
+                    value=str(
+                        correction.get(
+                            "optimade_base_url",
+                            correction_defaults["optimade_base_url"],
+                        )
+                    ),
+                    help=(
+                        "Structure-discovery endpoint used only by phase-resolved automatic "
+                        "fetching. It supplies geometry, never correction energies or hull values."
+                    ),
+                ).strip()
+                if not correction["optimade_base_url"]:
+                    st.error("OPTIMADE base URL must not be empty in phase_resolved mode.")
             else:
                 correction["auto_fetch_phase_structures"] = False
 
@@ -2499,6 +2636,24 @@ if tab == "Input Builder":
                 )
                 if correction["max_condition_number"] <= 1:
                     st.error("Maximum weighted-design condition number must be > 1.")
+                correction["poor_fit_rmse_warning_eV_per_atom"] = st.number_input(
+                    "Poor-fit RMSE warning threshold (eV/atom)",
+                    min_value=1.0e-6,
+                    value=float(
+                        correction.get(
+                            "poor_fit_rmse_warning_eV_per_atom",
+                            correction_defaults[
+                                "poor_fit_rmse_warning_eV_per_atom"
+                            ],
+                        )
+                    ),
+                    step=0.01,
+                    format="%.3f",
+                    help=(
+                        "Diagnostic warning threshold only. It does not change coefficient "
+                        "uncertainty or silently reject a fitted model."
+                    ),
+                )
                 correction["reuse_fitted"] = st.checkbox(
                     "Reuse an exactly matching fitted model",
                     value=bool(

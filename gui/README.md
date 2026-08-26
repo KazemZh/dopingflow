@@ -70,9 +70,23 @@ Interactive editor for `input.toml`.
 - Live TOML preview
 - Save directly to `input.toml`
 
-The GUI defaults also preserve the advanced vacancy calibration keys in the
-saved TOML. The full input file remains the authoritative interface for custom
-experimental CSV paths and less frequently changed calibration controls.
+The Energy-correction panel exposes the experimental source, optional custom
+CSV and matminer cache path, model family, M1 scope, manifest/phase-resolved
+selection, OPTIMADE endpoint, support/CV thresholds, conditioning, fit-quality
+warning threshold, phase-mismatch override, provenance compatibility, and exact
+fit reuse.
+
+For oxide references the Input Builder uses the explicit oxygen convention:
+`oxygen_reference_correction_ev` changes the electronic O2 reference, while
+`delta_mu_O_ev` changes the physical oxygen chemical potential. The former must
+remain zero when experimental energy correction is enabled. O-rich requires
+`delta_mu_O_ev = 0`; O-poor permits values <= 0. A non-zero legacy
+`muO_shift_ev` is shown only as a migration case and is never silently mixed
+with the new keys.
+
+These `[references]` oxygen controls are deliberately independent of the
+`[vacancies]` oxygen-reference mode, delta-mu grid, and T-pO2 mapping controls.
+The GUI defaults continue to preserve those vacancy-analysis settings unchanged.
 
 ---
 
