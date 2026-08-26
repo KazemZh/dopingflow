@@ -182,7 +182,8 @@ DEFAULTS = {
         "gas_ref": "O2",
         "gas_dir": "reference_structures/gas",
         "oxygen_mode": "O-rich",
-        "muO_shift_ev": 0.0,
+        "oxygen_reference_correction_ev": 0.0,
+        "delta_mu_O_ev": 0.0,
     },
     "generate": {
         "poscar_order": ["Zr", "Ti", "Sb", "Sn", "O"],
