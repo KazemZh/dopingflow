@@ -40,7 +40,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm .github/workflows/_oneoff_sync_energy_correction_gui.yml
-          git rm .github/scripts/_oneoff_sync_energy_correction_gui.py
+          git rm -f .github/scripts/_oneoff_sync_energy_correction_gui.py
           git add gui/app.py docs/source/input_file.rst docs/source/methods/references.rst gui/README.md
           git diff --cached --stat
           git commit -m "Sync energy-correction GUI and oxygen documentation"
