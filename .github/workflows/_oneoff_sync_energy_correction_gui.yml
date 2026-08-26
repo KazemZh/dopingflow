@@ -24,6 +24,10 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Fix temporary RST literals in checkout
+        run: >-
+          python -c "from pathlib import Path; p=Path('.github/scripts/_oneoff_sync_energy_correction_gui.py'); s=p.read_text(encoding='utf-8'); s=s.replace(\"new_input_oxygen = '''\", \"new_input_oxygen = r'''\", 1); s=s.replace(\"old_refs_oxygen = '''\", \"old_refs_oxygen = r'''\", 1); s=s.replace(\"new_refs_oxygen = '''\", \"new_refs_oxygen = r'''\", 1); p.write_text(s, encoding='utf-8')"
+
       - name: Apply guarded synchronization patch
         run: python .github/scripts/_oneoff_sync_energy_correction_gui.py
 
