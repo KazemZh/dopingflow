@@ -44,32 +44,24 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           path = Path(".github/workflows/vacancy-calibration-tests.yml")
-          text = path.read_text(encoding="utf-8")
-          old_module = '      - "src/dopingflow/vacancy_static_thermodynamics.py"\n'
-          new_module = old_module + '      - "src/dopingflow/vacancy_configurational_thermodynamics.py"\n'
-          if text.count(old_module) != 2:
-              raise RuntimeError(f"Expected two module path anchors, found {text.count(old_module)}")
-          text = text.replace(old_module, new_module)
-          old_test = '      - "tests/test_vacancy_static_thermodynamics.py"\n'
-          new_test = old_test + '      - "tests/test_vacancy_configurational_thermodynamics.py"\n'
-          if text.count(old_test) != 2:
-              raise RuntimeError(f"Expected two test path anchors, found {text.count(old_test)}")
-          text = text.replace(old_test, new_test)
-          old_run = '''          pytest -q \\
-            tests/test_oxygen_calibration.py \\
-            tests/test_vacancy_static_thermodynamics.py \\
-            tests/test_vacancies_gui.py
-'''
-          new_run = '''          python -m py_compile gui/app.py src/dopingflow/vacancy_configurational_thermodynamics.py
-          pytest -q \\
-            tests/test_oxygen_calibration.py \\
-            tests/test_vacancy_static_thermodynamics.py \\
-            tests/test_vacancy_configurational_thermodynamics.py \\
-            tests/test_vacancies_gui.py
-'''
-          if text.count(old_run) != 1:
-              raise RuntimeError(f"Expected one CI run anchor, found {text.count(old_run)}")
-          path.write_text(text.replace(old_run, new_run), encoding="utf-8")
+          lines = path.read_text(encoding="utf-8").splitlines()
+          output = []
+          for line in lines:
+              output.append(line)
+              if line == '      - "src/dopingflow/vacancy_static_thermodynamics.py"':
+                  output.append('      - "src/dopingflow/vacancy_configurational_thermodynamics.py"')
+              if line == '      - "tests/test_vacancy_static_thermodynamics.py"':
+                  output.append('      - "tests/test_vacancy_configurational_thermodynamics.py"')
+          text = "\n".join(output) + "\n"
+          run_anchor = "            tests/test_vacancy_static_thermodynamics.py \\\n"
+          if text.count(run_anchor) != 1:
+              raise RuntimeError(f"Expected one test command anchor, found {text.count(run_anchor)}")
+          text = text.replace(
+              run_anchor,
+              run_anchor + "            tests/test_vacancy_configurational_thermodynamics.py \\\n",
+              1,
+          )
+          path.write_text(text, encoding="utf-8")
           PY
 
       - name: Syntax check changed Python files
