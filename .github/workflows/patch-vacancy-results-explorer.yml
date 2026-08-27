@@ -1,0 +1,107 @@
+name: Patch vacancy Results Explorer
+
+on:
+  push:
+    branches: ["debug/extended-energy-correction"]
+    paths:
+      - ".github/workflows/patch-vacancy-results-explorer.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: debug/extended-energy-correction
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Patch Results Explorer
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("gui/app.py")
+          text = path.read_text(encoding="utf-8")
+
+          old = '        "Static vacancy pressure map": vacancy_results_root / "vacancy_static_pressure_map.csv",\n'
+          new = old + '        "Vacancy formation free energy": vacancy_results_root / "vacancy_formation_free_energy.csv",\n'
+          if text.count(old) != 1:
+              raise RuntimeError("known_sources anchor not unique")
+          text = text.replace(old, new, 1)
+
+          old = '''            vacancy_pressure = (\n                pd.read_csv(compact_vacancy_paths["pressure"])\n                if "pressure" in compact_vacancy_paths\n                else pd.DataFrame()\n            )\n        except Exception as exc:\n'''
+          new = '''            vacancy_pressure = (\n                pd.read_csv(compact_vacancy_paths["pressure"])\n                if "pressure" in compact_vacancy_paths\n                else pd.DataFrame()\n            )\n            vacancy_free_energy_path = (\n                vacancy_results_root / "vacancy_formation_free_energy.csv"\n            )\n            vacancy_free_energy = (\n                pd.read_csv(vacancy_free_energy_path)\n                if vacancy_free_energy_path.exists()\n                else pd.DataFrame()\n            )\n        except Exception as exc:\n'''
+          if text.count(old) != 1:
+              raise RuntimeError("vacancy table load anchor not unique")
+          text = text.replace(old, new, 1)
+
+          old = '''                    st.info(\n                        "Static-lattice approximation: solid free energies are "\n                        "approximated by 0 K relaxed ML energies. Temperature and "\n                        "pressure enter only through the oxygen-gas chemical potential. "\n                        "Vibrational, configurational, electronic, magnetic and "\n                        "anharmonic solid free-energy contributions are neglected."\n                    )\n'''
+          new = '''                    entropy_modes_present = set(\n                        vacancy_minima.get(\n                            "solid_configurational_entropy_mode",\n                            pd.Series("none", index=vacancy_minima.index),\n                        )\n                        .fillna("none")\n                        .astype(str)\n                        .str.lower()\n                    )\n                    if "configurational" in entropy_modes_present:\n                        st.info(\n                            "Static ΔμO plots remain based on 0 K relaxed ML minima. "\n                            "Finite-temperature T–pO2 results and vacancy formation free "\n                            "energies include the explicit vacancy configurational partition "\n                            "function. Solid vibrational, zero-point, electronic, magnetic and "\n                            "anharmonic terms remain neglected."\n                        )\n                    elif "ideal" in entropy_modes_present:\n                        st.info(\n                            "Static ΔμO plots remain based on 0 K relaxed ML minima. "\n                            "Finite-temperature T–pO2 results and vacancy formation free "\n                            "energies include ideal oxygen-vacancy mixing entropy. Solid "\n                            "vibrational, zero-point, electronic, magnetic and anharmonic "\n                            "terms remain neglected."\n                        )\n                    else:\n                        st.info(\n                            "Static-lattice approximation: solid free energies are "\n                            "approximated by 0 K relaxed ML energies. Temperature and "\n                            "pressure enter through the oxygen-gas chemical potential; solid "\n                            "configurational, vibrational, electronic, magnetic and anharmonic "\n                            "terms are not included."\n                        )\n'''
+          if text.count(old) != 1:
+              raise RuntimeError("static info anchor not unique")
+          text = text.replace(old, new, 1)
+
+          old = '''                            "T–pO2 map",\n                        ]\n'''
+          new = '''                            "T–pO2 map",\n                            "Vacancy ΔG(T,pO2)",\n                        ]\n'''
+          if text.count(old) != 1:
+              raise RuntimeError("plot tabs anchor not unique")
+          text = text.replace(old, new, 1)
+
+          old = '''                            st.warning(\n                                "Static-lattice approximation: solid free energies are "\n                                "approximated by 0 K relaxed ML energies. Temperature and "\n                                "pressure enter only through the oxygen-gas chemical potential. "\n                                "Solid vibrational and entropic contributions are neglected."\n                            )\n'''
+          new = '''                            entropy_applied = vacancy_pressure.get(\n                                "solid_configurational_entropy_applied",\n                                pd.Series(False, index=vacancy_pressure.index),\n                            ).astype(str).str.lower().isin({"true", "1"}).any()\n                            if entropy_applied:\n                                st.info(\n                                    "This T–pO2 map includes the configured solid oxygen-vacancy "\n                                    "configurational free-energy contribution. Other solid "\n                                    "finite-temperature terms such as phonons remain neglected."\n                                )\n                            else:\n                                st.warning(\n                                    "Static-lattice solid approximation: temperature and pressure "\n                                    "enter through the oxygen reservoir; solid configurational and "\n                                    "vibrational free-energy terms are not included."\n                                )\n'''
+          if text.count(old) != 1:
+              raise RuntimeError("T-pO2 warning anchor not unique")
+          text = text.replace(old, new, 1)
+
+          old = '''                            st.plotly_chart(\n                                pressure_stability_map(\n                                    vacancy_pressure,\n                                    composition,\n                                    vacancy_minima,\n                                    include_standard_state,\n                                ),\n                                use_container_width=True,\n                            )\n                    convergence = vacancy_minima.get(\n'''
+          new = '''                            st.plotly_chart(\n                                pressure_stability_map(\n                                    vacancy_pressure,\n                                    composition,\n                                    vacancy_minima,\n                                    include_standard_state,\n                                ),\n                                use_container_width=True,\n                            )\n                    with plot_tabs[5]:\n                        if vacancy_free_energy.empty:\n                            st.info(\n                                "Rerun the vacancy thermodynamic analysis with the updated "\n                                "workflow to create vacancy_formation_free_energy.csv."\n                            )\n                        else:\n                            free_subset = vacancy_free_energy[\n                                vacancy_free_energy["actual_composition_key"].astype(str)\n                                == composition\n                            ].copy()\n                            temperatures = sorted(\n                                float(value)\n                                for value in free_subset["temperature_K"].dropna().unique()\n                            )\n                            control_t, control_p = st.columns(2)\n                            selected_temperature = control_t.selectbox(\n                                "Temperature (K)",\n                                temperatures,\n                                key="vac_free_energy_temperature",\n                            )\n                            free_subset = free_subset[\n                                np.isclose(\n                                    free_subset["temperature_K"].astype(float),\n                                    selected_temperature,\n                                )\n                            ]\n                            pressures = sorted(\n                                float(value)\n                                for value in free_subset[\n                                    "log10_oxygen_partial_pressure_bar"\n                                ].dropna().unique()\n                            )\n                            selected_pressure = control_p.selectbox(\n                                "log10(pO2/bar)",\n                                pressures,\n                                key="vac_free_energy_pressure",\n                            )\n                            free_subset = free_subset[\n                                np.isclose(\n                                    free_subset[\n                                        "log10_oxygen_partial_pressure_bar"\n                                    ].astype(float),\n                                    selected_pressure,\n                                )\n                            ].sort_values("n_vacancies")\n                            figure = px.line(\n                                free_subset,\n                                x="n_vacancies",\n                                y="vacancy_formation_free_energy_eV",\n                                markers=True,\n                                hover_data=[\n                                    "vacancy_formation_energy_static_reference_eV",\n                                    "oxygen_thermal_pressure_contribution_eV",\n                                    "solid_configurational_free_energy_correction_eV",\n                                ],\n                                title=(\n                                    f"Vacancy formation free energy — {composition}; "\n                                    f"T={selected_temperature:g} K; "\n                                    f"log10(pO2/bar)={selected_pressure:g}"\n                                ),\n                            )\n                            figure.update_layout(\n                                xaxis_title="Number of oxygen vacancies",\n                                yaxis_title="ΔGvac (eV)",\n                                template="plotly_white",\n                            )\n                            st.plotly_chart(figure, use_container_width=True)\n                            display_columns = [\n                                column\n                                for column in (\n                                    "n_vacancies",\n                                    "vacancy_formation_energy_static_reference_eV",\n                                    "oxygen_thermal_pressure_contribution_eV",\n                                    "solid_configurational_free_energy_correction_eV",\n                                    "solid_configurational_entropy_eV_per_K",\n                                    "vacancy_formation_free_energy_eV",\n                                )\n                                if column in free_subset.columns\n                            ]\n                            st.dataframe(\n                                free_subset[display_columns],\n                                use_container_width=True,\n                                hide_index=True,\n                            )\n                    convergence = vacancy_minima.get(\n'''
+          if text.count(old) != 1:
+              raise RuntimeError("new free-energy tab anchor not unique")
+          text = text.replace(old, new, 1)
+
+          old = '''        "vacancy_static_pressure_map.csv",\n    }:\n'''
+          new = '''        "vacancy_static_pressure_map.csv",\n        "vacancy_formation_free_energy.csv",\n    }:\n'''
+          if text.count(old) != 1:
+              raise RuntimeError("vacancy filters anchor not unique")
+          text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding="utf-8")
+
+          test_path = Path("tests/test_vacancies_gui.py")
+          test_text = test_path.read_text(encoding="utf-8")
+          marker = "def test_results_explorer_exposes_vacancy_formation_free_energy():"
+          if marker not in test_text:
+              test_text += '''\n\n\ndef test_results_explorer_exposes_vacancy_formation_free_energy():\n    app_text = (Path(__file__).resolve().parents[1] / "gui" / "app.py").read_text(\n        encoding="utf-8"\n    )\n    assert '"Vacancy formation free energy"' in app_text\n    assert '"vacancy_formation_free_energy.csv"' in app_text\n    assert '"Vacancy ΔG(T,pO2)"' in app_text\n    assert "solid_configurational_free_energy_correction_eV" in app_text\n'''
+              test_path.write_text(test_text, encoding="utf-8")
+          PY
+
+      - name: Syntax check
+        run: python -m py_compile gui/app.py
+
+      - name: Install targeted test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,corrections,gui]"
+
+      - name: Run GUI vacancy tests
+        run: pytest -q tests/test_vacancies_gui.py
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gui/app.py tests/test_vacancies_gui.py
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Show vacancy formation free energy in Results Explorer"
+            git push origin HEAD:debug/extended-energy-correction
+          fi
