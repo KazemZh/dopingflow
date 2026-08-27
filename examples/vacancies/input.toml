@@ -68,9 +68,10 @@ oxygen_calibration_dataset_cache_dir = ""
 oxygen_calibration_min_references = 2
 oxygen_calibration_include_host_oxide = true
 
-# Optional ideal occupied/vacant oxygen-site entropy. It is applied only to the
-# explicitly temperature-dependent T-pO2 map. Keep "none" for static-lattice
-# screening or select "ideal" to include the configurational contribution.
+# Optional solid vacancy configurational treatment for finite-T free energies:
+# "none" = static lattice; "ideal" = ideal occupied/vacant mixing;
+# "configurational" = canonical partition function over exact symmetry orbits.
+# The configurational mode requires exact enumeration/degeneracies.
 solid_configurational_entropy = "none"
 
 delta_mu_O_min_eV = -3.0

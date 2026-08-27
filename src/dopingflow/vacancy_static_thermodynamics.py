@@ -38,6 +38,9 @@ from dopingflow.oxygen_calibration import (
     fit_oxygen_reference,
     write_oxygen_calibration_report,
 )
+from dopingflow.vacancy_configurational_thermodynamics import (
+    augment_vacancy_formation_free_energy,
+)
 from dopingflow.vacancy_analysis import (
     K_B_EV_PER_K,
     NEGLECTED_SOLID_TERMS,
@@ -55,7 +58,7 @@ from dopingflow.vacancy_analysis import (
 )
 
 _CALIBRATED_MODES = {"global", "chemistry-specific"}
-_SOLID_CONFIG_ENTROPY_MODES = {"none", "ideal"}
+_SOLID_CONFIG_ENTROPY_MODES = {"none", "ideal", "configurational"}
 _KJ_PER_MOL_PER_EV = 96.4853321233
 _O2_H298_MINUS_H0_KJ_PER_MOL = 8.683
 _O_H298_MINUS_H0_EV = _O2_H298_MINUS_H0_KJ_PER_MOL / (2.0 * _KJ_PER_MOL_PER_EV)
@@ -119,7 +122,8 @@ def parse_static_vacancy_thermodynamics_config(
     ).strip().lower()
     if entropy_mode not in _SOLID_CONFIG_ENTROPY_MODES:
         raise ValueError(
-            "[vacancies].solid_configurational_entropy must be 'none' or 'ideal'"
+            "[vacancies].solid_configurational_entropy must be one of: "
+            "none, ideal, configurational"
         )
 
     return StaticVacancyThermodynamicsConfig(
@@ -271,6 +275,15 @@ def _calibrated_standard_state_delta_mu(
 
 
 def _enhanced_static_approximation(entropy_mode: str) -> str:
+    if entropy_mode == "configurational":
+        return (
+            "Finite-T screening uses 0 K relaxed ML minima plus an oxygen-vacancy "
+            "configurational partition-function correction from exact symmetry orbits. "
+            "The complete relaxed spectrum is used when available; otherwise the "
+            "complete exact single-point spectrum supplies the configurational correction. "
+            "Solid vibrational, zero-point, thermal-electronic, magnetic, anharmonic, "
+            "thermal-expansion and pV terms are neglected."
+        )
     if entropy_mode == "ideal":
         return (
             "Calibrated static-lattice approximation: solid internal energies are 0 K "
@@ -580,7 +593,7 @@ def analyze_static_vacancy_thermodynamics(
     """Create static-lattice outputs, with optional calibrated oxygen references."""
     requested = cfg.requested_oxygen_reference_mode
     if requested not in _CALIBRATED_MODES:
-        return analyze_vacancy_thermodynamics(
+        outputs = analyze_vacancy_thermodynamics(
             rows=rows,
             analysis_cfg=_base_analysis_config(cfg),
             parent_root=parent_root,
@@ -592,6 +605,13 @@ def analyze_static_vacancy_thermodynamics(
             fmax=fmax,
             max_steps=max_steps,
             source_database=source_database,
+        )
+        return augment_vacancy_formation_free_energy(
+            outputs=outputs,
+            rows=rows,
+            cfg=cfg,
+            parent_root=parent_root,
+            calibrated_reference=False,
         )
 
     # First let the established analysis core select minimum-energy structures
@@ -611,13 +631,20 @@ def analyze_static_vacancy_thermodynamics(
         max_steps=max_steps,
         source_database=source_database,
     )
-    return _postprocess_calibrated_outputs(
+    outputs = _postprocess_calibrated_outputs(
         outputs=outputs,
         cfg=cfg,
         parent_root=parent_root,
         backend=backend,
         model=model,
         task=task,
+    )
+    return augment_vacancy_formation_free_energy(
+        outputs=outputs,
+        rows=rows,
+        cfg=cfg,
+        parent_root=parent_root,
+        calibrated_reference=True,
     )
 
 

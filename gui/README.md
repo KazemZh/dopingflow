@@ -12,6 +12,7 @@ The GUI provides an interactive way to:
 - Configure and run the unified vacancy workflow and explore its separate database
 - Compare relaxed parent, generated vacancy, and relaxed vacancy structures
 - Configure calculator-verified, global-calibrated, or chemistry-specific oxygen references for vacancy thermodynamics
+- Configure none, ideal-mixing, or exact-orbit partition-function vacancy entropy
 - Select either the normal structure output or an existing directory containing many composition subdirectories
 
 The GUI is optional. The CLI remains the primary interface for scripted and HPC workflows.
@@ -176,10 +177,12 @@ reference oxides; `chemistry-specific` refits using only oxides of the actual
 host and present dopants. Neither mode invents a missing oxide stoichiometry.
 
 The T-pO2 map combines the calibrated 298 K oxygen enthalpy reference with NIST
-O2 gas enthalpy/entropy and pressure corrections. If
-`solid_configurational_entropy = "ideal"`, the ideal occupied/vacant oxygen-site
-mixing term is also applied in this T-dependent map; direct delta-mu plots remain
-static-lattice quantities.
+O2 gas enthalpy/entropy and pressure corrections. The Input Builder also exposes
+`solid_configurational_entropy = "none"`, `"ideal"`, or `"configurational"`.
+The last option uses exact symmetry-orbit degeneracies and an explicit canonical
+partition function; it refuses sampled enumeration because those degeneracies are
+not exact. Entropy-aware runs also write `vacancy_formation_free_energy.csv/json`.
+Direct delta-mu plots remain static-lattice quantities.
 
 The Input Builder offers a continuous ``nist_shomate`` mode over 100--6000 K,
 alongside custom ``user_table`` and qualitative ``none`` modes.

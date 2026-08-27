@@ -15,6 +15,7 @@ The format loosely follows semantic versioning.
 
 ## [Unreleased]
 ### Added
+- Finite-temperature vacancy formation free energies with optional ideal or exact-orbit configurational entropy; the explicit partition-function mode uses exact symmetry degeneracies and writes `vacancy_formation_free_energy.csv/json` while keeping direct delta-mu intervals static-lattice
 - Optional backend-specific, uncertainty-weighted energy-correction fitting
   from the curated Kingsbury dataset or explicit custom measurements, with
   phase-matched calibration manifests and reproducibility artifacts

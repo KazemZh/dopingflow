@@ -54,13 +54,20 @@ Solid configurational entropy remains optional:
 ```toml
 solid_configurational_entropy = "none"   # default
 # solid_configurational_entropy = "ideal"
+# solid_configurational_entropy = "configurational"
 ```
 
-`ideal` adds the binary occupied/vacant oxygen-site mixing entropy only to the
-explicitly temperature-dependent T-pO2 map. The direct delta-mu intervals remain
-static-lattice quantities. Vibrational, zero-point, magnetic,
-thermal-electronic, anharmonic, thermal-expansion and solid-pV contributions
-are not part of this screening level.
+`ideal` adds the binary occupied/vacant oxygen-site mixing entropy.
+`configurational` uses a canonical partition function over exact symmetry-distinct
+vacancy configurations and orbit degeneracies. It requires exact enumeration; if
+a calculation was sampled, the analysis stops rather than guessing degeneracies.
+When the whole exact set is relaxed, relaxed energies enter the partition function;
+otherwise the full exact single-point spectrum supplies a configurational correction
+to the relaxed static minimum. Both treatments affect finite-temperature outputs,
+including `vacancy_formation_free_energy.csv/json` and the T-pO2 stability map.
+Direct delta-mu intervals remain static-lattice quantities. Vibrational, zero-point,
+magnetic, thermal-electronic, anharmonic, thermal-expansion and solid-pV
+contributions are not part of this screening level.
 
 Generate five figures using only the compact files:
 

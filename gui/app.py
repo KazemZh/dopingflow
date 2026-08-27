@@ -2917,11 +2917,11 @@ if tab == "Input Builder":
         )
         if vac["static_thermodynamic_analysis"]:
             st.warning(
-                "Static-lattice approximation: solid free energies are approximated by "
-                "0 K relaxed ML energies. Temperature and pressure enter only through "
-                "the oxygen-gas chemical potential. Vibrational, configurational, "
-                "electronic, magnetic and anharmonic free-energy contributions of the "
-                "solid are neglected."
+                "Static-lattice baseline: 0 K relaxed ML energies are retained. Gas-phase "
+                "O2 enthalpy/entropy and pressure can be added in the T-pO2 analysis. "
+                "Solid vacancy configurational entropy can optionally be included as an "
+                "ideal-mixing or explicit partition-function term; phonon, zero-point, "
+                "thermal-electronic, magnetic and anharmonic solid terms remain neglected."
             )
             modes = CHOICES["vacancies.oxygen_reference_mode"]
             current_mode = str(vac.get("oxygen_reference_mode", defaults["oxygen_reference_mode"]))
@@ -2930,7 +2930,59 @@ if tab == "Input Builder":
             vac["oxygen_reference_mode"] = st.selectbox(
                 "Oxygen reference mode", modes, index=modes.index(current_mode), key="vac_o_ref_mode"
             )
-            if current_mode == "reference_file":
+            current_mode = vac["oxygen_reference_mode"]
+            if current_mode in {"global", "chemistry-specific"}:
+                vac["oxygen_reference_file"] = st.text_input(
+                    "Reference energies JSON",
+                    value=str(vac.get("oxygen_reference_file", defaults["oxygen_reference_file"])),
+                    key="vac_o_cal_ref_file",
+                    help="Uses already calculated binary oxide and bulk-metal references from refs-build.",
+                )
+                calibration_sources = CHOICES["vacancies.oxygen_calibration_experimental_source"]
+                current_calibration_source = str(
+                    vac.get(
+                        "oxygen_calibration_experimental_source",
+                        defaults["oxygen_calibration_experimental_source"],
+                    )
+                )
+                if current_calibration_source not in calibration_sources:
+                    current_calibration_source = defaults["oxygen_calibration_experimental_source"]
+                vac["oxygen_calibration_experimental_source"] = st.selectbox(
+                    "Experimental formation-enthalpy source",
+                    calibration_sources,
+                    index=calibration_sources.index(current_calibration_source),
+                    key="vac_o_cal_source",
+                )
+                if vac["oxygen_calibration_experimental_source"] in {"custom", "kingsbury+custom"}:
+                    vac["oxygen_calibration_experimental_data"] = st.text_input(
+                        "Custom experimental CSV",
+                        value=str(vac.get("oxygen_calibration_experimental_data", "")),
+                        key="vac_o_cal_custom",
+                    )
+                vac["oxygen_calibration_dataset_cache_dir"] = st.text_input(
+                    "Experimental dataset cache directory (optional)",
+                    value=str(vac.get("oxygen_calibration_dataset_cache_dir", "")),
+                    key="vac_o_cal_cache",
+                )
+                ccal1, ccal2 = st.columns(2)
+                vac["oxygen_calibration_min_references"] = int(ccal1.number_input(
+                    "Minimum calibration oxides",
+                    min_value=1,
+                    value=int(vac.get("oxygen_calibration_min_references", 2)),
+                    step=1,
+                    key="vac_o_cal_min_refs",
+                ))
+                vac["oxygen_calibration_include_host_oxide"] = ccal2.checkbox(
+                    "Include host oxide when eligible",
+                    value=bool(vac.get("oxygen_calibration_include_host_oxide", True)),
+                    key="vac_o_cal_host",
+                )
+                st.info(
+                    "Global uses all eligible real binary reference oxides. Chemistry-specific "
+                    "uses only oxides of the actual host/dopant cations. Missing oxide "
+                    "stoichiometries are never invented."
+                )
+            elif current_mode == "reference_file":
                 vac["oxygen_reference_file"] = st.text_input(
                     "Reference energies JSON",
                     value=str(vac.get("oxygen_reference_file", defaults["oxygen_reference_file"])),
@@ -2954,13 +3006,16 @@ if tab == "Input Builder":
                     value=float(vac.get("mu_O_reference_eV", -4.8)),
                     key="vac_mu_o_explicit",
                 ))
-            else:
+            elif current_mode == "none":
                 st.info("Minima will be written, but no preferred vacancy count across oxygen contents will be claimed.")
-            vac["allow_unverified_oxygen_reference"] = st.checkbox(
-                "Allow an unverifiable reference (recorded as unverified)",
-                value=bool(vac.get("allow_unverified_oxygen_reference", False)),
-                key="vac_allow_unverified_ref",
-            )
+            if current_mode not in {"global", "chemistry-specific"}:
+                vac["allow_unverified_oxygen_reference"] = st.checkbox(
+                    "Allow an unverifiable reference (recorded as unverified)",
+                    value=bool(vac.get("allow_unverified_oxygen_reference", False)),
+                    key="vac_allow_unverified_ref",
+                )
+            else:
+                vac["allow_unverified_oxygen_reference"] = False
             c1, c2, c3 = st.columns(3)
             vac["delta_mu_O_min_eV"] = float(c1.number_input("Minimum delta mu_O (eV)", value=float(vac.get("delta_mu_O_min_eV", -3.0)), max_value=0.0, key="vac_delta_mu_min"))
             vac["delta_mu_O_max_eV"] = float(c2.number_input("Maximum delta mu_O (eV)", value=float(vac.get("delta_mu_O_max_eV", 0.0)), max_value=0.0, key="vac_delta_mu_max"))
@@ -2986,6 +3041,37 @@ if tab == "Input Builder":
             c1, c2 = st.columns(2)
             vac["static_energy_source"] = c1.selectbox("Static energy source", sources, index=sources.index(current_source), key="vac_static_source")
             vac["exclude_unconverged"] = c2.checkbox("Exclude unconverged structures", value=bool(vac.get("exclude_unconverged", True)), key="vac_exclude_unconverged")
+
+            entropy_modes = CHOICES["vacancies.solid_configurational_entropy"]
+            current_entropy_mode = str(
+                vac.get("solid_configurational_entropy", defaults["solid_configurational_entropy"])
+            )
+            if current_entropy_mode not in entropy_modes:
+                current_entropy_mode = defaults["solid_configurational_entropy"]
+            vac["solid_configurational_entropy"] = st.selectbox(
+                "Solid vacancy configurational treatment",
+                entropy_modes,
+                index=entropy_modes.index(current_entropy_mode),
+                key="vac_solid_config_entropy",
+                help=(
+                    "none: static-lattice solid. ideal: ideal occupied/vacant mixing entropy. "
+                    "configurational: explicit canonical partition function over exact "
+                    "symmetry-distinct vacancy configurations."
+                ),
+            )
+            if vac["solid_configurational_entropy"] == "configurational":
+                st.warning(
+                    "Partition-function mode requires exact vacancy enumeration and exact orbit "
+                    "degeneracies. If auto mode switches to sampling, analysis stops with a "
+                    "clear error rather than inventing degeneracies. The complete relaxed "
+                    "spectrum is used when available; otherwise the full exact single-point "
+                    "spectrum supplies the configurational correction to the relaxed minimum."
+                )
+            elif vac["solid_configurational_entropy"] == "ideal":
+                st.info(
+                    "Ideal mode adds -T S_mix from occupied/vacant oxygen-site mixing to the "
+                    "finite-temperature vacancy free energy."
+                )
 
             st.markdown("##### Temperature–pressure mapping")
             vac["pressure_mapping"] = st.checkbox(

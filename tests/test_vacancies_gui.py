@@ -39,7 +39,9 @@ def test_vacancy_gui_defaults_are_one_flat_section():
     assert CHOICES["vacancies.oxygen_calibration_experimental_source"] == [
         "kingsbury", "kingsbury+custom", "custom"
     ]
-    assert CHOICES["vacancies.solid_configurational_entropy"] == ["none", "ideal"]
+    assert CHOICES["vacancies.solid_configurational_entropy"] == [
+        "none", "ideal", "configurational"
+    ]
     assert section["oxygen_calibration_experimental_source"] == "kingsbury"
     assert section["oxygen_calibration_min_references"] == 2
     assert section["oxygen_calibration_include_host_oxide"] is True

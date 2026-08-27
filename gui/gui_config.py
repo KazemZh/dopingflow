@@ -141,7 +141,7 @@ CHOICES = {
         "kingsbury+custom",
         "custom",
     ],
-    "vacancies.solid_configurational_entropy": ["none", "ideal"],
+    "vacancies.solid_configurational_entropy": ["none", "ideal", "configurational"],
     "vacancies.static_energy_source": ["relaxed_only", "relaxed_or_single_point"],
     "vacancies.oxygen_standard_state_mode": ["none", "nist_shomate", "user_table"],
     "vacancies.optimizer": OPTIMIZER_CHOICES,

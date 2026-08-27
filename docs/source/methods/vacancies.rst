@@ -155,12 +155,44 @@ unless their integer species counts and cation-site totals are identical.
 The default solid treatment is static-lattice: solid free energies are
 approximated by 0 K relaxed ML energies. Solid vibrational, zero-point,
 thermal-electronic, magnetic, anharmonic, thermal-expansion, and solid-pV terms
-are not included. Configurational entropy is also omitted by default. If
-``solid_configurational_entropy = "ideal"`` is selected, an ideal occupied/
-vacant oxygen-site mixing entropy is included only in the explicitly
-T-dependent pressure map. The direct ``delta_mu_O`` stability intervals remain
-static-lattice quantities because they do not define a unique temperature. This
-is not a complete finite-temperature phase diagram.
+are not included. Vacancy configurational entropy is optional:
+
+``solid_configurational_entropy = "none"``
+   Keep the static-lattice solid contribution.
+
+``solid_configurational_entropy = "ideal"``
+   Add ideal occupied/vacant oxygen-site mixing entropy.
+
+``solid_configurational_entropy = "configurational"``
+   Evaluate a canonical partition function over the exact symmetry-distinct
+   vacancy configurations and their orbit degeneracies. Exact enumeration is
+   required. If every exact orbit was relaxed, relaxed energies are used;
+   otherwise the complete exact single-point spectrum supplies a configurational
+   correction relative to its minimum, which is added to the relaxed static
+   minimum for that vacancy count. Sampled enumeration is rejected because its
+   degeneracies are not exact.
+
+The finite-temperature vacancy formation free energy is then
+
+.. math::
+
+   \Delta G_{vac}(n,T,p) =
+   E_{min}(n)-E_{min}(0) + n\mu_O(T,p) + \Delta F_{config}(n,T).
+
+For the explicit partition function,
+
+.. math::
+
+   \Delta F_{config}(n,T) =
+   -k_B T \ln\left[\sum_i g_i
+   \exp\left(-rac{E_i-E_{min}}{k_B T}ight)ight].
+
+The result is written for every vacancy count to
+``vacancy_formation_free_energy.csv/json``. The T-pO2 stability map minimizes
+this finite-T quantity. Direct ``delta_mu_O`` intervals remain static-lattice
+quantities because they do not define a unique temperature. Dopant-configurational
+entropy and the other solid free-energy terms listed above remain outside this
+screening level.
 
 For actual composition :math:`c`, the analysis selects the lowest converged
 relaxed energy :math:`E_{min}(c,n)` across every selected parent and relaxed

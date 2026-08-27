@@ -191,7 +191,7 @@ oxygen_reference_mode = "global"            # or "chemistry-specific"
 oxygen_reference_file = "reference_structures/reference_energies.json"
 oxygen_calibration_experimental_source = "kingsbury"
 oxygen_calibration_min_references = 2
-solid_configurational_entropy = "none"       # optional: "ideal"
+solid_configurational_entropy = "none"       # optional: "ideal" or "configurational"
 oxygen_standard_state_mode = "nist_shomate"
 ```
 
@@ -207,11 +207,17 @@ and formation-enthalpy residuals are written to
 For calibrated references, the T-pO2 map adds the NIST O2 gas enthalpy/entropy
 correction with a 298 K enthalpy origin and the ideal-gas pressure term. This is
 separate from the zero-temperature/backend oxygen calibration.
-``solid_configurational_entropy = "ideal"`` optionally adds the ideal binary
-occupied/vacant oxygen-site mixing entropy to T-dependent pressure maps only;
-T-independent delta-mu stability intervals remain static-lattice quantities.
-All other solid vibrational, zero-point, magnetic, electronic and anharmonic
-terms remain outside this screening level.
+``solid_configurational_entropy = "ideal"`` adds the ideal binary occupied/vacant
+oxygen-site mixing entropy. ``"configurational"`` instead evaluates a canonical
+partition function over the exact symmetry-distinct vacancy configurations and
+their orbit degeneracies. If every exact configuration was relaxed, the relaxed
+spectrum is used; otherwise the complete exact single-point spectrum provides
+the configurational correction to the relaxed minimum. Sampled enumeration is
+rejected for this mode because exact degeneracies are unavailable. Both entropy
+treatments enter only finite-temperature outputs; direct delta-mu intervals remain
+static-lattice quantities. ``vacancy_formation_free_energy.csv/json`` reports
+DeltaG_vac(T,pO2) for every vacancy count. Solid vibrational, zero-point, magnetic,
+electronic and anharmonic terms remain outside this screening level.
 
 ``oxygen_standard_state_mode = "nist_shomate"`` evaluates continuous NIST O2
 enthalpy/entropy corrections from 100 to 6000 K; ``user_table`` remains available
@@ -261,6 +267,7 @@ The GUI allows you to:
 - Configure optional formation-energy corrections
 - Configure, run, explore, and compare parent/generated/relaxed vacancy structures
 - Select raw, global-calibrated, or chemistry-specific oxygen references for vacancy thermodynamics
+- Select no, ideal, or explicit partition-function vacancy configurational entropy
 
 Relative-energy controls remain inside the existing `[formation]` section:
 
@@ -372,6 +379,7 @@ After launching, a local browser window will open automatically.
 │       ├── surface.py
 │       ├── vacancies.py
 │       ├── vacancy_analysis.py
+│       ├── vacancy_configurational_thermodynamics.py
 │       ├── vacancy_static_thermodynamics.py
 │       └── utils
 │           ├── io.py

@@ -379,7 +379,8 @@ def augment_vacancy_formation_free_energy(
     for line in minima:
         line["solid_configurational_entropy_mode"] = mode
         line["finite_temperature_configurational_treatment"] = mode
-        line["static_lattice_approximation"] = approximation
+        if mode != "none":
+            line["static_lattice_approximation"] = approximation
         if mode == "ideal":
             n_sites = int(line.get("n_oxygen_sites_parent", 0))
             line["solid_configurational_entropy_eV_per_K"] = (
@@ -616,6 +617,8 @@ def augment_vacancy_formation_free_energy(
         if metadata_path is None or not metadata_path.exists():
             continue
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        if mode != "none":
+            metadata["static_lattice_approximation"] = approximation
         metadata.update(
             {
                 "solid_configurational_entropy": mode,
@@ -631,7 +634,6 @@ def augment_vacancy_formation_free_energy(
                     else None
                 ),
                 "finite_temperature_vacancy_free_energy_output": str(free_json),
-                "static_lattice_approximation": approximation,
                 "neglected_solid_terms": neglected,
                 "pressure_mapping_is_approximate": pressure_is_approximate,
             }

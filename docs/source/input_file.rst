@@ -1576,6 +1576,36 @@ The step writes a combined CSV plus one CSV per exact chemical system under
 
 ---------------------------------------------------------------------
 
+[vacancies]
+-----------
+
+The vacancy stage uses one flat ``[vacancies]`` table. Important controls are:
+
+- ``host_species``, ``host_oxidation_state``, ``vacancy_species`` and
+  ``vacancy_compensation_charge`` for the formal-charge search space.
+- ``oxidation_state_elements`` / ``oxidation_state_values`` for dopants.
+- ``enumeration_mode = "auto" | "exact" | "sample"`` and the exact/sampling
+  limits for symmetry-distinct vacancy generation.
+- ``backend``, ``model``, ``task`` and ``device`` for ML screening/relaxation.
+- ``topk_per_vacancy_count``, ``optimizer``, ``fmax`` and ``max_steps`` for
+  relaxation.
+- ``static_thermodynamic_analysis = true`` to compare different oxygen contents.
+- ``oxygen_reference_mode = "global" | "chemistry-specific" |
+  "reference_file" | "same_calculator" | "explicit" | "none"``.
+- ``oxygen_standard_state_mode = "nist_shomate" | "user_table" | "none"``
+  together with ``temperatures_K`` and the ``pO2`` grid.
+- ``solid_configurational_entropy = "none" | "ideal" | "configurational"``.
+  The ``configurational`` option evaluates an explicit canonical partition
+  function using exact symmetry-orbit degeneracies; it therefore requires exact
+  vacancy enumeration.
+
+Finite-temperature runs write ``vacancy_formation_free_energy.csv/json`` with
+:math:`\Delta G_{vac}(T,p_{O_2})` for every vacancy count. See
+:doc:`methods/vacancies` and :doc:`methods/oxygen_calibration` for the equations,
+calibration rules and approximations.
+
+---------------------------------------------------------------------
+
 [surface]
 ---------
 
