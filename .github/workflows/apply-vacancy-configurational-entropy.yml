@@ -25,8 +25,52 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Prepare one-shot patch script
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("scripts/apply_vacancy_configurational_entropy_patch.py")
+          text = path.read_text(encoding="utf-8")
+          start = text.index("# ---------------------------------------------------------------------------\n# CI\n# ---------------------------------------------------------------------------")
+          end = text.index("# ---------------------------------------------------------------------------\n# README and examples\n# ---------------------------------------------------------------------------", start)
+          path.write_text(text[:start] + text[end:], encoding="utf-8")
+          PY
+
       - name: Apply integration patch
         run: python scripts/apply_vacancy_configurational_entropy_patch.py
+
+      - name: Update targeted CI coverage
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path(".github/workflows/vacancy-calibration-tests.yml")
+          text = path.read_text(encoding="utf-8")
+          old_module = '      - "src/dopingflow/vacancy_static_thermodynamics.py"\n'
+          new_module = old_module + '      - "src/dopingflow/vacancy_configurational_thermodynamics.py"\n'
+          if text.count(old_module) != 2:
+              raise RuntimeError(f"Expected two module path anchors, found {text.count(old_module)}")
+          text = text.replace(old_module, new_module)
+          old_test = '      - "tests/test_vacancy_static_thermodynamics.py"\n'
+          new_test = old_test + '      - "tests/test_vacancy_configurational_thermodynamics.py"\n'
+          if text.count(old_test) != 2:
+              raise RuntimeError(f"Expected two test path anchors, found {text.count(old_test)}")
+          text = text.replace(old_test, new_test)
+          old_run = '''          pytest -q \\
+            tests/test_oxygen_calibration.py \\
+            tests/test_vacancy_static_thermodynamics.py \\
+            tests/test_vacancies_gui.py
+'''
+          new_run = '''          python -m py_compile gui/app.py src/dopingflow/vacancy_configurational_thermodynamics.py
+          pytest -q \\
+            tests/test_oxygen_calibration.py \\
+            tests/test_vacancy_static_thermodynamics.py \\
+            tests/test_vacancy_configurational_thermodynamics.py \\
+            tests/test_vacancies_gui.py
+'''
+          if text.count(old_run) != 1:
+              raise RuntimeError(f"Expected one CI run anchor, found {text.count(old_run)}")
+          path.write_text(text.replace(old_run, new_run), encoding="utf-8")
+          PY
 
       - name: Syntax check changed Python files
         run: |
@@ -36,6 +80,19 @@ jobs:
             gui/app.py \
             gui/gui_config.py \
             tests/test_vacancy_configurational_thermodynamics.py
+
+      - name: Install targeted test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,corrections,gui]"
+
+      - name: Run targeted vacancy tests
+        run: |
+          pytest -q \
+            tests/test_oxygen_calibration.py \
+            tests/test_vacancy_static_thermodynamics.py \
+            tests/test_vacancy_configurational_thermodynamics.py \
+            tests/test_vacancies_gui.py
 
       - name: Commit integrated feature
         run: |
