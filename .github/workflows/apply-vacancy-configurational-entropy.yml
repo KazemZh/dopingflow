@@ -39,6 +39,53 @@ jobs:
       - name: Apply integration patch
         run: python scripts/apply_vacancy_configurational_entropy_patch.py
 
+      - name: Preserve legacy static metadata for none mode
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("src/dopingflow/vacancy_configurational_thermodynamics.py")
+          text = path.read_text(encoding="utf-8")
+          old = '''    approximation = _approximation_text(mode)
+    for line in minima:
+        line["solid_configurational_entropy_mode"] = mode
+        line["finite_temperature_configurational_treatment"] = mode
+        line["static_lattice_approximation"] = approximation
+'''
+          new = '''    approximation = _approximation_text(mode)
+    for line in minima:
+        line["solid_configurational_entropy_mode"] = mode
+        line["finite_temperature_configurational_treatment"] = mode
+        if mode != "none":
+            line["static_lattice_approximation"] = approximation
+'''
+          if text.count(old) != 1:
+              raise RuntimeError(f"Expected one minima metadata anchor, found {text.count(old)}")
+          text = text.replace(old, new, 1)
+          old_meta = '''                "finite_temperature_vacancy_free_energy_output": str(free_json),
+                "static_lattice_approximation": approximation,
+                "neglected_solid_terms": neglected,
+'''
+          new_meta = '''                "finite_temperature_vacancy_free_energy_output": str(free_json),
+                "neglected_solid_terms": neglected,
+'''
+          if text.count(old_meta) != 1:
+              raise RuntimeError(f"Expected one analysis metadata anchor, found {text.count(old_meta)}")
+          text = text.replace(old_meta, new_meta, 1)
+          marker = '''        metadata.update(
+            {
+'''
+          # For entropy-enabled modes we still record the enhanced approximation;
+          # for none, retain the exact legacy metadata string written by the base analysis.
+          insert = '''        if mode != "none":
+            metadata["static_lattice_approximation"] = approximation
+        metadata.update(
+            {
+'''
+          if text.count(marker) != 1:
+              raise RuntimeError(f"Expected one metadata update anchor, found {text.count(marker)}")
+          path.write_text(text.replace(marker, insert, 1), encoding="utf-8")
+          PY
+
       - name: Update targeted CI coverage
         run: |
           python - <<'PY'
@@ -91,6 +138,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
+            src/dopingflow/vacancy_configurational_thermodynamics.py \
             src/dopingflow/vacancy_static_thermodynamics.py \
             gui/gui_config.py gui/app.py gui/README.md \
             tests/test_vacancies_gui.py tests/test_vacancy_configurational_thermodynamics.py \
