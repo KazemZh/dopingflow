@@ -207,3 +207,13 @@ def test_vacancy_thermodynamic_gui_figures_use_categorical_legend():
     assert list(omitted_lines.data[1].y) != list(physical_lines.data[1].y)
     omitted_map = pressure_stability_map(pressure, "Sb10", minima, False)
     assert omitted_map.layout.title.text.startswith("Approximate T–pO2")
+
+
+def test_results_explorer_exposes_vacancy_formation_free_energy():
+    app_text = (Path(__file__).resolve().parents[1] / "gui" / "app.py").read_text(
+        encoding="utf-8"
+    )
+    assert '"Vacancy formation free energy"' in app_text
+    assert '"vacancy_formation_free_energy.csv"' in app_text
+    assert '"Vacancy ΔG(T,pO2)"' in app_text
+    assert "solid_configurational_free_energy_correction_eV" in app_text

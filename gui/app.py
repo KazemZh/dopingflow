@@ -4163,6 +4163,7 @@ elif tab == "Results Explorer":
         "Static vacancy stability intervals": vacancy_results_root / "vacancy_static_stability_intervals.csv",
         "Static vacancy best counts": vacancy_results_root / "vacancy_static_best_counts.csv",
         "Static vacancy pressure map": vacancy_results_root / "vacancy_static_pressure_map.csv",
+        "Vacancy formation free energy": vacancy_results_root / "vacancy_formation_free_energy.csv",
     }
     source_choice = st.selectbox(
         "Known result source",
@@ -4340,6 +4341,14 @@ elif tab == "Results Explorer":
                 if "pressure" in compact_vacancy_paths
                 else pd.DataFrame()
             )
+            vacancy_free_energy_path = (
+                vacancy_results_root / "vacancy_formation_free_energy.csv"
+            )
+            vacancy_free_energy = (
+                pd.read_csv(vacancy_free_energy_path)
+                if vacancy_free_energy_path.exists()
+                else pd.DataFrame()
+            )
         except Exception as exc:
             st.warning(f"Could not load compact vacancy-analysis tables: {exc}")
         else:
@@ -4353,13 +4362,39 @@ elif tab == "Results Explorer":
                         "Interactive plots use the compact minima, exact stability "
                         "interval, and selected-condition best-count tables."
                     )
-                    st.info(
-                        "Static-lattice approximation: solid free energies are "
-                        "approximated by 0 K relaxed ML energies. Temperature and "
-                        "pressure enter only through the oxygen-gas chemical potential. "
-                        "Vibrational, configurational, electronic, magnetic and "
-                        "anharmonic solid free-energy contributions are neglected."
+                    entropy_modes_present = set(
+                        vacancy_minima.get(
+                            "solid_configurational_entropy_mode",
+                            pd.Series("none", index=vacancy_minima.index),
+                        )
+                        .fillna("none")
+                        .astype(str)
+                        .str.lower()
                     )
+                    if "configurational" in entropy_modes_present:
+                        st.info(
+                            "Static ΔμO plots remain based on 0 K relaxed ML minima. "
+                            "Finite-temperature T–pO2 results and vacancy formation free "
+                            "energies include the explicit vacancy configurational partition "
+                            "function. Solid vibrational, zero-point, electronic, magnetic and "
+                            "anharmonic terms remain neglected."
+                        )
+                    elif "ideal" in entropy_modes_present:
+                        st.info(
+                            "Static ΔμO plots remain based on 0 K relaxed ML minima. "
+                            "Finite-temperature T–pO2 results and vacancy formation free "
+                            "energies include ideal oxygen-vacancy mixing entropy. Solid "
+                            "vibrational, zero-point, electronic, magnetic and anharmonic "
+                            "terms remain neglected."
+                        )
+                    else:
+                        st.info(
+                            "Static-lattice approximation: solid free energies are "
+                            "approximated by 0 K relaxed ML energies. Temperature and "
+                            "pressure enter through the oxygen-gas chemical potential; solid "
+                            "configurational, vibrational, electronic, magnetic and anharmonic "
+                            "terms are not included."
+                        )
                     compositions = sorted(
                         vacancy_intervals["actual_composition_key"]
                         .dropna()
@@ -4404,6 +4439,7 @@ elif tab == "Results Explorer":
                             "Potential vs vacancy count",
                             "Preferred count vs doping",
                             "T–pO2 map",
+                            "Vacancy ΔG(T,pO2)",
                         ]
                     )
                     with plot_tabs[0]:
@@ -4454,12 +4490,22 @@ elif tab == "Results Explorer":
                                 ),
                             )
                             include_standard_state = correction_mode.startswith("Include")
-                            st.warning(
-                                "Static-lattice approximation: solid free energies are "
-                                "approximated by 0 K relaxed ML energies. Temperature and "
-                                "pressure enter only through the oxygen-gas chemical potential. "
-                                "Solid vibrational and entropic contributions are neglected."
-                            )
+                            entropy_applied = vacancy_pressure.get(
+                                "solid_configurational_entropy_applied",
+                                pd.Series(False, index=vacancy_pressure.index),
+                            ).astype(str).str.lower().isin({"true", "1"}).any()
+                            if entropy_applied:
+                                st.info(
+                                    "This T–pO2 map includes the configured solid oxygen-vacancy "
+                                    "configurational free-energy contribution. Other solid "
+                                    "finite-temperature terms such as phonons remain neglected."
+                                )
+                            else:
+                                st.warning(
+                                    "Static-lattice solid approximation: temperature and pressure "
+                                    "enter through the oxygen reservoir; solid configurational and "
+                                    "vibrational free-energy terms are not included."
+                                )
                             if (not include_standard_state) or vacancy_pressure.get(
                                 "pressure_mapping_is_approximate",
                                 pd.Series(False, index=vacancy_pressure.index),
@@ -4476,6 +4522,91 @@ elif tab == "Results Explorer":
                                     include_standard_state,
                                 ),
                                 use_container_width=True,
+                            )
+                    with plot_tabs[5]:
+                        if vacancy_free_energy.empty:
+                            st.info(
+                                "Rerun the vacancy thermodynamic analysis with the updated "
+                                "workflow to create vacancy_formation_free_energy.csv."
+                            )
+                        else:
+                            free_subset = vacancy_free_energy[
+                                vacancy_free_energy["actual_composition_key"].astype(str)
+                                == composition
+                            ].copy()
+                            temperatures = sorted(
+                                float(value)
+                                for value in free_subset["temperature_K"].dropna().unique()
+                            )
+                            control_t, control_p = st.columns(2)
+                            selected_temperature = control_t.selectbox(
+                                "Temperature (K)",
+                                temperatures,
+                                key="vac_free_energy_temperature",
+                            )
+                            free_subset = free_subset[
+                                np.isclose(
+                                    free_subset["temperature_K"].astype(float),
+                                    selected_temperature,
+                                )
+                            ]
+                            pressures = sorted(
+                                float(value)
+                                for value in free_subset[
+                                    "log10_oxygen_partial_pressure_bar"
+                                ].dropna().unique()
+                            )
+                            selected_pressure = control_p.selectbox(
+                                "log10(pO2/bar)",
+                                pressures,
+                                key="vac_free_energy_pressure",
+                            )
+                            free_subset = free_subset[
+                                np.isclose(
+                                    free_subset[
+                                        "log10_oxygen_partial_pressure_bar"
+                                    ].astype(float),
+                                    selected_pressure,
+                                )
+                            ].sort_values("n_vacancies")
+                            figure = px.line(
+                                free_subset,
+                                x="n_vacancies",
+                                y="vacancy_formation_free_energy_eV",
+                                markers=True,
+                                hover_data=[
+                                    "vacancy_formation_energy_static_reference_eV",
+                                    "oxygen_thermal_pressure_contribution_eV",
+                                    "solid_configurational_free_energy_correction_eV",
+                                ],
+                                title=(
+                                    f"Vacancy formation free energy — {composition}; "
+                                    f"T={selected_temperature:g} K; "
+                                    f"log10(pO2/bar)={selected_pressure:g}"
+                                ),
+                            )
+                            figure.update_layout(
+                                xaxis_title="Number of oxygen vacancies",
+                                yaxis_title="ΔGvac (eV)",
+                                template="plotly_white",
+                            )
+                            st.plotly_chart(figure, use_container_width=True)
+                            display_columns = [
+                                column
+                                for column in (
+                                    "n_vacancies",
+                                    "vacancy_formation_energy_static_reference_eV",
+                                    "oxygen_thermal_pressure_contribution_eV",
+                                    "solid_configurational_free_energy_correction_eV",
+                                    "solid_configurational_entropy_eV_per_K",
+                                    "vacancy_formation_free_energy_eV",
+                                )
+                                if column in free_subset.columns
+                            ]
+                            st.dataframe(
+                                free_subset[display_columns],
+                                use_container_width=True,
+                                hide_index=True,
                             )
                     convergence = vacancy_minima.get(
                         "converged", pd.Series(False, index=vacancy_minima.index)
@@ -4510,6 +4641,7 @@ elif tab == "Results Explorer":
         "vacancy_static_stability_intervals.csv",
         "vacancy_static_best_counts.csv",
         "vacancy_static_pressure_map.csv",
+        "vacancy_formation_free_energy.csv",
     }:
         with st.expander("Vacancy thermodynamic filters", expanded=True):
             if "actual_composition_key" in df_f:
