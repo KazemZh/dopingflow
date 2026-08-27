@@ -71,31 +71,6 @@ jobs:
           path.write_text("\n".join(output) + "\n", encoding="utf-8")
           PY
 
-      - name: Update targeted CI coverage
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          path = Path(".github/workflows/vacancy-calibration-tests.yml")
-          lines = path.read_text(encoding="utf-8").splitlines()
-          output = []
-          for line in lines:
-              output.append(line)
-              if line == '      - "src/dopingflow/vacancy_static_thermodynamics.py"':
-                  output.append('      - "src/dopingflow/vacancy_configurational_thermodynamics.py"')
-              if line == '      - "tests/test_vacancy_static_thermodynamics.py"':
-                  output.append('      - "tests/test_vacancy_configurational_thermodynamics.py"')
-          text = "\n".join(output) + "\n"
-          run_anchor = "            tests/test_vacancy_static_thermodynamics.py \\\n"
-          if text.count(run_anchor) != 1:
-              raise RuntimeError(f"Expected one test command anchor, found {text.count(run_anchor)}")
-          text = text.replace(
-              run_anchor,
-              run_anchor + "            tests/test_vacancy_configurational_thermodynamics.py \\\n",
-              1,
-          )
-          path.write_text(text, encoding="utf-8")
-          PY
-
       - name: Syntax check changed Python files
         run: |
           python -m py_compile \
@@ -127,7 +102,6 @@ jobs:
             src/dopingflow/vacancy_static_thermodynamics.py \
             gui/gui_config.py gui/app.py gui/README.md \
             tests/test_vacancies_gui.py tests/test_vacancy_configurational_thermodynamics.py \
-            .github/workflows/vacancy-calibration-tests.yml \
             README.md CHANGELOG.md \
             examples/vacancies/input.toml examples/vacancies/README.md \
             docs/source/input_file.rst \
