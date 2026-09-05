@@ -15,6 +15,41 @@ root receives `vacancies_database.csv` and `vacancies_database.json`. Model
 weights are obtained by the selected backend on first use; choose a backend and
 model installed in your environment.
 
+The example uses the default symmetry search explicitly:
+
+```toml
+search_method = "enumeration"
+supercell = [1, 1, 1]
+```
+
+Switch to `search_method = "monte-carlo"` to sample vacancy–anion swaps and
+swaps between every distinct cation species in the relaxed parent. This supports
+more than two dopants and retains the same ML screening, top-k relaxation,
+reranking, and output layout. `supercell = [a, b, c]` controls the search cell
+for either method.
+
+For an isothermal search:
+
+```toml
+search_method = "monte-carlo"
+mc_temperature_K = 300.0
+mc_annealing = false
+```
+
+For annealing:
+
+```toml
+mc_temperature_K = 300.0
+mc_annealing = true
+mc_initial_temperature_K = 1200.0
+mc_annealing_hold_steps = 500
+mc_annealing_steps = 2000
+```
+
+The stopping, archive, tolerance, and move-weight controls are commented in
+`input.toml`. Each vacancy-count directory records the resolved schedule and
+acceptance statistics in `monte_carlo_summary.json`.
+
 The checked-in example keeps the backward-compatible `reference_file` oxygen
 reference so it can be used with an existing `reference_energies.json`. The same
 flat section now also supports:
@@ -61,6 +96,8 @@ solid_configurational_entropy = "none"   # default
 `configurational` uses a canonical partition function over exact symmetry-distinct
 vacancy configurations and orbit degeneracies. It requires exact enumeration; if
 a calculation was sampled, the analysis stops rather than guessing degeneracies.
+It is also incompatible with Monte Carlo sampling; Monte Carlo runs must select
+`none` or `ideal`.
 When the whole exact set is relaxed, relaxed energies enter the partition function;
 otherwise the full exact single-point spectrum supplies a configurational correction
 to the relaxed static minimum. Both treatments affect finite-temperature outputs,

@@ -12,6 +12,13 @@ The example uses one flat ``[vacancies]`` table and a single MACE calculator for
 screening and relaxation. Adjust ``device`` and ``model`` to match the installed
 environment.
 
+It explicitly selects ``search_method = "enumeration"`` and ``supercell =
+[1, 1, 1]``. The checked-in TOML also contains a complete commented Monte Carlo
+configuration. Monte Carlo supports constant-temperature sampling with
+``mc_annealing = false`` and an optional high-temperature hold plus linear
+cooling schedule when enabled. Both methods feed the same top-k relaxation and
+reranking stages.
+
 The checked-in file retains the backward-compatible ``reference_file`` oxygen
 reference, with commented guidance for switching to the new ``global`` or
 ``chemistry-specific`` experimental oxygen calibration. Automatic calibration

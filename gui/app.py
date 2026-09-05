@@ -2825,23 +2825,84 @@ if tab == "Input Builder":
         vac["extra_vacancies"] = int(c1.number_input("Extra vacancies", min_value=0, value=int(vac.get("extra_vacancies", 0)), key="vac_extra"))
         vac["max_vacancies_cap"] = int(c2.number_input("Maximum vacancy cap", min_value=1, value=int(vac.get("max_vacancies_cap", 8)), key="vac_cap"))
 
-        st.markdown("#### Enumeration")
+        st.markdown("#### Search method and supercell")
         c1, c2, c3, c4 = st.columns(4)
-        vac["enumeration_mode"] = c1.selectbox("Mode", CHOICES["vacancies.enumeration_mode"], index=CHOICES["vacancies.enumeration_mode"].index(vac.get("enumeration_mode", "auto")), key="vac_enum_mode")
-        vac["symprec"] = float(c2.number_input("Symmetry precision", min_value=1e-8, value=float(vac.get("symprec", 1e-3)), format="%.6g", key="vac_symprec"))
-        vac["angle_tolerance"] = float(c3.number_input("Angle tolerance", min_value=0.01, value=float(vac.get("angle_tolerance", 5.0)), key="vac_angle"))
-        vac["mapping_tolerance"] = float(c4.number_input("Mapping tolerance (Å)", min_value=0.001, value=float(vac.get("mapping_tolerance", 1.0)), key="vac_mapping"))
-        numeric_keys = [
-            ("max_exact_raw_configs", "Max exact raw"), ("max_exact_unique_configs", "Max exact unique"),
-            ("sample_budget", "Sample budget"), ("sample_batch_size", "Sample batch"),
-            ("sample_patience", "Sample patience"), ("sample_seed", "Sample seed"),
-            ("sample_max_saved", "Max sampled saved"),
+        search_methods = CHOICES["vacancies.search_method"]
+        current_search = str(vac.get("search_method", "enumeration"))
+        current_search = {
+            "pymatgen": "enumeration",
+            "monte_carlo": "monte-carlo",
+        }.get(current_search, current_search)
+        if current_search not in search_methods:
+            current_search = "enumeration"
+        vac["search_method"] = c1.selectbox(
+            "Vacancy search", search_methods,
+            index=search_methods.index(current_search), key="vac_search_method",
+            format_func=lambda value: "Enumeration" if value == "enumeration" else "Monte Carlo",
+            help="Choose symmetry-based enumeration or Metropolis Monte Carlo occupation sampling.",
+        )
+        supercell = list(vac.get("supercell", [1, 1, 1]))
+        while len(supercell) < 3:
+            supercell.append(1)
+        vac["supercell"] = [
+            int(column.number_input(label, min_value=1, value=int(supercell[index]), step=1, key=f"vac_supercell_{index}"))
+            for index, (column, label) in enumerate(zip((c2, c3, c4), ("Supercell a", "Supercell b", "Supercell c")))
         ]
-        columns = st.columns(4)
-        for index, (key, label) in enumerate(numeric_keys):
-            minimum = None if key == "sample_seed" else 1
-            vac[key] = int(columns[index % 4].number_input(label, min_value=minimum, value=int(vac.get(key, defaults[key])), step=1, key=f"vac_{key}"))
-        vac["minimum_vacancy_distance"] = float(st.number_input("Minimum vacancy distance (Å)", min_value=0.0, value=float(vac.get("minimum_vacancy_distance", 0.0)), key="vac_min_distance"))
+
+        if vac["search_method"] == "enumeration":
+            st.markdown("#### Enumeration settings")
+            c1, c2, c3, c4 = st.columns(4)
+            vac["enumeration_mode"] = c1.selectbox("Mode", CHOICES["vacancies.enumeration_mode"], index=CHOICES["vacancies.enumeration_mode"].index(vac.get("enumeration_mode", "auto")), key="vac_enum_mode")
+            vac["symprec"] = float(c2.number_input("Symmetry precision", min_value=1e-8, value=float(vac.get("symprec", 1e-3)), format="%.6g", key="vac_symprec"))
+            vac["angle_tolerance"] = float(c3.number_input("Angle tolerance", min_value=0.01, value=float(vac.get("angle_tolerance", 5.0)), key="vac_angle"))
+            vac["mapping_tolerance"] = float(c4.number_input("Mapping tolerance (Å)", min_value=0.001, value=float(vac.get("mapping_tolerance", 1.0)), key="vac_mapping"))
+            numeric_keys = [
+                ("max_exact_raw_configs", "Max exact raw"), ("max_exact_unique_configs", "Max exact unique"),
+                ("sample_budget", "Sample budget"), ("sample_batch_size", "Sample batch"),
+                ("sample_patience", "Sample patience"), ("sample_seed", "Sample seed"),
+                ("sample_max_saved", "Max sampled saved"),
+            ]
+            columns = st.columns(4)
+            for index, (key, label) in enumerate(numeric_keys):
+                minimum = None if key == "sample_seed" else 1
+                vac[key] = int(columns[index % 4].number_input(label, min_value=minimum, value=int(vac.get(key, defaults[key])), step=1, key=f"vac_{key}"))
+            vac["minimum_vacancy_distance"] = float(st.number_input("Minimum vacancy distance (Å)", min_value=0.0, value=float(vac.get("minimum_vacancy_distance", 0.0)), key="vac_min_distance"))
+        else:
+            st.markdown("#### Monte Carlo settings")
+            st.caption(
+                "Monte Carlo swaps vacancies with anions and swaps every distinct cation "
+                "species present in the relaxed parent, including systems with multiple dopants."
+            )
+            c1, c2, c3, c4 = st.columns(4)
+            vac["mc_temperature_K"] = float(c1.number_input("Monte Carlo temperature (K)", min_value=0.001, value=float(vac.get("mc_temperature_K", 300.0)), key="vac_mc_temperature", help="Constant temperature, or the final target temperature when annealing is enabled."))
+            vac["mc_annealing"] = c2.checkbox(
+                "Enable annealing",
+                value=bool(vac.get("mc_annealing", False)),
+                key="vac_mc_annealing",
+            )
+            modes = CHOICES["vacancies.mc_run_mode"]
+            mode = str(vac.get("mc_run_mode", "combined"))
+            vac["mc_run_mode"] = c3.selectbox("Stopping mode", modes, index=modes.index(mode), key="vac_mc_mode")
+            vac["sample_seed"] = int(c4.number_input("Random seed", value=int(vac.get("sample_seed", 42)), key="vac_mc_seed"))
+            if vac["mc_annealing"]:
+                c1, c2, c3 = st.columns(3)
+                vac["mc_initial_temperature_K"] = float(c1.number_input("Initial high temperature (K)", min_value=0.001, value=float(vac.get("mc_initial_temperature_K", 1200.0)), key="vac_mc_initial_temperature"))
+                vac["mc_annealing_hold_steps"] = int(c2.number_input("High-temperature hold steps", min_value=0, value=int(vac.get("mc_annealing_hold_steps", 500)), key="vac_mc_hold_steps"))
+                vac["mc_annealing_steps"] = int(c3.number_input("Cooling ramp steps", min_value=0, value=int(vac.get("mc_annealing_steps", 2000)), key="vac_mc_annealing_steps"))
+                if vac["mc_initial_temperature_K"] < vac["mc_temperature_K"]:
+                    st.error("Initial temperature must be greater than or equal to the final Monte Carlo temperature.")
+            else:
+                st.caption(f"Isothermal sampling at {vac['mc_temperature_K']:g} K.")
+            c1, c2 = st.columns(2)
+            vac["mc_max_steps"] = int(c1.number_input("MC max steps", min_value=1, value=int(vac.get("mc_max_steps", 10000)), key="vac_mc_steps"))
+            vac["mc_patience"] = int(c2.number_input("MC patience", min_value=1, value=int(vac.get("mc_patience", 2000)), key="vac_mc_patience"))
+            c1, c2, c3 = st.columns(3)
+            vac["mc_energy_window_eV"] = float(c1.number_input("Archive window (eV)", min_value=0.0, value=float(vac.get("mc_energy_window_eV", 0.5)), key="vac_mc_window"))
+            vac["sample_max_saved"] = int(c2.number_input("Maximum archived candidates", min_value=1, value=int(vac.get("sample_max_saved", 50000)), key="vac_mc_max_saved"))
+            vac["mc_improvement_tolerance_eV"] = float(c3.number_input("Improvement tolerance (eV)", min_value=0.0, value=float(vac.get("mc_improvement_tolerance_eV", 1e-5)), format="%.3g", key="vac_mc_tolerance"))
+            c1, c2 = st.columns(2)
+            vac["mc_cation_move_weight"] = float(c1.number_input("Cation-swap weight", min_value=0.0, value=float(vac.get("mc_cation_move_weight", 0.5)), key="vac_mc_cation_weight"))
+            vac["mc_vacancy_move_weight"] = float(c2.number_input("Vacancy-swap weight", min_value=0.0, value=float(vac.get("mc_vacancy_move_weight", 0.5)), key="vac_mc_vacancy_weight"))
 
         st.markdown("#### ML calculator")
         c1, c2, c3 = st.columns(3)
@@ -3042,7 +3103,14 @@ if tab == "Input Builder":
             vac["static_energy_source"] = c1.selectbox("Static energy source", sources, index=sources.index(current_source), key="vac_static_source")
             vac["exclude_unconverged"] = c2.checkbox("Exclude unconverged structures", value=bool(vac.get("exclude_unconverged", True)), key="vac_exclude_unconverged")
 
-            entropy_modes = CHOICES["vacancies.solid_configurational_entropy"]
+            entropy_modes = list(CHOICES["vacancies.solid_configurational_entropy"])
+            if vac.get("search_method") == "monte-carlo":
+                entropy_modes = [mode for mode in entropy_modes if mode != "configurational"]
+                st.caption(
+                    "Monte Carlo supports static-lattice ('none') or ideal vacancy mixing. "
+                    "The exact configurational partition function is available only with "
+                    "Enumeration and exact symmetry-orbit degeneracies."
+                )
             current_entropy_mode = str(
                 vac.get("solid_configurational_entropy", defaults["solid_configurational_entropy"])
             )
@@ -5237,7 +5305,35 @@ else:
                 show_structure(parent_path, title="Relaxed parent", viewer_mode="bulk")
             st.stop()
         group = st.selectbox("Vacancy count", groups, format_func=lambda path: path.name, key="vac_view_count")
-        config_dirs = sorted(path for path in group.glob("config_*") if path.is_dir())
+        mc_summary_path = group / "monte_carlo_summary.json"
+        if mc_summary_path.exists():
+            mc_summary = json.loads(mc_summary_path.read_text(encoding="utf-8"))
+            st.caption(
+                f"Monte Carlo: {mc_summary.get('mc_steps', 0)} steps; "
+                f"{mc_summary.get('selection_reason', 'unknown stop reason')}"
+            )
+            move_rows = [
+                {
+                    "move": move,
+                    "attempted": attempted,
+                    "accepted": mc_summary.get("mc_accepted_moves", {}).get(move, 0),
+                }
+                for move, attempted in mc_summary.get("mc_attempted_moves", {}).items()
+            ]
+            if move_rows:
+                move_frame = pd.DataFrame(move_rows)
+                move_frame["acceptance_ratio"] = (
+                    move_frame["accepted"] / move_frame["attempted"].replace(0, pd.NA)
+                )
+                st.dataframe(move_frame, use_container_width=True, hide_index=True)
+        config_dirs = sorted(
+            path
+            for path in group.iterdir()
+            if path.is_dir() and path.name.startswith(("config_", "mc_"))
+        )
+        if not config_dirs:
+            st.warning("No generated vacancy configurations were found for this count.")
+            st.stop()
         configuration = st.selectbox(
             "Configuration", config_dirs, format_func=lambda path: path.name, key="vac_view_config"
         )

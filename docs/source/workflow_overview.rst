@@ -125,8 +125,11 @@ Stages
 10. Oxygen vacancies (optional run-all extension)
 
    - Analyze actual selected-parent dopant counts and reachable formal charges
-   - Enumerate symmetry-distinct arrangements for every count through the maximum
-   - Screen and relax top-k arrangements with one shared ML calculator
+   - Expand each parent with a user-selected supercell
+   - Search each count by symmetry enumeration or Metropolis Monte Carlo
+   - In Monte Carlo mode, swap vacancies/anions and any number of cation species
+   - Run isothermally or hold and linearly cool from an annealing temperature
+   - Screen and relax top-k arrangements with one shared ML calculator, then rerank
    - Keep vacancy results separate from normal thermodynamic databases
    - Optionally aggregate exact integer compositions and converged count minima
    - Verify an O2 reference and solve exact oxygen-grand-potential stability windows

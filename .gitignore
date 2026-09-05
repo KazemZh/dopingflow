@@ -43,3 +43,6 @@ phase_diagrams/
 # Documentations
 docs/build/
 todo.txt
+reports/
+
+Monte-carlo-vacancies/

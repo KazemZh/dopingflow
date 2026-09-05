@@ -3,9 +3,10 @@ Oxygen-Vacancy Workflow
 
 ``dopingflow vacancies -c input.toml`` is the only public vacancy command. It
 discovers filtered relaxed parents, determines charge-based vacancy counts,
-enumerates symmetry-distinct arrangements, evaluates single-point ML energies,
-selects the lowest-energy structures independently at each vacancy count,
-relaxes that top-k set, reranks it, and writes parent-level and global summaries.
+expands the configured supercell, searches arrangements by symmetry enumeration
+or Metropolis Monte Carlo, evaluates single-point ML energies, selects the
+lowest-energy structures independently at each vacancy count, relaxes that
+top-k set, reranks it, and writes parent-level and global summaries.
 
 Configuration
 -------------
@@ -46,6 +47,8 @@ and therefore is not a listing of default values.
    symprec = 1.0e-3
    angle_tolerance = 5.0
    mapping_tolerance = 1.0
+   search_method = "enumeration"
+   supercell = [1, 1, 1]
    enumeration_mode = "auto"
    max_exact_raw_configs = 300000
    max_exact_unique_configs = 100000
@@ -128,6 +131,52 @@ sets degeneracy to null because it is not exact. ``auto`` selects exact mode
 below ``max_exact_raw_configs`` and restarts in sampled mode if the exact unique
 limit is exceeded. ``minimum_vacancy_distance`` filters close periodic pairs.
 
+Monte Carlo occupation search
+-----------------------------
+
+Set ``search_method = "monte-carlo"`` to use Metropolis occupation sampling as
+an alternative to the default ``"enumeration"`` symmetry search. ``supercell =
+[na, nb, nc]`` expands both the scan and relaxed parent consistently before the
+formal-charge analysis and search; it is available for either method.
+
+One move swaps a vacancy marker with an atom on the vacancy-species sublattice.
+The other swaps two different cation species. Species are discovered from the
+parent, so the host and any number of dopant types are supported. Internal
+vacancy markers are removed before every ML calculator call.
+
+.. code-block:: toml
+
+   search_method = "monte-carlo"
+   supercell = [2, 2, 1]
+   mc_annealing = true
+   mc_initial_temperature_K = 1500.0
+   mc_annealing_hold_steps = 500
+   mc_annealing_steps = 2000
+   mc_temperature_K = 600.0          # final target temperature
+   mc_run_mode = "combined"       # fixed, converged, or combined
+   mc_max_steps = 10000
+   mc_patience = 2000
+   mc_improvement_tolerance_eV = 1.0e-5
+   mc_energy_window_eV = 0.5
+   mc_cation_move_weight = 0.5
+   mc_vacancy_move_weight = 0.5
+   sample_seed = 42
+   sample_max_saved = 100
+
+``sample_seed`` makes the trajectory reproducible. Unique accepted occupations
+inside the energy window are archived up to ``sample_max_saved``. The existing
+``topk_per_vacancy_count`` stage selects
+candidates for relaxation and relaxed-energy reranking using the configured
+optimizer. M3GNet, UMA, MACE, and GRACE are supported through the common backend
+factory. Each count writes ``monte_carlo_summary.json`` and retains the standard
+``00_generate``/``01_scan``/``02_relax`` directory layout and ranking tables.
+When ``mc_annealing = true``, the initial temperature is held for
+``mc_annealing_hold_steps``, followed by a
+linear cooling ramp lasting ``mc_annealing_steps``. Sampling then continues at
+``mc_temperature_K``. The default ``mc_annealing = false`` runs the complete
+search isothermally at ``mc_temperature_K`` and ignores the initial, hold, and
+cooling-ramp settings.
+
 Screening, relaxation, and interpretation
 ------------------------------------------
 
@@ -170,7 +219,8 @@ are not included. Vacancy configurational entropy is optional:
    otherwise the complete exact single-point spectrum supplies a configurational
    correction relative to its minimum, which is added to the relaxed static
    minimum for that vacancy count. Sampled enumeration is rejected because its
-   degeneracies are not exact.
+   degeneracies are not exact. This mode is therefore incompatible with Monte
+   Carlo; use ``none`` or ``ideal`` for Monte Carlo results.
 
 The finite-temperature vacancy formation free energy is then
 

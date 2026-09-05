@@ -15,6 +15,13 @@ The format loosely follows semantic versioning.
 
 ## [Unreleased]
 ### Added
+- A second vacancy search method, ``search_method = "monte-carlo"``, that
+  performs generic vacancy–anion and multi-species cation swaps on a configurable
+  supercell, archives low-energy occupations, and feeds the established top-k
+  relaxation and reranking stages.
+- Optional Monte Carlo annealing with a high-temperature hold, linear cooling
+  ramp, and final target temperature; the default remains constant-temperature
+  sampling when ``mc_annealing = false``.
 - Finite-temperature vacancy formation free energies with optional ideal or exact-orbit configurational entropy; the explicit partition-function mode uses exact symmetry degeneracies and writes `vacancy_formation_free_energy.csv/json` while keeping direct delta-mu intervals static-lattice
 - Optional backend-specific, uncertainty-weighted energy-correction fitting
   from the curated Kingsbury dataset or explicit custom measurements, with

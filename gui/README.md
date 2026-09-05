@@ -10,6 +10,8 @@ The GUI provides an interactive way to:
 - Visualize generated structures
 - Explore the main database and per-system phase-diagram CSVs with Plotly
 - Configure and run the unified vacancy workflow and explore its separate database
+- Choose Enumeration or Monte Carlo vacancy search with a configurable supercell
+- Run Monte Carlo isothermally or enable a high-temperature hold and cooling ramp
 - Compare relaxed parent, generated vacancy, and relaxed vacancy structures
 - Configure calculator-verified, global-calibrated, or chemistry-specific oxygen references for vacancy thermodynamics
 - Configure none, ideal-mixing, or exact-orbit partition-function vacancy entropy
@@ -68,6 +70,8 @@ Interactive editor for `input.toml`.
   flat Vacancies section
 - Vacancy oxygen-reference selector including `global` and `chemistry-specific`
   calibration in addition to the existing raw/reference modes
+- Conditional vacancy controls: enumeration and Monte Carlo parameters are shown
+  only for the selected search, and annealing parameters appear only when enabled
 - Live TOML preview
 - Save directly to `input.toml`
 
@@ -205,6 +209,8 @@ Useful for:
 - Checking dopant placement
 - Inspecting relaxed geometries
 - Quick sanity checks
+- Reviewing Monte Carlo stopping and move-acceptance diagnostics alongside its
+  generated and relaxed candidates
 
 ---
 

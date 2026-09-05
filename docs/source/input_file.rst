@@ -99,6 +99,8 @@ M3GNet/CPU calculator with MACE/CUDA.
    oxidation_state_values = [[3, 5], [5]]
    extra_vacancies = 0
    max_vacancies_cap = 8
+   search_method = "enumeration"
+   supercell = [1, 1, 1]
    symprec = 1.0e-3
    angle_tolerance = 5.0
    mapping_tolerance = 1.0
@@ -111,6 +113,20 @@ M3GNet/CPU calculator with MACE/CUDA.
    sample_seed = 42
    sample_max_saved = 50000
    minimum_vacancy_distance = 0.0
+
+   # Monte Carlo settings are used only with search_method = "monte-carlo".
+   mc_temperature_K = 300.0
+   mc_annealing = false
+   mc_initial_temperature_K = 1200.0
+   mc_annealing_hold_steps = 500
+   mc_annealing_steps = 2000
+   mc_run_mode = "combined"
+   mc_max_steps = 10000
+   mc_patience = 2000
+   mc_improvement_tolerance_eV = 1.0e-5
+   mc_energy_window_eV = 0.5
+   mc_cation_move_weight = 0.5
+   mc_vacancy_move_weight = 0.5
    backend = "mace"
    model = "medium-mpa-0"
    task = ""
@@ -153,6 +169,17 @@ The same resolved backend/model/task is used for parent energies, defective
 single points, and every relaxation. See :doc:`methods/vacancies` for the full
 algorithm, output layout, resume rules, and interpretation limits.
 
+``search_method`` accepts ``"enumeration"`` (default) or ``"monte-carlo"``.
+``supercell`` is a three-positive-integer expansion applied consistently to the
+scan and relaxed parent before either search. Enumeration uses the symmetry,
+exact/sample, sampling-budget, and minimum-distance fields. Monte Carlo uses
+``sample_seed`` and ``sample_max_saved`` plus the ``mc_*`` fields; enumeration
+limits are ignored by that search. With ``mc_annealing = false``, all steps use
+the constant ``mc_temperature_K``. With annealing enabled, the search holds
+``mc_initial_temperature_K``, cools linearly during ``mc_annealing_steps``, and
+then remains at ``mc_temperature_K``. The initial temperature must not be lower
+than the target.
+
 For a directory that already contains many composition subdirectories, use::
 
    parent_source = "directory"
@@ -163,7 +190,10 @@ The directory path remains a flat key in ``[vacancies]``.
 
 Static-lattice thermodynamic analysis is disabled by default for compatibility. When
 enabled, all keys remain in this same flat table. ``oxygen_reference_mode`` is
-``reference_file``, ``same_calculator``, ``explicit``, or ``none``. Explicit
+``reference_file``, ``same_calculator``, ``explicit``, ``none``, ``global``, or
+``chemistry-specific``. The last two modes fit a backend/model/task-specific
+per-O reference from eligible calculated binary oxides and experimental 298 K
+formation enthalpies; they use the ``oxygen_calibration_*`` fields. Explicit
 mode requires ``mu_O_reference_eV`` per oxygen atom. Reference-file mode rejects
 incompatible or unverifiable backend/model/task metadata unless the latter is
 deliberately acknowledged with ``allow_unverified_oxygen_reference = true``.

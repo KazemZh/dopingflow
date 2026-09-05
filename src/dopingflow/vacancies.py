@@ -38,6 +38,7 @@ from dopingflow.vacancy_static_thermodynamics import (
     analyze_static_vacancy_thermodynamics,
     parse_static_vacancy_thermodynamics_config as parse_vacancy_analysis_config,
 )
+from dopingflow.vacancy_monte_carlo import monte_carlo_vacancy_search
 
 log = logging.getLogger(__name__)
 
@@ -121,6 +122,20 @@ class VacancyConfig:
     angle_tolerance: float
     mapping_tolerance: float
     enumeration_mode: str
+    search_method: str
+    supercell: tuple[int, int, int]
+    mc_temperature_K: float
+    mc_annealing: bool
+    mc_initial_temperature_K: float
+    mc_annealing_hold_steps: int
+    mc_annealing_steps: int
+    mc_run_mode: str
+    mc_max_steps: int
+    mc_patience: int
+    mc_improvement_tolerance_eV: float
+    mc_energy_window_eV: float | None
+    mc_cation_move_weight: float
+    mc_vacancy_move_weight: float
     max_exact_raw_configs: int
     max_exact_unique_configs: int
     sample_budget: int
@@ -273,6 +288,78 @@ def parse_vacancy_config(raw: dict[str, Any], root: Path) -> VacancyConfig:
     enumeration_mode = str(section.get("enumeration_mode", "auto")).strip().lower()
     if enumeration_mode not in {"auto", "exact", "sample"}:
         raise ValueError("[vacancies].enumeration_mode must be 'auto', 'exact', or 'sample'")
+    search_method_raw = str(section.get("search_method", "enumeration")).strip().lower()
+    search_method = {
+        "pymatgen": "enumeration",
+        "monte_carlo": "monte-carlo",
+        "monte carlo": "monte-carlo",
+    }.get(search_method_raw, search_method_raw)
+    if search_method not in {"enumeration", "monte-carlo"}:
+        raise ValueError(
+            "[vacancies].search_method must be 'enumeration' or 'monte-carlo'"
+        )
+    entropy_mode = str(
+        getattr(analysis_config, "solid_configurational_entropy", "none")
+    ).strip().lower()
+    if search_method == "monte-carlo" and entropy_mode == "configurational":
+        raise ValueError(
+            "[vacancies].solid_configurational_entropy='configurational' is "
+            "incompatible with search_method='monte-carlo' because Monte Carlo "
+            "does not provide a complete exact symmetry-orbit spectrum or exact "
+            "degeneracies. Choose solid_configurational_entropy='ideal' or 'none', "
+            "or use search_method='enumeration' with enumeration_mode='exact'."
+        )
+    if entropy_mode == "configurational" and enumeration_mode != "exact":
+        raise ValueError(
+            "[vacancies].solid_configurational_entropy='configurational' requires "
+            "search_method='enumeration' and enumeration_mode='exact'."
+        )
+    supercell_raw = section.get("supercell", [1, 1, 1])
+    if (
+        not isinstance(supercell_raw, list)
+        or len(supercell_raw) != 3
+        or any(
+            isinstance(value, bool) or not isinstance(value, int) or value <= 0
+            for value in supercell_raw
+        )
+    ):
+        raise ValueError("[vacancies].supercell must contain three positive integers")
+    mc_run_mode = str(section.get("mc_run_mode", "combined")).strip().lower()
+    if mc_run_mode not in {"fixed", "converged", "combined"}:
+        raise ValueError("[vacancies].mc_run_mode must be 'fixed', 'converged', or 'combined'")
+    mc_temperature = float(section.get("mc_temperature_K", 300.0))
+    mc_annealing = bool(section.get("mc_annealing", False))
+    mc_initial_temperature = float(
+        section.get("mc_initial_temperature_K", 1200.0)
+    )
+    mc_tolerance = float(section.get("mc_improvement_tolerance_eV", 1.0e-5))
+    mc_window_raw = section.get("mc_energy_window_eV", 0.5)
+    mc_window = None if mc_window_raw is None else float(mc_window_raw)
+    mc_cation_weight = float(section.get("mc_cation_move_weight", 0.5))
+    mc_vacancy_weight = float(section.get("mc_vacancy_move_weight", 0.5))
+    mc_hold_steps = section.get("mc_annealing_hold_steps", 500)
+    mc_annealing_steps = section.get("mc_annealing_steps", 2_000)
+    if any(
+        isinstance(value, bool) or not isinstance(value, int) or value < 0
+        for value in (mc_hold_steps, mc_annealing_steps)
+    ):
+        raise ValueError(
+            "[vacancies] mc_annealing_hold_steps and mc_annealing_steps "
+            "must be non-negative integers"
+        )
+    if (
+        mc_temperature <= 0
+        or (mc_annealing and mc_initial_temperature < mc_temperature)
+        or mc_tolerance < 0
+    ):
+        raise ValueError(
+            "[vacancies] MC target temperature must be > 0, initial temperature "
+            "must be at least the target, and tolerance must be >= 0"
+        )
+    if mc_window is not None and mc_window < 0:
+        raise ValueError("[vacancies].mc_energy_window_eV must be non-negative or omitted")
+    if min(mc_cation_weight, mc_vacancy_weight) < 0 or mc_cation_weight + mc_vacancy_weight <= 0:
+        raise ValueError("[vacancies] MC move weights must be non-negative with a positive sum")
 
     minimum_distance = float(section.get("minimum_vacancy_distance", 0.0))
     if minimum_distance < 0:
@@ -335,6 +422,20 @@ def parse_vacancy_config(raw: dict[str, Any], root: Path) -> VacancyConfig:
         angle_tolerance=angle_tolerance,
         mapping_tolerance=mapping_tolerance,
         enumeration_mode=enumeration_mode,
+        search_method=search_method,
+        supercell=tuple(int(value) for value in supercell_raw),
+        mc_temperature_K=mc_temperature,
+        mc_annealing=mc_annealing,
+        mc_initial_temperature_K=mc_initial_temperature,
+        mc_annealing_hold_steps=int(mc_hold_steps),
+        mc_annealing_steps=int(mc_annealing_steps),
+        mc_run_mode=mc_run_mode,
+        mc_max_steps=_positive_int(section, "mc_max_steps", 10_000),
+        mc_patience=_positive_int(section, "mc_patience", 2_000),
+        mc_improvement_tolerance_eV=mc_tolerance,
+        mc_energy_window_eV=mc_window,
+        mc_cation_move_weight=mc_cation_weight,
+        mc_vacancy_move_weight=mc_vacancy_weight,
         max_exact_raw_configs=_positive_int(section, "max_exact_raw_configs", 300_000),
         max_exact_unique_configs=_positive_int(section, "max_exact_unique_configs", 100_000),
         sample_budget=_positive_int(section, "sample_budget", 20_000),
@@ -848,7 +949,7 @@ def _parent_reference(
     _write_json(ref_dir / "single_point.json", sp_meta)
     source_meta_path = Path(parent["candidate_dir"]) / "02_relax" / "meta.json"
     source_meta = _load_json(source_meta_path)
-    reused = _relaxation_matches(source_meta, cfg)
+    reused = cfg.supercell == (1, 1, 1) and _relaxation_matches(source_meta, cfg)
     if reused:
         energy_relaxed = float(source_meta["energy_relaxed_eV"])
         relaxed_structure = relaxed_parent
@@ -917,6 +1018,9 @@ def _run_parent(
     parent_id = str(parent["parent_id"])
     symmetry_parent = Structure.from_file(str(parent["symmetry_path"]))
     relaxed_parent = Structure.from_file(str(parent["relaxed_path"]))
+    if cfg.supercell != (1, 1, 1):
+        symmetry_parent.make_supercell(cfg.supercell)
+        relaxed_parent.make_supercell(cfg.supercell)
     mapping = map_parent_sites(
         symmetry_parent,
         relaxed_parent,
@@ -1042,14 +1146,75 @@ def _run_parent(
     log.info("[2/7] Vacancy enumeration: %s counts=%s", parent_id, counts)
     for n_vacancies in counts:
         group_dir = vacancy_root / f"V_{cfg.vacancy_species}_{n_vacancies:02d}"
-        configs, enumeration_meta = enumerate_vacancy_orbits(
-            symmetry_parent,
-            relaxed_parent,
-            symmetry_vacancy_indices,
-            relaxed_vacancy_indices,
-            n_vacancies,
-            cfg,
-        )
+        if cfg.search_method == "monte-carlo":
+            mc_result = monte_carlo_vacancy_search(
+                relaxed_parent,
+                vacancy_species=cfg.vacancy_species,
+                n_vacancies=n_vacancies,
+                energy_function=lambda structure: structure_energy_with_calculator(
+                    structure, calculator
+                ),
+                temperature_K=cfg.mc_temperature_K,
+                initial_temperature_K=(
+                    cfg.mc_initial_temperature_K if cfg.mc_annealing else cfg.mc_temperature_K
+                ),
+                annealing_hold_steps=(cfg.mc_annealing_hold_steps if cfg.mc_annealing else 0),
+                annealing_steps=(cfg.mc_annealing_steps if cfg.mc_annealing else 0),
+                max_steps=cfg.mc_max_steps,
+                patience=cfg.mc_patience,
+                run_mode=cfg.mc_run_mode,
+                seed=cfg.sample_seed + n_vacancies,
+                max_candidates=cfg.sample_max_saved,
+                energy_window_eV=cfg.mc_energy_window_eV,
+                improvement_tolerance_eV=cfg.mc_improvement_tolerance_eV,
+                cation_move_weight=cfg.mc_cation_move_weight,
+                vacancy_move_weight=cfg.mc_vacancy_move_weight,
+            )
+            configs = [
+                {
+                    "configuration_id": f"mc_{rank:06d}",
+                    "removed_site_indices": list(candidate.vacancy_indices),
+                    "enumeration_mode": "monte_carlo",
+                    "degeneracy": 1,
+                    "degeneracy_is_exact": False,
+                    "minimum_vacancy_distance_angstrom": periodic_vacancy_distances(
+                        relaxed_parent, candidate.vacancy_indices
+                    )[0],
+                    "mc_structure": candidate.structure,
+                    "mc_energy_sp_total_eV": candidate.energy_eV,
+                    "mc_step": candidate.step,
+                    "mc_move": candidate.move,
+                }
+                for rank, candidate in enumerate(mc_result.candidates, start=1)
+            ]
+            enumeration_meta = {
+                "enumeration_mode": "monte_carlo",
+                "selection_reason": mc_result.stop_reason,
+                "mc_steps": mc_result.steps,
+                "mc_best_energy_eV": mc_result.best_energy_eV,
+                "mc_best_step": mc_result.best_step,
+                "mc_annealing": cfg.mc_annealing,
+                "mc_initial_temperature_K": (
+                    cfg.mc_initial_temperature_K if cfg.mc_annealing else cfg.mc_temperature_K
+                ),
+                "mc_target_temperature_K": cfg.mc_temperature_K,
+                "mc_annealing_hold_steps": (
+                    cfg.mc_annealing_hold_steps if cfg.mc_annealing else 0
+                ),
+                "mc_annealing_steps": cfg.mc_annealing_steps if cfg.mc_annealing else 0,
+                "mc_attempted_moves": mc_result.attempted_moves,
+                "mc_accepted_moves": mc_result.accepted_moves,
+            }
+            _write_json(group_dir / "monte_carlo_summary.json", enumeration_meta)
+        else:
+            configs, enumeration_meta = enumerate_vacancy_orbits(
+                symmetry_parent,
+                relaxed_parent,
+                symmetry_vacancy_indices,
+                relaxed_vacancy_indices,
+                n_vacancies,
+                cfg,
+            )
         log.info(
             "%s n=%d: %s unique=%d (%s)",
             parent_id,
@@ -1062,13 +1227,18 @@ def _run_parent(
             scenarios, n_vacancies, cfg.vacancy_compensation_charge
         )
         for item in configs:
+            item_metadata = {key: value for key, value in item.items() if key != "mc_structure"}
             config_dir = group_dir / item["configuration_id"]
             generate_dir = config_dir / "00_generate"
-            defective = _defective_structure(relaxed_parent, item["removed_site_indices"])
+            defective = (
+                item["mc_structure"]
+                if "mc_structure" in item
+                else _defective_structure(relaxed_parent, item["removed_site_indices"])
+            )
             generate_dir.mkdir(parents=True, exist_ok=True)
             Poscar(defective).write_file(generate_dir / "POSCAR")
             generation_meta = {
-                **item,
+                **item_metadata,
                 "parent_id": parent_id,
                 "vacancy_species": cfg.vacancy_species,
                 "n_vacancies": n_vacancies,
@@ -1081,9 +1251,28 @@ def _run_parent(
                 "source_parent_path": str(parent["relaxed_path"]),
                 "output_path": str(config_dir),
                 "configuration_fingerprint": fingerprint,
+                "search_method": cfg.search_method,
+                "supercell": list(cfg.supercell),
                 **enumeration_meta,
             }
             _write_json(generate_dir / "meta.json", generation_meta)
+            if "mc_energy_sp_total_eV" in item:
+                _write_json(
+                    config_dir / "01_scan" / "meta.json",
+                    {
+                        "configuration_fingerprint": fingerprint,
+                        **_energy_columns(
+                            item["mc_energy_sp_total_eV"], len(defective), n_vacancies
+                        ),
+                        "backend": cfg.backend,
+                        "model": cfg.model,
+                        "task": cfg.task,
+                        "device": cfg.device,
+                        "search_method": "monte-carlo",
+                        "mc_step": item["mc_step"],
+                        "mc_move": item["mc_move"],
+                    },
+                )
             rows.append(
                 {
                     "parent_id": parent_id,
@@ -1113,6 +1302,17 @@ def _run_parent(
                     "generated_poscar_path": str(generate_dir / "POSCAR"),
                     "relaxed_poscar_path": "",
                     "configuration_fingerprint": fingerprint,
+                    "search_method": cfg.search_method,
+                    "supercell": list(cfg.supercell),
+                    **(
+                        _energy_columns(
+                            item["mc_energy_sp_total_eV"], len(defective), n_vacancies
+                        )
+                        if "mc_energy_sp_total_eV" in item
+                        else {}
+                    ),
+                    "mc_step": item.get("mc_step"),
+                    "mc_move": item.get("mc_move"),
                 }
             )
 
@@ -1120,6 +1320,9 @@ def _run_parent(
     defective_rows = [row for row in rows if row["n_vacancies"] > 0]
     pending_sp: list[tuple[dict[str, Any], Structure, Path]] = []
     for row in defective_rows:
+        if row.get("energy_sp_total_eV") is not None:
+            row["energy_sp_reported_eV"] = _reported_energy(row, cfg.energy_normalization)
+            continue
         scan_dir = Path(row["generated_poscar_path"]).parent.parent / "01_scan"
         old_meta = _load_json(scan_dir / "meta.json")
         if (

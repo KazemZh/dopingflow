@@ -164,6 +164,14 @@ dopingflow.vacancies module
    :show-inheritance:
    :undoc-members:
 
+dopingflow.vacancy_monte_carlo module
+------------------------------------
+
+.. automodule:: dopingflow.vacancy_monte_carlo
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 dopingflow.vacancy_analysis module
 ----------------------------------
 

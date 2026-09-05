@@ -161,7 +161,7 @@ def vacancies_cmd(
     config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
     verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
 ) -> None:
-    """Determine vacancy counts, enumerate, ML-screen, select top-k, and relax."""
+    """Search vacancies by symmetry or Monte Carlo, ML-screen, relax, and rerank."""
     _init(config, verbose)
     out_path = run_vacancies_from_toml(config)
     typer.echo(f"\nWrote vacancy database CSV: {out_path}")

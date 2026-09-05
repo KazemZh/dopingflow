@@ -200,10 +200,12 @@ Unified oxygen-vacancy workflow:
 
    dopingflow vacancies -c input.toml
 
-This one command performs charge-count determination, symmetry enumeration,
-single-point screening, fixed-count top-k selection, ML relaxation, and optional
-oxygen-grand-potential analysis. Its seven logged phases are implementation
-details, not separate public commands.
+This one command performs charge-count determination, configurable-supercell
+construction, either symmetry enumeration or Monte Carlo occupation sampling,
+single-point screening, fixed-count top-k selection, ML relaxation/reranking,
+and optional oxygen-grand-potential analysis. Monte Carlo may be isothermal or
+use a high-temperature hold followed by linear cooling. Its logged phases are
+implementation details, not separate public commands.
 
 Outputs Overview
 ----------------
@@ -359,6 +361,12 @@ structures. Global tables remain separate from ``results_database.csv``::
 
    <structure.outdir>/vacancies_database.csv
    <structure.outdir>/vacancies_database.json
+
+``search_method = "enumeration"`` retains the symmetry-based workflow.
+``search_method = "monte-carlo"`` writes a ``monte_carlo_summary.json`` in each
+vacancy-count directory and uses the same ``00_generate/01_scan/02_relax``
+layout. Set ``mc_annealing = false`` for constant ``mc_temperature_K`` sampling;
+enable it to expose the initial-temperature, hold-step, and cooling-step schedule.
 
 With ``[vacancies].static_thermodynamic_analysis = true``, the same command also
 writes ``vacancy_static_minima.csv``, ``vacancy_static_stability_intervals.csv``,

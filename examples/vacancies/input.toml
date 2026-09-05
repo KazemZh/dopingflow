@@ -16,6 +16,8 @@ oxidation_state_elements = ["Sb", "Nb"]
 oxidation_state_values = [[3, 5], [5]]
 extra_vacancies = 0
 max_vacancies_cap = 8
+search_method = "enumeration"
+supercell = [1, 1, 1]
 symprec = 1.0e-3
 angle_tolerance = 5.0
 mapping_tolerance = 1.0
@@ -28,6 +30,23 @@ sample_patience = 4000
 sample_seed = 42
 sample_max_saved = 50000
 minimum_vacancy_distance = 0.0
+
+# Alternative occupation search:
+# search_method = "monte-carlo"
+# mc_temperature_K = 300.0
+# mc_annealing = false
+# Set mc_annealing=true to enable the high-temperature schedule below.
+# mc_initial_temperature_K = 1200.0
+# mc_annealing_hold_steps = 500
+# mc_annealing_steps = 2000
+# mc_run_mode = "combined"  # fixed, converged, or combined
+# mc_max_steps = 10000
+# mc_patience = 2000
+# mc_improvement_tolerance_eV = 1.0e-5
+# mc_energy_window_eV = 0.5
+# mc_cation_move_weight = 0.5
+# mc_vacancy_move_weight = 0.5
+# Monte Carlo reuses sample_seed and sample_max_saved above.
 backend = "mace"
 model = "medium-mpa-0"
 task = ""

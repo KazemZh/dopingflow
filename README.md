@@ -170,13 +170,52 @@ dopingflow run-all -c input.toml
 ```
 
 The unified `vacancies` command determines a continuous charge-based oxygen-
-vacancy range, symmetry-reduces configurations, screens all configurations and
-relaxes the top-k at each fixed vacancy count with one shared M3GNet, UMA, MACE,
-or GRACE calculator. It uses one flat `[vacancies]` section. To append it to
+vacancy range, searches configurations by symmetry enumeration or Monte Carlo,
+and relaxes/reranks the top-k at each fixed vacancy count with one shared M3GNet,
+UMA, MACE, or GRACE calculator. It uses one flat `[vacancies]` section. To append it to
 the normal pipeline, run `dopingflow run-all -c input.toml --until vacancies`.
 Results are written separately to `<structure.outdir>/vacancies_database.csv`.
 Comparing different vacancy counts thermodynamically requires an oxygen chemical
 potential; raw ML total-energy differences alone are not vacancy formation energies.
+
+The symmetry search remains the default. A Metropolis Monte Carlo alternative can
+jointly redistribute vacancies and any number of cation/dopant species on a chosen
+supercell, archive low-energy unique occupations, then use the normal top-k
+relaxation and relaxed-energy reranking pipeline:
+
+```toml
+[vacancies]
+search_method = "monte-carlo"       # default: "enumeration"
+supercell = [2, 2, 1]
+mc_initial_temperature_K = 1500.0
+mc_annealing = true
+mc_annealing_hold_steps = 500
+mc_annealing_steps = 2000
+mc_temperature_K = 600.0             # target temperature
+mc_run_mode = "combined"
+mc_max_steps = 10000
+mc_patience = 2000
+mc_improvement_tolerance_eV = 1.0e-5
+mc_energy_window_eV = 0.5
+mc_cation_move_weight = 0.5
+mc_vacancy_move_weight = 0.5
+sample_seed = 42
+sample_max_saved = 100
+topk_per_vacancy_count = 15
+```
+
+Monte Carlo single points use the selected vacancy `backend`, `model`, `task`, and
+`device` (M3GNet, UMA, MACE, or GRACE). Relaxation uses the selected workflow
+optimizer and cell-relaxation settings. Per-count `monte_carlo_summary.json` files
+record stopping and move acceptance statistics; candidates retain the established
+`00_generate`/`01_scan`/`02_relax` layout.
+
+With `mc_annealing = true`, the schedule holds `mc_initial_temperature_K` for
+`mc_annealing_hold_steps`, cools linearly to `mc_temperature_K` over
+`mc_annealing_steps`, and then continues at the target temperature. Set both step
+counts to zero for an immediate transition. With `mc_annealing = false` (the
+default), the entire search is performed at the constant `mc_temperature_K` and
+all annealing parameters are ignored.
 
 Optional `[vacancies].static_thermodynamic_analysis = true` adds Level-1
 static-lattice composition minima, exact oxygen-grand-potential intervals,
@@ -215,7 +254,9 @@ spectrum is used; otherwise the complete exact single-point spectrum provides
 the configurational correction to the relaxed minimum. Sampled enumeration is
 rejected for this mode because exact degeneracies are unavailable. Both entropy
 treatments enter only finite-temperature outputs; direct delta-mu intervals remain
-static-lattice quantities. ``vacancy_formation_free_energy.csv/json`` reports
+static-lattice quantities. Monte Carlo supports ``"none"`` and ``"ideal"`` only;
+the explicit ``"configurational"`` mode requires ``search_method = "enumeration"``
+with ``enumeration_mode = "exact"``. ``vacancy_formation_free_energy.csv/json`` reports
 DeltaG_vac(T,pO2) for every vacancy count. Solid vibrational, zero-point, magnetic,
 electronic and anharmonic terms remain outside this screening level.
 
@@ -341,6 +382,9 @@ After launching, a local browser window will open automatically.
 │   ├── smoke_test
 │   ├── surface_creation
 │   └── vacancies
+│       ├── input.toml
+│       ├── README.md
+│       ├── plot_static_vacancy_thermodynamics.py
 │       └── plot_vacancy_analysis.py
 ├── .github
 │   └── workflows
@@ -380,6 +424,7 @@ After launching, a local browser window will open automatically.
 │       ├── vacancies.py
 │       ├── vacancy_analysis.py
 │       ├── vacancy_configurational_thermodynamics.py
+│       ├── vacancy_monte_carlo.py
 │       ├── vacancy_static_thermodynamics.py
 │       └── utils
 │           ├── io.py
