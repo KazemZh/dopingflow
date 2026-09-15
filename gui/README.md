@@ -117,14 +117,18 @@ The Results Explorer can load the main results database, phase-diagram output,
 vacancy-analysis tables, or a custom CSV.
 
 For the existing phase-diagram view, candidate metadata matching is now
-portable across machines: the plotting helper first uses the candidate path and
-then falls back to the final `composition/candidate` path components. This
-prevents copied calculations from failing merely because the original absolute
-path came from another workstation or HPC filesystem.
+portable across machines: the plotting helper matches the final
+`composition/candidate` path components rather than requiring identical absolute
+path prefixes. This prevents copied calculations from failing merely because
+the original output came from another workstation or HPC filesystem.
 
 If corrected hull columns are present, the phase plot offers Raw/Corrected
 selection. The corrected view comes from a separately rebuilt complete hull; it
 is not a post-hoc shift of raw energy above hull.
+
+The phase-diagram backend also passes the candidate `Composition` to pymatgen's
+`get_decomposition()` API, avoiding the historical `PDEntry has no attribute
+get_atomic_fraction` failure caused by passing the entire `PDEntry` object.
 
 The vacancy thermodynamic panel provides grand-potential envelopes, preferred
 vacancy count, static stability intervals, T-pO2 maps, and vacancy formation
