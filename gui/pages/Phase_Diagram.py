@@ -56,6 +56,15 @@ def _resolve_vacancy_root(cfg: dict) -> Path:
     return (project_root / str(structure.get("outdir", "random_structures"))).resolve()
 
 
+def _compatible_system_rows(frame: pd.DataFrame, chemical_system: str) -> pd.DataFrame:
+    """Keep the selected exact system plus lower-dimensional boundary systems."""
+    target = frozenset(str(chemical_system).split("-"))
+    mask = frame["chemical_system"].astype(str).apply(
+        lambda label: frozenset(label.split("-")).issubset(target)
+    )
+    return frame[mask].copy()
+
+
 cfg = _load_config()
 phase_cfg = dict(cfg.get("phase_diagram", {}) or {})
 
@@ -153,10 +162,15 @@ with phase_tab:
                     key="pd_quantity",
                 )
 
-                system_raw = raw_phase[
+                # The table reports the exact selected chemical system. The plot also
+                # includes lower-dimensional compatible systems so binary/ternary
+                # boundaries remain visible in the selected higher-dimensional space.
+                exact_raw = raw_phase[
                     raw_phase["chemical_system"].astype(str) == selected_system
                 ].copy()
-                system_selected = select_hull_quantity(system_raw, quantity)
+                system_selected = select_hull_quantity(exact_raw, quantity)
+                compatible_raw = _compatible_system_rows(raw_phase, selected_system)
+                compatible_selected = select_hull_quantity(compatible_raw, quantity)
 
                 database_path = project_root / "results_database.csv"
                 if not database_path.exists():
@@ -180,7 +194,7 @@ with phase_tab:
                             low_memory=False,
                         )
                         plot_data, dopants = prepare_phase_diagram_plot_data(
-                            system_selected,
+                            compatible_selected,
                             database,
                         )
                     except Exception as exc:
