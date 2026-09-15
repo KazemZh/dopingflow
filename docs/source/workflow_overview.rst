@@ -11,7 +11,7 @@ It combines symmetry-aware structure generation with machine-learned
 interatomic potentials to efficiently screen large configurational spaces.
 
 The workflow is designed to first identify promising bulk candidates and
-then optionally extend the analysis to surface structures.
+then optionally extend the analysis to oxygen vacancies and surface structures.
 
 
 Pipeline Structure
@@ -21,7 +21,16 @@ Reference Construction → Optional Correction Fit → Enumeration → Screening
 
 Optional Post-Processing:
 
+Vacancy Results → Vacancy-resolved Raw/Corrected Phase Diagram
+
 Database → Surface Generation → Surface Relaxation
+
+The vacancy-resolved energy-above-hull analysis is intentionally a
+post-processing use of the existing phase-diagram stage. The normal ``run-all``
+order creates the standard phase diagram before vacancy generation. Therefore,
+a new workflow normally runs ``vacancies`` first and then reruns
+``phase-diagram`` with ``include_vacancy_minima = true``. No vacancy relaxation
+is repeated by this post-processing step.
 
 Sequential Workflow
 -------------------
@@ -121,6 +130,9 @@ Stages
    - Write per-system CSV files plus a combined result table
    - When correction is enabled, build independent complete raw and corrected
      entry sets and reconstruct both hulls
+   - Optionally, after the vacancy stage has completed, include the lowest-energy
+     relaxed structure at every vacancy count and write
+     ``vacancy_energy_above_hull.csv``
 
 10. Oxygen vacancies (optional run-all extension)
 
@@ -133,12 +145,19 @@ Stages
    - Keep vacancy results separate from normal thermodynamic databases
    - Optionally aggregate exact integer compositions and converged count minima
    - Verify an O2 reference and solve exact oxygen-grand-potential stability windows
-   - Write compact minima, interval, and selected-condition plotting tables
+   - Write compact minima, interval, selected-condition, pressure, and free-energy tables
 
 The preferred vacancy count depends on ``delta_mu_O``. Raw total energy, energy
 per atom, and energy per vacancy cannot rank structures with different oxygen
-contents. The derived stability result is limited to generated doped-host
-structures and is not a full competing-phase grand-potential convex hull.
+contents. Vacancy formation thermodynamics therefore use an oxygen reservoir.
+
+The optional vacancy-resolved energy-above-hull post-processing asks a different
+question: for each oxygen-deficient composition, how far is the selected vacancy
+minimum from the closed-system decomposition hull? It uses the existing phase-
+diagram entry set and correction model. A decrease in energy above hull with
+vacancy count means movement closer to that composition's hull, not necessarily
+favorable oxygen removal. It is also not yet an oxygen-open competing-phase
+grand-potential hull.
 
 11. Surface generation (optional)
 
@@ -166,34 +185,41 @@ Design Principles
 Notes
 -----
 
-- The core workflow (Stages 0–9) focuses on bulk screening, database generation,
-  and explicitly labeled Level-1 static-lattice thermodynamic analysis. Its
-  optional temperature-pressure map changes only the oxygen-gas reservoir and
-  is not a complete finite-temperature phase diagram.
+- The standard bulk stages use static relaxed energies unless a method explicitly
+  adds another thermodynamic term.
+- The vacancy T-pO2 analysis changes the oxygen-gas reservoir and is not a full
+  finite-temperature competing-phase diagram.
+- The vacancy-resolved closed-system hull is only as complete as the competing
+  phases supplied to the phase-diagram calculation.
 - Surface generation is intentionally decoupled from the main pipeline and is executed separately.
-- This design allows users to:
-  - inspect and validate bulk candidates before surface modeling
-  - control the number of generated slabs
-  - avoid combinatorial explosion of surface structures
 
 Typical Usage
 -------------
 
 A typical workflow consists of:
 
-1. Running the full bulk pipeline:
+1. Running the bulk pipeline and vacancy search:
 
    ::
 
-      dopingflow run-all -c input.toml
+      dopingflow run-all -c input.toml --until vacancies
 
-2. Inspecting the resulting database:
+2. Optionally rebuilding the phase diagram with vacancy minima:
 
    ::
 
-      results_database.csv
+      dopingflow phase-diagram -c input.toml
 
-3. Generating and optionally relaxing surfaces:
+   with::
+
+      [phase_diagram]
+      include_vacancy_minima = true
+      vacancy_results_directory = "vacancy-selected"
+
+3. Inspecting the resulting databases and phase stability in the Streamlit
+   ``Phase Diagram`` page.
+
+4. Generating and optionally relaxing surfaces:
 
    ::
 
