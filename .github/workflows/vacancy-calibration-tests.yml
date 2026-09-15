@@ -15,6 +15,7 @@ on:
       - "gui/phase_diagram_plots.py"
       - "gui/pages/Phase_Diagram.py"
       - "gui/vacancy_thermo_plots.py"
+      - "docs/source/**"
       - "tests/test_oxygen_calibration.py"
       - "tests/test_vacancy_static_thermodynamics.py"
       - "tests/test_vacancy_configurational_thermodynamics.py"
@@ -35,6 +36,7 @@ on:
       - "gui/phase_diagram_plots.py"
       - "gui/pages/Phase_Diagram.py"
       - "gui/vacancy_thermo_plots.py"
+      - "docs/source/**"
       - "tests/test_oxygen_calibration.py"
       - "tests/test_vacancy_static_thermodynamics.py"
       - "tests/test_vacancy_configurational_thermodynamics.py"
@@ -59,7 +61,7 @@ jobs:
       - name: Install targeted test dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev,corrections,gui]"
+          pip install -e ".[dev,corrections,gui,docs]"
 
       - name: Run vacancy calibration and phase-diagram GUI tests
         run: |
@@ -76,3 +78,7 @@ jobs:
             tests/test_vacancy_phase_diagram_extension.py \
             tests/test_phase_diagram_gui_plots.py \
             tests/test_vacancies_gui.py
+
+      - name: Build Sphinx documentation
+        run: |
+          sphinx-build -b html docs/source /tmp/dopingflow-docs-html
