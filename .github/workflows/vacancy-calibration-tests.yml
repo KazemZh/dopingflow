@@ -12,11 +12,14 @@ on:
       - "src/dopingflow/phase_diagram_convergence_extensions.py"
       - "gui/gui_config.py"
       - "gui/app.py"
+      - "gui/phase_diagram_plots.py"
+      - "gui/pages/Phase_Diagram.py"
       - "gui/vacancy_thermo_plots.py"
       - "tests/test_oxygen_calibration.py"
       - "tests/test_vacancy_static_thermodynamics.py"
       - "tests/test_vacancy_configurational_thermodynamics.py"
       - "tests/test_vacancy_phase_diagram_extension.py"
+      - "tests/test_phase_diagram_gui_plots.py"
       - "tests/test_vacancies_gui.py"
       - ".github/workflows/vacancy-calibration-tests.yml"
   pull_request:
@@ -29,11 +32,14 @@ on:
       - "src/dopingflow/phase_diagram_convergence_extensions.py"
       - "gui/gui_config.py"
       - "gui/app.py"
+      - "gui/phase_diagram_plots.py"
+      - "gui/pages/Phase_Diagram.py"
       - "gui/vacancy_thermo_plots.py"
       - "tests/test_oxygen_calibration.py"
       - "tests/test_vacancy_static_thermodynamics.py"
       - "tests/test_vacancy_configurational_thermodynamics.py"
       - "tests/test_vacancy_phase_diagram_extension.py"
+      - "tests/test_phase_diagram_gui_plots.py"
       - "tests/test_vacancies_gui.py"
       - ".github/workflows/vacancy-calibration-tests.yml"
   workflow_dispatch:
@@ -55,10 +61,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,corrections,gui]"
 
-      - name: Run vacancy calibration tests
+      - name: Run vacancy calibration and phase-diagram GUI tests
         run: |
           python -m py_compile \
             gui/app.py \
+            gui/phase_diagram_plots.py \
+            gui/pages/Phase_Diagram.py \
             src/dopingflow/vacancy_configurational_thermodynamics.py \
             src/dopingflow/phase_diagram_convergence_extensions.py
           pytest -q \
@@ -66,4 +74,5 @@ jobs:
             tests/test_vacancy_static_thermodynamics.py \
             tests/test_vacancy_configurational_thermodynamics.py \
             tests/test_vacancy_phase_diagram_extension.py \
+            tests/test_phase_diagram_gui_plots.py \
             tests/test_vacancies_gui.py
