@@ -67,16 +67,15 @@ def _vacancy_paths(
     vacancy_root: Path,
     row: dict[str, str],
 ) -> tuple[Path, Path, Path]:
-    """Return candidate directory, relaxed POSCAR, and relaxation metadata."""
+    """Return candidate directory, relaxed POSCAR, and relaxation metadata.
+
+    The zero-vacancy energy in ``vacancy_static_minima.csv`` is the vacancy
+    workflow's parent-reference energy.  That reference can be a consistency
+    relaxation rather than the original candidate relaxation, so the n=0 hull
+    entry must use ``05_vacancies/parent_reference/relaxed/POSCAR`` whenever
+    the stored absolute path is no longer valid after results are copied.
+    """
     n_vacancies = int(float(row["n_vacancies"]))
-
-    stored_poscar = str(row.get("source_relaxed_poscar_path", "")).strip()
-    if stored_poscar:
-        stored_path = Path(stored_poscar).expanduser()
-        if stored_path.is_file():
-            candidate_dir = stored_path.parent.parent
-            return candidate_dir, stored_path, stored_path.parent / "meta.json"
-
     parent_id = str(row.get("source_parent_id", "")).strip()
     if not parent_id:
         raise ValueError("vacancy_static_minima.csv row is missing source_parent_id")
@@ -92,11 +91,39 @@ def _vacancy_paths(
         composition_directory = parent_parts[-2]
 
     parent_dir = vacancy_root / composition_directory / candidate
+    stored_poscar = str(row.get("source_relaxed_poscar_path", "")).strip()
+    stored_path = Path(stored_poscar).expanduser() if stored_poscar else None
 
     if n_vacancies == 0:
-        candidate_dir = parent_dir
-        poscar = candidate_dir / "02_relax" / "POSCAR"
-        return candidate_dir, poscar, poscar.parent / "meta.json"
+        parent_reference = parent_dir / "05_vacancies" / "parent_reference"
+        poscar = (
+            stored_path
+            if stored_path is not None and stored_path.is_file()
+            else parent_reference / "relaxed" / "POSCAR"
+        )
+
+        source = {}
+        source_path = parent_reference / "source.json"
+        if source_path.is_file():
+            try:
+                source = json.loads(source_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                source = {}
+
+        if _as_bool(source.get("parent_relaxation_reused", False)):
+            meta = parent_dir / "02_relax" / "meta.json"
+        else:
+            consistency_meta = parent_reference / "relaxed" / "meta.json"
+            meta = (
+                consistency_meta
+                if consistency_meta.is_file()
+                else parent_dir / "02_relax" / "meta.json"
+            )
+        return parent_dir, poscar, meta
+
+    if stored_path is not None and stored_path.is_file():
+        candidate_dir = stored_path.parent.parent
+        return candidate_dir, stored_path, stored_path.parent / "meta.json"
 
     vacancy_species = str(row.get("vacancy_species", "O")).strip() or "O"
     config_id = str(row.get("source_configuration_id", "")).strip()
