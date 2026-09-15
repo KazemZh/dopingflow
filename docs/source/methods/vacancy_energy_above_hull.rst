@@ -9,6 +9,9 @@ of oxygen vacancies without building a separate convex-hull implementation.
 Configuration
 -------------
 
+The complete input-key reference is also listed in
+:doc:`../input_file_phase_diagram`.
+
 Add the following options to ``[phase_diagram]``::
 
    [phase_diagram]
