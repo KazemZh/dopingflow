@@ -27,7 +27,7 @@ never labeled a corrected hull. See :doc:`energy_corrections`.
 Terminal References
 -------------------
 
-A closed phase diagram requires an elemental terminal entry for every element
+A closed phase diagram requires one elemental terminal entry for every element
 in the system. ``O2`` supplies the oxygen terminal because its composition
 contains only oxygen. Every metal must be listed in ``metal_ref`` and have a
 corresponding POSCAR available when ``refs-build`` is run, including when
@@ -38,40 +38,29 @@ The step stops with a descriptive error if a terminal is missing.
 Configuration
 -------------
 
-All settings remain in the existing ``[phase_diagram]`` section::
+The standard settings remain in the existing ``[phase_diagram]`` section::
 
    [phase_diagram]
    skip_if_done = true
    stable_threshold_eV_per_atom = 0.05
 
-``skip_if_done`` returns the existing combined output without rebuilding the
-diagrams on the correction-disabled path. With correction enabled, corrected
-hulls are always rebuilt because a fit ID alone does not fingerprint candidate
-structures, energies, membership, or the stability threshold. Disabling
-correction also rebuilds an existing file that contains corrected columns.
-``stable_threshold_eV_per_atom`` controls the boolean raw and corrected
-stability columns and must be non-negative.
+To include the lowest-energy relaxed oxygen-vacancy structure at every
+investigated vacancy count, add::
 
-Vacancy minima
---------------
-
-The lowest-energy relaxed vacancy structure for each investigated vacancy count
-can be included in the same phase diagram::
-
-   [phase_diagram]
    include_vacancy_minima = true
    vacancy_results_directory = "vacancy-selected"
 
-The vacancy directory must contain ``vacancy_static_minima.csv`` and the
-corresponding relaxed vacancy structures.  If ``vacancy_results_directory`` is
-omitted, ``[vacancies].parent_directory`` is used when the vacancy workflow was
-run with ``parent_source = "directory"``; otherwise the workflow root is used.
+``vacancy_results_directory`` must contain ``vacancy_static_minima.csv`` and the
+corresponding relaxed structures. If it is omitted, the implementation first
+uses ``[vacancies].parent_directory`` when ``parent_source = "directory"`` and
+otherwise falls back to the workflow root.
 
-Vacancy minima are added before the raw and corrected phase diagrams are built,
-so they can themselves become hull vertices.  The stage also writes
-``vacancy_energy_above_hull.csv``, which contains the vacancy count together
-with the raw/corrected energy above hull and decomposition for direct plotting
-against ``n_vacancies``.
+When vacancy minima are requested, the phase diagram is rebuilt even if
+``skip_if_done = true`` because a cached diagram that predates vacancy inclusion
+is not a valid result for this analysis.
+
+``stable_threshold_eV_per_atom`` controls the boolean raw and corrected
+stability columns and must be non-negative.
 
 Energy Above Hull
 -----------------
@@ -104,6 +93,30 @@ It is scientifically incorrect to add a phase correction directly to raw
 energy above hull because correction can change the hull facets and
 decomposition itself.
 
+Vacancy-resolved hulls
+----------------------
+
+When ``include_vacancy_minima = true``, the lowest-energy relaxed structure for
+``n = 0, 1, 2, ...`` is read from ``vacancy_static_minima.csv``. Only positively
+converged relaxed minima are accepted. These entries are inserted into the same
+raw and corrected phase diagrams as the ordinary relaxed candidates.
+
+Each oxygen-vacancy count has a different overall composition because the
+number of oxygen atoms changes. Therefore ``E_above_hull(n)`` means the distance
+of that oxygen-deficient composition from the lowest-energy decomposition
+available at that same composition. A decrease with increasing vacancy count
+means that the oxygen-deficient structure moves closer to its closed-system
+convex hull.
+
+This quantity is deliberately distinct from vacancy formation free energy and
+from an oxygen-open grand-potential hull. Vacancy formation free energy asks
+whether oxygen removal from the same host is favorable at a chosen oxygen
+chemical potential. An oxygen-open grand-potential hull would additionally
+compare decomposition stability as a function of oxygen chemical potential.
+
+See :doc:`vacancy_energy_above_hull` for the dedicated vacancy-resolved output
+and interpretation.
+
 Outputs
 -------
 
@@ -115,10 +128,6 @@ Individual systems are also written under ``phase_diagrams/``::
 
    phase_diagrams/phase_diagram_O-Sb-Sn.csv
    phase_diagrams/phase_diagram_Ce-O-Sb-Sn.csv
-
-When vacancy minima are enabled, an additional compact output is written:
-
-``vacancy_energy_above_hull.csv``
 
 Columns include:
 
@@ -147,6 +156,14 @@ columns include:
 - applicability reason, method, fit ID, parameter set, experimental dataset,
   and backend/model/task provenance
 
+With vacancy minima enabled, an additional compact table is written:
+
+``vacancy_energy_above_hull.csv``
+
+It carries the vacancy metadata together with the same raw/corrected hull
+distances, stability flags, and decomposition strings. It can therefore be
+plotted directly as corrected energy above hull versus ``n_vacancies``.
+
 If any required non-elemental entry has no structure, an incompatible
 backend/model/task/settings provenance, lacks positive convergence, or has an
 oxygen environment absent from the fitted basis, the corrected diagram for
@@ -157,3 +174,19 @@ The correction uncertainty is evaluated as
 on its corrected-hull decomposition. This is a fixed-corrected-facet
 linearization: it retains coefficient correlations, but it does not yet sample
 coefficient uncertainty to estimate the probability of a different hull facet.
+
+GUI visualization
+-----------------
+
+The Streamlit GUI includes a dedicated ``Phase Diagram`` page. It provides:
+
+- raw/corrected hull selection;
+- chemical-system selection;
+- a two-dopant composition map coloured by energy above hull;
+- one-dimensional concentration curves;
+- a dedicated raw/corrected ``E_above_hull`` versus oxygen-vacancy-count plot;
+- decomposition tables for the selected system.
+
+The phase-diagram plotting helper also matches candidates by the final
+``composition/candidate`` path components, so copied calculations remain
+plottable even when absolute paths were generated on another machine.
