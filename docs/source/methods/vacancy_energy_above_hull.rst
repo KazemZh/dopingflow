@@ -38,6 +38,14 @@ added to the same chemical-system entry set used by the standard phase diagram.
 Consequently, vacancy structures can themselves become hull vertices and can
 change the decomposition facet seen by other entries.
 
+For ``n_vacancies = 0``, the energy and structure are taken from the vacancy
+workflow's own parent reference. If that parent reference reused the original
+candidate relaxation, the existing phase-diagram entry is reused rather than
+duplicated. If the vacancy workflow performed a separate consistency
+relaxation, that n=0 reference remains a distinct entry so its stored energy is
+never paired with the wrong geometry. Copied calculations with stale absolute
+paths are reconstructed from the local vacancy directory layout.
+
 When ``[energy_correction].enabled = true``, the existing corrected-hull
 machinery is reused. Corrections are applied to the entries before a new
 ``pymatgen`` ``PhaseDiagram`` is constructed; corrected energy above hull is
