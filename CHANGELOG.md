@@ -15,6 +15,13 @@ The format loosely follows semantic versioning.
 
 ## [Unreleased]
 ### Added
+- Optional vacancy-resolved raw/corrected phase diagrams: the lowest-energy
+  relaxed structure at each oxygen-vacancy count can be added to the existing
+  phase-diagram entry set, with a compact `vacancy_energy_above_hull.csv` output
+  for plotting energy above hull versus vacancy count.
+- A dedicated Streamlit **Phase Diagram** page with exact-system selection,
+  raw/corrected hull switching, a two-dopant composition map, concentration
+  curves, decomposition tables, and vacancy-count energy-above-hull plots.
 - A second vacancy search method, ``search_method = "monte-carlo"``, that
   performs generic vacancy–anion and multi-species cation swaps on a configurable
   supercell, archives low-energy occupations, and feeds the established top-k
@@ -81,6 +88,10 @@ The format loosely follows semantic versioning.
 - Tests for flat formation configuration, metadata flattening, and per-system phase diagrams
 
 ### Changed
+- Phase-diagram GUI metadata matching now tolerates calculations copied from
+  another filesystem by matching the final `composition/candidate` path when
+  absolute path prefixes differ. Vacancy phase rows no longer break the normal
+  composition plot and are represented separately in the vacancy-hull view.
 - Vacancy oxygen-reference selection now exposes ``global`` and
   ``chemistry-specific`` calibrated modes alongside the existing
   ``reference_file``, ``same_calculator``, ``explicit``, and ``none`` modes.
