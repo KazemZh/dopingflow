@@ -1,20 +1,10 @@
-"""Phase-diagram convergence guard and optional vacancy-hull extension.
+"""Convergence guard plus optional vacancy-minimum phase-diagram analysis.
 
 The standard phase-diagram stage reads relaxed candidates from
-``results_database.csv``.  This extension keeps its convergence guard and can
-optionally add the lowest-energy oxygen-vacancy structure for every vacancy
-count from ``vacancy_static_minima.csv`` to the same raw/corrected hull.
-
-Enable the vacancy contribution with::
-
-    [phase_diagram]
-    include_vacancy_minima = true
-    vacancy_results_directory = "vacancy-selected"
-
-The usual ``phase_diagram_results.csv`` then contains the vacancy entries as
-part of the evaluated chemical systems.  A compact vacancy-only table is also
-written as ``vacancy_energy_above_hull.csv`` for plotting energy above hull
-against the number of oxygen vacancies.
+``results_database.csv``.  When requested, this extension also reads the
+lowest-energy relaxed structure for every vacancy count from
+``vacancy_static_minima.csv`` and adds those structures to the same raw and
+corrected hulls.
 """
 
 from __future__ import annotations
@@ -89,14 +79,9 @@ def _vacancy_paths(
 
     parent_id = str(row.get("source_parent_id", "")).strip()
     if not parent_id:
-        raise ValueError(
-            "vacancy_static_minima.csv row is missing source_parent_id"
-        )
+        raise ValueError("vacancy_static_minima.csv row is missing source_parent_id")
 
     parent_parts = Path(parent_id).parts
-    if not parent_parts:
-        raise ValueError(f"Invalid vacancy source_parent_id: {parent_id!r}")
-
     candidate = parent_parts[-1]
     composition_directory = str(row.get("composition_directory", "")).strip()
     if not composition_directory:
@@ -111,8 +96,7 @@ def _vacancy_paths(
     if n_vacancies == 0:
         candidate_dir = parent_dir
         poscar = candidate_dir / "02_relax" / "POSCAR"
-        meta = candidate_dir / "02_relax" / "meta.json"
-        return candidate_dir, poscar, meta
+        return candidate_dir, poscar, poscar.parent / "meta.json"
 
     vacancy_species = str(row.get("vacancy_species", "O")).strip() or "O"
     config_id = str(row.get("source_configuration_id", "")).strip()
@@ -128,8 +112,7 @@ def _vacancy_paths(
         / config_id
     )
     poscar = candidate_dir / "02_relax" / "POSCAR"
-    meta = candidate_dir / "02_relax" / "meta.json"
-    return candidate_dir, poscar, meta
+    return candidate_dir, poscar, poscar.parent / "meta.json"
 
 
 def _load_vacancy_minimum_entries(
@@ -144,9 +127,7 @@ def _load_vacancy_minimum_entries(
     output: list[tuple[str, Path, PDEntry, dict[str, Any]]] = []
 
     with minima_path.open(newline="", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        for raw_row in reader:
-            row = dict(raw_row)
+        for row in csv.DictReader(handle):
             n_vacancies = int(float(row["n_vacancies"]))
             energy_source = str(row.get("energy_source", "")).strip().lower()
             if energy_source != "relaxed":
@@ -172,9 +153,7 @@ def _load_vacancy_minimum_entries(
 
             candidate_dir, poscar, meta_path = _vacancy_paths(vacancy_root, row)
             if not poscar.is_file():
-                raise FileNotFoundError(
-                    f"Relaxed vacancy structure not found: {poscar}"
-                )
+                raise FileNotFoundError(f"Relaxed vacancy structure not found: {poscar}")
             if not meta_path.is_file():
                 raise FileNotFoundError(
                     f"Vacancy relaxation metadata not found: {meta_path}"
@@ -182,25 +161,23 @@ def _load_vacancy_minimum_entries(
 
             structure = Structure.from_file(str(poscar))
             relax_meta = json.loads(meta_path.read_text(encoding="utf-8"))
-
-            # Older vacancy relaxations used ``fmax_target`` while the phase-
-            # diagram provenance checker expects ``fmax_target_eV_per_A``.
             fmax_target = relax_meta.get(
                 "fmax_target_eV_per_A",
                 relax_meta.get("fmax_target"),
             )
 
+            # Keep entry_kind="candidate" so the existing corrected-hull
+            # provenance validator is applied to vacancy energies as well.
             attribute = {
-                "entry_kind": "vacancy_minimum",
+                "entry_kind": "candidate",
+                "candidate_subtype": "vacancy_minimum",
                 "structure_path": str(poscar.resolve()),
                 "metadata_path": str(meta_path.resolve()),
                 "backend": relax_meta.get("backend", row.get("backend")),
                 "model": relax_meta.get("model", row.get("model")),
                 "task": relax_meta.get("task", row.get("task")),
                 "backend_package": relax_meta.get("backend_package"),
-                "backend_package_version": relax_meta.get(
-                    "backend_package_version"
-                ),
+                "backend_package_version": relax_meta.get("backend_package_version"),
                 "model_checkpoint_sha256": relax_meta.get(
                     "model_checkpoint_sha256"
                 ),
@@ -208,9 +185,7 @@ def _load_vacancy_minimum_entries(
                 "fmax_target_eV_per_A": fmax_target,
                 "max_steps": relax_meta.get("max_steps"),
                 "converged": _as_bool(relax_meta.get("converged", True)),
-                "relaxed_poscar_sha256": relax_meta.get(
-                    "relaxed_poscar_sha256"
-                ),
+                "relaxed_poscar_sha256": relax_meta.get("relaxed_poscar_sha256"),
                 "device": relax_meta.get("device"),
                 "gpu_id": relax_meta.get("gpu_id"),
                 "n_vacancies": n_vacancies,
@@ -219,9 +194,7 @@ def _load_vacancy_minimum_entries(
                     "vacancy_percent_of_parent_oxygen", ""
                 ),
                 "source_parent_id": row.get("source_parent_id", ""),
-                "source_configuration_id": row.get(
-                    "source_configuration_id", ""
-                ),
+                "source_configuration_id": row.get("source_configuration_id", ""),
             }
 
             name = (
@@ -244,9 +217,7 @@ def _load_vacancy_minimum_entries(
                     "vacancy_percent_of_parent_oxygen", ""
                 ),
                 "source_parent_id": row.get("source_parent_id", ""),
-                "source_configuration_id": row.get(
-                    "source_configuration_id", ""
-                ),
+                "source_configuration_id": row.get("source_configuration_id", ""),
                 "vacancy_structure_path": str(poscar.resolve()),
             }
             output.append((name, candidate_dir, entry, summary))
@@ -278,31 +249,28 @@ def _candidate_entries_from_database_converged(
         )
 
     _VACANCY_METADATA_BY_CANDIDATE_PATH.clear()
+    if not _ACTIVE_INCLUDE_VACANCY_MINIMA:
+        return accepted
+    if _ACTIVE_VACANCY_ROOT is None:
+        raise RuntimeError("Vacancy-hull analysis is active without a vacancy root")
 
-    if _ACTIVE_INCLUDE_VACANCY_MINIMA:
-        if _ACTIVE_VACANCY_ROOT is None:
-            raise RuntimeError("Vacancy-hull analysis is active without a vacancy root")
+    normal_paths = {str(candidate_dir.resolve()) for _, candidate_dir, _ in accepted}
+    vacancy_entries = _load_vacancy_minimum_entries(_ACTIVE_VACANCY_ROOT)
 
-        normal_paths = {str(candidate_dir.resolve()) for _, candidate_dir, _ in accepted}
-        vacancy_entries = _load_vacancy_minimum_entries(_ACTIVE_VACANCY_ROOT)
+    for entry_name, candidate_dir, entry, summary in vacancy_entries:
+        candidate_key = str(candidate_dir.resolve())
+        _VACANCY_METADATA_BY_CANDIDATE_PATH[candidate_key] = summary
 
-        for entry_name, candidate_dir, entry, summary in vacancy_entries:
-            candidate_key = str(candidate_dir.resolve())
-            _VACANCY_METADATA_BY_CANDIDATE_PATH[candidate_key] = summary
+        # Reuse an existing n=0 parent if it is already in results_database.csv.
+        if summary["n_vacancies"] == 0 and candidate_key in normal_paths:
+            continue
+        accepted.append((entry_name, candidate_dir, entry))
 
-            # The n=0 parent is normally already present in results_database.csv.
-            # Reuse that entry instead of inserting a duplicate at the same energy.
-            if summary["n_vacancies"] == 0 and candidate_key in normal_paths:
-                continue
-
-            accepted.append((entry_name, candidate_dir, entry))
-
-        log.info(
-            "Added vacancy minima from %s to the phase-diagram hull (%d minima).",
-            _ACTIVE_VACANCY_ROOT,
-            len(vacancy_entries),
-        )
-
+    log.info(
+        "Added vacancy minima from %s to the phase-diagram hull (%d minima).",
+        _ACTIVE_VACANCY_ROOT,
+        len(vacancy_entries),
+    )
     return accepted
 
 
@@ -314,18 +282,18 @@ def _write_vacancy_hull_summary(phase_output: Path, root: Path) -> Path:
         )
 
     with phase_output.open(newline="", encoding="utf-8") as handle:
-        rows = list(csv.DictReader(handle))
+        phase_rows = list(csv.DictReader(handle))
 
     selected: list[dict[str, Any]] = []
-    for row in rows:
+    for row in phase_rows:
         candidate_path = str(row.get("candidate_path", "")).strip()
         if not candidate_path:
             continue
-        key = str(Path(candidate_path).resolve())
-        metadata = _VACANCY_METADATA_BY_CANDIDATE_PATH.get(key)
-        if metadata is None:
-            continue
-        selected.append({**metadata, **row})
+        metadata = _VACANCY_METADATA_BY_CANDIDATE_PATH.get(
+            str(Path(candidate_path).resolve())
+        )
+        if metadata is not None:
+            selected.append({**metadata, **row})
 
     if not selected:
         raise ValueError(
@@ -383,7 +351,6 @@ def run_phase_diagram_from_toml(config_path: Path) -> Path:
     global _ACTIVE_INCLUDE_VACANCY_MINIMA, _ACTIVE_VACANCY_ROOT
 
     install_extensions()
-
     raw = tomllib.loads(config_path.read_text(encoding="utf-8"))
     root = config_path.resolve().parent
     phase = raw.get("phase_diagram", {}) or {}
@@ -405,8 +372,8 @@ def run_phase_diagram_from_toml(config_path: Path) -> Path:
     _ACTIVE_INCLUDE_VACANCY_MINIMA = True
     _ACTIVE_VACANCY_ROOT = vacancy_root
 
-    # A cached phase-diagram file predating vacancy inclusion is not valid for
-    # this analysis, so force a rebuild when vacancy minima are requested.
+    # Cached phase-diagram files created without vacancy entries are not valid
+    # for this analysis, so force a rebuild when vacancy minima are requested.
     raw_for_run = dict(raw)
     phase_for_run = dict(phase)
     phase_for_run["skip_if_done"] = False
