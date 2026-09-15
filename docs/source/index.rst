@@ -39,6 +39,7 @@ User Guide
    installation_and_usage
    required_inputs
    input_file
+   input_file_phase_diagram
 
 
 Workflow Stages
