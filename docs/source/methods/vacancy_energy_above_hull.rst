@@ -67,7 +67,8 @@ Outputs
 -------
 
 The normal outputs are rebuilt and include the vacancy structures in their
-chemical systems. In addition, a compact vacancy-only table is written as::
+chemical systems. In addition, a compact vacancy-only table is written to the
+workflow project root as::
 
    vacancy_energy_above_hull.csv
 
