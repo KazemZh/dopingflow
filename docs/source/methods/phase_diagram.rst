@@ -52,6 +52,27 @@ correction also rebuilds an existing file that contains corrected columns.
 ``stable_threshold_eV_per_atom`` controls the boolean raw and corrected
 stability columns and must be non-negative.
 
+Vacancy minima
+--------------
+
+The lowest-energy relaxed vacancy structure for each investigated vacancy count
+can be included in the same phase diagram::
+
+   [phase_diagram]
+   include_vacancy_minima = true
+   vacancy_results_directory = "vacancy-selected"
+
+The vacancy directory must contain ``vacancy_static_minima.csv`` and the
+corresponding relaxed vacancy structures.  If ``vacancy_results_directory`` is
+omitted, ``[vacancies].parent_directory`` is used when the vacancy workflow was
+run with ``parent_source = "directory"``; otherwise the workflow root is used.
+
+Vacancy minima are added before the raw and corrected phase diagrams are built,
+so they can themselves become hull vertices.  The stage also writes
+``vacancy_energy_above_hull.csv``, which contains the vacancy count together
+with the raw/corrected energy above hull and decomposition for direct plotting
+against ``n_vacancies``.
+
 Energy Above Hull
 -----------------
 
@@ -94,6 +115,10 @@ Individual systems are also written under ``phase_diagrams/``::
 
    phase_diagrams/phase_diagram_O-Sb-Sn.csv
    phase_diagrams/phase_diagram_Ce-O-Sb-Sn.csv
+
+When vacancy minima are enabled, an additional compact output is written:
+
+``vacancy_energy_above_hull.csv``
 
 Columns include:
 
