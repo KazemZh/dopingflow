@@ -204,22 +204,24 @@ A typical workflow consists of:
 
       dopingflow run-all -c input.toml --until vacancies
 
-2. Optionally rebuilding the phase diagram with vacancy minima:
+2. Enabling the vacancy-resolved phase diagram:
 
    ::
-
-      dopingflow phase-diagram -c input.toml
-
-   with::
 
       [phase_diagram]
       include_vacancy_minima = true
       vacancy_results_directory = "vacancy-selected"
 
-3. Inspecting the resulting databases and phase stability in the Streamlit
-   ``Phase Diagram`` page.
+3. Rebuilding the phase diagram without repeating vacancy relaxation:
 
-4. Generating and optionally relaxing surfaces:
+   ::
+
+      dopingflow phase-diagram -c input.toml
+
+4. Inspecting the raw/corrected composition-space and vacancy-count stability
+   plots in the Streamlit ``Phase Diagram`` page.
+
+5. Generating and optionally relaxing surfaces:
 
    ::
 
