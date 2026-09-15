@@ -41,13 +41,8 @@ def _write_relaxed_structure(path: Path, formula: str, energy: float) -> None:
 def test_load_vacancy_minimum_entries_reconstructs_local_paths(tmp_path):
     parent = tmp_path / "Sb2p5" / "candidate_001"
     parent_poscar = parent / "02_relax" / "POSCAR"
-    parent_reference_poscar = (
-        parent
-        / "05_vacancies"
-        / "parent_reference"
-        / "relaxed"
-        / "POSCAR"
-    )
+    parent_reference = parent / "05_vacancies" / "parent_reference"
+    parent_reference_poscar = parent_reference / "relaxed" / "POSCAR"
     vacancy_poscar = (
         parent
         / "05_vacancies"
@@ -59,7 +54,7 @@ def test_load_vacancy_minimum_entries_reconstructs_local_paths(tmp_path):
     _write_relaxed_structure(parent_poscar, "SnO2", -10.2)
     _write_relaxed_structure(parent_reference_poscar, "SnO2", -10.0)
     _write_relaxed_structure(vacancy_poscar, "SnO", -8.0)
-    (parent / "05_vacancies" / "parent_reference" / "source.json").write_text(
+    (parent_reference / "source.json").write_text(
         json.dumps({"parent_relaxation_reused": False, "parent_converged": True}),
         encoding="utf-8",
     )
@@ -127,7 +122,7 @@ def test_load_vacancy_minimum_entries_reconstructs_local_paths(tmp_path):
 
     assert len(entries) == 2
     assert entries[0][3]["n_vacancies"] == 0
-    assert entries[0][1] == parent
+    assert entries[0][1] == parent_reference
     assert entries[0][2].attribute["structure_path"] == str(
         parent_reference_poscar.resolve()
     )
