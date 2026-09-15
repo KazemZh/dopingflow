@@ -319,6 +319,8 @@ DEFAULTS = {
     "phase_diagram": {
         "skip_if_done": True,
         "stable_threshold_eV_per_atom": 1.0e-8,
+        "include_vacancy_minima": False,
+        "vacancy_results_directory": "",
     },
     "vacancies": {
         "enabled": True,
