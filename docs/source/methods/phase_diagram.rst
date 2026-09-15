@@ -93,6 +93,11 @@ It is scientifically incorrect to add a phase correction directly to raw
 energy above hull because correction can change the hull facets and
 decomposition itself.
 
+For decomposition reporting, ``pymatgen`` receives the candidate
+``Composition`` rather than the ``PDEntry`` object. This is the required API
+contract for ``PhaseDiagram.get_decomposition`` and avoids the historical
+``PDEntry has no attribute get_atomic_fraction`` failure.
+
 Vacancy-resolved hulls
 ----------------------
 
@@ -188,5 +193,9 @@ The Streamlit GUI includes a dedicated ``Phase Diagram`` page. It provides:
 - decomposition tables for the selected system.
 
 The phase-diagram plotting helper also matches candidates by the final
-``composition/candidate`` path components, so copied calculations remain
-plottable even when absolute paths were generated on another machine.
+``composition/candidate`` path components. This fixes plotting after calculations
+are copied from an HPC filesystem to a local machine, where the absolute paths
+in ``phase_diagram_results.csv`` and ``results_database.csv`` may have different
+prefixes. Vacancy configuration rows that do not exist in the normal results
+database are handled separately rather than causing the composition plot to
+fail.
