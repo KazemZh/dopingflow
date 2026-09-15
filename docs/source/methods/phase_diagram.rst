@@ -106,6 +106,12 @@ When ``include_vacancy_minima = true``, the lowest-energy relaxed structure for
 converged relaxed minima are accepted. These entries are inserted into the same
 raw and corrected phase diagrams as the ordinary relaxed candidates.
 
+The n=0 point uses the vacancy workflow's parent reference. If the vacancy
+workflow reused the original parent relaxation, the normal phase entry is reused
+without duplication. If the vacancy workflow performed a separate consistency
+relaxation, the n=0 parent reference stays a distinct phase entry so the vacancy
+series uses the matching energy and geometry.
+
 Each oxygen-vacancy count has a different overall composition because the
 number of oxygen atoms changes. Therefore ``E_above_hull(n)`` means the distance
 of that oxygen-deficient composition from the lowest-energy decomposition
