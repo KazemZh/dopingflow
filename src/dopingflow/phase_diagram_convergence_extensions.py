@@ -67,13 +67,13 @@ def _vacancy_paths(
     vacancy_root: Path,
     row: dict[str, str],
 ) -> tuple[Path, Path, Path]:
-    """Return candidate directory, relaxed POSCAR, and relaxation metadata.
+    """Return phase-entry directory, relaxed POSCAR, and relaxation metadata.
 
     The zero-vacancy energy in ``vacancy_static_minima.csv`` is the vacancy
-    workflow's parent-reference energy.  That reference can be a consistency
-    relaxation rather than the original candidate relaxation, so the n=0 hull
-    entry must use ``05_vacancies/parent_reference/relaxed/POSCAR`` whenever
-    the stored absolute path is no longer valid after results are copied.
+    workflow's parent-reference energy. That reference can be a consistency
+    relaxation rather than the original candidate relaxation, so n=0 must use
+    the vacancy parent-reference geometry and remain a distinct phase entry when
+    that consistency relaxation was not reused from the original candidate.
     """
     n_vacancies = int(float(row["n_vacancies"]))
     parent_id = str(row.get("source_parent_id", "")).strip()
@@ -110,8 +110,10 @@ def _vacancy_paths(
             except json.JSONDecodeError:
                 source = {}
 
-        if _as_bool(source.get("parent_relaxation_reused", False)):
+        reused = _as_bool(source.get("parent_relaxation_reused", False))
+        if reused:
             meta = parent_dir / "02_relax" / "meta.json"
+            candidate_dir = parent_dir
         else:
             consistency_meta = parent_reference / "relaxed" / "meta.json"
             meta = (
@@ -119,7 +121,8 @@ def _vacancy_paths(
                 if consistency_meta.is_file()
                 else parent_dir / "02_relax" / "meta.json"
             )
-        return parent_dir, poscar, meta
+            candidate_dir = parent_reference
+        return candidate_dir, poscar, meta
 
     if stored_path is not None and stored_path.is_file():
         candidate_dir = stored_path.parent.parent
@@ -288,7 +291,8 @@ def _candidate_entries_from_database_converged(
         candidate_key = str(candidate_dir.resolve())
         _VACANCY_METADATA_BY_CANDIDATE_PATH[candidate_key] = summary
 
-        # Reuse an existing n=0 parent if it is already in results_database.csv.
+        # Reuse n=0 only when the vacancy workflow reused the original parent
+        # relaxation; a consistency-relaxed n=0 entry has a distinct directory.
         if summary["n_vacancies"] == 0 and candidate_key in normal_paths:
             continue
         accepted.append((entry_name, candidate_dir, entry))
