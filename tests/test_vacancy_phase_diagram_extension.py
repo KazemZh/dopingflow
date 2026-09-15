@@ -22,11 +22,13 @@ def _write_relaxed_structure(path: Path, formula: str, energy: float) -> None:
         json.dumps(
             {
                 "energy_relaxed_total_eV": energy,
+                "energy_relaxed_eV": energy,
                 "backend": "mace",
                 "model": "mh-1",
                 "task": "matpes_r2scan",
                 "optimizer": "bfgs",
                 "fmax_target": 0.05,
+                "fmax_target_eV_per_A": 0.05,
                 "max_steps": 300,
                 "converged": True,
                 "device": "cpu",
@@ -39,6 +41,13 @@ def _write_relaxed_structure(path: Path, formula: str, energy: float) -> None:
 def test_load_vacancy_minimum_entries_reconstructs_local_paths(tmp_path):
     parent = tmp_path / "Sb2p5" / "candidate_001"
     parent_poscar = parent / "02_relax" / "POSCAR"
+    parent_reference_poscar = (
+        parent
+        / "05_vacancies"
+        / "parent_reference"
+        / "relaxed"
+        / "POSCAR"
+    )
     vacancy_poscar = (
         parent
         / "05_vacancies"
@@ -47,8 +56,13 @@ def test_load_vacancy_minimum_entries_reconstructs_local_paths(tmp_path):
         / "02_relax"
         / "POSCAR"
     )
-    _write_relaxed_structure(parent_poscar, "SnO2", -10.0)
+    _write_relaxed_structure(parent_poscar, "SnO2", -10.2)
+    _write_relaxed_structure(parent_reference_poscar, "SnO2", -10.0)
     _write_relaxed_structure(vacancy_poscar, "SnO", -8.0)
+    (parent / "05_vacancies" / "parent_reference" / "source.json").write_text(
+        json.dumps({"parent_relaxation_reused": False, "parent_converged": True}),
+        encoding="utf-8",
+    )
 
     minima = tmp_path / ext.VACANCY_MINIMA_CSV
     with minima.open("w", newline="", encoding="utf-8") as handle:
@@ -81,7 +95,7 @@ def test_load_vacancy_minimum_entries_reconstructs_local_paths(tmp_path):
                 "vacancy_percent_of_parent_oxygen": 0.0,
                 "source_parent_id": "Sb2p5/candidate_001",
                 "source_configuration_id": "parent_reference",
-                "source_relaxed_poscar_path": "/stale/remote/POSCAR",
+                "source_relaxed_poscar_path": "/stale/remote/parent_reference/relaxed/POSCAR",
                 "energy_source": "relaxed",
                 "energy_relaxed_min_eV": -10.0,
                 "converged": True,
@@ -113,6 +127,10 @@ def test_load_vacancy_minimum_entries_reconstructs_local_paths(tmp_path):
 
     assert len(entries) == 2
     assert entries[0][3]["n_vacancies"] == 0
+    assert entries[0][1] == parent
+    assert entries[0][2].attribute["structure_path"] == str(
+        parent_reference_poscar.resolve()
+    )
     assert entries[1][3]["n_vacancies"] == 1
     assert entries[1][1].name == "config_0001"
     assert entries[1][2].composition.reduced_formula == "SnO"
