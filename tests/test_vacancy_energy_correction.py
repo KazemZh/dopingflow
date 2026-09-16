@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import runpy
 import tomllib
 
 import pytest
@@ -152,3 +153,12 @@ def test_checked_in_vacancy_example_documents_correction_opt_in() -> None:
     assert vacancies["apply_fitted_energy_correction"] is False
     assert vacancies["allow_legacy_energy_correction_provenance"] is False
     assert vacancies["oxygen_reference_mode"] == "reference_file"
+
+
+def test_gui_defaults_expose_vacancy_correction_flags() -> None:
+    root = Path(__file__).resolve().parents[1]
+    namespace = runpy.run_path(str(root / "gui" / "gui_config.py"))
+    vacancies = namespace["DEFAULTS"]["vacancies"]
+
+    assert vacancies["apply_fitted_energy_correction"] is False
+    assert vacancies["allow_legacy_energy_correction_provenance"] is False
