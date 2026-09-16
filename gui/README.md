@@ -97,6 +97,14 @@ with the new keys.
 These `[references]` oxygen controls are deliberately independent of the
 `[vacancies]` oxygen-reference mode, delta-mu grid, and T-pO2 mapping controls.
 
+GUI-generated vacancy defaults now include the opt-in correction flags explicitly:
+
+```toml
+[vacancies]
+apply_fitted_energy_correction = false
+allow_legacy_energy_correction_provenance = false
+```
+
 ---
 
 ### 2️⃣ Run
@@ -199,16 +207,33 @@ energy, and it is not yet an oxygen-open grand-potential hull.
 This page controls whether the fitted experimental formation-energy correction
 is also used inside the vacancy thermodynamic analysis.
 
-It edits:
+The common correction model is configured through the normal correction section,
+for example:
+
+```toml
+[energy_correction]
+enabled = true
+experimental_source = "kingsbury"
+model_family = "auto"
+correction_terms = ["oxide"]
+m1_elements = "workflow"
+calibration_selection = "phase_resolved"
+auto_fetch_phase_structures = true
+reuse_fitted = true
+```
+
+The vacancy page edits:
 
 ```toml
 [vacancies]
 apply_fitted_energy_correction = true
 allow_legacy_energy_correction_provenance = false
+oxygen_reference_mode = "reference_file"
 ```
 
-The selected M0/M1 family remains controlled by `[energy_correction]`. If
-`model_family = "auto"`, the family selected by `corrections-fit` is used.
+If `model_family = "auto"`, the family selected by `corrections-fit` is used.
+Run `refs-build`, `corrections-fit`, and then `vacancies` when fitting a new model.
+The vacancy stage reuses the fitted model rather than fitting a second one.
 
 The page blocks the invalid combination of a fitted M0/M1 vacancy correction
 with `oxygen_reference_mode = "global"` or `"chemistry-specific"`, because the
@@ -220,6 +245,11 @@ cross-count thermodynamics use
 `ΔE_corrected = ΔE_raw + C(defect) - C(parent)`. The uncertainty is evaluated
 from the correlated reaction feature vector rather than by independently adding
 parent and defect correction errors.
+
+Correction application also validates the stored energy provenance. Known
+backend/model/task, optimizer, force-tolerance (`fmax`), maximum-step,
+convergence, or structure mismatches are rejected. The legacy-provenance option
+accepts missing historical metadata only; it does not override a known mismatch.
 
 ---
 
