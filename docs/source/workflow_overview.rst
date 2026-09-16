@@ -21,9 +21,17 @@ Reference Construction → Optional Correction Fit → Enumeration → Screening
 
 Optional Post-Processing:
 
+Vacancy Results → Optional M0/M1-corrected Vacancy Thermodynamics
+
 Vacancy Results → Vacancy-resolved Raw/Corrected Phase Diagram
 
 Database → Surface Generation → Surface Relaxation
+
+The vacancy M0/M1 option reuses the already fitted backend-specific correction
+model. It does not refit a separate vacancy-specific model. The correction is
+applied to the relaxed parent and selected vacancy minima before different
+vacancy counts are compared. Global/chemistry-specific experimental oxygen
+calibration is mutually exclusive with this option to prevent double counting.
 
 The vacancy-resolved energy-above-hull analysis is intentionally a
 post-processing use of the existing phase-diagram stage. The normal ``run-all``
@@ -145,11 +153,16 @@ Stages
    - Keep vacancy results separate from normal thermodynamic databases
    - Optionally aggregate exact integer compositions and converged count minima
    - Verify an O2 reference and solve exact oxygen-grand-potential stability windows
+   - Optionally apply the fitted M0/M1 correction as
+     ``C(defect)-C(parent)`` with correlated coefficient uncertainty
    - Write compact minima, interval, selected-condition, pressure, and free-energy tables
 
 The preferred vacancy count depends on ``delta_mu_O``. Raw total energy, energy
 per atom, and energy per vacancy cannot rank structures with different oxygen
 contents. Vacancy formation thermodynamics therefore use an oxygen reservoir.
+When ``apply_fitted_energy_correction = true``, the active cross-count energy is
+corrected while the raw reaction energy remains in the output. See
+:doc:`methods/vacancy_energy_correction`.
 
 The optional vacancy-resolved energy-above-hull post-processing asks a different
 question: for each oxygen-deficient composition, how far is the selected vacancy
@@ -189,6 +202,8 @@ Notes
   adds another thermodynamic term.
 - The vacancy T-pO2 analysis changes the oxygen-gas reservoir and is not a full
   finite-temperature competing-phase diagram.
+- M0/M1-corrected vacancy thermodynamics must not be combined with the global or
+  chemistry-specific experimental oxygen calibration.
 - The vacancy-resolved closed-system hull is only as complete as the competing
   phases supplied to the phase-diagram calculation.
 - Surface generation is intentionally decoupled from the main pipeline and is executed separately.
@@ -198,13 +213,24 @@ Typical Usage
 
 A typical workflow consists of:
 
-1. Running the bulk pipeline and vacancy search:
+1. Fitting/reusing the optional correction and running the bulk/vacancy stages:
 
    ::
 
-      dopingflow run-all -c input.toml --until vacancies
+      [energy_correction]
+      enabled = true
+      model_family = "m0"   # or m1 / auto
 
-2. Enabling the vacancy-resolved phase diagram:
+      [vacancies]
+      apply_fitted_energy_correction = true
+      oxygen_reference_mode = "reference_file"
+
+   ::
+
+      dopingflow corrections-fit -c input.toml
+      dopingflow run-all -c input.toml --from generate --until vacancies
+
+2. Enabling the vacancy-resolved phase diagram if desired:
 
    ::
 
@@ -218,8 +244,8 @@ A typical workflow consists of:
 
       dopingflow phase-diagram -c input.toml
 
-4. Inspecting the raw/corrected composition-space and vacancy-count stability
-   plots in the Streamlit ``Phase Diagram`` page.
+4. Inspecting the vacancy correction controls and raw/corrected phase stability
+   in the Streamlit ``Vacancy M0/M1 Energy Correction`` and ``Phase Diagram`` pages.
 
 5. Generating and optionally relaxing surfaces:
 
