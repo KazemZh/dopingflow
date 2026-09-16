@@ -8,21 +8,34 @@ The oxygen-vacancy workflow can optionally apply the already fitted
 backend-specific M0/M1 formation-energy correction to the relaxed parent and
 oxygen-deficient minima before different vacancy counts are compared.
 
-The feature is disabled by default. Enable it with::
-
-   [vacancies]
-   apply_fitted_energy_correction = true
-
-The correction family itself is still configured in the existing
-``[energy_correction]`` section. For example::
+The feature is disabled by default. A complete practical configuration is::
 
    [energy_correction]
    enabled = true
-   model_family = "m0"       # or "m1" / "auto"
+   experimental_source = "kingsbury"
+   model_family = "auto"        # or force "m0" / "m1"
+   correction_terms = ["oxide"]
+   m1_elements = "workflow"
+   calibration_selection = "phase_resolved"
+   auto_fetch_phase_structures = true
+   reuse_fitted = true
 
-Run ``dopingflow corrections-fit -c input.toml`` before the vacancy analysis.
+   [vacancies]
+   static_thermodynamic_analysis = true
+   apply_fitted_energy_correction = true
+   allow_legacy_energy_correction_provenance = false
+   oxygen_reference_mode = "reference_file"
+   oxygen_reference_file = "reference_structures/reference_energies.json"
+
+Run::
+
+   dopingflow refs-build -c input.toml
+   dopingflow corrections-fit -c input.toml
+   dopingflow vacancies -c input.toml
+
 If ``model_family = "auto"``, the M0 or M1 model selected by the established
-cross-validation/admission procedure is used.
+cross-validation/admission procedure is used. The vacancy analysis never fits a
+second vacancy-specific correction model.
 
 Method
 ------
@@ -100,6 +113,12 @@ or::
 Use a raw same-backend oxygen reference, normally ``reference_file`` or
 ``same_calculator``, when applying M0/M1 to the vacancy solid energies.
 
+The experimental source under ``[energy_correction]`` is still used. For
+example, ``experimental_source = "kingsbury"`` supplies the measurements from
+which the common M0/M1 model is fitted. The separate
+``oxygen_calibration_experimental_source`` vacancy setting is only relevant to
+the alternative ``global``/``chemistry-specific`` oxygen-reference route.
+
 Finite-temperature convention
 -----------------------------
 
@@ -166,11 +185,18 @@ Provenance
 ----------
 
 The fitted model and vacancy energies must use compatible backend/model/task and
-relaxation provenance. Older vacancy calculations may predate package-version
-and relaxed-POSCAR hashes. They can be explicitly adopted with::
+relaxation provenance. The compatibility check includes optimizer, force
+tolerance (``fmax``), maximum relaxation steps, positive convergence, and
+available structure/energy provenance in addition to the backend/model/task.
+Known differences are rejected rather than silently applying a correction fit
+to a calculation produced under a different recorded protocol.
+
+Older vacancy calculations may predate package-version and relaxed-POSCAR
+hashes. They can be explicitly adopted with::
 
    [vacancies]
    allow_legacy_energy_correction_provenance = true
 
-Known mismatches are still rejected. Keep this false for newly provenance-rich
-data whenever possible.
+This accepts missing historical fields only. It does not override a known
+backend/model/task or relaxation-setting mismatch. Keep the option false for
+new provenance-rich data whenever possible.
