@@ -1,6 +1,21 @@
 [structure]
 outdir = "random_structures"
 
+# Optional backend-specific M0/M1 correction used by formation/phase-diagram
+# analysis and, when explicitly enabled below, by vacancy thermodynamics.
+# Keep this disabled for a raw vacancy-only example. To use it, set enabled=true,
+# run `dopingflow corrections-fit -c input.toml`, and then enable
+# apply_fitted_energy_correction in [vacancies].
+[energy_correction]
+enabled = false
+experimental_source = "kingsbury"
+model_family = "auto"
+correction_terms = ["oxide"]
+m1_elements = "workflow"
+calibration_selection = "phase_resolved"
+auto_fetch_phase_structures = true
+reuse_fitted = true
+
 [vacancies]
 enabled = true
 parent_source = "selected_candidates"
@@ -67,7 +82,13 @@ cell_filter = "frechet"
 # Level-1 vacancy thermodynamics.
 static_thermodynamic_analysis = true
 
-# Backward-compatible raw O2 reference from refs-build.
+# Optional M0/M1 correction of the solid parent/defect energies. This reuses
+# the already fitted [energy_correction] model; it does not fit a second model.
+apply_fitted_energy_correction = false
+allow_legacy_energy_correction_provenance = false
+
+# Backward-compatible raw O2 reference from refs-build. This raw same-backend
+# mode is the recommended oxygen reservoir when M0/M1 vacancy correction is on.
 oxygen_reference_mode = "reference_file"
 oxygen_reference_file = "reference_structures/reference_energies.json"
 oxygen_reference_structure = "reference_structures/gas/O2.POSCAR"
@@ -78,6 +99,9 @@ allow_unverified_oxygen_reference = false
 # formation enthalpies, replace the mode above with either:
 # oxygen_reference_mode = "global"
 # oxygen_reference_mode = "chemistry-specific"
+# IMPORTANT: these two calibrated oxygen-reference modes are mutually exclusive
+# with apply_fitted_energy_correction=true because both use experimental
+# formation-enthalpy information and would double count oxygen calibration.
 # The calibrated modes require the refs-build backend/model/task to match this
 # vacancy calculator and require the optional `corrections` dependency for the
 # default Kingsbury experimental dataset.
