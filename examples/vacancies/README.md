@@ -24,7 +24,7 @@ supercell = [1, 1, 1]
 
 Switch to `search_method = "monte-carlo"` to sample vacancy–anion swaps and
 swaps between every distinct cation species in the relaxed parent. This supports
-more than two dopants and retains the same ML screening, top-k relaxation,
+more than two dopants and retains the same low-energy archive, top-k relaxation,
 reranking, and output layout. `supercell = [a, b, c]` controls the search cell
 for either method.
 
@@ -49,6 +49,61 @@ mc_annealing_steps = 2000
 The stopping, archive, tolerance, and move-weight controls are commented in
 `input.toml`. Each vacancy-count directory records the resolved schedule and
 acceptance statistics in `monte_carlo_summary.json`.
+
+### Explicit vacancy counts and a dedicated MC calculator
+
+For studies where the vacancy counts are chosen as part of the research design,
+set them directly instead of deriving the range from formal oxidation-state
+compensation:
+
+```toml
+vacancy_counts = [1, 2]
+```
+
+The explicit list overrides the charge-derived range, `extra_vacancies`, and
+`max_vacancies_cap`; the workflow still checks that the requested count does not
+exceed the available vacancy-species sites. The formal-charge scenarios are
+retained in the metadata for interpretation.
+
+By default the Monte Carlo search inherits the ordinary vacancy calculator. An
+optional MC-only calculator can now be selected independently:
+
+```toml
+# Fast Metropolis search
+mc_backend = "grace"
+mc_model = "GRACE-1L-OMAT"
+mc_task = ""
+mc_device = "cuda"
+mc_gpu_id = 0
+
+# Final/reference calculator
+backend = "mace"
+model = "mh-1"
+task = "matpes_r2scan"
+device = "cuda"
+gpu_id = 0
+```
+
+With this setup GRACE evaluates the accepted/proposed Monte Carlo occupation
+states and defines the low-energy MC archive. The existing
+`topk_per_vacancy_count` selection is therefore based on the GRACE search
+energies. The selected structures are then relaxed and reranked with the final
+MACE calculator. Parent consistency energies, static thermodynamics, fitted
+energy-correction provenance, and final relaxed energies remain tied to the
+ordinary `backend`/`model`/`task` settings. Search-energy metadata records the
+MC calculator separately so GRACE energies are not mislabeled as MACE values.
+
+Cation and vacancy moves remain independently tunable. For coupled dopant–vacancy
+ordering, keep both weights nonzero, for example:
+
+```toml
+mc_cation_move_weight = 0.5
+mc_vacancy_move_weight = 0.5
+```
+
+Changing `vacancy_counts` or any explicit `mc_*` calculator setting participates
+in the vacancy configuration fingerprint, so an incompatible completed vacancy
+search is not silently reused.
 
 ## Optional M0/M1 correction for vacancy thermodynamics
 
