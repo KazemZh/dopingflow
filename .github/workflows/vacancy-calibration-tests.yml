@@ -4,6 +4,9 @@ on:
   push:
     branches: ["debug/extended-energy-correction"]
     paths:
+      - "README.md"
+      - "CHANGELOG.md"
+      - "examples/vacancies/**"
       - "src/dopingflow/__init__.py"
       - "src/dopingflow/oxygen_calibration.py"
       - "src/dopingflow/vacancy_static_thermodynamics.py"
@@ -15,6 +18,7 @@ on:
       - "src/dopingflow/phase_diagram_convergence_extensions.py"
       - "gui/gui_config.py"
       - "gui/app.py"
+      - "gui/README.md"
       - "gui/phase_diagram_plots.py"
       - "gui/pages/Phase_Diagram.py"
       - "gui/pages/Vacancy_Energy_Correction.py"
@@ -32,6 +36,9 @@ on:
       - ".github/workflows/vacancy-calibration-tests.yml"
   pull_request:
     paths:
+      - "README.md"
+      - "CHANGELOG.md"
+      - "examples/vacancies/**"
       - "src/dopingflow/__init__.py"
       - "src/dopingflow/oxygen_calibration.py"
       - "src/dopingflow/vacancy_static_thermodynamics.py"
@@ -43,6 +50,7 @@ on:
       - "src/dopingflow/phase_diagram_convergence_extensions.py"
       - "gui/gui_config.py"
       - "gui/app.py"
+      - "gui/README.md"
       - "gui/phase_diagram_plots.py"
       - "gui/pages/Phase_Diagram.py"
       - "gui/pages/Vacancy_Energy_Correction.py"
