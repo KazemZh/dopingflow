@@ -15,6 +15,14 @@ The format loosely follows semantic versioning.
 
 ## [Unreleased]
 ### Added
+- Optional user-controlled M0/M1 correction of oxygen-vacancy thermodynamics.
+  The vacancy reaction correction is evaluated as `C(defect)-C(parent)` with
+  correlated covariance propagation, raw values are retained, and the feature
+  is guarded against simultaneous global/chemistry-specific experimental oxygen
+  calibration to avoid double counting.
+- A dedicated Streamlit **Vacancy M0/M1 Energy Correction** page for enabling
+  the correction, reviewing the configured M0/M1/auto family, and explicitly
+  accepting legacy vacancy-energy provenance when older data require it.
 - Optional vacancy-resolved raw/corrected phase diagrams: the lowest-energy
   relaxed structure at each oxygen-vacancy count can be added to the existing
   phase-diagram entry set, with a compact `vacancy_energy_above_hull.csv` output
