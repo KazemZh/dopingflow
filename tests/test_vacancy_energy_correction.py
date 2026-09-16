@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from dopingflow.corrections import CorrectionApplication, CorrectionModel
+from dopingflow.vacancies import parse_vacancy_analysis_config
 from dopingflow.vacancy_energy_correction_extensions import (
     parse_static_vacancy_thermodynamics_config,
     vacancy_reaction_correction,
@@ -60,6 +61,15 @@ def test_vacancy_fitted_correction_is_opt_in(tmp_path: Path) -> None:
     cfg = parse_static_vacancy_thermodynamics_config({}, tmp_path)
     assert cfg.apply_fitted_energy_correction is False
     assert cfg.allow_legacy_energy_correction_provenance is False
+
+
+def test_vacancies_module_uses_enhanced_parser(tmp_path: Path) -> None:
+    cfg = parse_vacancy_analysis_config(
+        {"apply_fitted_energy_correction": True},
+        tmp_path,
+    )
+    assert cfg.apply_fitted_energy_correction is True
+    assert cfg.correction_workflow_root == tmp_path.resolve()
 
 
 def test_rejects_fitted_correction_with_global_oxygen_calibration(tmp_path: Path) -> None:
