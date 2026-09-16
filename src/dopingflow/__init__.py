@@ -12,3 +12,7 @@ from dopingflow import vacancy_energy_correction_extensions as _vacancy_energy_c
 # Add opt-in explicit vacancy counts and a dedicated Monte Carlo search
 # calculator while preserving the established final-calculator workflow.
 from dopingflow import vacancy_mc_extensions as _vacancy_mc_extensions  # noqa: E402,F401
+
+# Add opt-in composition/exact-parent filtering for the staged GRACE-search /
+# MACE-finalize vacancy workflow.
+from dopingflow import vacancy_parent_selection_extensions as _vacancy_parent_selection_extensions  # noqa: E402,F401
