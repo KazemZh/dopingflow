@@ -1,0 +1,202 @@
+M0/M1 Correction for Vacancy Thermodynamics
+===========================================
+
+Purpose
+-------
+
+The oxygen-vacancy workflow can optionally apply the already fitted
+backend-specific M0/M1 formation-energy correction to the relaxed parent and
+oxygen-deficient minima before different vacancy counts are compared.
+
+The feature is disabled by default. A complete practical configuration is::
+
+   [energy_correction]
+   enabled = true
+   experimental_source = "kingsbury"
+   model_family = "auto"        # or force "m0" / "m1"
+   correction_terms = ["oxide"]
+   m1_elements = "workflow"
+   calibration_selection = "phase_resolved"
+   auto_fetch_phase_structures = true
+   reuse_fitted = true
+
+   [vacancies]
+   static_thermodynamic_analysis = true
+   apply_fitted_energy_correction = true
+   allow_legacy_energy_correction_provenance = false
+   oxygen_reference_mode = "reference_file"
+   oxygen_reference_file = "reference_structures/reference_energies.json"
+
+Run::
+
+   dopingflow refs-build -c input.toml
+   dopingflow corrections-fit -c input.toml
+   dopingflow vacancies -c input.toml
+
+If ``model_family = "auto"``, the M0 or M1 model selected by the established
+cross-validation/admission procedure is used. The vacancy analysis never fits a
+second vacancy-specific correction model.
+
+Method
+------
+
+For a vacancy structure containing ``n`` removed oxygen atoms, dopingflow keeps
+the raw relaxed ML energies but changes the cross-count reaction energy from
+
+.. math::
+
+   \Delta E_{\mathrm{raw}}(n)=E_{\mathrm{def}}^{\mathrm{raw}}(n)
+   -E_{\mathrm{parent}}^{\mathrm{raw}}
+
+to
+
+.. math::
+
+   \Delta E_{\mathrm{corr}}(n)=\Delta E_{\mathrm{raw}}(n)
+   +C_{\mathrm{def}}(n)-C_{\mathrm{parent}}.
+
+For M0,
+
+.. math::
+
+   C_{M0}=\beta_O N_O,
+
+and for M1,
+
+.. math::
+
+   C_{M1}=\beta_O N_O+\sum_M \beta_M N_M.
+
+For a vacancy series with fixed cation composition and structures classified as
+ordinary oxides, the M1 cation terms cancel between parent and defect. The
+oxygen feature changes with the number of removed oxygen atoms. The actual
+structure is nevertheless classified for every selected minimum; an unsupported
+oxygen environment fails explicitly rather than silently receiving the ordinary
+oxide correction.
+
+Correction uncertainty
+----------------------
+
+Parent and defect corrections use the same fitted coefficients, so their
+uncertainties are correlated. Dopingflow therefore forms the reaction feature
+vector
+
+.. math::
+
+   \mathbf q_{vac}=\mathbf x_{def}-\mathbf x_{parent}
+
+and evaluates
+
+.. math::
+
+   \sigma_{vac}=\sqrt{\mathbf q_{vac}^{T}C_\beta\mathbf q_{vac}}.
+
+It does not add the parent and defect correction uncertainties independently in
+quadrature.
+
+Oxygen reference and double counting
+------------------------------------
+
+The fitted M0/M1 correction and the vacancy ``global`` /
+``chemistry-specific`` oxygen-reference calibration both use experimental
+formation-enthalpy information to correct oxygen-related systematic error.
+They must not be applied together.
+
+Therefore ``apply_fitted_energy_correction = true`` is rejected when::
+
+   oxygen_reference_mode = "global"
+
+or::
+
+   oxygen_reference_mode = "chemistry-specific"
+
+Use a raw same-backend oxygen reference, normally ``reference_file`` or
+``same_calculator``, when applying M0/M1 to the vacancy solid energies.
+
+The experimental source under ``[energy_correction]`` is still used. For
+example, ``experimental_source = "kingsbury"`` supplies the measurements from
+which the common M0/M1 model is fitted. The separate
+``oxygen_calibration_experimental_source`` vacancy setting is only relevant to
+the alternative ``global``/``chemistry-specific`` oxygen-reference route.
+
+Finite-temperature convention
+-----------------------------
+
+The M0/M1 coefficients are fitted to standard formation enthalpies near 298 K.
+When the fitted vacancy correction is active, the O2 gas thermochemistry uses a
+298 K enthalpy origin:
+
+.. math::
+
+   \Delta\mu_O(T,p)=\frac12[H_{O_2}(T)-H_{O_2}(298)-TS_{O_2}(T)]
+   +\frac12 k_BT\ln(p/p^\circ).
+
+The preserved raw finite-temperature result retains the original raw-O2
+thermochemical convention, while the active corrected result uses the 298 K
+origin above. This prevents the side-by-side ``raw`` column from being silently
+reinterpreted under the corrected reference convention.
+
+Solid vibrational, zero-point, magnetic, electronic, anharmonic, thermal-
+expansion and pV terms remain outside this screening model unless separately
+stated by the existing configurational-entropy option.
+
+Configurational entropy
+-----------------------
+
+M0/M1 is composition-linear. For configurations with the same vacancy count
+and the same ordinary-oxide classification, the correction is identical and
+therefore does not change their relative configurational energy spectrum. The
+existing ``none``, ``ideal`` and exact ``configurational`` vacancy entropy
+options can therefore continue to operate on the selected count minima.
+
+Outputs
+-------
+
+The existing vacancy tables remain the active outputs. Before replacing their
+cross-count thermodynamic values with the M0/M1-corrected values, dopingflow
+also saves uncorrected snapshots when those tables exist:
+
+- ``vacancy_static_minima_raw.csv/json``
+- ``vacancy_static_stability_intervals_raw.csv/json``
+- ``vacancy_static_best_counts_raw.csv/json``
+- ``vacancy_static_pressure_map_raw.csv/json``
+- ``vacancy_formation_free_energy_raw.csv/json``
+
+The active ``vacancy_static_minima.csv`` includes both raw and corrected
+information, including:
+
+- ``delta_energy_to_parent_raw_eV``
+- ``delta_energy_to_parent_eV`` (active corrected value)
+- ``energy_correction_eV``
+- ``parent_energy_correction_eV``
+- ``vacancy_reaction_correction_eV``
+- ``vacancy_reaction_correction_uncertainty_eV``
+- ``vacancy_reaction_feature_vector``
+- ``correction_model_family`` and ``correction_fit_id``
+- ``grand_potential_intercept_raw_eV``
+- ``grand_potential_intercept_eV`` (active corrected value)
+
+``vacancy_formation_free_energy.csv`` additionally reports raw and corrected
+finite-temperature vacancy free energies side by side. The existing active
+``vacancy_formation_free_energy_eV`` column is the corrected result when this
+option is enabled.
+
+Provenance
+----------
+
+The fitted model and vacancy energies must use compatible backend/model/task and
+relaxation provenance. The compatibility check includes optimizer, force
+tolerance (``fmax``), maximum relaxation steps, positive convergence, and
+available structure/energy provenance in addition to the backend/model/task.
+Known differences are rejected rather than silently applying a correction fit
+to a calculation produced under a different recorded protocol.
+
+Older vacancy calculations may predate package-version and relaxed-POSCAR
+hashes. They can be explicitly adopted with::
+
+   [vacancies]
+   allow_legacy_energy_correction_provenance = true
+
+This accepts missing historical fields only. It does not override a known
+backend/model/task or relaxation-setting mismatch. Keep the option false for
+new provenance-rich data whenever possible.

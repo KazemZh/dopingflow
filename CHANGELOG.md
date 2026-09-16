@@ -15,6 +15,21 @@ The format loosely follows semantic versioning.
 
 ## [Unreleased]
 ### Added
+- Optional user-controlled M0/M1 correction of oxygen-vacancy thermodynamics.
+  The vacancy reaction correction is evaluated as `C(defect)-C(parent)` with
+  correlated covariance propagation, raw values are retained, and the feature
+  is guarded against simultaneous global/chemistry-specific experimental oxygen
+  calibration to avoid double counting.
+- A dedicated Streamlit **Vacancy M0/M1 Energy Correction** page for enabling
+  the correction, reviewing the configured M0/M1/auto family, and explicitly
+  accepting legacy vacancy-energy provenance when older data require it.
+- Optional vacancy-resolved raw/corrected phase diagrams: the lowest-energy
+  relaxed structure at each oxygen-vacancy count can be added to the existing
+  phase-diagram entry set, with a compact `vacancy_energy_above_hull.csv` output
+  for plotting energy above hull versus vacancy count.
+- A dedicated Streamlit **Phase Diagram** page with exact-system selection,
+  raw/corrected hull switching, a two-dopant composition map, concentration
+  curves, decomposition tables, and vacancy-count energy-above-hull plots.
 - A second vacancy search method, ``search_method = "monte-carlo"``, that
   performs generic vacancy–anion and multi-species cation swaps on a configurable
   supercell, archives low-energy occupations, and feeds the established top-k
@@ -81,6 +96,10 @@ The format loosely follows semantic versioning.
 - Tests for flat formation configuration, metadata flattening, and per-system phase diagrams
 
 ### Changed
+- Phase-diagram GUI metadata matching now tolerates calculations copied from
+  another filesystem by matching the final `composition/candidate` path when
+  absolute path prefixes differ. Vacancy phase rows no longer break the normal
+  composition plot and are represented separately in the vacancy-hull view.
 - Vacancy oxygen-reference selection now exposes ``global`` and
   ``chemistry-specific`` calibrated modes alongside the existing
   ``reference_file``, ``same_calculator``, ``explicit``, and ``none`` modes.

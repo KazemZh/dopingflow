@@ -9,7 +9,10 @@ The GUI provides an interactive way to:
 - Monitor logs
 - Visualize generated structures
 - Explore the main database and per-system phase-diagram CSVs with Plotly
+- Inspect raw/corrected phase-diagram stability in composition space
+- Plot raw/corrected energy above hull against oxygen-vacancy count
 - Configure and run the unified vacancy workflow and explore its separate database
+- Optionally apply the fitted M0/M1 correction to vacancy thermodynamics
 - Choose Enumeration or Monte Carlo vacancy search with a configurable supercell
 - Run Monte Carlo isothermally or enable a high-temperature hold and cooling ramp
 - Compare relaxed parent, generated vacancy, and relaxed vacancy structures
@@ -31,8 +34,8 @@ From the project root:
 pip install -e ".[gui]"
 ```
 
-If the vacancy oxygen calibration should automatically use the curated
-experimental 298 K formation-enthalpy dataset, also install:
+If the vacancy oxygen calibration or experimental energy correction should use
+the curated experimental dataset, also install:
 
 ```bash
 pip install -e ".[corrections]"
@@ -55,6 +58,8 @@ streamlit run gui/app.py
 ```
 
 A local browser window will open automatically (usually at http://localhost:8501).
+Streamlit also discovers the files under `gui/pages/`, including the dedicated
+**Phase Diagram** and **Vacancy M0/M1 Energy Correction** pages.
 
 ---
 
@@ -91,7 +96,14 @@ with the new keys.
 
 These `[references]` oxygen controls are deliberately independent of the
 `[vacancies]` oxygen-reference mode, delta-mu grid, and T-pO2 mapping controls.
-The GUI defaults continue to preserve those vacancy-analysis settings unchanged.
+
+GUI-generated vacancy defaults now include the opt-in correction flags explicitly:
+
+```toml
+[vacancies]
+apply_fitted_energy_correction = false
+allow_legacy_energy_correction_provenance = false
+```
 
 ---
 
@@ -103,100 +115,33 @@ Graphical interface for:
 dopingflow run-all
 ```
 
-Supports:
-
-- Full workflow execution
-- Stage range execution
-- Single-stage execution
-- Full workflow including vacancies and vacancies-only execution
-- Optional overrides
-- Log monitoring
+Supports full workflow execution, stage ranges, individual stages, vacancies,
+optional overrides, and log monitoring.
 
 ---
 
 ### 3️⃣ Results Explorer
 
-Selects `results_database.csv`, the combined phase-diagram result, the vacancy
-database, or a custom CSV path and allows:
+The Results Explorer can load the main results database, phase-diagram output,
+vacancy-analysis tables, or a custom CSV.
 
-Choose **Phase diagram (energy above hull)** as the known result source, then
-select the dopant for the x-axis and the dopant defining the fixed-concentration
-curves. The matching co-doped system and compatible single-dopant boundary
-systems are selected automatically. Each connected point is the minimum-energy
-relaxed configuration at that composition, stars mark candidates on the convex
-hull, and the pristine host is shown at the origin.
+For the existing phase-diagram view, candidate metadata matching is now
+portable across machines: the plotting helper matches the final
+`composition/candidate` path components rather than requiring identical absolute
+path prefixes. This prevents copied calculations from failing merely because
+the original output came from another workstation or HPC filesystem.
 
-If corrected hull columns are present, the panel offers a Raw/Corrected switch.
-The corrected view comes from a separately rebuilt complete hull; it is not a
-post-hoc shift of raw energy above hull. The Input Builder keeps correction
-disabled by default. Its model selector offers `manual`, forced `m0`, forced
-`m1`, and `auto`. Manual mode exposes explicit correction terms. M0 is the
-ordinary-oxide O term; M1 adds only independently supported
-`oxide_cation:<Element>` terms, and auto mode falls back to parsimonious M0
-unless M1 clears the configured leave-one-out improvement and one-standard-error
-gates. `m1_elements = "workflow"` scopes candidate terms to the non-oxygen host
-and all configured dopants; an explicit element array is also supported.
+If corrected hull columns are present, the phase plot offers Raw/Corrected
+selection. The corrected view comes from a separately rebuilt complete hull; it
+is not a post-hoc shift of raw energy above hull.
 
-The calibration selector offers explicit `manifest` and complete
-`phase_resolved` modes. Phase-resolved selection retains all strict,
-non-generic ordinary oxide records whose non-oxygen elements are in the
-host-and-dopant scope and that have
-a curated `likely_mpid`. Missing structures can be fetched from the configured
-Materials Project OPTIMADE endpoint into an immutable hash-validated cache.
-Only geometry is fetched: calibration relaxation and hull filtering use the
-selected ML backend, and doped candidates are not rerelaxed. The advanced panel
-also exposes M1 compound/stoichiometry support, CV improvement, polyanion,
-uncertainty, same-backend hull, conditioning, and exact-model reuse controls.
-Disabling the hull filter writes an explicit `false` value rather than silently
-restoring the 0.10 eV/atom default.
+The phase-diagram backend also passes the candidate `Composition` to pymatgen's
+`get_decomposition()` API, avoiding the historical `PDEntry has no attribute
+get_atomic_fraction` failure caused by passing the entire `PDEntry` object.
 
-The correction panel compares the reference and candidate-relaxation
-backend/model/task settings. These must align, and package-version or local
-checkpoint changes require rebuilding references, refitting, and rerunning
-stale relaxed candidates. A correction-enabled sequential run performs fit or
-exact reuse once before its composition loop.
-
-The known-source selector also detects static vacancy composition minima, exact
-stability intervals, selected-condition best counts, and the
-temperature-pressure map. Dedicated filters cover actual composition, dynamic
-dopant percentages, vacancy count, ``delta_mu_O``, temperature, and ``pO2``.
-
-When the compact static-lattice tables are present, a dedicated
-``Vacancy thermodynamic plots`` panel provides interactive Plotly views of the
-grand-potential envelope, grand potential versus vacancy count, preferred count
-versus doping, the composition/oxygen-chemical-potential stability map, and an
-T-pO2 map. The first four plots retain their original ``delta_mu_O``-based
-definitions and controls. The T-pO2 tab has a standard-state selector, so that
-map can be viewed with the configured ``delta_mu_O_standard(T)`` correction
-or with the term intentionally omitted. Stability maps use fixed colors and
-categorical legends. The temperature-pressure title and annotation identify whether the gas mapping uses
-the NIST Shomate correction, a user table, or is approximate because the
-standard-state thermal correction was omitted.
-
-For calibrated oxygen-reference runs, every minima/pressure row records the
-calibration scope, target chemistry, number of accepted reference oxides and fit
-spread. `oxygen_calibration_report.json` provides the complete included/excluded
-reference audit trail. The `global` mode uses all eligible ordinary binary
-reference oxides; `chemistry-specific` refits using only oxides of the actual
-host and present dopants. Neither mode invents a missing oxide stoichiometry.
-
-The T-pO2 map combines the calibrated 298 K oxygen enthalpy reference with NIST
-O2 gas enthalpy/entropy and pressure corrections. The Input Builder also exposes
-`solid_configurational_entropy = "none"`, `"ideal"`, or `"configurational"`.
-The last option uses exact symmetry-orbit degeneracies and an explicit canonical
-partition function; it refuses sampled enumeration because those degeneracies are
-not exact. Entropy-aware runs also write `vacancy_formation_free_energy.csv/json`.
-Direct delta-mu plots remain static-lattice quantities.
-
-The Input Builder offers a continuous ``nist_shomate`` mode over 100--6000 K,
-alongside custom ``user_table`` and qualitative ``none`` modes.
-
-- Column selection
-- Interactive Plotly plotting
-- Data filtering
-- Scatter / line / bar plots
-
-Ideal for rapid exploration of screening results without writing analysis scripts.
+The vacancy thermodynamic panel provides grand-potential envelopes, preferred
+vacancy count, static stability intervals, T-pO2 maps, and vacancy formation
+free energies. These quantities remain distinct from energy above hull.
 
 ---
 
@@ -204,38 +149,137 @@ Ideal for rapid exploration of screening results without writing analysis script
 
 Visual inspection of generated structures using `py3Dmol`.
 
-Useful for:
+Useful for checking dopant placement, relaxed geometries, vacancy structures,
+and Monte Carlo outputs.
 
-- Checking dopant placement
-- Inspecting relaxed geometries
-- Quick sanity checks
-- Reviewing Monte Carlo stopping and move-acceptance diagnostics alongside its
-  generated and relaxed candidates
+---
+
+### Phase Diagram page
+
+The dedicated **Phase Diagram** page is the recommended interface for phase
+stability analysis. It reads `phase_diagram_results.csv` and, when available,
+`vacancy_energy_above_hull.csv`.
+
+It provides:
+
+- exact chemical-system selection;
+- Raw/Corrected hull selection;
+- a two-dopant composition map where marker color is energy above hull;
+- one-dimensional concentration curves;
+- stable-point highlighting;
+- decomposition tables;
+- corrected/raw energy above hull versus oxygen-vacancy count;
+- composition selection for vacancy-hull curves.
+
+The page also edits these `[phase_diagram]` options directly:
+
+```toml
+[phase_diagram]
+include_vacancy_minima = true
+vacancy_results_directory = "vacancy-selected"
+```
+
+After saving the settings, run:
+
+```bash
+dopingflow phase-diagram -c input.toml
+```
+
+The additional output is:
+
+```text
+vacancy_energy_above_hull.csv
+```
+
+For each cation composition, the file contains the lowest-energy relaxed
+structure at each investigated oxygen-vacancy count and its raw/corrected energy
+above hull and decomposition.
+
+A lower energy above hull after introducing vacancies means that the
+oxygen-deficient composition is closer to its closed-system decomposition hull.
+This does **not** mean the same thing as a negative vacancy formation free
+energy, and it is not yet an oxygen-open grand-potential hull.
+
+---
+
+### Vacancy M0/M1 Energy Correction page
+
+This page controls whether the fitted experimental formation-energy correction
+is also used inside the vacancy thermodynamic analysis.
+
+The common correction model is configured through the normal correction section,
+for example:
+
+```toml
+[energy_correction]
+enabled = true
+experimental_source = "kingsbury"
+model_family = "auto"
+correction_terms = ["oxide"]
+m1_elements = "workflow"
+calibration_selection = "phase_resolved"
+auto_fetch_phase_structures = true
+reuse_fitted = true
+```
+
+The vacancy page edits:
+
+```toml
+[vacancies]
+apply_fitted_energy_correction = true
+allow_legacy_energy_correction_provenance = false
+oxygen_reference_mode = "reference_file"
+```
+
+If `model_family = "auto"`, the family selected by `corrections-fit` is used.
+Run `refs-build`, `corrections-fit`, and then `vacancies` when fitting a new model.
+The vacancy stage reuses the fitted model rather than fitting a second one.
+
+The page blocks the invalid combination of a fitted M0/M1 vacancy correction
+with `oxygen_reference_mode = "global"` or `"chemistry-specific"`, because the
+two paths would reuse the same experimental formation-enthalpy information for
+oxygen-related calibration.
+
+When enabled, raw values remain available while the active vacancy
+cross-count thermodynamics use
+`ΔE_corrected = ΔE_raw + C(defect) - C(parent)`. The uncertainty is evaluated
+from the correlated reaction feature vector rather than by independently adding
+parent and defect correction errors.
+
+Correction application also validates the stored energy provenance. Known
+backend/model/task, optimizer, force-tolerance (`fmax`), maximum-step,
+convergence, or structure mismatches are rejected. The legacy-provenance option
+accepts missing historical metadata only; it does not override a known mismatch.
 
 ---
 
 ## ⚠️ Notes
 
-- The GUI assumes it is launched from the project root.
+- The GUI assumes it is launched from the project root unless another project
+  root is entered explicitly.
 - It uses the same `input.toml` as the CLI.
 - Large workflows are better executed from CLI or HPC systems.
 - The GUI is intended for development, testing, and interactive analysis.
+- Phase-diagram conclusions are only as complete as the competing phases
+  included in the calculation.
 
 ---
 
 ## Development
 
-GUI source files:
+Relevant GUI source files:
 
-```
+```text
 gui/
 ├── app.py
 ├── gui_config.py
+├── phase_diagram_plots.py
+├── pages/
+│   ├── Phase_Diagram.py
+│   └── Vacancy_Energy_Correction.py
 ├── io_project.py
 └── view_structure.py
 ```
-
-The layout and logic are defined in `app.py`.
 
 ---
 
