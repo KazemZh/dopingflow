@@ -1,18 +1,8 @@
 """Optional fitted M0/M1 corrections for oxygen-vacancy thermodynamics.
 
-The vacancy workflow historically compares raw relaxed ML solid energies with an
-oxygen reservoir.  This extension adds an explicit opt-in that applies the
-already fitted backend-specific M0/M1 correction to the parent and vacancy
-minima before cross-vacancy-count thermodynamics are evaluated.
-
-The correction is applied as a reaction correction,
-
-    Delta E_corr = Delta E_raw + C(defect) - C(parent),
-
-and its uncertainty is evaluated from the *difference* of the two feature
-vectors with the fitted covariance matrix.  This preserves the parameter
-correlations between parent and defect instead of treating their correction
-errors as independent.
+This module installs a small extension around the established vacancy static-
+thermodynamics parser/analyzer.  The feature is opt-in and reuses the fitted
+backend-specific M0/M1 correction; it does not fit a vacancy-specific model.
 """
 
 from __future__ import annotations
@@ -54,15 +44,17 @@ _ORIGINAL_ANALYZE = getattr(
     "_energy_correction_original_analyze",
     _base.analyze_static_vacancy_thermodynamics,
 )
-
 _DOUBLE_COUNTING_MODES = {"global", "chemistry-specific"}
+_KJ_PER_MOL_PER_EV = 96.4853321233
+_O2_H298_MINUS_H0_KJ_PER_MOL = 8.683
+_O_H298_MINUS_H0_EV = _O2_H298_MINUS_H0_KJ_PER_MOL / (2.0 * _KJ_PER_MOL_PER_EV)
 
 
 @dataclass(frozen=True)
 class EnergyCorrectedStaticVacancyThermodynamicsConfig(
     _base.StaticVacancyThermodynamicsConfig
 ):
-    """Enhanced vacancy config carrying only opt-in correction controls."""
+    """Vacancy thermodynamics plus explicit fitted-correction controls."""
 
     apply_fitted_energy_correction: bool = False
     correction_workflow_root: Path = Path(".")
@@ -81,11 +73,11 @@ def parse_static_vacancy_thermodynamics_config(
     if enabled and base_cfg.requested_oxygen_reference_mode in _DOUBLE_COUNTING_MODES:
         raise ValueError(
             "[vacancies].apply_fitted_energy_correction=true cannot be combined with "
-            "oxygen_reference_mode='global' or 'chemistry-specific'. Both use the "
-            "experimental formation-enthalpy information to correct the oxygen-related "
-            "systematic error and combining them would double count that calibration. "
-            "Use a raw same-backend oxygen reference (normally 'reference_file' or "
-            "'same_calculator') when applying the fitted M0/M1 correction."
+            "oxygen_reference_mode='global' or 'chemistry-specific'. Both use "
+            "experimental formation-enthalpy information to correct oxygen-related "
+            "systematic error, so combining them would double count the calibration. "
+            "Use a raw same-backend oxygen reference, normally 'reference_file' or "
+            "'same_calculator', when applying the fitted M0/M1 correction."
         )
 
     return EnergyCorrectedStaticVacancyThermodynamicsConfig(
@@ -124,6 +116,29 @@ def _write_pair(
     return csv_path, json_path
 
 
+def _snapshot_raw_outputs(
+    outputs: dict[str, Path], parent_root: Path
+) -> None:
+    """Preserve the pre-correction thermodynamic tables for direct comparison."""
+
+    stems = (
+        "vacancy_static_minima",
+        "vacancy_static_stability_intervals",
+        "vacancy_static_best_counts",
+        "vacancy_static_pressure_map",
+        "vacancy_formation_free_energy",
+    )
+    for stem in stems:
+        source = outputs.get(f"{stem}_json")
+        if source is None or not source.is_file():
+            continue
+        rows = json.loads(source.read_text(encoding="utf-8"))
+        raw_stem = f"{stem}_raw"
+        csv_path, json_path = _write_pair(parent_root, raw_stem, rows)
+        outputs[f"{raw_stem}_csv"] = csv_path
+        outputs[f"{raw_stem}_json"] = json_path
+
+
 def _as_bool(value: Any) -> bool:
     if isinstance(value, bool):
         return value
@@ -150,12 +165,7 @@ def _minimum_paths(
     parent_root: Path,
     row: dict[str, Any],
 ) -> tuple[Path, Path]:
-    """Resolve the relaxed POSCAR and metadata for one selected minimum.
-
-    Stored vacancy paths may point to the HPC filesystem where the calculation
-    was generated, so the standard local vacancy directory layout is used as a
-    fallback.
-    """
+    """Resolve one selected minimum even after an HPC tree was copied locally."""
 
     n_vacancies = int(row["n_vacancies"])
     parent_id = str(row.get("source_parent_id", "")).strip()
@@ -172,8 +182,8 @@ def _minimum_paths(
             )
         composition_directory = parts[-2]
     candidate_root = parent_root / composition_directory / candidate
-
     stored = _stored_file(parent_root, row.get("source_relaxed_poscar_path"))
+
     if n_vacancies == 0:
         parent_reference = candidate_root / "05_vacancies" / "parent_reference"
         source: dict[str, Any] = {}
@@ -183,7 +193,6 @@ def _minimum_paths(
                 source = json.loads(source_path.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
                 source = {}
-
         reused = _as_bool(source.get("parent_relaxation_reused", False))
         if reused:
             poscar = stored or candidate_root / "02_relax" / "POSCAR"
@@ -230,8 +239,7 @@ def _load_fitted_m0_m1_model(
     reference_data = json.loads(reference_path.read_text(encoding="utf-8"))
     validate_reference_energy_provenance(reference_data)
     signature = backend_signature_from_reference(reference_data, root=root)
-    fitted_path = model_path(root, signature)
-    model = load_correction_model(fitted_path)
+    model = load_correction_model(model_path(root, signature))
     validate_backend_compatibility(model, signature)
     validate_applicability_compatibility(model)
     _validate_active_model_semantics(model)
@@ -240,7 +248,7 @@ def _load_fitted_m0_m1_model(
             "Vacancy fitted-energy correction requires a fitted M0 or M1 model, but "
             f"the active artifact is family={model.model_family!r}. Configure "
             "[energy_correction].model_family as 'm0', 'm1', or 'auto', run "
-            "dopingflow corrections-fit, and then rerun vacancy analysis."
+            "dopingflow corrections-fit, and rerun vacancy analysis."
         )
     return model
 
@@ -250,14 +258,11 @@ def vacancy_reaction_correction(
     defect: CorrectionApplication,
     parent: CorrectionApplication,
 ) -> CorrectionApplication:
-    """Return C(defect)-C(parent) with fully correlated parameter uncertainty."""
+    """Return C(defect)-C(parent) with correlated parameter uncertainty."""
 
     vector = combine_feature_vectors(
         model.correction_terms,
-        (
-            (1.0, defect.feature_vector),
-            (-1.0, parent.feature_vector),
-        ),
+        ((1.0, defect.feature_vector), (-1.0, parent.feature_vector)),
     )
     matched = tuple(
         term
@@ -333,6 +338,7 @@ def _rebuild_static_selection_outputs(
         lines = sorted(grouped[key], key=lambda row: int(row["n_vacancies"]))
         if any(line.get("grand_potential_intercept_eV") is None for line in lines):
             continue
+
         for interval in _base.exact_stability_intervals(
             lines,
             cfg.delta_mu_O_min_eV,
@@ -398,20 +404,31 @@ def _rebuild_static_selection_outputs(
 def _annotate_finite_temperature_outputs(
     outputs: dict[str, Path], parent_root: Path
 ) -> None:
-    """Expose raw and corrected finite-T vacancy free energies side by side."""
+    """Add a raw value evaluated with the original raw-O2 thermal convention."""
 
-    json_path = outputs.get("vacancy_formation_free_energy_json")
-    if json_path is None or not json_path.is_file():
+    path = outputs.get("vacancy_formation_free_energy_json")
+    if path is None or not path.is_file():
         return
-    rows: list[dict[str, Any]] = json.loads(json_path.read_text(encoding="utf-8"))
+    rows: list[dict[str, Any]] = json.loads(path.read_text(encoding="utf-8"))
     for row in rows:
         raw_intercept = row.get("grand_potential_intercept_raw_eV")
-        thermal = row.get("oxygen_thermal_pressure_contribution_eV")
-        config = row.get("solid_configurational_free_energy_correction_eV", 0.0)
-        if raw_intercept is not None and thermal is not None:
-            raw_value = float(raw_intercept) + float(thermal) + float(config or 0.0)
-            row["vacancy_formation_free_energy_raw_eV"] = raw_value
+        if raw_intercept is not None:
             n_vacancies = int(row.get("n_vacancies", 0))
+            standard_delta = float(row.get("delta_mu_O_standard_eV_per_O", 0.0))
+            if str(row.get("oxygen_standard_state_mode", "")).lower() == "nist_shomate":
+                # Corrected M0/M1 finite-T output uses a 298 K enthalpy origin.
+                # Undo that origin shift for the side-by-side raw reference value.
+                standard_delta += _O_H298_MINUS_H0_EV
+            pressure_delta = float(row.get("delta_mu_O_pressure_eV_per_O", 0.0))
+            config_term = float(
+                row.get("solid_configurational_free_energy_correction_eV", 0.0) or 0.0
+            )
+            raw_value = (
+                float(raw_intercept)
+                + n_vacancies * (standard_delta + pressure_delta)
+                + config_term
+            )
+            row["vacancy_formation_free_energy_raw_eV"] = raw_value
             row["vacancy_formation_free_energy_raw_per_vacancy_eV"] = (
                 raw_value / n_vacancies if n_vacancies else None
             )
@@ -432,6 +449,7 @@ def _update_metadata(
     outputs: dict[str, Path],
     model: CorrectionModel,
     allow_legacy: bool,
+    oxygen_standard_state_mode: str,
 ) -> None:
     for key in ("metadata", "static_metadata"):
         path = outputs.get(key)
@@ -456,7 +474,9 @@ def _update_metadata(
                     "global and chemistry-specific oxygen calibration are forbidden "
                     "when fitted M0/M1 vacancy correction is enabled"
                 ),
-                "finite_T_oxygen_enthalpy_origin_K": 298.15,
+                "finite_T_oxygen_enthalpy_origin_K": (
+                    298.15 if oxygen_standard_state_mode == "nist_shomate" else None
+                ),
             }
         )
         path.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
@@ -476,7 +496,9 @@ def _apply_correction_to_outputs(
     if not minima:
         return outputs
 
+    _snapshot_raw_outputs(outputs, parent_root)
     model = _load_fitted_m0_m1_model(cfg)
+
     grouped: dict[str, list[dict[str, Any]]] = {}
     for row in minima:
         grouped.setdefault(str(row["actual_composition_key"]), []).append(row)
@@ -511,16 +533,16 @@ def _apply_correction_to_outputs(
         for line in lines:
             defect_application, defect_provenance, _ = application(line)
             reaction = vacancy_reaction_correction(
-                model,
-                defect_application,
-                parent_application,
+                model, defect_application, parent_application
             )
             n_vacancies = int(line["n_vacancies"])
             raw_delta = float(line.get("delta_energy_to_parent_eV", 0.0))
-            corrected_delta = 0.0 if n_vacancies == 0 else raw_delta + reaction.correction_eV
+            corrected_delta = (
+                0.0
+                if n_vacancies == 0
+                else raw_delta + reaction.correction_eV
+            )
             raw_energy = float(line["energy_relaxed_min_eV"])
-            corrected_energy = raw_energy + defect_application.correction_eV
-            parent_corrected_energy = parent_raw_energy + parent_application.correction_eV
             mu = line.get("mu_O_reference_eV")
             raw_intercept = line.get("grand_potential_intercept_eV")
             corrected_intercept = (
@@ -548,15 +570,17 @@ def _apply_correction_to_outputs(
                     "grand_potential_intercept_raw_eV": raw_intercept,
                     "energy_correction_eV": defect_application.correction_eV,
                     "parent_energy_correction_eV": parent_application.correction_eV,
-                    "energy_corrected_min_eV": corrected_energy,
-                    "parent_energy_corrected_min_eV": parent_corrected_energy,
+                    "energy_corrected_min_eV": (
+                        raw_energy + defect_application.correction_eV
+                    ),
+                    "parent_energy_corrected_min_eV": (
+                        parent_raw_energy + parent_application.correction_eV
+                    ),
                     "vacancy_reaction_correction_eV": reaction.correction_eV,
                     "vacancy_reaction_correction_uncertainty_eV": (
                         reaction.uncertainty_eV
                     ),
-                    "correction_feature_vector": list(
-                        defect_application.feature_vector
-                    ),
+                    "correction_feature_vector": list(defect_application.feature_vector),
                     "parent_correction_feature_vector": list(
                         parent_application.feature_vector
                     ),
@@ -570,8 +594,7 @@ def _apply_correction_to_outputs(
                     "parent_correction_provenance_assumptions": parent_provenance.get(
                         "assumptions", []
                     ),
-                    # Active thermodynamic quantities become corrected while the
-                    # raw values remain explicitly available above.
+                    # These established fields become the active corrected values.
                     "delta_energy_to_parent_eV": corrected_delta,
                     "grand_potential_intercept_eV": corrected_intercept,
                     "grand_potential_intercept_per_vacancy_eV": (
@@ -590,9 +613,9 @@ def _apply_correction_to_outputs(
         outputs=outputs,
     )
 
-    # A fitted M0/M1 model is calibrated to standard formation enthalpies near
-    # 298 K. Rebuild finite-T outputs using the same 298 K gas enthalpy origin
-    # used by the experimentally calibrated vacancy reference path.
+    # M0/M1 is calibrated against standard formation enthalpies near 298 K, so
+    # corrected finite-T results use the 298 K gas enthalpy origin. Raw snapshots
+    # above retain the original uncorrected convention.
     outputs = _base.augment_vacancy_formation_free_energy(
         outputs=outputs,
         rows=rows,
@@ -605,6 +628,7 @@ def _apply_correction_to_outputs(
         outputs=outputs,
         model=model,
         allow_legacy=cfg.allow_legacy_energy_correction_provenance,
+        oxygen_standard_state_mode=cfg.oxygen_standard_state_mode,
     )
     return outputs
 
@@ -660,10 +684,6 @@ def install_extensions() -> None:
     )
     _base.parse_vacancy_analysis_config = parse_static_vacancy_thermodynamics_config
     _base.analyze_static_vacancy_thermodynamics = analyze_static_vacancy_thermodynamics
-    _base.StaticVacancyThermodynamicsConfig = (
-        EnergyCorrectedStaticVacancyThermodynamicsConfig
-    )
-    _base.VacancyAnalysisConfig = EnergyCorrectedStaticVacancyThermodynamicsConfig
     _base._energy_correction_extension_installed = True
 
 
