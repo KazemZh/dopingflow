@@ -12,6 +12,7 @@ The GUI provides an interactive way to:
 - Inspect raw/corrected phase-diagram stability in composition space
 - Plot raw/corrected energy above hull against oxygen-vacancy count
 - Configure and run the unified vacancy workflow and explore its separate database
+- Optionally apply the fitted M0/M1 correction to vacancy thermodynamics
 - Choose Enumeration or Monte Carlo vacancy search with a configurable supercell
 - Run Monte Carlo isothermally or enable a high-temperature hold and cooling ramp
 - Compare relaxed parent, generated vacancy, and relaxed vacancy structures
@@ -57,8 +58,8 @@ streamlit run gui/app.py
 ```
 
 A local browser window will open automatically (usually at http://localhost:8501).
-Streamlit also discovers `gui/pages/Phase_Diagram.py`, so a dedicated **Phase
-Diagram** page appears in the app navigation.
+Streamlit also discovers the files under `gui/pages/`, including the dedicated
+**Phase Diagram** and **Vacancy M0/M1 Energy Correction** pages.
 
 ---
 
@@ -193,6 +194,35 @@ energy, and it is not yet an oxygen-open grand-potential hull.
 
 ---
 
+### Vacancy M0/M1 Energy Correction page
+
+This page controls whether the fitted experimental formation-energy correction
+is also used inside the vacancy thermodynamic analysis.
+
+It edits:
+
+```toml
+[vacancies]
+apply_fitted_energy_correction = true
+allow_legacy_energy_correction_provenance = false
+```
+
+The selected M0/M1 family remains controlled by `[energy_correction]`. If
+`model_family = "auto"`, the family selected by `corrections-fit` is used.
+
+The page blocks the invalid combination of a fitted M0/M1 vacancy correction
+with `oxygen_reference_mode = "global"` or `"chemistry-specific"`, because the
+two paths would reuse the same experimental formation-enthalpy information for
+oxygen-related calibration.
+
+When enabled, raw values remain available while the active vacancy
+cross-count thermodynamics use
+`ΔE_corrected = ΔE_raw + C(defect) - C(parent)`. The uncertainty is evaluated
+from the correlated reaction feature vector rather than by independently adding
+parent and defect correction errors.
+
+---
+
 ## ⚠️ Notes
 
 - The GUI assumes it is launched from the project root unless another project
@@ -215,7 +245,8 @@ gui/
 ├── gui_config.py
 ├── phase_diagram_plots.py
 ├── pages/
-│   └── Phase_Diagram.py
+│   ├── Phase_Diagram.py
+│   └── Vacancy_Energy_Correction.py
 ├── io_project.py
 └── view_structure.py
 ```
