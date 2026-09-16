@@ -32,6 +32,9 @@ sequential_structures/
 Mn*/
 alloy_hull_summary.json
 phase_diagrams/
+vacancy-selected/
+Monte-carlo-vacancies/
+
 
 # IDE
 .vscode/
@@ -45,4 +48,6 @@ docs/build/
 todo.txt
 reports/
 
-Monte-carlo-vacancies/
+
+# Tools
+analysis/
