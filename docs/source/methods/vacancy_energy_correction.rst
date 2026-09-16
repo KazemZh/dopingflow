@@ -112,6 +112,11 @@ When the fitted vacancy correction is active, the O2 gas thermochemistry uses a
    \Delta\mu_O(T,p)=\frac12[H_{O_2}(T)-H_{O_2}(298)-TS_{O_2}(T)]
    +\frac12 k_BT\ln(p/p^\circ).
 
+The preserved raw finite-temperature result retains the original raw-O2
+thermochemical convention, while the active corrected result uses the 298 K
+origin above. This prevents the side-by-side ``raw`` column from being silently
+reinterpreted under the corrected reference convention.
+
 Solid vibrational, zero-point, magnetic, electronic, anharmonic, thermal-
 expansion and pV terms remain outside this screening model unless separately
 stated by the existing configurational-entropy option.
@@ -128,9 +133,18 @@ options can therefore continue to operate on the selected count minima.
 Outputs
 -------
 
-The existing vacancy tables remain the main outputs. When the option is active,
-``vacancy_static_minima.csv`` includes both raw and corrected information,
-including:
+The existing vacancy tables remain the active outputs. Before replacing their
+cross-count thermodynamic values with the M0/M1-corrected values, dopingflow
+also saves uncorrected snapshots when those tables exist:
+
+- ``vacancy_static_minima_raw.csv/json``
+- ``vacancy_static_stability_intervals_raw.csv/json``
+- ``vacancy_static_best_counts_raw.csv/json``
+- ``vacancy_static_pressure_map_raw.csv/json``
+- ``vacancy_formation_free_energy_raw.csv/json``
+
+The active ``vacancy_static_minima.csv`` includes both raw and corrected
+information, including:
 
 - ``delta_energy_to_parent_raw_eV``
 - ``delta_energy_to_parent_eV`` (active corrected value)
@@ -143,7 +157,7 @@ including:
 - ``grand_potential_intercept_raw_eV``
 - ``grand_potential_intercept_eV`` (active corrected value)
 
-``vacancy_formation_free_energy.csv`` additionally reports the raw and corrected
+``vacancy_formation_free_energy.csv`` additionally reports raw and corrected
 finite-temperature vacancy free energies side by side. The existing active
 ``vacancy_formation_free_energy_eV`` column is the corrected result when this
 option is enabled.
