@@ -170,24 +170,35 @@ Or run the complete pipeline:
 dopingflow run-all -c input.toml
 ```
 
-The unified `vacancies` command determines a continuous charge-based oxygen-
-vacancy range, searches configurations by symmetry enumeration or Monte Carlo,
-and relaxes/reranks the top-k at each fixed vacancy count with one shared M3GNet,
-UMA, MACE, or GRACE calculator. It uses one flat `[vacancies]` section. To append it to
-the normal pipeline, run `dopingflow run-all -c input.toml --until vacancies`.
-Results are written separately to `<structure.outdir>/vacancies_database.csv`.
-Comparing different vacancy counts thermodynamically requires an oxygen chemical
-potential; raw ML total-energy differences alone are not vacancy formation energies.
+The unified `vacancies` command determines a charge-based oxygen-vacancy range
+(or uses an explicit `vacancy_counts` list), searches configurations by symmetry
+enumeration or Monte Carlo, and relaxes/reranks the top-k at each fixed vacancy
+count. The final/reference calculator may be M3GNet, UMA, MACE, or GRACE; Monte
+Carlo can optionally use a separate fast calculator for occupation-search
+energies. It uses one flat `[vacancies]` section. To append it to the normal
+pipeline, run `dopingflow run-all -c input.toml --until vacancies`. Results are
+written separately to `<structure.outdir>/vacancies_database.csv`. Comparing
+different vacancy counts thermodynamically requires an oxygen chemical potential;
+raw ML total-energy differences alone are not vacancy formation energies.
 
 The symmetry search remains the default. A Metropolis Monte Carlo alternative can
 jointly redistribute vacancies and any number of cation/dopant species on a chosen
 supercell, archive low-energy unique occupations, then use the normal top-k
-relaxation and relaxed-energy reranking pipeline:
+relaxation and relaxed-energy reranking pipeline. For example, GRACE can screen a
+large occupation space while MACE remains the final thermodynamic calculator:
 
 ```toml
 [vacancies]
 search_method = "monte-carlo"       # default: "enumeration"
-supercell = [2, 2, 1]
+supercell = [2, 1, 1]
+vacancy_counts = [1, 2]              # optional explicit research-design counts
+
+mc_backend = "grace"
+mc_model = "GRACE-1L-OMAT"
+mc_task = ""
+mc_device = "cuda"
+mc_gpu_id = 0
+
 mc_initial_temperature_K = 1500.0
 mc_annealing = true
 mc_annealing_hold_steps = 500
@@ -203,13 +214,25 @@ mc_vacancy_move_weight = 0.5
 sample_seed = 42
 sample_max_saved = 100
 topk_per_vacancy_count = 15
+
+# Final/reference calculator used for top-k relaxation and thermodynamics
+backend = "mace"
+model = "mh-1"
+task = "matpes_r2scan"
+device = "cuda"
+gpu_id = 0
 ```
 
-Monte Carlo single points use the selected vacancy `backend`, `model`, `task`, and
-`device` (M3GNet, UMA, MACE, or GRACE). Relaxation uses the selected workflow
-optimizer and cell-relaxation settings. Per-count `monte_carlo_summary.json` files
-record stopping and move acceptance statistics; candidates retain the established
-`00_generate`/`01_scan`/`02_relax` layout.
+If the `mc_*` calculator keys are omitted, Monte Carlo inherits the final vacancy
+calculator exactly as before. When they are supplied, the MC archive and top-k
+selection use the dedicated search energies, while the selected structures are
+relaxed and reranked with the ordinary `backend`/`model`/`task` calculator.
+Search-energy provenance is recorded separately in `01_scan/meta.json`,
+`ranking_scan.csv`, `vacancy_results.*`, and `monte_carlo_summary.json`; a
+cross-backend search-to-relax energy difference is not reported as though both
+energies came from the same model. Changing the explicit vacancy counts or MC
+calculator participates in the vacancy fingerprint, so incompatible completed
+searches are not silently reused.
 
 With `mc_annealing = true`, the schedule holds `mc_initial_temperature_K` for
 `mc_annealing_hold_steps`, cools linearly to `mc_temperature_K` over
@@ -497,6 +520,7 @@ After launching, a local browser window will open automatically.
 │       ├── vacancy_analysis.py
 │       ├── vacancy_configurational_thermodynamics.py
 │       ├── vacancy_energy_correction_extensions.py
+│       ├── vacancy_mc_extensions.py
 │       ├── vacancy_monte_carlo.py
 │       ├── vacancy_static_thermodynamics.py
 │       └── utils
@@ -509,6 +533,7 @@ After launching, a local browser window will open automatically.
     ├── test_cli.py
     ├── test_generate_minimal.py
     ├── test_vacancy_energy_correction.py
+    ├── test_vacancy_mc_extensions.py
     ├── test_vacancy_phase_diagram_extension.py
     └── test_imports.py
 
