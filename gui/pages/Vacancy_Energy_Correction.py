@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 import toml
 
@@ -123,3 +125,124 @@ st.caption(
     "With resume/skip enabled, existing vacancy screening and relaxations are reused; "
     "the thermodynamic tables are rebuilt from the available vacancy database."
 )
+
+
+def _vacancy_results_root() -> Path:
+    if str(vacancies.get("parent_source", "")).strip() == "directory":
+        value = str(vacancies.get("parent_directory", "")).strip()
+        if value:
+            path = Path(value).expanduser()
+            return path.resolve() if path.is_absolute() else (project_root / path).resolve()
+    outdir = str((cfg.get("structure", {}) or {}).get("outdir", "random_structures"))
+    return (project_root / outdir).resolve()
+
+
+st.divider()
+st.subheader("Raw vs corrected vacancy free energy")
+results_root = _vacancy_results_root()
+free_energy_path = results_root / "vacancy_formation_free_energy.csv"
+
+if not free_energy_path.exists():
+    st.info(
+        "No vacancy_formation_free_energy.csv was found yet. Run the vacancy analysis "
+        "after saving the settings above."
+    )
+else:
+    try:
+        free_energy = pd.read_csv(free_energy_path, low_memory=False)
+    except Exception as exc:
+        st.error(f"Could not read {free_energy_path}: {exc}")
+    else:
+        required = {
+            "actual_composition_key",
+            "n_vacancies",
+            "temperature_K",
+            "log10_oxygen_partial_pressure_bar",
+        }
+        if not required.issubset(free_energy.columns):
+            st.warning("The vacancy free-energy file does not contain the expected finite-T columns.")
+        else:
+            compositions = sorted(
+                free_energy["actual_composition_key"].dropna().astype(str).unique()
+            )
+            composition = st.selectbox(
+                "Composition",
+                compositions,
+                key="vac_corr_plot_composition",
+            )
+            subset = free_energy[
+                free_energy["actual_composition_key"].astype(str) == composition
+            ].copy()
+            temperatures = sorted(subset["temperature_K"].dropna().astype(float).unique())
+            temperature = st.selectbox(
+                "Temperature (K)",
+                temperatures,
+                key="vac_corr_plot_temperature",
+            )
+            subset = subset[subset["temperature_K"].astype(float) == float(temperature)]
+            pressures = sorted(
+                subset["log10_oxygen_partial_pressure_bar"].dropna().astype(float).unique()
+            )
+            pressure = st.selectbox(
+                "log10(pO2 / bar)",
+                pressures,
+                key="vac_corr_plot_pressure",
+            )
+            selected = subset[
+                subset["log10_oxygen_partial_pressure_bar"].astype(float) == float(pressure)
+            ].sort_values("n_vacancies")
+
+            figure = go.Figure()
+            if "vacancy_formation_free_energy_raw_eV" in selected.columns:
+                figure.add_trace(
+                    go.Scatter(
+                        x=selected["n_vacancies"],
+                        y=selected["vacancy_formation_free_energy_raw_eV"],
+                        mode="lines+markers",
+                        name="Raw",
+                    )
+                )
+            corrected_column = (
+                "vacancy_formation_free_energy_corrected_eV"
+                if "vacancy_formation_free_energy_corrected_eV" in selected.columns
+                else "vacancy_formation_free_energy_eV"
+            )
+            if corrected_column in selected.columns:
+                figure.add_trace(
+                    go.Scatter(
+                        x=selected["n_vacancies"],
+                        y=selected[corrected_column],
+                        mode="lines+markers",
+                        name="M0/M1 corrected" if "corrected" in corrected_column else "Active",
+                    )
+                )
+            figure.update_layout(
+                title=(
+                    f"{composition}: vacancy free energy at T={float(temperature):g} K, "
+                    f"log10(pO2/bar)={float(pressure):g}"
+                ),
+                xaxis_title="Number of oxygen vacancies",
+                yaxis_title="Vacancy formation free energy (eV)",
+                template="plotly_white",
+            )
+            st.plotly_chart(figure, use_container_width=True)
+
+            table_columns = [
+                column
+                for column in (
+                    "n_vacancies",
+                    "vacancy_formation_free_energy_raw_eV",
+                    "vacancy_formation_free_energy_corrected_eV",
+                    "vacancy_reaction_correction_eV",
+                    "vacancy_reaction_correction_uncertainty_eV",
+                    "correction_model_family",
+                    "correction_fit_id",
+                )
+                if column in selected.columns
+            ]
+            if table_columns:
+                st.dataframe(
+                    selected[table_columns],
+                    use_container_width=True,
+                    hide_index=True,
+                )
