@@ -18,7 +18,7 @@ The workflow integrates:
 - Formation energy calculations using configurable thermodynamic reference schemes
 - Optional backend-specific formation-energy corrections fitted to experimental data
 - Restricted one-dimensional alloy convex hulls and full multicomponent phase diagrams
-- Oxygen-vacancy screening, thermodynamics, and optional vacancy-resolved closed-system energy-above-hull analysis
+- Oxygen-vacancy screening, thermodynamics, optional M0/M1-corrected vacancy energetics, and optional vacancy-resolved closed-system energy-above-hull analysis
 - Bandgap prediction using ALIGNN
 - Automated database collection
 - Fully reproducible, stage-isolated execution
@@ -40,6 +40,7 @@ User Guide
    required_inputs
    input_file
    input_file_phase_diagram
+   input_file_vacancy_correction
 
 
 Workflow Stages
@@ -66,6 +67,7 @@ Each stage can be executed independently and uses its own configuration block.
    methods/alloy_hull
    methods/phase_diagram
    methods/vacancy_energy_above_hull
+   methods/vacancy_energy_correction
    methods/vacancies
    methods/surfaces
 
