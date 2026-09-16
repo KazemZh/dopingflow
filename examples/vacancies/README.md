@@ -50,9 +50,68 @@ The stopping, archive, tolerance, and move-weight controls are commented in
 `input.toml`. Each vacancy-count directory records the resolved schedule and
 acceptance statistics in `monte_carlo_summary.json`.
 
+## Optional M0/M1 correction for vacancy thermodynamics
+
+The checked-in example now includes the complete opt-in correction block, but
+keeps it disabled so the example remains usable as a raw vacancy-only input:
+
+```toml
+[energy_correction]
+enabled = false
+experimental_source = "kingsbury"
+model_family = "auto"
+correction_terms = ["oxide"]
+m1_elements = "workflow"
+calibration_selection = "phase_resolved"
+auto_fetch_phase_structures = true
+reuse_fitted = true
+```
+
+To apply the same fitted backend-specific M0/M1 model used by corrected
+formation energies and the corrected phase diagram to the vacancy parent and
+vacancy minima, set `enabled = true`, fit the model first, and then enable the
+vacancy option:
+
+```toml
+[vacancies]
+static_thermodynamic_analysis = true
+apply_fitted_energy_correction = true
+allow_legacy_energy_correction_provenance = false
+oxygen_reference_mode = "reference_file"
+oxygen_reference_file = "reference_structures/reference_energies.json"
+```
+
+Run in this order:
+
+```bash
+dopingflow refs-build -c input.toml
+dopingflow corrections-fit -c input.toml
+dopingflow vacancies -c input.toml
+```
+
+The vacancy correction is
+`ΔE_corrected = ΔE_raw + C(defect) - C(parent)`. It reuses the already fitted
+model and therefore preserves one correction definition across ordinary bulk
+formation/phase-diagram analysis and vacancy thermodynamics.
+
+The correction fit and the corrected candidate/vacancy energies must have
+compatible provenance. Known differences in backend, model, task, optimizer,
+force tolerance (`fmax`), or `max_steps` are rejected. The legacy-provenance
+option only accepts fields that were not recorded by older runs; it does not
+waive a known mismatch.
+
+The fitted M0/M1 vacancy correction must **not** be combined with
+`oxygen_reference_mode = "global"` or `"chemistry-specific"`, because those
+oxygen-reference modes also use experimental formation enthalpies and the two
+routes would double count oxygen-related calibration. Use a raw same-backend
+reservoir such as `reference_file` or `same_calculator` when M0/M1 correction is
+active.
+
+## Alternative calibrated oxygen reference
+
 The checked-in example keeps the backward-compatible `reference_file` oxygen
-reference so it can be used with an existing `reference_energies.json`. The same
-flat section now also supports:
+reference so it can be used with an existing `reference_energies.json`. When the
+M0/M1 vacancy correction is **off**, the same flat section also supports:
 
 ```toml
 oxygen_reference_mode = "global"
