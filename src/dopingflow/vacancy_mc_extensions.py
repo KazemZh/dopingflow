@@ -329,6 +329,14 @@ def _rewrite_mc_artifacts(
         )
         _base._write_csv(group_dir / "ranking_scan.csv", group_rows)
 
+        relaxed_rows = [
+            row for row in group_rows if row.get("energy_relaxed_total_eV") is not None
+        ]
+        relaxed_rows.sort(
+            key=lambda row: (float(row["energy_relaxed_total_eV"]), row["configuration_id"])
+        )
+        _base._write_csv(group_dir / "ranking_relax.csv", relaxed_rows)
+
         summary_path = group_dir / "monte_carlo_summary.json"
         summary = _base._load_json(summary_path)
         if summary:
