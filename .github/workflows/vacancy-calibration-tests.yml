@@ -8,11 +8,13 @@ on:
       - "CHANGELOG.md"
       - "examples/vacancies/**"
       - "src/dopingflow/__init__.py"
+      - "src/dopingflow/cli.py"
       - "src/dopingflow/oxygen_calibration.py"
       - "src/dopingflow/vacancy_static_thermodynamics.py"
       - "src/dopingflow/vacancy_configurational_thermodynamics.py"
       - "src/dopingflow/vacancy_energy_correction_extensions.py"
       - "src/dopingflow/vacancy_mc_extensions.py"
+      - "src/dopingflow/vacancy_mc_staged.py"
       - "src/dopingflow/vacancy_analysis.py"
       - "src/dopingflow/vacancies.py"
       - "src/dopingflow/phase_diagram.py"
@@ -30,6 +32,7 @@ on:
       - "tests/test_vacancy_configurational_thermodynamics.py"
       - "tests/test_vacancy_energy_correction.py"
       - "tests/test_vacancy_mc_extensions.py"
+      - "tests/test_vacancy_mc_staged.py"
       - "tests/test_vacancy_phase_diagram_extension.py"
       - "tests/test_phase_diagram_gui_plots.py"
       - "tests/test_phase_diagram_systems.py"
@@ -42,11 +45,13 @@ on:
       - "CHANGELOG.md"
       - "examples/vacancies/**"
       - "src/dopingflow/__init__.py"
+      - "src/dopingflow/cli.py"
       - "src/dopingflow/oxygen_calibration.py"
       - "src/dopingflow/vacancy_static_thermodynamics.py"
       - "src/dopingflow/vacancy_configurational_thermodynamics.py"
       - "src/dopingflow/vacancy_energy_correction_extensions.py"
       - "src/dopingflow/vacancy_mc_extensions.py"
+      - "src/dopingflow/vacancy_mc_staged.py"
       - "src/dopingflow/vacancy_analysis.py"
       - "src/dopingflow/vacancies.py"
       - "src/dopingflow/phase_diagram.py"
@@ -64,6 +69,7 @@ on:
       - "tests/test_vacancy_configurational_thermodynamics.py"
       - "tests/test_vacancy_energy_correction.py"
       - "tests/test_vacancy_mc_extensions.py"
+      - "tests/test_vacancy_mc_staged.py"
       - "tests/test_vacancy_phase_diagram_extension.py"
       - "tests/test_phase_diagram_gui_plots.py"
       - "tests/test_phase_diagram_systems.py"
@@ -96,9 +102,11 @@ jobs:
             gui/phase_diagram_plots.py \
             gui/pages/Phase_Diagram.py \
             gui/pages/Vacancy_Energy_Correction.py \
+            src/dopingflow/cli.py \
             src/dopingflow/vacancy_configurational_thermodynamics.py \
             src/dopingflow/vacancy_energy_correction_extensions.py \
             src/dopingflow/vacancy_mc_extensions.py \
+            src/dopingflow/vacancy_mc_staged.py \
             src/dopingflow/phase_diagram_convergence_extensions.py
           pytest -q \
             tests/test_oxygen_calibration.py \
@@ -106,6 +114,7 @@ jobs:
             tests/test_vacancy_configurational_thermodynamics.py \
             tests/test_vacancy_energy_correction.py \
             tests/test_vacancy_mc_extensions.py \
+            tests/test_vacancy_mc_staged.py \
             tests/test_vacancy_phase_diagram_extension.py \
             tests/test_phase_diagram_gui_plots.py \
             tests/test_phase_diagram_systems.py \
