@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import tomllib
 
 import pytest
 
@@ -132,3 +133,22 @@ def test_m1_cation_terms_cancel_for_fixed_cation_composition() -> None:
     assert reaction.feature_vector == pytest.approx((-2.0, 0.0, 0.0))
     assert reaction.correction_eV == pytest.approx(0.40)
     assert reaction.uncertainty_eV == pytest.approx(0.20)
+
+
+def test_checked_in_vacancy_example_documents_correction_opt_in() -> None:
+    root = Path(__file__).resolve().parents[1]
+    raw = tomllib.loads((root / "examples" / "vacancies" / "input.toml").read_text())
+
+    correction = raw["energy_correction"]
+    assert correction["enabled"] is False
+    assert correction["experimental_source"] == "kingsbury"
+    assert correction["model_family"] == "auto"
+    assert correction["correction_terms"] == ["oxide"]
+    assert correction["m1_elements"] == "workflow"
+    assert correction["calibration_selection"] == "phase_resolved"
+    assert correction["auto_fetch_phase_structures"] is True
+
+    vacancies = raw["vacancies"]
+    assert vacancies["apply_fitted_energy_correction"] is False
+    assert vacancies["allow_legacy_energy_correction_provenance"] is False
+    assert vacancies["oxygen_reference_mode"] == "reference_file"
