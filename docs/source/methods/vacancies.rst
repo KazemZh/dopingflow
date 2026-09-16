@@ -2,24 +2,29 @@ Oxygen-Vacancy Workflow
 =======================
 
 ``dopingflow vacancies -c input.toml`` is the only public vacancy command. It
-discovers filtered relaxed parents, determines charge-based vacancy counts,
-expands the configured supercell, searches arrangements by symmetry enumeration
-or Metropolis Monte Carlo, evaluates single-point ML energies, selects the
+discovers filtered relaxed parents, determines charge-based vacancy counts or
+uses explicitly requested counts, expands the configured supercell, searches
+arrangements by symmetry enumeration or Metropolis Monte Carlo, selects the
 lowest-energy structures independently at each vacancy count, relaxes that
 top-k set, reranks it, and writes parent-level and global summaries.
 
 Configuration
 -------------
 
-All settings live in one flat ``[vacancies]`` table. Screening and relaxation
-share one resolved ``backend``, ``model``, ``task`` and ``device`` combination.
-The backend may be M3GNet, UMA, MACE, or GRACE.
+All settings live in one flat ``[vacancies]`` table. The ordinary
+``backend``, ``model``, ``task`` and ``device`` combination is the final and
+reference calculator used for parent consistency calculations, top-k
+relaxations, thermodynamic analysis, and correction provenance. The backend may
+be M3GNet, UMA, MACE, or GRACE. Monte Carlo may optionally use a separate
+``mc_backend``/``mc_model``/``mc_task``/``mc_device`` calculator only for the
+Metropolis occupation-search energies; when those keys are omitted it inherits
+the final calculator for backward compatibility.
 
 Only chemistry-specific inputs are required: ``host_species`` and the parallel
 ``oxidation_state_elements``/``oxidation_state_values`` arrays. In addition,
 ``parent_directory`` is required only when ``parent_source = "directory"``.
-All other keys have runtime defaults. In particular, the calculator defaults to
-``backend = "m3gnet"``, ``model = "default"``, ``task = ""``, and
+All other keys have runtime defaults. In particular, the final calculator
+defaults to ``backend = "m3gnet"``, ``model = "default"``, ``task = ""``, and
 ``device = "cpu"``. Backend-specific blank model/task values are normalized as
 documented in :doc:`../input_file`; for example, MACE ``mh-1`` with a blank task
 uses ``omat_pbe``. The complete example below deliberately selects MACE/CUDA
@@ -44,6 +49,8 @@ and therefore is not a listing of default values.
 
    extra_vacancies = 0
    max_vacancies_cap = 8
+   # Optional explicit research-design override:
+   # vacancy_counts = [1, 2]
    symprec = 1.0e-3
    angle_tolerance = 5.0
    mapping_tolerance = 1.0
@@ -93,6 +100,13 @@ the continuous range from one through the largest upper count, then applies
 sites. Residual charge is retained for every scenario and count; exact
 compensation is marked only when it is zero.
 
+For a study where the vacancy counts are chosen explicitly rather than inferred
+from the formal-charge model, set for example ``vacancy_counts = [1, 2]``. The
+explicit positive integer list replaces the charge-derived count range,
+``extra_vacancies``, and ``max_vacancies_cap`` for generation/search purposes;
+the requested values are still checked against the number of available oxygen
+sites. Formal-charge scenarios are still written as metadata for interpretation.
+
 Eight Sb3+ atoms on Sn4+ sites give ``8 × (3 - 4) = -8`` and therefore generate
 counts 1, 2, 3, and 4. Four Sb3+ plus four Nb5+ give ``-4 + 4 = 0`` and no
 defective count unless ``extra_vacancies`` is positive. For ``delta_Q = -3``,
@@ -141,19 +155,29 @@ formal-charge analysis and search; it is available for either method.
 
 One move swaps a vacancy marker with an atom on the vacancy-species sublattice.
 The other swaps two different cation species. Species are discovered from the
-parent, so the host and any number of dopant types are supported. Internal
+parent, so the host and any number of dopant types are supported. Both move
+weights may remain nonzero to sample coupled dopant-vacancy ordering. Internal
 vacancy markers are removed before every ML calculator call.
 
 .. code-block:: toml
 
    search_method = "monte-carlo"
-   supercell = [2, 2, 1]
+   supercell = [2, 1, 1]
+   vacancy_counts = [1, 2]
+
+   # Fast calculator used only for Metropolis search energies.
+   mc_backend = "grace"
+   mc_model = "GRACE-1L-OMAT"
+   mc_task = ""
+   mc_device = "cuda"
+   mc_gpu_id = 0
+
    mc_annealing = true
    mc_initial_temperature_K = 1500.0
    mc_annealing_hold_steps = 500
    mc_annealing_steps = 2000
    mc_temperature_K = 600.0          # final target temperature
-   mc_run_mode = "combined"       # fixed, converged, or combined
+   mc_run_mode = "combined"          # fixed, converged, or combined
    mc_max_steps = 10000
    mc_patience = 2000
    mc_improvement_tolerance_eV = 1.0e-5
@@ -163,29 +187,57 @@ vacancy markers are removed before every ML calculator call.
    sample_seed = 42
    sample_max_saved = 100
 
+   # Final/reference calculator.
+   backend = "mace"
+   model = "mh-1"
+   task = "matpes_r2scan"
+   device = "cuda"
+   gpu_id = 0
+
 ``sample_seed`` makes the trajectory reproducible. Unique accepted occupations
 inside the energy window are archived up to ``sample_max_saved``. The existing
-``topk_per_vacancy_count`` stage selects
-candidates for relaxation and relaxed-energy reranking using the configured
-optimizer. M3GNet, UMA, MACE, and GRACE are supported through the common backend
-factory. Each count writes ``monte_carlo_summary.json`` and retains the standard
+``topk_per_vacancy_count`` stage selects candidates using the MC-search energy;
+the selected structures are then relaxed and reranked using the final calculator
+and configured optimizer. If the ``mc_*`` calculator keys are omitted, both
+stages use the same calculator as in earlier inputs. M3GNet, UMA, MACE, and GRACE
+are supported through the common backend factory.
+
+Search and final provenance remain distinct when different calculators are used.
+``01_scan/meta.json`` and the scan-ranking/database rows identify the MC search
+calculator, while ``02_relax/meta.json`` and final thermodynamic provenance
+identify the final calculator. A GRACE-to-MACE energy difference is not reported
+as a same-calculator relaxation energy change. Each count writes
+``monte_carlo_summary.json`` and retains the standard
 ``00_generate``/``01_scan``/``02_relax`` directory layout and ranking tables.
+Changing explicit vacancy counts or explicit MC calculator settings changes the
+vacancy fingerprint and therefore invalidates incompatible cached search results.
+
 When ``mc_annealing = true``, the initial temperature is held for
-``mc_annealing_hold_steps``, followed by a
-linear cooling ramp lasting ``mc_annealing_steps``. Sampling then continues at
-``mc_temperature_K``. The default ``mc_annealing = false`` runs the complete
-search isothermally at ``mc_temperature_K`` and ignores the initial, hold, and
-cooling-ramp settings.
+``mc_annealing_hold_steps``, followed by a linear cooling ramp lasting
+``mc_annealing_steps``. Sampling then continues at ``mc_temperature_K``. The
+default ``mc_annealing = false`` runs the complete search isothermally at
+``mc_temperature_K`` and ignores the initial, hold, and cooling-ramp settings.
 
 Screening, relaxation, and interpretation
 ------------------------------------------
 
-The parent and every defective structure use the same common calculator
-factory. Single-point energies and relaxed energies are ranked only among
-structures having the same parent and vacancy count. The parent does not consume
-a top-k slot. Its prior relaxed energy is reused only when metadata prove
-calculator and relaxation compatibility; otherwise a consistency relaxation is
-written below the vacancy output without modifying the original parent.
+The parent reference, final top-k relaxations, and thermodynamic analysis use the
+ordinary vacancy calculator. Enumeration single points also use that calculator.
+For Monte Carlo, the archived search energies may instead come from the optional
+MC-only calculator described above. Energies are ranked only among structures
+having the same parent and vacancy count. The parent does not consume a top-k
+slot. Its prior relaxed energy is reused only when metadata prove calculator and
+relaxation compatibility; otherwise a consistency relaxation is written below
+the vacancy output without modifying the original parent.
+
+When cation swaps are enabled, the defective Monte Carlo minima can differ from
+the replicated source parent in both cation ordering and vacancy arrangement.
+The current ``n=0`` parent reference is not subjected to a cation-only Monte
+Carlo search. Consequently, a vacancy formation free energy from such a run can
+contain both vacancy formation and cation-reordering contributions relative to
+the source parent. This is appropriate for a coupled ordering search but should
+be distinguished from a vacancy free energy referenced to an independently
+equilibrated cation arrangement.
 
 Raw totals across different vacancy counts are not defect formation energies,
 because the structures contain different numbers of oxygen atoms. Thermodynamic
@@ -235,7 +287,7 @@ For the explicit partition function,
 
    \Delta F_{config}(n,T) =
    -k_B T \ln\left[\sum_i g_i
-   \exp\left(-rac{E_i-E_{min}}{k_B T}ight)ight].
+   \exp\left(-\frac{E_i-E_{min}}{k_B T}\right)\right].
 
 The result is written for every vacancy count to
 ``vacancy_formation_free_energy.csv/json``. The T-pO2 stability map minimizes
