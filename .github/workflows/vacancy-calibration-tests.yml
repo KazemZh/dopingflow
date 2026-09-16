@@ -15,6 +15,7 @@ on:
       - "src/dopingflow/vacancy_energy_correction_extensions.py"
       - "src/dopingflow/vacancy_mc_extensions.py"
       - "src/dopingflow/vacancy_mc_staged.py"
+      - "src/dopingflow/vacancy_parent_selection_extensions.py"
       - "src/dopingflow/vacancy_analysis.py"
       - "src/dopingflow/vacancies.py"
       - "src/dopingflow/phase_diagram.py"
@@ -33,6 +34,7 @@ on:
       - "tests/test_vacancy_energy_correction.py"
       - "tests/test_vacancy_mc_extensions.py"
       - "tests/test_vacancy_mc_staged.py"
+      - "tests/test_vacancy_parent_selection.py"
       - "tests/test_vacancy_phase_diagram_extension.py"
       - "tests/test_phase_diagram_gui_plots.py"
       - "tests/test_phase_diagram_systems.py"
@@ -52,6 +54,7 @@ on:
       - "src/dopingflow/vacancy_energy_correction_extensions.py"
       - "src/dopingflow/vacancy_mc_extensions.py"
       - "src/dopingflow/vacancy_mc_staged.py"
+      - "src/dopingflow/vacancy_parent_selection_extensions.py"
       - "src/dopingflow/vacancy_analysis.py"
       - "src/dopingflow/vacancies.py"
       - "src/dopingflow/phase_diagram.py"
@@ -70,6 +73,7 @@ on:
       - "tests/test_vacancy_energy_correction.py"
       - "tests/test_vacancy_mc_extensions.py"
       - "tests/test_vacancy_mc_staged.py"
+      - "tests/test_vacancy_parent_selection.py"
       - "tests/test_vacancy_phase_diagram_extension.py"
       - "tests/test_phase_diagram_gui_plots.py"
       - "tests/test_phase_diagram_systems.py"
@@ -107,6 +111,7 @@ jobs:
             src/dopingflow/vacancy_energy_correction_extensions.py \
             src/dopingflow/vacancy_mc_extensions.py \
             src/dopingflow/vacancy_mc_staged.py \
+            src/dopingflow/vacancy_parent_selection_extensions.py \
             src/dopingflow/phase_diagram_convergence_extensions.py
           pytest -q \
             tests/test_oxygen_calibration.py \
@@ -115,6 +120,7 @@ jobs:
             tests/test_vacancy_energy_correction.py \
             tests/test_vacancy_mc_extensions.py \
             tests/test_vacancy_mc_staged.py \
+            tests/test_vacancy_parent_selection.py \
             tests/test_vacancy_phase_diagram_extension.py \
             tests/test_phase_diagram_gui_plots.py \
             tests/test_phase_diagram_systems.py \
