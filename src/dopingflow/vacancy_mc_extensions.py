@@ -1,21 +1,17 @@
-"""Extensions for Monte Carlo vacancy searches with a dedicated fast calculator.
+"""Opt-in extensions for large-cell Monte Carlo vacancy searches.
 
-The established vacancy workflow uses one final calculator for parent reference
-energies, post-search single-point bookkeeping, relaxations, and thermodynamic
-analysis.  This module adds two opt-in controls without changing the default
-behavior:
+Two controls are added without changing legacy vacancy inputs:
 
-* ``vacancy_counts = [1, 2, ...]`` explicitly selects vacancy counts instead of
-  deriving a continuous range from formal charge assumptions.
+* ``vacancy_counts = [1, 2, ...]`` searches exactly the requested positive
+  vacancy counts instead of deriving a continuous range from formal charges.
 * ``mc_backend`` / ``mc_model`` / ``mc_task`` / ``mc_device`` / ``mc_gpu_id``
-  select a calculator used only by the Metropolis occupation search.  The
-  ordinary ``backend`` / ``model`` / ``task`` / ``device`` calculator remains
-  authoritative for parent consistency relaxations, final top-k relaxations,
-  thermodynamic analysis, and correction provenance.
+  select a calculator used only for Metropolis occupation energies.  The normal
+  vacancy calculator remains authoritative for parent/reference calculations,
+  final top-k relaxations, thermodynamic analysis, and correction provenance.
 
-The extension is installed at package import time, following the same pattern as
-the vacancy energy-correction extension.  Existing input files therefore retain
-identical behavior.
+The Monte Carlo archive and top-k selection use the MC-search energies.  When
+search and final calculators differ, those search energies are explicitly
+labelled and are not presented as same-calculator relaxation energy changes.
 """
 
 from __future__ import annotations
@@ -98,7 +94,6 @@ def parse_monte_carlo_search_calculator(
 
     explicit_keys = {"mc_backend", "mc_model", "mc_task", "mc_device", "mc_gpu_id"}
     explicitly_configured = any(key in section for key in explicit_keys)
-
     backend, model, task = normalize_backend_config(
         backend=str(section.get("mc_backend", cfg.backend)),
         model=str(section.get("mc_model", cfg.model)),
@@ -111,13 +106,11 @@ def parse_monte_carlo_search_calculator(
         raise ValueError("[vacancies].mc_device must be 'cpu' or 'cuda'")
     if isinstance(gpu_id, bool) or not isinstance(gpu_id, int) or gpu_id < 0:
         raise ValueError("[vacancies].mc_gpu_id must be a non-negative integer")
-
     if cfg.device == "cuda" and device == "cuda" and int(gpu_id) != cfg.gpu_id:
         raise ValueError(
             "[vacancies] final and MC calculators currently must use the same gpu_id "
             "when both use CUDA in one vacancy process"
         )
-
     return MonteCarloSearchCalculatorConfig(
         backend=backend,
         model=model,
@@ -139,8 +132,7 @@ def _explicit_count_result(
     if counts[-1] > available_sites:
         raise ValueError(
             "[vacancies].vacancy_counts requests more vacancies than available "
-            f"{_base.VacancyConfig.__name__} vacancy-species sites: requested "
-            f"{counts[-1]}, available {available_sites}"
+            f"vacancy-species sites: requested {counts[-1]}, available {available_sites}"
         )
     negative = [int(item["delta_Q"]) for item in scenarios if int(item["delta_Q"]) < 0]
     charge_based_max = max(
@@ -231,25 +223,42 @@ def _mc_provenance() -> dict[str, Any]:
     }
 
 
+def _mixed_calculators(cfg: _base.VacancyConfig) -> bool:
+    mc = _ACTIVE_MC_CONFIG
+    if mc is None:
+        return False
+    return (mc.backend, mc.model, mc.task, mc.device, mc.gpu_id) != (
+        cfg.backend,
+        cfg.model,
+        cfg.task,
+        cfg.device,
+        cfg.gpu_id,
+    )
+
+
 def _rewrite_mc_artifacts(
     parent: dict[str, Path | str],
     cfg: _base.VacancyConfig,
     rows: list[dict[str, Any]],
     metadata: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Make search-energy provenance explicit after the established workflow runs."""
+    """Make search and final energy provenance explicit in written artifacts."""
 
     if cfg.search_method != "monte-carlo" or _ACTIVE_MC_CONFIG is None:
         return rows, metadata
 
     provenance = _mc_provenance()
+    mixed = _mixed_calculators(cfg)
     vacancy_root = Path(parent["candidate_dir"]) / _base.VACANCY_STAGE_DIR
+
     for row in rows:
         if int(row.get("n_vacancies", 0)) <= 0:
             continue
         if str(row.get("enumeration_mode", "")) != "monte_carlo":
             continue
+
         row.update(provenance)
+        row["mc_search_energy_sp_total_eV"] = row.get("energy_sp_total_eV")
         row["energy_sp_backend"] = _ACTIVE_MC_CONFIG.backend
         row["energy_sp_model"] = _ACTIVE_MC_CONFIG.model
         row["energy_sp_task"] = _ACTIVE_MC_CONFIG.task
@@ -258,49 +267,75 @@ def _rewrite_mc_artifacts(
         row["final_model"] = cfg.model
         row["final_task"] = cfg.task
         row["final_device"] = cfg.device
+        row["topk_selection_energy_source"] = "monte_carlo_search_single_point"
 
         config_id = str(row.get("configuration_id", ""))
         n_vacancies = int(row["n_vacancies"])
-        if config_id:
-            scan_meta_path = (
-                vacancy_root
-                / f"V_{cfg.vacancy_species}_{n_vacancies:02d}"
-                / config_id
-                / "01_scan"
-                / "meta.json"
+        config_root = (
+            vacancy_root / f"V_{cfg.vacancy_species}_{n_vacancies:02d}" / config_id
+        )
+        scan_meta_path = config_root / "01_scan" / "meta.json"
+        scan_meta = _base._load_json(scan_meta_path)
+        if scan_meta:
+            scan_meta.update(
+                {
+                    "backend": _ACTIVE_MC_CONFIG.backend,
+                    "model": _ACTIVE_MC_CONFIG.model,
+                    "task": _ACTIVE_MC_CONFIG.task,
+                    "device": _ACTIVE_MC_CONFIG.device,
+                    "energy_role": "monte_carlo_search_single_point",
+                    **provenance,
+                    "final_backend": cfg.backend,
+                    "final_model": cfg.model,
+                    "final_task": cfg.task,
+                    "final_device": cfg.device,
+                }
             )
-            scan_meta = _base._load_json(scan_meta_path)
-            if scan_meta:
-                scan_meta.update(
+            _base._write_json(scan_meta_path, scan_meta)
+
+        if mixed and row.get("energy_relaxed_total_eV") is not None:
+            relax_meta_path = config_root / "02_relax" / "meta.json"
+            relax_meta = _base._load_json(relax_meta_path)
+            if relax_meta:
+                search_initial = relax_meta.get("energy_initial_eV")
+                relax_meta.update(
                     {
-                        "backend": _ACTIVE_MC_CONFIG.backend,
-                        "model": _ACTIVE_MC_CONFIG.model,
-                        "task": _ACTIVE_MC_CONFIG.task,
-                        "device": _ACTIVE_MC_CONFIG.device,
-                        "energy_role": "monte_carlo_search_single_point",
+                        "mc_search_energy_initial_eV": search_initial,
+                        "energy_initial_eV": None,
+                        "energy_change_eV": None,
+                        "energy_initial_comparable_to_relaxed": False,
+                        "energy_change_note": (
+                            "Initial search energy used a different calculator; "
+                            "no cross-backend relaxation energy change is reported."
+                        ),
                         **provenance,
-                        "final_backend": cfg.backend,
-                        "final_model": cfg.model,
-                        "final_task": cfg.task,
-                        "final_device": cfg.device,
                     }
                 )
-                _base._write_json(scan_meta_path, scan_meta)
+                _base._write_json(relax_meta_path, relax_meta)
+                row["mc_search_energy_initial_eV"] = search_initial
+                row["energy_initial_eV"] = None
+                row["energy_change_eV"] = None
+                row["energy_initial_comparable_to_relaxed"] = False
+                row["energy_change_note"] = relax_meta["energy_change_note"]
 
     counts = sorted(
         {int(row["n_vacancies"]) for row in rows if int(row.get("n_vacancies", 0)) > 0}
     )
     for n_vacancies in counts:
-        summary_path = (
-            vacancy_root
-            / f"V_{cfg.vacancy_species}_{n_vacancies:02d}"
-            / "monte_carlo_summary.json"
+        group_dir = vacancy_root / f"V_{cfg.vacancy_species}_{n_vacancies:02d}"
+        group_rows = [row for row in rows if int(row.get("n_vacancies", -1)) == n_vacancies]
+        group_rows.sort(
+            key=lambda row: (float(row["energy_sp_total_eV"]), row["configuration_id"])
         )
+        _base._write_csv(group_dir / "ranking_scan.csv", group_rows)
+
+        summary_path = group_dir / "monte_carlo_summary.json"
         summary = _base._load_json(summary_path)
         if summary:
             summary.update(
                 {
                     **provenance,
+                    "topk_selection_energy_source": "monte_carlo_search_single_point",
                     "final_backend": cfg.backend,
                     "final_model": cfg.model,
                     "final_task": cfg.task,
