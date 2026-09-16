@@ -381,6 +381,8 @@ DEFAULTS = {
         "relax_mode": "atoms",
         "cell_filter": "frechet",
         "static_thermodynamic_analysis": False,
+        "apply_fitted_energy_correction": False,
+        "allow_legacy_energy_correction_provenance": False,
         "oxygen_reference_mode": "reference_file",
         "oxygen_reference_file": "reference_structures/reference_energies.json",
         "oxygen_reference_structure": "reference_structures/gas/O2.POSCAR",
