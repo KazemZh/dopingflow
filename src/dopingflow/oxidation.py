@@ -507,7 +507,12 @@ def execute_method(
     except Exception as exc:
         if cfg.fail_fast:
             raise
-        log.exception("Oxidation method %s failed for %s", method, target.target_id)
+        log.debug(
+            "Oxidation method %s failed for %s",
+            method,
+            target.target_id,
+            exc_info=True,
+        )
         return base_method_result(
             method=method,
             target=target,
@@ -702,6 +707,138 @@ def _flatten_site_rows(results: Sequence[dict[str, Any]]) -> list[dict[str, Any]
     return rows
 
 
+
+def _safe_output_parts(target_id: str) -> list[str]:
+    """Convert a target ID into safe hierarchical output-directory components."""
+    parts: list[str] = []
+    for raw in str(target_id).replace("\\", "/").split("/"):
+        raw = raw.strip()
+        if not raw or raw in {".", ".."}:
+            continue
+        safe = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in raw)
+        parts.append(safe or "target")
+    return parts or ["target"]
+
+
+def _target_output_dir(cfg: OxidationConfig, target: StructureTarget) -> Path:
+    return cfg.output_dir / "structures" / Path(*_safe_output_parts(target.target_id))
+
+
+def _write_per_structure_outputs(
+    cfg: OxidationConfig,
+    targets: Sequence[StructureTarget],
+    results: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Write an auditable result package for every analyzed structure."""
+    index_rows: list[dict[str, Any]] = []
+    successful_statuses = {"assigned", "descriptors-only"}
+
+    for target in targets:
+        target_results = [r for r in results if r["target_id"] == target.target_id]
+        target_dir = _target_output_dir(cfg, target)
+        method_dir = target_dir / "methods"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        method_dir.mkdir(parents=True, exist_ok=True)
+
+        site_rows = _flatten_site_rows(target_results)
+        method_statuses = {
+            str(result["method"]): str(result.get("assignment_status", "unknown"))
+            for result in target_results
+        }
+        unresolved = [
+            method
+            for method, status in method_statuses.items()
+            if status not in successful_statuses
+        ]
+        successful = [
+            method
+            for method, status in method_statuses.items()
+            if status in successful_statuses
+        ]
+        if unresolved and successful:
+            overall_status = "partial"
+        elif unresolved:
+            overall_status = "unresolved"
+        else:
+            overall_status = "complete"
+
+        _json_write(target_dir / "oxidation_results.json", target_results)
+        _csv_write(target_dir / "oxidation_sites.csv", site_rows)
+        for result in target_results:
+            _json_write(method_dir / f"{result['method']}.json", result)
+
+        summary = {
+            "target_id": target.target_id,
+            "parent_id": target.parent_id,
+            "structure_kind": target.kind,
+            "structure_path": str(target.structure_path),
+            "n_oxygen_vacancies": (
+                target.n_vacancies if target.vacancy_species == "O" else 0
+            ),
+            "metadata": target.metadata,
+            "overall_status": overall_status,
+            "method_statuses": method_statuses,
+            "successful_methods": successful,
+            "unresolved_methods": unresolved,
+            "output_directory": str(target_dir),
+        }
+        _json_write(target_dir / "summary.json", summary)
+
+        try:
+            n_atoms = len(Structure.from_file(target.structure_path))
+        except Exception:
+            n_atoms = None
+        index_rows.append(
+            {
+                **summary,
+                "n_atoms": n_atoms,
+                "n_methods": len(target_results),
+                "n_successful_methods": len(successful),
+                "n_unresolved_methods": len(unresolved),
+            }
+        )
+
+    return index_rows
+
+
+def _log_analysis_summary(
+    results: Sequence[dict[str, Any]],
+    *,
+    n_targets: int,
+    discovery_warnings: Sequence[str],
+) -> None:
+    """Report non-assignments once, at the end, without per-structure tracebacks."""
+    unresolved = [
+        result
+        for result in results
+        if result.get("assignment_status") not in {"assigned", "descriptors-only"}
+    ]
+    log.info(
+        "Oxidation analysis completed: targets=%d method_results=%d unresolved=%d",
+        n_targets,
+        len(results),
+        len(unresolved),
+    )
+    for message in discovery_warnings:
+        log.warning("Oxidation discovery: %s", message)
+    if not unresolved:
+        return
+    log.warning(
+        "Oxidation analysis completed with %d structure/method case(s) without an assignment:",
+        len(unresolved),
+    )
+    for result in unresolved:
+        detail = result.get("error") or "; ".join(result.get("limitations", []))
+        suffix = f" - {detail}" if detail else ""
+        log.warning(
+            "  %s [%s]: %s%s",
+            result.get("target_id"),
+            result.get("method"),
+            result.get("assignment_status"),
+            suffix,
+        )
+
+
 def run_oxidation(
     raw: dict[str, Any],
     root: Path,
@@ -780,6 +917,9 @@ def run_oxidation(
     _json_write(cfg.output_dir / "oxidation_comparison.json", comparisons)
     _json_write(cfg.output_dir / "dft_followup_candidates.json", followup_candidates)
     _csv_write(cfg.output_dir / "oxidation_sites.csv", _flatten_site_rows(results))
+    structure_index = _write_per_structure_outputs(cfg, targets, results)
+    _csv_write(cfg.output_dir / "oxidation_structure_index.csv", structure_index)
+    _json_write(cfg.output_dir / "oxidation_structure_index.json", structure_index)
     _json_write(
         cfg.output_dir / "meta.json",
         {
@@ -791,6 +931,8 @@ def run_oxidation(
             "n_targets": len(targets),
             "n_method_results": len(results),
             "target_ids": [target.target_id for target in targets],
+            "per_structure_root": str(cfg.output_dir / "structures"),
+            "structure_index_csv": str(cfg.output_dir / "oxidation_structure_index.csv"),
             "discovery_warnings": discovery_warnings,
             "dft_followup": {
                 "enabled": cfg.dft_followup_enabled,
@@ -809,6 +951,11 @@ def run_oxidation(
                 "majority voting is used to establish oxidation-state truth."
             ),
         },
+    )
+    _log_analysis_summary(
+        results,
+        n_targets=len(targets),
+        discovery_warnings=discovery_warnings,
     )
     return results_path
 

@@ -372,3 +372,51 @@ def test_eos_requires_explicit_validated_assignment(tmp_path: Path) -> None:
     assert [
         item["formal_oxidation_state"] for item in assigned["formal_oxidation_states"]
     ] == [4, -2]
+
+
+
+def test_per_structure_outputs_and_quiet_failure_summary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    source_root = tmp_path / "random_structures"
+    _write_parent_tree(source_root)
+
+    def runner_for(method: str):
+        def runner(target, cfg, settings):
+            del cfg, settings
+            if method == "bond-valence":
+                raise RuntimeError("synthetic non-assignment")
+            structure = Structure.from_file(target.structure_path)
+            return base_method_result(
+                method=method,
+                target=target,
+                scope="site-resolved",
+                formal_oxidation_states=site_records(structure, [4, 5, -2, -2]),
+            )
+
+        return runner
+
+    monkeypatch.setattr(oxidation, "_method_runner", runner_for)
+    caplog.set_level("INFO")
+    raw = {
+        "structure": {"outdir": str(source_root)},
+        "oxidation": {
+            "strategy": "combined",
+            "methods": ["bond-valence", "toss-gnn"],
+            "include_oxygen_vacancies": False,
+        },
+    }
+    run_oxidation(raw, tmp_path)
+
+    target_dir = (
+        source_root / "06_oxidation" / "structures" / "Sb25" / "candidate_0001"
+    )
+    assert (target_dir / "summary.json").exists()
+    assert (target_dir / "oxidation_sites.csv").exists()
+    assert (target_dir / "methods" / "bond-valence.json").exists()
+    assert (target_dir / "methods" / "toss-gnn.json").exists()
+    assert (source_root / "06_oxidation" / "oxidation_structure_index.csv").exists()
+    assert not [record for record in caplog.records if record.levelname == "ERROR"]
+    assert "without an assignment" in caplog.text

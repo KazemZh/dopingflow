@@ -554,6 +554,10 @@ dedicated pages under `gui/pages/`, including:
   fitted correction to vacancy thermodynamics.
 - **Phase Diagram** — explores raw/corrected hull results and vacancy-resolved
   energy above hull.
+- **Oxidation States** — configures structural/ML/DFT oxidation analysis and provides a
+  structure browser: select an analyzed parent or vacancy structure, choose a method,
+  and inspect atom-by-atom oxidation states/descriptors. Results are also written per
+  structure under ``06_oxidation/structures/<target_id>/``.
 
 The staged GUI page explicitly warns that current top-k selection is performed
 with GRACE before MACE finalization.

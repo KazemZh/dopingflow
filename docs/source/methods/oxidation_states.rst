@@ -194,13 +194,27 @@ needed for those calculations.
 Outputs
 -------
 
-The stage writes under ``[oxidation].output_dir``:
+The stage writes aggregate files under ``[oxidation].output_dir``:
 
 * ``oxidation_results.json``: complete per-method records;
 * ``oxidation_sites.csv``: flattened site/composition-token records;
+* ``oxidation_structure_index.csv`` / ``.json``: one row/object per analyzed structure;
 * ``oxidation_comparison.json``: descriptive method comparison;
 * ``dft_followup_candidates.json``: optional follow-up selection;
 * ``meta.json``: resolved settings, target list, and provenance.
+
+In addition, every structure gets a dedicated hierarchical result package under
+``structures/<target_id>/``. For example, ``Sb5_In10/candidate_001`` is written
+to ``structures/Sb5_In10/candidate_001/``. Each package contains
+``summary.json``, ``oxidation_sites.csv``, ``oxidation_results.json``, and one
+JSON file per requested method below ``methods/``. This layout is intended for
+structure-by-structure inspection while the aggregate tables remain available
+for screening and statistics.
+
+A method that cannot assign a particular structure is recorded as
+``unsupported``, ``unavailable``, or ``failed`` without interrupting other
+structures. These cases are summarized once at the end of the run instead of
+emitting a traceback for every ordinary non-assignment.
 
 Results keep separate fields for method/strategy, prediction scope, formal
 oxidation state, Bader partial charge, orbital populations, magnetic moments,

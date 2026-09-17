@@ -65,7 +65,27 @@ def _run_bond_valence(target: StructureTarget, settings: dict[str, Any]) -> dict
     if "max_radius" in settings:
         kwargs["max_radius"] = float(settings["max_radius"])
     analyzer = BVAnalyzer(**kwargs)
-    valences = analyzer.get_valences(structure)
+    try:
+        valences = analyzer.get_valences(structure)
+    except ValueError as exc:
+        if "Valences cannot be assigned" not in str(exc):
+            raise
+        return base_method_result(
+            method="bond-valence",
+            target=target,
+            scope="site-resolved",
+            status="unsupported",
+            provenance={
+                "implementation": "pymatgen.analysis.bond_valence.BVAnalyzer",
+                "settings": kwargs,
+            },
+            limitations=[
+                "pymatgen BVAnalyzer could not find a chemically consistent valence "
+                "assignment for this structure. This is a method limitation, not a "
+                "software or installation failure."
+            ],
+            error="Valences cannot be assigned by pymatgen BVAnalyzer",
+        )
     formal = site_records(structure, [float(value) for value in valences])
     return base_method_result(
         method="bond-valence",
