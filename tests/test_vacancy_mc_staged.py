@@ -2,6 +2,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import dopingflow.vacancy_mc_staged as staged
+from dopingflow.vacancy_parent_selection_extensions import pick_parents
 
 
 def _cfg(tmp_path: Path):
@@ -84,3 +85,19 @@ def test_finalize_stage_requires_only_final_backend(monkeypatch, tmp_path):
 
     assert [backend for backend, _ in checked] == ["mace"]
     assert [item["backend"] for item in built] == ["mace"]
+
+
+def test_pick_lowest_energy_parent_keeps_first_selected_per_composition():
+    parents = [
+        {"composition": "Sb5_Ti2p5", "parent_id": "Sb5_Ti2p5/candidate_014"},
+        {"composition": "Sb5_Ti2p5", "parent_id": "Sb5_Ti2p5/candidate_022"},
+        {"composition": "Sb5_Ce2p5", "parent_id": "Sb5_Ce2p5/candidate_029"},
+        {"composition": "Sb5_Ce2p5", "parent_id": "Sb5_Ce2p5/candidate_031"},
+    ]
+
+    selected = pick_parents(parents, "lowest_energy")
+
+    assert [p["parent_id"] for p in selected] == [
+        "Sb5_Ti2p5/candidate_014",
+        "Sb5_Ce2p5/candidate_029",
+    ]
