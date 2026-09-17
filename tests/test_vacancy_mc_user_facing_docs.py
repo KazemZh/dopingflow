@@ -15,11 +15,12 @@ def test_main_readme_documents_current_staged_workflow():
         "vacancies-finalize",
         'parent_pick = "lowest_energy"',
         'output_directory = "vacancy-mc-grace-mace"',
-        "vacancy_counts = [1, 2]",
+        "vacancy_counts = [1, 2, 3, 4]",
         "supercell = [2, 2, 2]",
         'mc_backend = "grace"',
-        "mc_max_steps = 200000",
-        "mc_patience = 100000",
+        "mc_max_steps = 500000",
+        "mc_patience = 105000",
+        "mc_improvement_tolerance_eV = 0.001",
         "GRACE top-k",
     ]
     for token in required:
@@ -34,12 +35,14 @@ def test_checked_in_vacancy_example_matches_staged_research_design():
         'output_directory = "vacancy-mc-grace-mace"',
         "parent_include = [",
         'search_method = "monte-carlo"',
-        "vacancy_counts = [1, 2]",
+        "max_vacancies_cap = 4",
+        "vacancy_counts = [1, 2, 3, 4]",
         "supercell = [2, 2, 2]",
         'mc_backend = "grace"',
         'mc_model = "GRACE-1L-OMAT"',
-        "mc_max_steps = 200000",
-        "mc_patience = 100000",
+        "mc_max_steps = 500000",
+        "mc_patience = 105000",
+        "mc_improvement_tolerance_eV = 0.001",
         'backend = "mace"',
         'model = "mh-1"',
     ]:
@@ -65,6 +68,14 @@ def test_sphinx_docs_cover_staged_commands_and_parent_routing():
         assert token in method
         assert token in staged_reference
 
+    for token in (
+        "vacancy_counts = [1, 2, 3, 4]",
+        "mc_max_steps = 500000",
+        "mc_patience = 105000",
+        "mc_improvement_tolerance_eV = 0.001",
+    ):
+        assert token in staged_reference, token
+
     assert "input_file_vacancy_mc" in index
 
 
@@ -82,6 +93,14 @@ def test_gui_readme_and_staged_page_document_split_environments():
         "output_directory",
     ]:
         assert token in readme, token
+
+    for token in (
+        "[1, 2, 3, 4]",
+        "500000",
+        "105000",
+        "0.001",
+    ):
+        assert token in page, token
 
     assert "Run GRACE MC search" in page
     assert "Run MACE finalize" in page
