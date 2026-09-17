@@ -21,6 +21,7 @@ from dopingflow.oxidation import (
 TOSS_VERIFIED_COMMIT = "c45582a3cd3088480b5d83b1440d360bd4577b80"
 TOSS_DEFAULT_LP = "models/pyg_Hetero_GCN_s_0608.pth"
 TOSS_DEFAULT_NC = "models/pyg_GCN_s_0609.pth"
+CHGNET_MAX_ATOMIC_NUMBER = 94
 CHGNET_UPSTREAM_MN_RANGES = (
     (0.5, 1.5, 2),
     (1.5, 2.5, 3),
@@ -299,6 +300,32 @@ def _run_chgnet(target: StructureTarget, settings: dict[str, Any]) -> dict[str, 
     if device not in {"cpu", "cuda", "mps"}:
         raise ValueError("[oxidation.chgnet].device must be cpu, cuda, or mps")
 
+    structure = Structure.from_file(target.structure_path)
+    unsupported = sorted(
+        {
+            site.specie.symbol
+            for site in structure
+            if int(site.specie.Z) > CHGNET_MAX_ATOMIC_NUMBER
+        }
+    )
+    if unsupported:
+        return base_method_result(
+            method="chgnet",
+            target=target,
+            scope="site-resolved",
+            status="unsupported",
+            provenance={
+                "implementation": "chgnet.model.model.CHGNet.predict_structure",
+                "model_name": model_name,
+                "requested_device": device,
+                "verified_atom_embedding_max_atomic_number": CHGNET_MAX_ATOMIC_NUMBER,
+            },
+            limitations=[
+                "The upstream CHGNet AtomEmbedding default supports atomic numbers up to 94; "
+                "unsupported elements present: " + ", ".join(unsupported)
+            ],
+        )
+
     cache_key = ("chgnet", model_name, device)
 
     def _load() -> Any:
@@ -311,7 +338,6 @@ def _run_chgnet(target: StructureTarget, settings: dict[str, Any]) -> dict[str, 
             return CHGNet.load(model_name=model_name)
 
     model = cached_model(cache_key, _load)
-    structure = Structure.from_file(target.structure_path)
     try:
         prediction = model.predict_structure(structure)
     except Exception as exc:
@@ -336,13 +362,15 @@ def _run_chgnet(target: StructureTarget, settings: dict[str, Any]) -> dict[str, 
         for index, site in enumerate(structure)
     ]
     ranges = _parse_moment_ranges(settings)
+    use_absolute_moment = bool(settings.get("use_absolute_moment", False))
     inferred: list[int | None] = []
     ambiguous_elements: set[str] = set()
     for site, moment in zip(structure, moments):
         element = site.specie.symbol
+        mapped_moment = abs(moment) if use_absolute_moment else moment
         value: int | None = None
         for lower, upper, oxidation in ranges.get(element, []):
-            if lower <= abs(moment) < upper:
+            if lower <= mapped_moment < upper:
                 value = oxidation
                 break
         if value is None:
@@ -350,10 +378,15 @@ def _run_chgnet(target: StructureTarget, settings: dict[str, Any]) -> dict[str, 
         inferred.append(value)
 
     n_assigned = sum(value is not None for value in inferred)
-    status = "assigned" if n_assigned == len(structure) else ("partial" if n_assigned else "descriptors-only")
+    status = "assigned" if n_assigned == len(structure) else (
+        "partial" if n_assigned else "descriptors-only"
+    )
     limitations = [
-        "CHGNet directly predicts local magnetic moments; any formal oxidation state in this result is an inference from an explicit moment-to-state mapping, not a native universal CHGNet oxidation-state output.",
-        "Near-zero magnetic moments cannot reliably distinguish closed-shell alternatives such as Sn2+/Sn4+ or Sb3+/Sb5+; those sites are deliberately not forced into an oxidation state.",
+        "CHGNet directly predicts local magnetic moments; any formal oxidation state in this "
+        "result is an inference from an explicit moment-to-state mapping, not a native universal "
+        "CHGNet oxidation-state output.",
+        "Near-zero magnetic moments cannot reliably distinguish closed-shell alternatives such as "
+        "Sn2+/Sn4+ or Sb3+/Sb5+; those sites are deliberately not forced into an oxidation state.",
     ]
     if ambiguous_elements:
         limitations.append(
@@ -362,7 +395,13 @@ def _run_chgnet(target: StructureTarget, settings: dict[str, Any]) -> dict[str, 
         )
     if bool(settings.get("use_upstream_mn_mapping", True)):
         limitations.append(
-            "The default Mn ranges reproduce CHGNet's upstream solve_charge_by_mag mapping; other elements require user-supplied ranges."
+            "The default Mn ranges are the ranges used by CHGNet's upstream solve_charge_by_mag "
+            "helper. By default they are applied to the raw predicted moment, matching upstream."
+        )
+    if use_absolute_moment:
+        limitations.append(
+            "use_absolute_moment=true was explicitly requested; this differs from the upstream "
+            "solve_charge_by_mag comparison, which uses the raw magnetic moment."
         )
 
     return base_method_result(
@@ -370,7 +409,11 @@ def _run_chgnet(target: StructureTarget, settings: dict[str, Any]) -> dict[str, 
         target=target,
         scope="site-resolved",
         status=status,
-        formal_oxidation_states=site_records(structure, inferred, status="inferred-from-moment"),
+        formal_oxidation_states=site_records(
+            structure,
+            inferred,
+            status="inferred-from-moment",
+        ),
         magnetic_moments=moment_records,
         provenance={
             "implementation": "chgnet.model.model.CHGNet.predict_structure",
@@ -378,6 +421,8 @@ def _run_chgnet(target: StructureTarget, settings: dict[str, Any]) -> dict[str, 
             "model_name": model_name,
             "model_version": getattr(model, "version", None),
             "requested_device": device,
+            "verified_atom_embedding_max_atomic_number": CHGNET_MAX_ATOMIC_NUMBER,
+            "use_absolute_moment": use_absolute_moment,
             "moment_oxidation_ranges": {
                 element: [list(item) for item in entries] for element, entries in ranges.items()
             },
@@ -508,10 +553,13 @@ def _run_bertos(target: StructureTarget, settings: dict[str, Any]) -> dict[str, 
             "composition_tokens": tokens,
         },
         limitations=[
-            "BERTOS is composition-based. Its repeated element tokens are stoichiometric composition tokens, not crystallographic sites, so no site mapping is invented.",
-            "Structures with the same composition but different oxygen-vacancy arrangements are indistinguishable to this composition-only model.",
+            "BERTOS is composition-based. Its repeated element tokens are stoichiometric "
+            "composition tokens, not crystallographic sites, so no site mapping is invented.",
+            "Structures with the same composition but different oxygen-vacancy arrangements are "
+            "indistinguishable to this composition-only model.",
             "BERTOS therefore cannot identify which specific atom is reduced near a vacancy.",
-            "Reported scores are the model's own maximum softmax probabilities; they are not presented as calibrated physical confidence.",
+            "Reported scores are the model's own maximum softmax probabilities; they are not "
+            "presented as calibrated physical confidence.",
         ],
     )
 
