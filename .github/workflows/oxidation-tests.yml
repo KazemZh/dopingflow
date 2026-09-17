@@ -9,6 +9,8 @@ on:
       - "src/dopingflow/oxidation_dft.py"
       - "src/dopingflow/cli.py"
       - "tests/test_oxidation.py"
+      - "gui/pages/Oxidation_States.py"
+      - "README.md"
       - "docs/source/methods/oxidation_states.rst"
       - "docs/source/index.rst"
       - "docs/source/api/dopingflow.rst"
@@ -33,14 +35,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,docs]"
 
-      - name: Compile oxidation modules
+      - name: Compile oxidation modules and GUI page
         run: |
           python -m py_compile \
             src/dopingflow/oxidation.py \
             src/dopingflow/oxidation_structural.py \
             src/dopingflow/oxidation_ml.py \
             src/dopingflow/oxidation_dft.py \
-            src/dopingflow/cli.py
+            src/dopingflow/cli.py \
+            gui/pages/Oxidation_States.py
 
       - name: Run oxidation tests
         run: pytest -q tests/test_oxidation.py
