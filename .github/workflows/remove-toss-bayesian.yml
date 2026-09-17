@@ -44,3 +44,5 @@ jobs:
           git rm tools/remove_toss_bayesian.py .github/workflows/remove-toss-bayesian.yml
           git commit -m "Remove conventional Bayesian TOSS oxidation method"
           git push origin HEAD:feature/oxidation-state-framework
+
+# one-time removal trigger
