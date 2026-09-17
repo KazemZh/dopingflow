@@ -101,7 +101,11 @@ Formal-charge scenarios are still retained as metadata.
 
 For the present study::
 
-   vacancy_counts = [1, 2]
+   vacancy_counts = [1, 2, 3, 4]
+
+When using the explicit 1--4-vacancy research design, keep the cap consistent::
+
+   max_vacancies_cap = 4
 
 ``supercell``
 ~~~~~~~~~~~~~
@@ -115,8 +119,8 @@ For a 120-atom SnO2-based source parent with 40 cations and 80 oxygen sites, a
 oxygen sites. Dopant counts are multiplied by eight while their percentages are
 unchanged.
 
-One and two vacancies correspond to 0.15625% and 0.3125% of the 640-site oxygen
-sublattice, respectively.
+One, two, three, and four vacancies correspond to 0.15625%, 0.3125%, 0.46875%,
+and 0.625% of the 640-site oxygen sublattice, respectively.
 
 Stage-1 Monte Carlo calculator
 ------------------------------
@@ -162,9 +166,9 @@ A production-oriented starting point for the present 960-atom coupled search is:
    mc_temperature_K = 600.0
 
    mc_run_mode = "combined"
-   mc_max_steps = 200000
-   mc_patience = 100000
-   mc_improvement_tolerance_eV = 1.0e-5
+   mc_max_steps = 500000
+   mc_patience = 105000
+   mc_improvement_tolerance_eV = 0.001
 
    mc_energy_window_eV = 1.0
    sample_seed = 42
@@ -186,14 +190,18 @@ are included in this total.
    Apply both the maximum-step ceiling and no-improvement stopping condition.
 
 The current no-improvement counter is active from step 1, including the high-
-temperature hold and cooling ramp. If the full annealing schedule must be
-completed, choose::
-
-   mc_patience > mc_annealing_hold_steps + mc_annealing_steps
+temperature hold and cooling ramp. For the present schedule, the annealing phase
+lasts 5,000 + 50,000 = 55,000 trial moves. Setting ``mc_patience = 105000``
+therefore prevents a no-improvement stop before the complete annealing schedule
+plus roughly 50,000 additional trial moves at 600 K. Any new best structure that
+improves the previous global minimum by at least 1 meV resets the patience
+counter.
 
 The package-level 10,000-step/2,000-patience defaults are intentionally small
-and are useful for development/smoke tests. The larger values above are a
-project-specific starting point, not a universal convergence guarantee.
+and are useful for development/smoke tests. The larger 500,000-step ceiling and
+105,000-step patience above are project-specific production starting values, not
+a universal convergence guarantee. Independent replicas/seeds and low-energy
+motif agreement provide stronger convergence evidence than a single trajectory.
 
 Archive and selection
 ---------------------
@@ -204,7 +212,8 @@ the current archived minimum.
 
 After Stage 1, each fixed vacancy-count group is sorted by the MC-search energy.
 ``topk_per_vacancy_count`` determines how many structures are written to
-``selected_candidates.txt`` for finalization.
+``selected_candidates.txt`` for finalization. With ``vacancy_counts = [1, 2, 3,
+4]``, this selection is performed independently for all four vacancy counts.
 
 Current staged selection sequence::
 
@@ -296,11 +305,13 @@ With ``output_directory = "vacancy-mc-grace-mace"`` the main files are::
                │   ├── ranking_scan.csv
                │   ├── selected_candidates.txt
                │   └── mc_*/
-               └── V_O_02/
+               ├── V_O_02/
+               ├── V_O_03/
+               └── V_O_04/
 
 Each selected Stage-1 configuration contains a generated POSCAR and GRACE search
 metadata. Stage 2 adds a final-backend single-point record, relaxed structure,
-and final metadata.
+and final metadata in the same dedicated output tree.
 
 Thermodynamic compatibility
 ---------------------------
@@ -329,9 +340,9 @@ Reference-state caveat when cations move
 
 The current Stage-2 ``n=0`` parent reference is the replicated source parent; it
 is not subjected to an independent cation-only Monte Carlo search. When
-``mc_cation_move_weight`` is non-zero, the defective ``n=1`` and ``n=2`` minima
-may therefore contain both vacancy rearrangement and cation reordering relative
-to the source parent.
+``mc_cation_move_weight`` is non-zero, the defective ``n=1,2,3,4`` minima may
+therefore contain both vacancy rearrangement and cation reordering relative to
+the source parent.
 
 This is appropriate for a coupled ordering search. A strict vacancy formation
 free energy referenced to an equilibrated cation arrangement would require an
