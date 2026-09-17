@@ -25,8 +25,16 @@ jobs:
 
       - name: Apply GPAW migration
         run: |
-          # POTCAR may appear only in explanatory text saying GPAW does not require it.
-          sed -i 's/["VASP electronic", "vasprun.xml", "OUTCAR", "POTCAR"]/["VASP electronic", "vasprun.xml", "OUTCAR"]/g' tools/replace_vasp_with_gpaw.py
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('tools/replace_vasp_with_gpaw.py')
+          text = p.read_text(encoding='utf-8')
+          old = 'forbidden = ["VASP electronic", "vasprun.xml", "OUTCAR", "POTCAR"]'
+          new = 'forbidden = ["VASP electronic", "vasprun.xml", "OUTCAR"]'
+          if old not in text:
+              raise SystemExit('GPAW migration validation anchor missing')
+          p.write_text(text.replace(old, new), encoding='utf-8')
+          PY
           python tools/replace_vasp_with_gpaw.py
 
       - name: Install validation dependencies
