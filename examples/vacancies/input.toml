@@ -82,10 +82,10 @@ oxidation_state_values = [
 
 count_mode = "all_reachable"
 extra_vacancies = 0
-max_vacancies_cap = 2
+max_vacancies_cap = 4
 
 # Explicit study counts override the charge-derived generation range.
-vacancy_counts = [1, 2]
+vacancy_counts = [1, 2, 3, 4]
 
 # The original 120-atom SnO2-based parent becomes a 960-atom search cell for a
 # 2x2x2 replication (320 cations + 640 oxygen sites before removing vacancies).
@@ -114,12 +114,17 @@ mc_annealing_hold_steps = 5000
 mc_annealing_steps = 50000
 mc_temperature_K = 600.0
 mc_run_mode = "combined"
-mc_max_steps = 200000
+mc_max_steps = 500000
 
-# In the current implementation patience is counted from step 1. Keep it larger
-# than hold+ramp when the full annealing schedule must be completed.
-mc_patience = 100000
-mc_improvement_tolerance_eV = 1.0e-5
+# The current MC implementation counts patience from step 1, including the
+# 5,000-step hot hold and 50,000-step cooling ramp. Using 105,000 therefore
+# guarantees that a no-improvement stop cannot occur before the annealing
+# schedule is complete plus roughly 50,000 additional trial moves at 600 K.
+mc_patience = 105000
+
+# A new global minimum must improve the previous best by at least 1 meV to reset
+# the no-improvement counter.
+mc_improvement_tolerance_eV = 0.001
 mc_energy_window_eV = 1.0
 mc_cation_move_weight = 0.5
 mc_vacancy_move_weight = 0.5
@@ -139,8 +144,8 @@ tf_threads = 1
 omp_threads = 1
 chunksize = 25
 
-# Stage 1 selects this many candidates independently for n=1 and n=2 according
-# to GRACE search energy. Stage 2 runs MACE only on those selected structures.
+# Stage 1 selects this many candidates independently for n=1,2,3,4 according to
+# GRACE search energy. Stage 2 runs MACE only on those selected structures.
 topk_per_vacancy_count = 20
 energy_normalization = "per_vacancy"
 optimizer = "bfgs"
