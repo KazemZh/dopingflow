@@ -128,24 +128,36 @@ configuration to the extracted model directory.
 DFT interpretation
 ------------------
 
-The DFT strategy deliberately separates *formal assignment* from supporting
-electronic descriptors:
+The DFT strategy uses **GPAW** as its electronic-structure backend.  GPAW is
+open source and is driven directly from Python/ASE, so dopingflow does not
+require per-structure ``INCAR``, ``KPOINTS``, ``POTCAR``, or equivalent input
+files.  Install the optional dependency and GPAW PAW datasets before execution::
+
+   pip install -e ".[oxidation-gpaw]"
+   gpaw install-data
 
 ``dft-electronic``
-   VASP ``vasprun.xml``/``OUTCAR`` post-processing for total/projected DOS,
-   approximate integrated projected populations below the Fermi level, final
-   energy, Fermi level, and site magnetic moments.  These are descriptors only.
+   Runs or reopens a GPAW ``.gpw`` ground-state calculation.  The current
+   direct-execution path uses periodic plane-wave mode and records total energy,
+   Fermi level, site magnetic moments, total DOS, and atom/angular-momentum
+   projected DOS integrals.  ``dos.csv``, ``pdos_integrals.json``,
+   ``magnetic_moments.csv``, and ``electronic_summary.json`` are written beside
+   the ``oxidation.gpw`` restart file.  These quantities are descriptors only.
 
 ``bader``
-   Parses ``ACF.dat`` and reports Bader electron populations and partial charge
-   when a valence-electron reference is available from ``POTCAR`` or the
-   configuration.  Bader never emits an integer formal oxidation state by
-   itself.
+   When ``execute=true``, dopingflow reopens the GPAW restart, reconstructs the
+   all-electron density with ``get_all_electron_density()``, writes a cube file
+   in the units expected by the Bader program, and invokes the free external
+   ``bader`` executable.  Because the density contains all electrons, the
+   reported continuous partial charge is ``Z - N_Bader``; no POTCAR or
+   user-supplied valence-electron table is required.  Bader never emits an
+   integer formal oxidation state by itself.
 
 ``wannier``
    Parses ``wannier90_centres.xyz`` and records Wannier-center information.
    Static centers are supporting descriptors and are not converted into formal
-   oxidation states automatically.
+   oxidation states automatically.  GPAW/Wannier90 can be used externally to
+   generate these centers when required.
 
 ``eos``
    The formal DFT-based assignment adapter.  It accepts assignments only from
@@ -153,10 +165,13 @@ electronic descriptors:
    ``validated=true``.  It does not infer EOS labels from Bader charge, DOS, or
    static Wannier centers.
 
-DFT mode can post-process existing outputs or explicitly execute a configured
-external command.  Expensive work is never started merely because another
-method failed.  For each DFT submethod, ``execute = false`` is the safe default.
-When ``execute = true`` an explicit ``command`` is required.
+The GPAW single-point path is opt-in.  ``execute=false`` only post-processes an
+existing ``oxidation.gpw``.  ``execute=true`` runs GPAW directly with the shared
+settings in ``[oxidation.dft_electronic]``.  Energy cutoff, k-point sampling,
+spin initialization, smearing, and SCF convergence remain scientific convergence
+parameters and must be validated for the target chemistry.  Bader has its own
+``execute`` gate because running the external Bader executable is a separate
+post-processing action.
 
 The EOS exchange file is intentionally simple and auditable::
 
@@ -187,7 +202,7 @@ Conflicting or unresolved cases can be listed for DFT follow-up::
    methods = ["dft-electronic", "bader", "eos"]
 
 With ``execute=false`` this only writes candidates.  Set ``execute=true`` only
-when the selected DFT method tables also contain the commands/work directories
+when the selected method tables contain the GPAW/post-processing settings and work directories
 needed for those calculations.
 
 Outputs
@@ -311,12 +326,12 @@ CLI::
 
    dopingflow oxidation -c input.toml --strategy ml --methods bertos
 
-5. DFT plus Bader and orbital analysis
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+5. GPAW plus Bader and orbital analysis
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The two methods intentionally share the same per-target output root.  Run the
-DFT command first; Bader can either post-process an existing ``ACF.dat`` or run
-an explicit Bader command.
+The two methods intentionally share the same per-target output root.  GPAW can
+run the single point directly from the relaxed structure.  Bader can then
+reconstruct GPAW's all-electron density and run the free ``bader`` executable.
 
 ::
 
@@ -326,24 +341,37 @@ an explicit Bader command.
    methods = ["dft-electronic", "bader"]
 
    [oxidation.dft_electronic]
-   code = "vasp"
-   output_root = "dft_oxidation"
+   code = "gpaw"
+   output_root = "gpaw_oxidation"
    execute = true
-   command = ["mpirun", "-np", "8", "vasp_std"]
+   mode = "pw"
+   ecut_eV = 500.0
+   xc = "PBE"
+   kpts = [1, 1, 1]
+   gamma = true
+   smearing_eV = 0.05
+   convergence_density = 1e-5
+   maxiter = 333
+   spinpol = "auto"
+   initial_magmoms = {}
+   gpw_file = "oxidation.gpw"
 
    [oxidation.bader]
-   output_root = "dft_oxidation"
+   output_root = "gpaw_oxidation"
+   gpw_file = "oxidation.gpw"
    execute = true
-   command = ["bader", "CHGCAR"]
-   # Optional if POTCAR is unavailable:
-   valence_electrons = { Sn = 4, Sb = 5, O = 6 }
+   gridrefinement = 4
+   density_file = "density.cube"
+   acf_file = "ACF.dat"
+   command = ["bader", "density.cube"]
 
 CLI::
 
    dopingflow oxidation -c input.toml --strategy dft --methods dft-electronic,bader
 
 Selecting only ``bader`` produces Bader descriptors and *no invented integer
-formal oxidation-state assignment*.
+formal oxidation-state assignment*.  If ``execute=true`` for Bader, an existing
+GPAW restart must already be present in the same per-target directory.
 
 6. DFT plus Wannier/EOS where supported
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -356,16 +384,16 @@ formal oxidation-state assignment*.
    methods = ["dft-electronic", "wannier", "eos"]
 
    [oxidation.dft_electronic]
-   output_root = "dft_oxidation"
+   output_root = "gpaw_oxidation"
    execute = false
 
    [oxidation.wannier]
-   output_root = "dft_oxidation"
+   output_root = "gpaw_oxidation"
    centres_file = "wannier90_centres.xyz"
    execute = false
 
    [oxidation.eos]
-   output_root = "dft_oxidation"
+   output_root = "gpaw_oxidation"
    results_file = "eos_results.json"
    execute = false
 
@@ -397,11 +425,11 @@ CLI::
    use_upstream_mn_mapping = true
 
    [oxidation.bader]
-   output_root = "dft_oxidation"
+   output_root = "gpaw_oxidation"
    execute = false
 
    [oxidation.eos]
-   output_root = "dft_oxidation"
+   output_root = "gpaw_oxidation"
    execute = false
    results_file = "eos_results.json"
 

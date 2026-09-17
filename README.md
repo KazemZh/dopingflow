@@ -58,6 +58,7 @@ pip install -e ".[alignn]"
 pip install -e ".[oxidation-toss]"    # TOSS-GNN Python deps
 pip install -e ".[oxidation-chgnet]"  # CHGNet magnetic-moment analysis
 pip install -e ".[oxidation-bertos]"  # BERTOS composition-token model
+pip install -e ".[oxidation-gpaw]"    # GPAW single-point DFT / electronic descriptors
 
 # GUI
 pip install -e ".[gui]"
@@ -453,7 +454,7 @@ Available methods are:
 
 - **Structural:** pymatgen bond valence.
 - **ML:** pretrained TOSS-GNN, CHGNet magnetic-moment analysis, and BERTOS.
-- **DFT:** VASP electronic descriptors, Bader, Wannier descriptors, and validated
+- **DFT:** GPAW single-point electronic descriptors, GPAW all-electron-density Bader analysis, Wannier descriptors, and validated
   EOS/charge-pumping formal assignments.
 - **Combined:** an explicit set of methods from multiple groups. Every method is
   retained separately; labels are not averaged and no majority vote is used.
@@ -478,6 +479,30 @@ Run it with:
 dopingflow oxidation -c input.toml --strategy structural --methods bond-valence
 ```
 
+For open-source DFT electronic descriptors, install GPAW and its PAW datasets, then configure one reusable parameter set rather than per-structure DFT input files:
+
+```bash
+pip install -e ".[oxidation-gpaw]"
+gpaw install-data
+```
+
+```toml
+[oxidation.dft_electronic]
+code = "gpaw"
+output_root = "gpaw_oxidation"
+execute = false              # true runs the single point directly
+mode = "pw"
+ecut_eV = 500.0
+xc = "PBE"
+kpts = [1, 1, 1]
+gamma = true
+smearing_eV = 0.05
+convergence_density = 1e-5
+spinpol = "auto"
+```
+
+The generated per-target GPAW directory can contain `oxidation.gpw`, `gpaw.txt`, `dos.csv`, `pdos_integrals.json`, `magnetic_moments.csv`, and `electronic_summary.json`. Cutoff, k-point, spin, smearing, and convergence settings must be converged for the target chemistry.
+
 The stage can analyze both selected vacancy-free parents and relaxed oxygen
 vacancy structures. When valid same-element parent mapping is available it also
 reports parent-relative changes.
@@ -493,8 +518,9 @@ Important interpretation rules are enforced in the implementation:
 - Static Wannier centers are descriptors. Formal DFT labels are accepted only
   from an explicitly validated EOS/charge-pumping result with a documented
   assignment procedure.
-- New DFT calculations are opt-in: `execute = false` is the safe default, and an
-  explicit external command is required when execution is enabled.
+- New GPAW single-point calculations are opt-in: `execute = false` is the safe default.
+  When enabled, dopingflow runs GPAW directly from the relaxed structure; Bader execution
+  separately requires the free `bader` executable.
 
 Outputs are written under `[oxidation].output_dir` and include
 `oxidation_results.json`, `oxidation_sites.csv`, `oxidation_comparison.json`,
@@ -540,9 +566,9 @@ dedicated pages under `gui/pages/`, including:
 
 - **Oxidation States** — configures structural/ML/DFT/combined strategies,
   individual methods, parent and oxygen-vacancy targets, TOSS-GNN/CHGNet/BERTOS
-  settings, DFT/Bader/Wannier/EOS post-processing, and optional candidate-limited
+  settings, GPAW/Bader/Wannier/EOS analysis, and optional candidate-limited
   DFT follow-up. It can save `[oxidation]`, run `dopingflow oxidation`, and inspect
-  the generated CSV/JSON results. External DFT execution remains behind explicit
+  the generated CSV/JSON results. GPAW and Bader execution remain behind explicit
   method-level and follow-up `execute` gates plus a GUI confirmation.
 - **Staged Vacancy MC** — edits `parent_include`, `parent_pick`,
   `output_directory`, `vacancy_counts`, `supercell`, GRACE `mc_*` settings,

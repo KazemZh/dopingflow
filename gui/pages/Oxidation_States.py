@@ -267,7 +267,7 @@ def dft_method_panel(method: str, table_name: str, *, extra: str = "") -> None:
     settings = _table(table_name)
     settings["output_root"] = st.text_input(
         "Per-target DFT output root",
-        value=str(settings.get("output_root", "dft_oxidation")),
+        value=str(settings.get("output_root", "gpaw_oxidation")),
         key=f"oxidation_{table_name}_root",
     )
     settings["execute"] = st.checkbox(
@@ -292,37 +292,150 @@ def dft_method_panel(method: str, table_name: str, *, extra: str = "") -> None:
 
 
 if "dft-electronic" in methods:
-    with st.expander("DFT electronic descriptors", expanded=False):
+    with st.expander("GPAW electronic descriptors", expanded=False):
         dft = _table("dft_electronic")
-        dft["code"] = st.selectbox(
-            "Electronic-structure code",
-            ["vasp"],
-            index=0,
-            help="The current parser supports VASP vasprun.xml/OUTCAR outputs.",
+        dft["code"] = "gpaw"
+        st.info(
+            "GPAW is the supported DFT backend for oxidation analysis. It is open source and runs "
+            "directly from the relaxed structure without INCAR/KPOINTS/POTCAR-style per-structure inputs."
+        )
+        dft["output_root"] = st.text_input(
+            "Per-target GPAW output root",
+            value=str(dft.get("output_root", "gpaw_oxidation")),
+            key="oxidation_dft_electronic_root",
+        )
+        dft["execute"] = st.checkbox(
+            "Run GPAW single-point calculation",
+            value=bool(dft.get("execute", False)),
+            key="oxidation_dft_electronic_execute",
+            help="Off means post-process an existing oxidation.gpw file only.",
+        )
+        f1, f2 = st.columns(2)
+        dft["gpw_file"] = f1.text_input(
+            "GPAW restart file", value=str(dft.get("gpw_file", "oxidation.gpw"))
+        )
+        dft["txt_file"] = f2.text_input(
+            "GPAW log file", value=str(dft.get("txt_file", "gpaw.txt"))
+        )
+        g1, g2, g3 = st.columns(3)
+        dft["xc"] = g1.text_input("XC functional", value=str(dft.get("xc", "PBE")))
+        dft["mode"] = "pw"
+        dft["ecut_eV"] = float(
+            g2.number_input(
+                "Plane-wave cutoff (eV)",
+                min_value=50.0,
+                value=float(dft.get("ecut_eV", 500.0)),
+                step=25.0,
+            )
+        )
+        dft["smearing_eV"] = float(
+            g3.number_input(
+                "Fermi-Dirac smearing (eV)",
+                min_value=0.0,
+                value=float(dft.get("smearing_eV", 0.05)),
+                step=0.01,
+            )
+        )
+        raw_kpts = dft.get("kpts", [1, 1, 1])
+        if not isinstance(raw_kpts, (list, tuple)) or len(raw_kpts) != 3:
+            raw_kpts = [1, 1, 1]
+        k1, k2, k3, kg = st.columns(4)
+        kx = int(k1.number_input("k₁", min_value=1, value=int(raw_kpts[0]), step=1))
+        ky = int(k2.number_input("k₂", min_value=1, value=int(raw_kpts[1]), step=1))
+        kz = int(k3.number_input("k₃", min_value=1, value=int(raw_kpts[2]), step=1))
+        dft["kpts"] = [kx, ky, kz]
+        dft["gamma"] = kg.checkbox("Gamma-centered", value=bool(dft.get("gamma", True)))
+        c1, c2, c3 = st.columns(3)
+        dft["convergence_density"] = float(
+            c1.number_input(
+                "Density convergence",
+                min_value=1.0e-10,
+                value=float(dft.get("convergence_density", 1.0e-5)),
+                format="%.1e",
+            )
+        )
+        dft["maxiter"] = int(
+            c2.number_input("SCF max iterations", min_value=1, value=int(dft.get("maxiter", 333)), step=10)
+        )
+        dft["charge"] = float(
+            c3.number_input("Net cell charge (e)", value=float(dft.get("charge", 0.0)), step=1.0)
+        )
+        spin_options = ["auto", "true", "false"]
+        spin_current = str(dft.get("spinpol", "auto")).lower()
+        if spin_current not in spin_options:
+            spin_current = "auto"
+        dft["spinpol"] = st.selectbox(
+            "Spin polarization",
+            spin_options,
+            index=spin_options.index(spin_current),
+            help="auto lets GPAW follow supplied initial magnetic moments; set true explicitly for magnetic systems when needed.",
+        )
+        magmom_text = json.dumps(dft.get("initial_magmoms", {}), indent=2)
+        magmom_text = st.text_area(
+            "Optional initial magnetic moments by element (JSON)",
+            value=magmom_text,
+            height=100,
+            help='Example: {"Mn": 4.0, "Fe": 4.0, "Ni": 2.0}. Unlisted elements start at 0 μB.',
+        )
+        dft["initial_magmoms"] = _parse_json_mapping(magmom_text, "Initial magnetic moments")
+        d1, d2, d3, d4 = st.columns(4)
+        dft["dos_emin_eV"] = float(d1.number_input("DOS Emin (E-EF, eV)", value=float(dft.get("dos_emin_eV", -10.0))))
+        dft["dos_emax_eV"] = float(d2.number_input("DOS Emax (E-EF, eV)", value=float(dft.get("dos_emax_eV", 5.0))))
+        dft["dos_npoints"] = int(d3.number_input("DOS points", min_value=51, value=int(dft.get("dos_npoints", 601)), step=50))
+        dft["dos_width_eV"] = float(d4.number_input("DOS width (eV)", min_value=0.0, value=float(dft.get("dos_width_eV", 0.10)), step=0.05))
+        dft["save_wavefunctions"] = st.checkbox(
+            "Store wavefunctions in .gpw (larger file)",
+            value=bool(dft.get("save_wavefunctions", False)),
+        )
+        st.caption(
+            "The calculation is single-point only. Energy cutoff, k-points, spin treatment, smearing, and convergence must be converged for the target chemistry before production use."
         )
         oxidation["dft_electronic"] = dft
-        dft_method_panel(
-            "dft-electronic",
-            "dft_electronic",
-            extra="Reports electronic descriptors only; it does not create a formal integer oxidation assignment.",
-        )
 
 if "bader" in methods:
-    with st.expander("Bader charge analysis", expanded=False):
-        dft_method_panel(
-            "bader",
-            "bader",
-            extra="Bader produces continuous charge descriptors only and never creates formal oxidation labels by itself.",
-        )
+    with st.expander("GPAW + Bader charge analysis", expanded=False):
         bader = _table("bader")
-        valence_text = json.dumps(bader.get("valence_electrons", {}), indent=2)
-        valence_text = st.text_area(
-            "Optional valence-electron references (JSON)",
-            value=valence_text,
-            height=100,
-            help='Example: {"Sn": 4, "Sb": 5, "O": 6}. Leave empty when POTCAR supplies the values.',
+        bader["output_root"] = st.text_input(
+            "Per-target GPAW/Bader output root",
+            value=str(bader.get("output_root", "gpaw_oxidation")),
+            key="oxidation_bader_root",
+            help="Use the same root as dft-electronic so Bader can reuse oxidation.gpw.",
         )
-        bader["valence_electrons"] = _parse_json_mapping(valence_text, "Valence-electron references")
+        bader["execute"] = st.checkbox(
+            "Generate GPAW all-electron density and run Bader",
+            value=bool(bader.get("execute", False)),
+            key="oxidation_bader_execute",
+            help="Requires an existing GPAW .gpw file in the same per-target directory and the free Bader executable.",
+        )
+        b1, b2, b3 = st.columns(3)
+        bader["gpw_file"] = b1.text_input(
+            "GPAW restart file", value=str(bader.get("gpw_file", "oxidation.gpw"))
+        )
+        bader["density_file"] = b2.text_input(
+            "All-electron density cube", value=str(bader.get("density_file", "density.cube"))
+        )
+        bader["acf_file"] = b3.text_input(
+            "Bader ACF file", value=str(bader.get("acf_file", "ACF.dat"))
+        )
+        grid_options = [1, 2, 4]
+        grid_current = int(bader.get("gridrefinement", 4))
+        if grid_current not in grid_options:
+            grid_current = 4
+        bader["gridrefinement"] = st.selectbox(
+            "GPAW all-electron density grid refinement",
+            grid_options,
+            index=grid_options.index(grid_current),
+        )
+        command_text = st.text_input(
+            "Bader command",
+            value=_command_text(bader.get("command", ["bader", "density.cube"])),
+            disabled=not bader["execute"],
+            help="Default uses the free 'bader' executable on density.cube; no shell is used.",
+        )
+        bader["command"] = _parse_command(command_text)
+        st.caption(
+            "dopingflow reconstructs GPAW's all-electron density and reports continuous Bader charges as Z − basin electrons. It never converts them automatically into formal integer oxidation states."
+        )
         oxidation["bader"] = bader
 
 if "wannier" in methods:

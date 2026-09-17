@@ -75,6 +75,10 @@ oxidation-bertos = [
   "transformers>=4.30",
 ]
 
+oxidation-gpaw = [
+  "gpaw>=24.6",
+]
+
 dev = [
   "pytest>=8",
   "ruff>=0.5",

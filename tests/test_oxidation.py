@@ -296,8 +296,8 @@ def test_bader_is_descriptor_only_and_never_invents_integer_state(tmp_path: Path
     (workdir / "ACF.dat").write_text(
         "# X Y Z CHARGE MIN_DIST ATOMIC_VOL\n"
         "---------------------------------------------\n"
-        "1 0.0 0.0 0.0 3.60 0.50 10.0\n"
-        "2 2.5 2.5 2.5 6.30 0.50 11.0\n",
+        "1 0.0 0.0 0.0 49.60 0.50 10.0\n"
+        "2 2.5 2.5 2.5 8.30 0.50 11.0\n",
         encoding="utf-8",
     )
     result = run_dft_method(
@@ -307,13 +307,43 @@ def test_bader_is_descriptor_only_and_never_invents_integer_state(tmp_path: Path
         {
             "workdir": str(workdir),
             "execute": False,
-            "valence_electrons": {"Sn": 4, "O": 6},
         },
     )
     assert result["assignment_status"] == "descriptors-only"
     assert result["formal_oxidation_states"] == []
+    assert result["bader_partial_charges"][0]["atomic_number"] == 50
     assert result["bader_partial_charges"][0]["bader_partial_charge"] == pytest.approx(0.4)
     assert result["bader_partial_charges"][1]["bader_partial_charge"] == pytest.approx(-0.3)
+
+
+def test_dft_electronic_is_gpaw_only_and_requires_gpw_when_not_executing(tmp_path: Path) -> None:
+    structure_path = tmp_path / "POSCAR"
+    Poscar(_structure()).write_file(structure_path)
+    target = StructureTarget(
+        target_id="parent",
+        parent_id="parent",
+        kind="vacancy-free",
+        structure_path=structure_path,
+        n_vacancies=0,
+        vacancy_species=None,
+    )
+    cfg = _cfg(tmp_path, methods=("dft-electronic",))
+
+    with pytest.raises(OptionalMethodUnavailable, match="GPAW-only"):
+        run_dft_method(
+            "dft-electronic",
+            target,
+            cfg,
+            {"code": "vasp", "execute": False},
+        )
+
+    with pytest.raises(OptionalMethodUnavailable, match="oxidation.gpw"):
+        run_dft_method(
+            "dft-electronic",
+            target,
+            cfg,
+            {"code": "gpaw", "execute": False},
+        )
 
 
 def test_eos_requires_explicit_validated_assignment(tmp_path: Path) -> None:

@@ -1,15 +1,15 @@
 from __future__ import annotations
 
+import csv
 import json
 import math
-import re
 import shlex
 import subprocess
 from pathlib import Path
 from typing import Any, Sequence
 
 from pymatgen.core import Structure
-from pymatgen.io.vasp import Poscar
+from pymatgen.io.ase import AseAtomsAdaptor
 
 from dopingflow.oxidation import (
     OptionalMethodUnavailable,
@@ -30,7 +30,7 @@ def _workdir(target: StructureTarget, cfg: OxidationConfig, settings: dict[str, 
     if explicit:
         path = _format_path(explicit, target=target)
         return (path if path.is_absolute() else cfg.root / path).resolve()
-    root_raw = str(settings.get("output_root") or "dft_oxidation").strip()
+    root_raw = str(settings.get("output_root") or "gpaw_oxidation").strip()
     root = Path(root_raw).expanduser()
     root = (root if root.is_absolute() else cfg.source_root / root).resolve()
     return root / target.safe_id
@@ -42,7 +42,7 @@ def _command_tokens(command: Any, *, target: StructureTarget, workdir: Path) -> 
     elif isinstance(command, list):
         raw = [str(item) for item in command]
     else:
-        raise ValueError("DFT/post-processing command must be a string or array of strings")
+        raise ValueError("Post-processing command must be a string or array of strings")
     return [
         item.format(
             target_id=target.target_id,
@@ -73,7 +73,7 @@ def _maybe_execute(
         )
     workdir.mkdir(parents=True, exist_ok=True)
     structure = Structure.from_file(target.structure_path)
-    Poscar(structure).write_file(workdir / "POSCAR")
+    structure.to(filename=str(workdir / "structure.cif"))
     tokens = _command_tokens(command, target=target, workdir=workdir)
     completed = subprocess.run(
         tokens,
@@ -101,109 +101,297 @@ def _trapz(x: Sequence[float], y: Sequence[float]) -> float:
     return total
 
 
+def _parse_kpts(settings: dict[str, Any]) -> tuple[int, int, int]:
+    raw = settings.get("kpts", [1, 1, 1])
+    if isinstance(raw, str):
+        raw = [item.strip() for item in raw.replace("x", ",").split(",") if item.strip()]
+    if not isinstance(raw, (list, tuple)) or len(raw) != 3:
+        raise ValueError("[oxidation.dft_electronic].kpts must contain three positive integers")
+    kpts = tuple(int(value) for value in raw)
+    if any(value < 1 for value in kpts):
+        raise ValueError("[oxidation.dft_electronic].kpts values must be >= 1")
+    return kpts
+
+
+def _parse_initial_magmoms(settings: dict[str, Any]) -> dict[str, float]:
+    raw = settings.get("initial_magmoms", {}) or {}
+    if not isinstance(raw, dict):
+        raise ValueError("[oxidation.dft_electronic].initial_magmoms must be a table/dictionary")
+    return {str(element): float(value) for element, value in raw.items()}
+
+
+def _gpaw_restart(path: Path):
+    try:
+        from gpaw import restart
+    except ImportError as exc:
+        raise OptionalMethodUnavailable(
+            "GPAW electronic analysis requires the optional GPAW package. "
+            "Install dopingflow with [oxidation-gpaw] and install GPAW PAW setup data."
+        ) from exc
+    try:
+        return restart(str(path), txt=None)
+    except TypeError:
+        return restart(str(path))
+    except Exception as exc:
+        raise RuntimeError(f"Could not read GPAW restart file {path}: {exc}") from exc
+
+
+def _run_gpaw_single_point(
+    target: StructureTarget,
+    cfg: OxidationConfig,
+    settings: dict[str, Any],
+) -> Path:
+    try:
+        import gpaw
+        from gpaw import FermiDirac, GPAW, PW
+    except ImportError as exc:
+        raise OptionalMethodUnavailable(
+            "GPAW execution requires the optional GPAW package. Install dopingflow with "
+            "[oxidation-gpaw] and install GPAW PAW setup data."
+        ) from exc
+
+    mode = str(settings.get("mode", "pw")).strip().lower()
+    if mode != "pw":
+        raise ValueError(
+            "The oxidation GPAW backend currently supports mode='pw' only for periodic doped solids"
+        )
+
+    workdir = _workdir(target, cfg, settings)
+    workdir.mkdir(parents=True, exist_ok=True)
+    structure = Structure.from_file(target.structure_path)
+    atoms = AseAtomsAdaptor.get_atoms(structure)
+
+    initial_map = _parse_initial_magmoms(settings)
+    if initial_map:
+        atoms.set_initial_magnetic_moments(
+            [float(initial_map.get(symbol, 0.0)) for symbol in atoms.get_chemical_symbols()]
+        )
+
+    spin_mode = settings.get("spinpol", "auto")
+    if isinstance(spin_mode, bool):
+        spin_mode = "true" if spin_mode else "false"
+    spin_mode = str(spin_mode).strip().lower()
+    if spin_mode not in {"auto", "true", "false"}:
+        raise ValueError("[oxidation.dft_electronic].spinpol must be auto, true, or false")
+
+    ecut = float(settings.get("ecut_eV", 500.0))
+    if ecut <= 0:
+        raise ValueError("[oxidation.dft_electronic].ecut_eV must be positive")
+    smearing = float(settings.get("smearing_eV", 0.05))
+    if smearing < 0:
+        raise ValueError("[oxidation.dft_electronic].smearing_eV must be >= 0")
+    convergence_density = float(settings.get("convergence_density", 1.0e-5))
+    if convergence_density <= 0:
+        raise ValueError("[oxidation.dft_electronic].convergence_density must be positive")
+
+    gpw_path = workdir / str(settings.get("gpw_file", "oxidation.gpw"))
+    txt_path = workdir / str(settings.get("txt_file", "gpaw.txt"))
+    kwargs: dict[str, Any] = {
+        "mode": PW(ecut),
+        "xc": str(settings.get("xc", "PBE")),
+        "kpts": {"size": _parse_kpts(settings), "gamma": bool(settings.get("gamma", True))},
+        "occupations": FermiDirac(smearing),
+        "convergence": {"density": convergence_density},
+        "txt": str(txt_path),
+    }
+    maxiter = int(settings.get("maxiter", 333))
+    if maxiter > 0:
+        kwargs["maxiter"] = maxiter
+    charge = float(settings.get("charge", 0.0))
+    if abs(charge) > 1.0e-12:
+        kwargs["charge"] = charge
+    if spin_mode == "true":
+        kwargs["spinpol"] = True
+    elif spin_mode == "false":
+        kwargs["spinpol"] = False
+
+    try:
+        calc = GPAW(**kwargs)
+        atoms.calc = calc
+        energy = float(atoms.get_potential_energy())
+        if bool(settings.get("save_wavefunctions", False)):
+            calc.write(str(gpw_path), mode="all")
+        else:
+            calc.write(str(gpw_path))
+    except Exception as exc:
+        raise RuntimeError(f"GPAW single-point calculation failed: {exc}") from exc
+
+    metadata = {
+        "code": "GPAW",
+        "gpaw_version": getattr(gpaw, "__version__", None),
+        "target_id": target.target_id,
+        "structure_path": str(target.structure_path),
+        "gpw_file": str(gpw_path),
+        "txt_file": str(txt_path),
+        "final_energy_eV": energy,
+        "settings": {
+            "mode": "pw",
+            "ecut_eV": ecut,
+            "xc": str(settings.get("xc", "PBE")),
+            "kpts": list(_parse_kpts(settings)),
+            "gamma": bool(settings.get("gamma", True)),
+            "smearing_eV": smearing,
+            "convergence_density": convergence_density,
+            "maxiter": maxiter,
+            "charge": charge,
+            "spinpol": spin_mode,
+            "initial_magmoms": initial_map,
+            "save_wavefunctions": bool(settings.get("save_wavefunctions", False)),
+        },
+    }
+    (workdir / "gpaw_run_metadata.json").write_text(
+        json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8"
+    )
+    return gpw_path
+
+
 def _run_dft_electronic(
     target: StructureTarget,
     cfg: OxidationConfig,
     settings: dict[str, Any],
 ) -> dict[str, Any]:
-    code = str(settings.get("code", "vasp")).strip().lower()
-    if code != "vasp":
+    code = str(settings.get("code", "gpaw")).strip().lower()
+    if code != "gpaw":
         raise OptionalMethodUnavailable(
-            f"The current dft-electronic post-processor supports VASP outputs only; requested code='{code}'."
+            f"The oxidation dft-electronic backend is GPAW-only; requested code='{code}'."
         )
-    workdir = _maybe_execute(target, cfg, settings, stage="dft_electronic")
-    vasprun_path = workdir / str(settings.get("vasprun_file", "vasprun.xml"))
-    if not vasprun_path.is_file():
+
+    workdir = _workdir(target, cfg, settings)
+    gpw_path = workdir / str(settings.get("gpw_file", "oxidation.gpw"))
+    if bool(settings.get("execute", False)):
+        gpw_path = _run_gpaw_single_point(target, cfg, settings)
+    if not gpw_path.is_file():
         raise OptionalMethodUnavailable(
-            f"VASP electronic analysis needs {vasprun_path}. Set execute=true with a command, or point workdir/output_root to existing outputs."
+            f"GPAW electronic analysis needs {gpw_path}. Set execute=true to run the GPAW "
+            "single point directly, or point workdir/output_root to an existing GPAW result."
         )
-    try:
-        from pymatgen.io.vasp.outputs import Outcar, Vasprun
-    except ImportError as exc:  # pragma: no cover
-        raise OptionalMethodUnavailable("pymatgen VASP parsers are unavailable") from exc
 
-    try:
-        vasprun = Vasprun(
-            vasprun_path,
-            parse_dos=True,
-            parse_eigen=False,
-            parse_projected_eigen=False,
-            parse_potcar_file=False,
-        )
-    except Exception as exc:
-        raise RuntimeError(f"Could not parse VASP vasprun.xml: {exc}") from exc
-
+    atoms, calc = _gpaw_restart(gpw_path)
     original = Structure.from_file(target.structure_path)
-    final_structure = vasprun.final_structure
-    if len(final_structure) != len(original) or [site.specie.symbol for site in final_structure] != [
-        site.specie.symbol for site in original
-    ]:
-        raise RuntimeError("DFT output site order/species do not match the analyzed relaxed structure")
+    symbols = list(atoms.get_chemical_symbols())
+    expected = [site.specie.symbol for site in original]
+    if len(symbols) != len(expected) or symbols != expected:
+        raise RuntimeError("GPAW output site order/species do not match the analyzed relaxed structure")
+
+    try:
+        final_energy = float(atoms.get_potential_energy())
+    except Exception:
+        final_energy = None
+    try:
+        efermi = float(calc.get_fermi_level())
+    except Exception:
+        efermi = None
 
     magnetic_records: list[dict[str, Any]] = []
-    outcar_path = workdir / str(settings.get("outcar_file", "OUTCAR"))
-    if outcar_path.is_file():
+    try:
         try:
-            outcar = Outcar(outcar_path)
-            magnetization = outcar.magnetization
-            if magnetization and len(magnetization) == len(original):
-                for index, (site, entry) in enumerate(zip(original, magnetization)):
-                    magnetic_records.append(
-                        {
-                            "site_index": index,
-                            "element": site.specie.symbol,
-                            "magnetic_moment": float(entry.get("tot", 0.0)),
-                            "descriptor": "dft_outcar_site_magnetic_moment",
-                        }
-                    )
-        except Exception:
-            magnetic_records = []
+            moments = calc.get_magnetic_moments(atoms)
+        except TypeError:
+            moments = calc.get_magnetic_moments()
+        if moments is not None and len(moments) == len(original):
+            magnetic_records = [
+                {
+                    "site_index": index,
+                    "element": expected[index],
+                    "magnetic_moment": float(value),
+                    "descriptor": "gpaw_site_magnetic_moment",
+                }
+                for index, value in enumerate(moments)
+            ]
+    except Exception:
+        magnetic_records = []
 
     orbital_records: list[dict[str, Any]] = []
     dos_descriptors: list[dict[str, Any]] = []
-    complete_dos = getattr(vasprun, "complete_dos", None)
-    if complete_dos is not None:
-        efermi = float(vasprun.efermi)
-        try:
-            interpolated = complete_dos.get_interpolated_value(efermi)
-            total_dos_fermi = sum(float(value) for value in interpolated.values())
-        except Exception:
-            total_dos_fermi = None
+    limitations = [
+        "GPAW DOS/PDOS integrals and local magnetic moments are supporting electronic descriptors, not integer formal oxidation-state assignments.",
+        "GPAW atomic-projector PDOS is a qualitative local-character measure because the PAW partial-wave projectors are not an orthonormal atomic basis.",
+    ]
+    try:
+        import numpy as np
+
+        emin = float(settings.get("dos_emin_eV", -10.0))
+        emax = float(settings.get("dos_emax_eV", 5.0))
+        npoints = int(settings.get("dos_npoints", 601))
+        width = float(settings.get("dos_width_eV", 0.10))
+        if emax <= emin or npoints < 3 or width < 0:
+            raise ValueError("invalid DOS window/npoints/width")
+        energies = np.linspace(emin, emax, npoints)
+        doscalc = calc.dos()
+        total_dos = doscalc.raw_dos(energies, spin=None, width=width)
+        total_dos_fermi = (
+            float(np.interp(0.0, energies, total_dos)) if emin <= 0.0 <= emax else None
+        )
         dos_descriptors.append(
             {
                 "efermi_eV": efermi,
                 "total_dos_at_efermi_states_per_eV": total_dos_fermi,
-                "descriptor": "vasp_complete_dos",
+                "energy_reference": "E-E_F",
+                "descriptor": "gpaw_total_dos",
             }
         )
-        for index, site in enumerate(final_structure):
-            try:
-                spd = complete_dos.get_site_spd_dos(site)
-            except Exception:
-                continue
+
+        with (workdir / "dos.csv").open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["energy_relative_to_efermi_eV", "total_dos_states_per_eV"])
+            writer.writerows((float(e), float(d)) for e, d in zip(energies, total_dos))
+
+        occupied = [i for i, energy in enumerate(energies) if float(energy) <= 0.0]
+        stop = occupied[-1] + 1 if occupied else 0
+        labels = {0: "s", 1: "p", 2: "d", 3: "f"}
+        for index, element in enumerate(expected):
             populations: dict[str, float] = {}
-            for orbital_type, dos in spd.items():
-                energies = [float(value) for value in dos.energies]
-                mask = [i for i, energy in enumerate(energies) if energy <= efermi]
-                if len(mask) < 2:
-                    continue
-                stop = mask[-1] + 1
-                try:
-                    density_map = dos.densities
-                    total_density = [
-                        sum(float(values[i]) for values in density_map.values()) for i in range(stop)
-                    ]
-                    populations[str(orbital_type)] = _trapz(energies[:stop], total_density)
-                except Exception:
-                    continue
+            if stop >= 2:
+                for angular, label in labels.items():
+                    try:
+                        pdos = doscalc.raw_pdos(
+                            energies,
+                            a=index,
+                            l=angular,
+                            spin=None,
+                            width=width,
+                        )
+                        populations[label] = _trapz(
+                            [float(value) for value in energies[:stop]],
+                            [float(value) for value in pdos[:stop]],
+                        )
+                    except Exception:
+                        continue
             orbital_records.append(
                 {
                     "site_index": index,
-                    "element": original[index].specie.symbol,
+                    "element": element,
                     "orbital_populations": populations,
-                    "descriptor": "integrated_projected_dos_below_efermi",
+                    "descriptor": "gpaw_integrated_projector_pdos_below_efermi",
                 }
             )
+        (workdir / "pdos_integrals.json").write_text(
+            json.dumps(orbital_records, indent=2), encoding="utf-8"
+        )
+    except Exception as exc:
+        limitations.append(f"GPAW DOS/PDOS extraction was unavailable for this result: {type(exc).__name__}: {exc}")
+
+    if magnetic_records:
+        with (workdir / "magnetic_moments.csv").open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=["site_index", "element", "magnetic_moment", "descriptor"],
+            )
+            writer.writeheader()
+            writer.writerows(magnetic_records)
+
+    summary = {
+        "code": "GPAW",
+        "workdir": str(workdir),
+        "gpw_file": str(gpw_path),
+        "execute": bool(settings.get("execute", False)),
+        "final_energy_eV": final_energy,
+        "efermi_eV": efermi,
+        "dos_descriptors": dos_descriptors,
+    }
+    (workdir / "electronic_summary.json").write_text(
+        json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8"
+    )
 
     result = base_method_result(
         method="dft-electronic",
@@ -212,20 +400,8 @@ def _run_dft_electronic(
         status="descriptors-only",
         orbital_populations=orbital_records,
         magnetic_moments=magnetic_records,
-        provenance={
-            "code": "VASP",
-            "workdir": str(workdir),
-            "vasprun_file": str(vasprun_path),
-            "outcar_file": str(outcar_path) if outcar_path.is_file() else None,
-            "execute": bool(settings.get("execute", False)),
-            "final_energy_eV": float(vasprun.final_energy),
-            "efermi_eV": float(vasprun.efermi),
-            "dos_descriptors": dos_descriptors,
-        },
-        limitations=[
-            "Projected DOS integrals, orbital populations, and local magnetic moments are supporting electronic descriptors, not integer formal oxidation-state assignments.",
-            "Projected populations depend on the projector/basis choices and integration convention used by the electronic-structure calculation.",
-        ],
+        provenance=summary,
+        limitations=limitations,
     )
     result["dos_descriptors"] = dos_descriptors
     return result
@@ -254,13 +430,26 @@ def _parse_acf(path: Path) -> list[dict[str, float]]:
     return rows
 
 
-def _potcar_valence_map(path: Path) -> dict[str, float]:
-    if not path.is_file():
-        return {}
-    text = path.read_text(encoding="utf-8", errors="replace")
-    elements = re.findall(r"VRHFIN\s*=\s*([A-Z][a-z]?)\s*:", text)
-    zvals = re.findall(r"ZVAL\s*=\s*([-+0-9.Ee]+)", text)
-    return {element: float(zval) for element, zval in zip(elements, zvals)}
+
+def _write_gpaw_all_electron_density(
+    gpw_path: Path,
+    density_path: Path,
+    *,
+    gridrefinement: int,
+) -> None:
+    if gridrefinement not in {1, 2, 4}:
+        raise ValueError("[oxidation.bader].gridrefinement must be one of 1, 2, or 4")
+    try:
+        from ase.io import write
+        from ase.units import Bohr
+    except ImportError as exc:
+        raise OptionalMethodUnavailable("GPAW Bader preparation requires ASE") from exc
+    atoms, calc = _gpaw_restart(gpw_path)
+    try:
+        rho = calc.get_all_electron_density(gridrefinement=gridrefinement)
+        write(str(density_path), atoms, data=rho * Bohr**3)
+    except Exception as exc:
+        raise RuntimeError(f"Could not reconstruct GPAW all-electron density for Bader: {exc}") from exc
 
 
 def _run_bader(
@@ -268,51 +457,78 @@ def _run_bader(
     cfg: OxidationConfig,
     settings: dict[str, Any],
 ) -> dict[str, Any]:
-    workdir = _maybe_execute(target, cfg, settings, stage="bader")
+    workdir = _workdir(target, cfg, settings)
+    gpw_path = workdir / str(settings.get("gpw_file", "oxidation.gpw"))
+    density_path = workdir / str(settings.get("density_file", "density.cube"))
     acf = workdir / str(settings.get("acf_file", "ACF.dat"))
+    gridrefinement = int(settings.get("gridrefinement", 4))
+
+    if bool(settings.get("execute", False)):
+        workdir.mkdir(parents=True, exist_ok=True)
+        if not gpw_path.is_file():
+            raise OptionalMethodUnavailable(
+                f"Bader execution needs the GPAW restart {gpw_path}. Run dft-electronic first "
+                "with the same output_root/workdir and execute=true, or provide an existing .gpw file."
+            )
+        _write_gpaw_all_electron_density(
+            gpw_path,
+            density_path,
+            gridrefinement=gridrefinement,
+        )
+        command = settings.get("command") or ["bader", density_path.name]
+        tokens = _command_tokens(command, target=target, workdir=workdir)
+        try:
+            completed = subprocess.run(
+                tokens,
+                cwd=workdir,
+                check=False,
+                text=True,
+                capture_output=True,
+            )
+        except FileNotFoundError as exc:
+            raise OptionalMethodUnavailable(
+                "The Bader executable was not found. Install the free Henkelman-group Bader program "
+                "or configure [oxidation.bader].command to its executable path."
+            ) from exc
+        (workdir / "dopingflow_bader_stdout.txt").write_text(
+            completed.stdout or "", encoding="utf-8"
+        )
+        (workdir / "dopingflow_bader_stderr.txt").write_text(
+            completed.stderr or "", encoding="utf-8"
+        )
+        if completed.returncode != 0:
+            raise RuntimeError(
+                f"Bader command failed with exit code {completed.returncode}; see dopingflow_bader_stderr.txt"
+            )
+
     if not acf.is_file():
         raise OptionalMethodUnavailable(
-            f"Bader analysis needs {acf}. Run Bader externally or set execute=true with an explicit command."
+            f"Bader analysis needs {acf}. Set execute=true to generate an all-electron density "
+            "from GPAW and run Bader, or point workdir/output_root to existing Bader outputs."
         )
+
     structure = Structure.from_file(target.structure_path)
     rows = _parse_acf(acf)
     if len(rows) != len(structure):
         raise RuntimeError(
             f"Bader ACF.dat contains {len(rows)} atom rows for a {len(structure)}-site structure"
         )
-    configured_valence = settings.get("valence_electrons", {}) or {}
-    if not isinstance(configured_valence, dict):
-        raise ValueError("[oxidation.bader].valence_electrons must be a table/dictionary")
-    valence_map = _potcar_valence_map(workdir / str(settings.get("potcar_file", "POTCAR")))
-    valence_map.update({str(key): float(value) for key, value in configured_valence.items()})
 
     charge_records = []
-    missing_valence: set[str] = set()
     for index, (site, row) in enumerate(zip(structure, rows)):
-        element = site.specie.symbol
-        zval = valence_map.get(element)
-        partial = None if zval is None else float(zval) - row["electrons"]
-        if zval is None:
-            missing_valence.add(element)
+        atomic_number = int(site.specie.Z)
+        partial = float(atomic_number) - float(row["electrons"])
         charge_records.append(
             {
                 "site_index": index,
-                "element": element,
+                "element": site.specie.symbol,
+                "atomic_number": atomic_number,
                 "bader_electrons": row["electrons"],
-                "valence_electrons": zval,
                 "bader_partial_charge": partial,
-                "assignment_status": "descriptor" if partial is not None else "missing-valence-reference",
+                "assignment_status": "descriptor",
             }
         )
-    limitations = [
-        "Bader charge is a partitioned continuous charge descriptor and is not, by itself, a formal integer oxidation-state assignment.",
-        "No formal oxidation state is emitted by this method, even when Bader charges are close to integers.",
-    ]
-    if missing_valence:
-        limitations.append(
-            "Partial charges could not be computed for elements lacking a POTCAR/configured valence-electron reference: "
-            + ", ".join(sorted(missing_valence))
-        )
+
     return base_method_result(
         method="bader",
         target=target,
@@ -320,12 +536,19 @@ def _run_bader(
         status="descriptors-only",
         bader_partial_charges=charge_records,
         provenance={
+            "code": "GPAW+Bader",
             "workdir": str(workdir),
+            "gpw_file": str(gpw_path) if gpw_path.is_file() else None,
+            "density_file": str(density_path) if density_path.is_file() else None,
             "acf_file": str(acf),
+            "gridrefinement": gridrefinement,
             "execute": bool(settings.get("execute", False)),
-            "valence_electron_sources": valence_map,
         },
-        limitations=limitations,
+        limitations=[
+            "Bader charge is a partitioned continuous charge descriptor and is not, by itself, a formal integer oxidation-state assignment.",
+            "When execute=true, dopingflow reconstructs GPAW's all-electron density before Bader partitioning; partial charge is Z minus the Bader electron population.",
+            "No formal oxidation state is emitted by this method, even when a Bader partial charge is close to an integer.",
+        ],
     )
 
 
