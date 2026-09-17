@@ -7,9 +7,10 @@
 **High-throughput ML-driven doping workflow for materials screening.**
 
 `dopingflow` is a modular CLI pipeline for automated generation, screening,
-relaxation, formation-energy analysis, phase stability, and oxygen-vacancy
-studies of doped crystal structures using machine-learning interatomic
-potentials and graph neural networks.
+relaxation, formation-energy analysis, phase stability, oxygen-vacancy studies,
+and configurable oxidation-state analysis of doped crystal structures using
+machine-learning interatomic potentials, graph neural networks, structural
+chemistry, and optional DFT post-processing.
 
 Designed for **reproducible, scalable materials-discovery workflows**.
 
@@ -19,6 +20,7 @@ Designed for **reproducible, scalable materials-discovery workflows**.
 
 - **Online HTML:** https://kazemzh.github.io/dopingflow/
 - **Checked-in PDF user guide:** [dopingflow-user-guide.pdf](dopingflow-user-guide.pdf)
+- **Oxidation-state guide:** [`docs/source/methods/oxidation_states.rst`](docs/source/methods/oxidation_states.rst)
 - **Vacancy example:** [`examples/vacancies`](examples/vacancies)
 
 ---
@@ -52,6 +54,11 @@ pip install -e ".[uma]"
 # ALIGNN bandgap support
 pip install -e ".[alignn]"
 
+# Oxidation-state optional dependencies
+pip install -e ".[oxidation-toss]"    # conventional TOSS / TOSS-GNN Python deps
+pip install -e ".[oxidation-chgnet]"  # CHGNet magnetic-moment analysis
+pip install -e ".[oxidation-bertos]"  # BERTOS composition-token model
+
 # GUI
 pip install -e ".[gui]"
 
@@ -64,6 +71,10 @@ pip install -e ".[corrections]"
 # Development and tests
 pip install -e ".[dev]"
 ```
+
+The TOSS-GNN and BERTOS adapters also require local upstream repositories/model
+files as documented in the oxidation-state guide; dopingflow does not silently
+download or invent those external assets.
 
 M3GNet and UMA have historically required incompatible dependency stacks; keep
 backend environments isolated when their dependency requirements conflict.
@@ -120,6 +131,7 @@ dopingflow phase-diagram -c input.toml
 dopingflow vacancies -c input.toml
 dopingflow vacancies-mc-search -c input.toml
 dopingflow vacancies-finalize -c input.toml
+dopingflow oxidation -c input.toml
 dopingflow surface -c input.toml
 ```
 
@@ -431,6 +443,68 @@ use experimental formation-enthalpy information for oxygen-related calibration.
 
 ---
 
+## Oxidation-state analysis
+
+The oxidation stage is independent of the ML potential used for structural
+relaxation. The same MACE-, UMA-, GRACE-, or M3GNet-relaxed structures can be
+analyzed with structural, ML, DFT, or explicitly combined strategies.
+
+Available methods are:
+
+- **Structural:** pymatgen bond valence and conventional Bayesian/MAP TOSS.
+- **ML:** pretrained TOSS-GNN, CHGNet magnetic-moment analysis, and BERTOS.
+- **DFT:** VASP electronic descriptors, Bader, Wannier descriptors, and validated
+  EOS/charge-pumping formal assignments.
+- **Combined:** an explicit set of methods from multiple groups. Every method is
+  retained separately; labels are not averaged and no majority vote is used.
+
+A small structural smoke test can start with:
+
+```toml
+[oxidation]
+enabled = true
+strategy = "structural"
+methods = ["bond-valence"]
+include_vacancy_free = true
+include_oxygen_vacancies = true
+output_dir = "06_oxidation"
+mapping_tolerance = 1.2
+fail_fast = false
+```
+
+Run it with:
+
+```bash
+dopingflow oxidation -c input.toml --strategy structural --methods bond-valence
+```
+
+The stage can analyze both selected vacancy-free parents and relaxed oxygen
+vacancy structures. When valid same-element parent mapping is available it also
+reports parent-relative changes.
+
+Important interpretation rules are enforced in the implementation:
+
+- Bader charges are continuous descriptors and never become formal integer
+  oxidation states automatically.
+- CHGNet magnetic moments are stored separately from inferred oxidation labels;
+  unsupported or ambiguous sites remain unresolved.
+- BERTOS is composition-token level and is never fabricated into site-resolved
+  assignments.
+- Static Wannier centers are descriptors. Formal DFT labels are accepted only
+  from an explicitly validated EOS/charge-pumping result with a documented
+  assignment procedure.
+- New DFT calculations are opt-in: `execute = false` is the safe default, and an
+  explicit external command is required when execution is enabled.
+
+Outputs are written under `[oxidation].output_dir` and include
+`oxidation_results.json`, `oxidation_sites.csv`, `oxidation_comparison.json`,
+`dft_followup_candidates.json`, and `meta.json`.
+
+See the complete seven configuration examples and method-specific caveats in
+[`docs/source/methods/oxidation_states.rst`](docs/source/methods/oxidation_states.rst).
+
+---
+
 ## Recommended smoke test before a production campaign
 
 For the first run on a new machine/backend combination, temporarily reduce the
@@ -464,6 +538,12 @@ streamlit run gui/app.py
 In addition to the main Input Builder/Run/Results pages, Streamlit discovers
 dedicated pages under `gui/pages/`, including:
 
+- **Oxidation States** — configures structural/ML/DFT/combined strategies,
+  individual methods, parent and oxygen-vacancy targets, TOSS-GNN/CHGNet/BERTOS
+  settings, DFT/Bader/Wannier/EOS post-processing, and optional candidate-limited
+  DFT follow-up. It can save `[oxidation]`, run `dopingflow oxidation`, and inspect
+  the generated CSV/JSON results. External DFT execution remains behind explicit
+  method-level and follow-up `execute` gates plus a GUI confirmation.
 - **Staged Vacancy MC** — edits `parent_include`, `parent_pick`,
   `output_directory`, `vacancy_counts`, `supercell`, GRACE `mc_*` settings,
   production MC controls, and MACE finalization settings. Its defaults reflect
@@ -512,10 +592,15 @@ gui/
   app.py
   vacancy_staged.py
   pages/
+    Oxidation_States.py
     Vacancy_MC_Staged.py
     Vacancy_Energy_Correction.py
     Phase_Diagram.py
 src/dopingflow/
+  oxidation.py
+  oxidation_structural.py
+  oxidation_ml.py
+  oxidation_dft.py
   vacancies.py
   vacancy_monte_carlo.py
   vacancy_mc_extensions.py
