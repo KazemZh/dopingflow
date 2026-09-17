@@ -100,10 +100,12 @@ and actual model inference may impose additional applicability limitations.
 
 Oxidation-state inference is performed only where an explicit magnetic-moment
 mapping exists.  By default dopingflow reproduces only the Mn mapping from
-CHGNet's upstream ``solve_charge_by_mag`` helper.  Other elements can be added
-through ``moment_oxidation_ranges``.  No universal mapping is assumed.
-In particular, near-zero moments are not used to distinguish Sn2+/Sn4+ or
-Sb3+/Sb5+.
+CHGNet's upstream ``solve_charge_by_mag`` helper, including its use of the raw
+magnetic moment.  Other elements can be added through ``moment_oxidation_ranges``.
+No universal mapping is assumed.  In particular, near-zero moments are not used
+to distinguish Sn2+/Sn4+ or Sb3+/Sb5+.  An explicit
+``use_absolute_moment = true`` option is available for user-defined workflows,
+but it is recorded as a departure from the upstream helper semantics.
 
 BERTOS
 ------
@@ -267,8 +269,9 @@ CLI::
    model_name = "0.3.0"
    device = "cpu"
    use_upstream_mn_mapping = true
+   use_absolute_moment = false
    # Optional additional element-specific ranges may be supplied as
-   # moment_oxidation_ranges = { Element = [[min_abs_moment, max_abs_moment, OS], ...] }
+   # moment_oxidation_ranges = { Element = [[min_moment, max_moment, OS], ...] }
    # only when a chemically justified mapping is available for that element/model.
 
 CLI::
