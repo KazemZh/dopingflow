@@ -23,9 +23,11 @@ on:
       - "gui/gui_config.py"
       - "gui/app.py"
       - "gui/README.md"
+      - "gui/vacancy_staged.py"
       - "gui/phase_diagram_plots.py"
       - "gui/pages/Phase_Diagram.py"
       - "gui/pages/Vacancy_Energy_Correction.py"
+      - "gui/pages/Vacancy_MC_Staged.py"
       - "gui/vacancy_thermo_plots.py"
       - "docs/source/**"
       - "tests/test_oxygen_calibration.py"
@@ -40,6 +42,7 @@ on:
       - "tests/test_phase_diagram_systems.py"
       - "tests/test_corrected_phase_diagram.py"
       - "tests/test_vacancies_gui.py"
+      - "tests/test_gui_vacancy_staged.py"
       - ".github/workflows/vacancy-calibration-tests.yml"
   pull_request:
     paths:
@@ -62,9 +65,11 @@ on:
       - "gui/gui_config.py"
       - "gui/app.py"
       - "gui/README.md"
+      - "gui/vacancy_staged.py"
       - "gui/phase_diagram_plots.py"
       - "gui/pages/Phase_Diagram.py"
       - "gui/pages/Vacancy_Energy_Correction.py"
+      - "gui/pages/Vacancy_MC_Staged.py"
       - "gui/vacancy_thermo_plots.py"
       - "docs/source/**"
       - "tests/test_oxygen_calibration.py"
@@ -79,6 +84,7 @@ on:
       - "tests/test_phase_diagram_systems.py"
       - "tests/test_corrected_phase_diagram.py"
       - "tests/test_vacancies_gui.py"
+      - "tests/test_gui_vacancy_staged.py"
       - ".github/workflows/vacancy-calibration-tests.yml"
   workflow_dispatch:
 
@@ -103,9 +109,11 @@ jobs:
         run: |
           python -m py_compile \
             gui/app.py \
+            gui/vacancy_staged.py \
             gui/phase_diagram_plots.py \
             gui/pages/Phase_Diagram.py \
             gui/pages/Vacancy_Energy_Correction.py \
+            gui/pages/Vacancy_MC_Staged.py \
             src/dopingflow/cli.py \
             src/dopingflow/vacancy_configurational_thermodynamics.py \
             src/dopingflow/vacancy_energy_correction_extensions.py \
@@ -125,7 +133,8 @@ jobs:
             tests/test_phase_diagram_gui_plots.py \
             tests/test_phase_diagram_systems.py \
             tests/test_corrected_phase_diagram.py \
-            tests/test_vacancies_gui.py
+            tests/test_vacancies_gui.py \
+            tests/test_gui_vacancy_staged.py
 
       - name: Build Sphinx documentation
         run: |
