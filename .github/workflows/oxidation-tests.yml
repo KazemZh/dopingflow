@@ -1,4 +1,5 @@
 name: Oxidation-state framework tests
+# Covers per-structure output packaging, quiet non-assignment handling, GUI browsing, and docs.
 
 on:
   pull_request:
