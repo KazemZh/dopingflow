@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import importlib
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -77,7 +78,8 @@ def _run_bond_valence(target: StructureTarget, settings: dict[str, Any]) -> dict
             "settings": kwargs,
         },
         limitations=[
-            "Bond-valence assignments are structure/parameter dependent and should be treated cautiously for strongly distorted, defective, or unusual coordination environments."
+            "Bond-valence assignments are structure/parameter dependent and should be treated "
+            "cautiously for strongly distorted, defective, or unusual coordination environments."
         ],
     )
 
@@ -100,11 +102,15 @@ def _run_toss_bayesian(target: StructureTarget, settings: dict[str, Any]) -> dic
     with tempfile.TemporaryDirectory(prefix="dopingflow-toss-") as tmpdir:
         cif_path = Path(tmpdir) / "structure.cif"
         CifWriter(structure).write_file(cif_path)
+        # Upstream TOSS's server path helper prepends './' internally. Give it
+        # a path relative to cwd so an absolute '/tmp/...' path is not turned
+        # into the unintended relative './/tmp/...'.
+        toss_filepath = os.path.relpath(cif_path, Path.cwd())
         try:
             valid_response = guess_module.get_the_valid_t(
                 m_id=cif_path.name,
                 server=True,
-                filepath=str(cif_path),
+                filepath=toss_filepath,
             )
             valid_t = valid_response[-1] if isinstance(valid_response, tuple) else valid_response
             if not valid_t:
@@ -118,12 +124,14 @@ def _run_toss_bayesian(target: StructureTarget, settings: dict[str, Any]) -> dic
                         "verified_interface_commit": TOSS_VERIFIED_COMMIT,
                         "repo_path": str(repo),
                     },
-                    limitations=["Conventional TOSS found no valid coordination tolerance for this structure."],
+                    limitations=[
+                        "Conventional TOSS found no valid coordination tolerance for this structure."
+                    ],
                 )
             outputs = tos_module.get_Oxidation_States(
                 m_id=cif_path.name,
                 server=True,
-                filepath=str(cif_path),
+                filepath=toss_filepath,
                 input_tolerance_list=valid_t,
             )
             result = outputs[-1]
@@ -165,7 +173,8 @@ def _run_toss_bayesian(target: StructureTarget, settings: dict[str, Any]) -> dic
         },
         limitations=[
             "This is conventional Bayesian/MAP TOSS, not the pretrained TOSS-GNN predictor.",
-            "Applicability to defective co-doped oxides should be assessed for the target chemistry rather than inferred from broad-database performance.",
+            "Applicability to defective co-doped oxides should be assessed for the target chemistry "
+            "rather than inferred from broad-database performance.",
         ],
     )
 
