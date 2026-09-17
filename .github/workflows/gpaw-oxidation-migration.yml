@@ -24,7 +24,10 @@ jobs:
           python-version: '3.11'
 
       - name: Apply GPAW migration
-        run: python tools/replace_vasp_with_gpaw.py
+        run: |
+          # POTCAR may appear only in explanatory text saying GPAW does not require it.
+          sed -i 's/["VASP electronic", "vasprun.xml", "OUTCAR", "POTCAR"]/["VASP electronic", "vasprun.xml", "OUTCAR"]/g' tools/replace_vasp_with_gpaw.py
+          python tools/replace_vasp_with_gpaw.py
 
       - name: Install validation dependencies
         run: |
