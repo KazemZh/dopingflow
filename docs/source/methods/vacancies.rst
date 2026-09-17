@@ -1,426 +1,501 @@
 Oxygen-Vacancy Workflow
 =======================
 
-``dopingflow vacancies -c input.toml`` is the only public vacancy command. It
-discovers filtered relaxed parents, determines charge-based vacancy counts,
-expands the configured supercell, searches arrangements by symmetry enumeration
-or Metropolis Monte Carlo, evaluates single-point ML energies, selects the
-lowest-energy structures independently at each vacancy count, relaxes that
-top-k set, reranks it, and writes parent-level and global summaries.
+DopingFlow supports two vacancy execution modes built from the same flat
+``[vacancies]`` configuration table:
 
-Configuration
--------------
+* ``dopingflow vacancies -c input.toml`` runs the complete vacancy workflow in
+  one Python environment. It supports symmetry enumeration or Monte Carlo and
+  remains useful when all requested ML backends coexist in that environment.
+* ``dopingflow vacancies-mc-search -c input.toml`` followed by
+  ``dopingflow vacancies-finalize -c input.toml`` splits a Monte Carlo study
+  into two environments. This is the recommended path when GRACE is used for
+  occupation search and MACE is used for final single points, relaxation,
+  reranking, and thermodynamics.
 
-All settings live in one flat ``[vacancies]`` table. Screening and relaxation
-share one resolved ``backend``, ``model``, ``task`` and ``device`` combination.
-The backend may be M3GNet, UMA, MACE, or GRACE.
+The staged commands deliberately perform separate dependency checks: the search
+process imports/builds only the ``mc_*`` calculator, while the finalize process
+imports/builds only the ordinary final calculator. GRACE and MACE therefore do
+not need to be installed together.
 
-Only chemistry-specific inputs are required: ``host_species`` and the parallel
-``oxidation_state_elements``/``oxidation_state_values`` arrays. In addition,
-``parent_directory`` is required only when ``parent_source = "directory"``.
-All other keys have runtime defaults. In particular, the calculator defaults to
-``backend = "m3gnet"``, ``model = "default"``, ``task = ""``, and
-``device = "cpu"``. Backend-specific blank model/task values are normalized as
-documented in :doc:`../input_file`; for example, MACE ``mh-1`` with a blank task
-uses ``omat_pbe``. The complete example below deliberately selects MACE/CUDA
-and therefore is not a listing of default values.
+Core scientific workflow
+------------------------
 
-.. code-block:: toml
+For each selected relaxed parent, the vacancy stage can:
+
+#. determine vacancy counts from formal oxidation-state compensation or use an
+   explicit ``vacancy_counts`` research-design list;
+#. replicate the parent with ``supercell``;
+#. search vacancy/cation occupations by symmetry enumeration or Metropolis Monte
+   Carlo;
+#. retain low-energy structures independently at each fixed vacancy count;
+#. relax and rerank selected structures with the final calculator;
+#. optionally compare vacancy counts using an oxygen chemical potential and
+   finite-temperature oxygen-gas corrections.
+
+Raw total energies for different vacancy counts are not directly comparable,
+because the structures contain different numbers of oxygen atoms. Cross-count
+thermodynamics requires an oxygen reservoir.
+
+Basic configuration
+-------------------
+
+All vacancy settings live in one flat table. The ordinary ``backend``, ``model``,
+``task`` and ``device`` fields define the final/reference calculator. Monte Carlo
+may optionally define an independent ``mc_backend``, ``mc_model``, ``mc_task``,
+``mc_device`` and ``mc_gpu_id`` calculator.
+
+A minimal explicit-count Monte Carlo setup is::
 
    [vacancies]
    enabled = true
-   parent_source = "selected_candidates"
-   include_parent_reference = true
-   skip_if_done = true
-   resume = true
+   parent_source = "directory"
+   parent_directory = "vacancy-selected"
 
-   count_mode = "all_reachable"
    host_species = "Sn"
    host_oxidation_state = 4
    vacancy_species = "O"
    vacancy_compensation_charge = 2
-   oxidation_state_elements = ["Sb", "Nb"]
-   oxidation_state_values = [[3, 5], [5]]
+   oxidation_state_elements = ["Sb", "Ti"]
+   oxidation_state_values = [[3, 5], [4]]
 
-   extra_vacancies = 0
-   max_vacancies_cap = 8
-   symprec = 1.0e-3
-   angle_tolerance = 5.0
-   mapping_tolerance = 1.0
-   search_method = "enumeration"
-   supercell = [1, 1, 1]
-   enumeration_mode = "auto"
-   max_exact_raw_configs = 300000
-   max_exact_unique_configs = 100000
-   sample_budget = 20000
-   sample_batch_size = 256
-   sample_patience = 4000
-   sample_seed = 42
-   sample_max_saved = 50000
-   minimum_vacancy_distance = 0.0
+   search_method = "monte-carlo"
+   vacancy_counts = [1, 2]
+   supercell = [2, 2, 2]
+
+   mc_backend = "grace"
+   mc_model = "GRACE-1L-OMAT"
+   mc_task = ""
+   mc_device = "cuda"
+   mc_gpu_id = 0
 
    backend = "mace"
-   model = "medium-mpa-0"
-   task = ""
+   model = "mh-1"
+   task = "matpes_r2scan"
    device = "cuda"
    gpu_id = 0
-   n_workers = 1
-   tf_threads = 1
-   omp_threads = 1
-   chunksize = 25
 
-   topk_per_vacancy_count = 15
-   energy_normalization = "per_vacancy"
+Formal charge and explicit vacancy counts
+----------------------------------------
+
+Actual dopant counts are read from the parent structure. They are not inferred
+from the requested nominal percentages. A dopant in formal state :math:`z_d`
+replacing a host in state :math:`z_h` contributes :math:`z_d-z_h`. Contributions
+from all co-dopants are combined.
+
+With charge-derived generation, each reachable negative total charge
+:math:`\Delta Q` contributes an upper relevant vacancy count
+
+.. math::
+
+   n_{max} = \left\lceil\frac{-\Delta Q}{q_{vac}}\right\rceil,
+
+where ``vacancy_compensation_charge`` is :math:`q_{vac}`. ``extra_vacancies``
+and ``max_vacancies_cap`` then bound the generated range.
+
+For a study where vacancy counts are chosen explicitly, use for example::
+
+   vacancy_counts = [1, 2]
+
+The explicit list replaces the charge-derived generation range for the search.
+Formal-charge scenarios are still recorded as metadata for interpretation.
+
+Formal oxidation-state assignments define a search-space model; they do not
+establish the actual electronic oxidation state of each cation.
+
+Parent discovery
+----------------
+
+``parent_source = "selected_candidates"`` uses the normal workflow output root.
+``parent_source = "directory"`` processes an existing multi-composition tree::
+
+   parent_source = "directory"
+   parent_directory = "vacancy-selected"
+
+Each discovered parent uses the selected scan structure for symmetry mapping and
+the corresponding relaxed structure for coordinates/energies. The staged search
+and finalize commands can additionally filter and route parents with the keys
+below.
+
+Staged parent filtering
+~~~~~~~~~~~~~~~~~~~~~~~
+
+``parent_include`` is optional and applies to the staged Monte Carlo commands.
+It may contain composition selectors::
+
+   parent_include = [
+       "Ti_2.5Sb_2.5",
+       "Ce_2.5Sb_5",
+       "In_7.5Sb_7.5",
+   ]
+
+Common composition labels are canonicalized independently of element order and
+``2.5``/``2p5`` notation. Therefore ``Ti_2.5Sb_5``, ``Ti2p5_Sb5`` and
+``Sb5_Ti2p5`` match the same composition. A selector containing ``/`` is treated
+as an exact parent ID, for example ``Sb5_Ti2p5/candidate_003``. A requested
+selector that matches no discovered parent causes a clear error instead of being
+silently ignored.
+
+``parent_pick`` controls how many selected parents are retained per composition::
+
+   parent_pick = "lowest_energy"   # or "all"
+
+The filtering stage writes ``selected_candidates.txt`` in ascending relaxed
+energy, and parent discovery preserves that order. ``lowest_energy`` therefore
+keeps the first/lowest-energy selected candidate for each composition. ``all`` is
+the backward-compatible behavior.
+
+Dedicated staged output directory
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The staged workflow can be kept separate from the source parent tree::
+
+   output_directory = "vacancy-mc-grace-mace"
+
+A relative path is resolved relative to ``input.toml``; an absolute path is also
+accepted. Source scan/relaxed structures are still read from ``parent_directory``
+or ``structure.outdir``, but result paths are mirrored beneath
+``output_directory``. Both the GRACE search and MACE finalize command resolve the
+same parent IDs there, so finalization continues directly from the persisted
+search selection.
+
+Typical global staged outputs are::
+
+   vacancy-mc-grace-mace/
+   ├── vacancy_mc_search_database.csv
+   ├── vacancy_mc_search_database.json
+   ├── vacancies_database.csv
+   ├── vacancies_database.json
+   └── <composition>/
+       └── <candidate>/
+           └── 05_vacancies/
+
+Symmetry enumeration
+--------------------
+
+The default ``search_method = "enumeration"`` canonicalizes vacancy occupation
+vectors under the parent's symmetry operations.
+
+``enumeration_mode = "exact"`` enumerates all combinations and records exact
+orbit degeneracies. ``sample`` samples canonicalized combinations and cannot
+claim exact degeneracies. ``auto`` starts from the exact combinatorial estimate
+and switches to sampling if configured limits are exceeded.
+
+The explicit configurational partition-function thermodynamics requires exact
+enumeration and exact orbit degeneracies. It is not available from the Monte
+Carlo search path.
+
+Coupled cation/vacancy Monte Carlo
+---------------------------------
+
+Set::
+
+   search_method = "monte-carlo"
+
+The Monte Carlo state is a fixed-site occupation state at a fixed composition
+and fixed number of vacancies. Two move classes are available:
+
+``vacancy_swap``
+   Exchange the internal vacancy marker with an occupied site on the configured
+   vacancy-species sublattice.
+
+``cation_swap``
+   Exchange two sites occupied by different cation species. The implementation
+   is generic and supports the host plus any number of dopant species present in
+   the parent.
+
+Internal vacancy markers are removed before every ML calculator call. To sample
+coupled cation/vacancy ordering, keep both move weights non-zero::
+
+   mc_cation_move_weight = 0.5
+   mc_vacancy_move_weight = 0.5
+
+Supercell interpretation
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+``supercell = [na, nb, nc]`` replicates the search parent before occupation
+sampling. For the current SnO2-based 120-atom parent, ``[2, 2, 2]`` gives 960
+atoms before vacancies: 320 cations and 640 oxygen sites. A 2.5% dopant represented
+by one dopant among 40 cations in the original parent becomes eight dopants among
+320 cations, so the concentration remains 2.5%.
+
+One and two vacancies in the 640-site oxygen sublattice correspond to 0.15625%
+and 0.3125% of oxygen sites, respectively.
+
+Annealing and stopping
+~~~~~~~~~~~~~~~~~~~~~~
+
+With ``mc_annealing = true``, the schedule holds the initial temperature, cools
+linearly to the target temperature, then continues at the target temperature::
+
+   mc_annealing = true
+   mc_initial_temperature_K = 1500.0
+   mc_annealing_hold_steps = 5000
+   mc_annealing_steps = 50000
+   mc_temperature_K = 600.0
+
+``mc_max_steps`` is the **total** trajectory length. Hold and cooling steps are
+part of that total. ``mc_run_mode`` may be ``fixed``, ``converged`` or
+``combined``.
+
+For ``converged`` and ``combined`` runs, ``mc_patience`` counts consecutive
+steps without a new global best larger than ``mc_improvement_tolerance_eV``.
+The current counter is active from step 1, including the hot hold and cooling
+ramp. Therefore, if the complete annealing schedule must be reached, choose
+``mc_patience`` larger than
+``mc_annealing_hold_steps + mc_annealing_steps``.
+
+The library defaults (10,000 maximum steps and 2,000 patience) are intentionally
+small enough for development and smoke tests. A large coupled ``2 x 2 x 2``
+study should normally set a larger ceiling explicitly and establish convergence
+empirically. A practical starting point for the present 960-atom search is::
+
+   mc_run_mode = "combined"
+   mc_max_steps = 200000
+   mc_patience = 100000
+
+   mc_annealing_hold_steps = 5000
+   mc_annealing_steps = 50000
+
+These numbers are not a universal convergence guarantee.
+
+Archive behavior
+~~~~~~~~~~~~~~~~
+
+Unique accepted occupation states are archived up to ``sample_max_saved``. If
+``mc_energy_window_eV`` is set, states above the configured energy window from
+the current archived minimum are discarded. ``sample_seed`` makes the trajectory
+reproducible for fixed software/model/runtime behavior.
+
+Each vacancy-count group records ``monte_carlo_summary.json`` with the step count,
+stop reason, best energy/step, attempted and accepted move counts, annealing
+schedule, and search-calculator provenance.
+
+Staged GRACE -> MACE execution
+------------------------------
+
+The recommended split-environment sequence is::
+
+   conda activate dopingflow-grace
+   dopingflow vacancies-mc-search -c input.toml --verbose
+
+   conda activate dopingflow-mace
+   dopingflow vacancies-finalize -c input.toml --verbose
+
+Stage 1: ``vacancies-mc-search``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The search command:
+
+* requires ``search_method = "monte-carlo"``;
+* checks/builds only the ``mc_*`` backend;
+* discovers, filters and optionally redirects the parent set;
+* runs joint cation/vacancy Monte Carlo independently for each requested vacancy
+  count;
+* writes generated candidate POSCARs and GRACE search metadata;
+* ranks the archive by search energy at fixed parent and vacancy count;
+* writes ``ranking_scan.csv`` and ``selected_candidates.txt``;
+* writes per-parent ``mc_search_results.csv/json`` and the global
+  ``vacancy_mc_search_database.csv/json``.
+
+A search fingerprint includes search-space settings, explicit vacancy counts,
+MC-calculator settings, and hashes of the source parent structures. It excludes
+the final calculator/relaxation settings. A completed compatible search can
+therefore be reused when only MACE finalization settings change.
+
+Stage 2: ``vacancies-finalize``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The finalize command:
+
+* checks/builds only the ordinary final backend;
+* requires a completed compatible Stage-1 search;
+* loads the persisted ``selected_candidates.txt`` for each vacancy count;
+* evaluates each selected structure with a final-calculator single point before
+  relaxation;
+* relaxes with the configured final calculator and optimizer;
+* reports the same-backend relaxation energy change from the final single point
+  to the final relaxed energy;
+* reranks the selected structures by final relaxed energy;
+* writes the ordinary ``vacancy_results.csv/json`` and global
+  ``vacancies_database.csv/json``;
+* runs the configured static vacancy thermodynamic analysis with final-calculator
+  energies.
+
+Search-energy provenance and final-energy provenance remain separate. A
+GRACE-to-MACE difference is not presented as a same-calculator relaxation energy.
+
+Current cross-backend selection limitation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+At present the staged path is::
+
+   GRACE archive
+      -> GRACE ranking
+      -> GRACE top-k
+      -> MACE single point on GRACE-selected candidates
+      -> MACE relaxation and reranking
+
+MACE does **not** yet single-point every archived GRACE candidate before selecting
+its relaxation top-k. Consequently, a structure ranked poorly by GRACE can be
+excluded even if MACE would rank it favorably. Before a large production study,
+validate GRACE-to-MACE ranking agreement on a representative smaller archive.
+
+Reference-state caveat for cation moves
+---------------------------------------
+
+When ``mc_cation_move_weight`` is non-zero, defective ``n=1``/``n=2`` minima may
+change both the vacancy location and cation ordering relative to the replicated
+source parent. The current ``n=0`` parent reference is not subjected to an
+independent cation-only Monte Carlo search.
+
+Therefore, a vacancy formation free energy from a coupled cation/vacancy run can
+contain both vacancy-formation and cation-reordering contributions relative to
+the source parent. This is acceptable when the research question is the coupled
+ordering landscape. For a strict vacancy formation free energy referenced to an
+equilibrated cation arrangement, a corresponding ``n=0`` cation-only equilibrium
+baseline would be required.
+
+Final relaxation and ranking
+----------------------------
+
+Within a fixed parent and fixed vacancy count, candidates are ranked by the
+appropriate stage energy. The final calculator may be M3GNet, UMA, MACE, or
+GRACE. Typical MACE settings are::
+
+   backend = "mace"
+   model = "mh-1"
+   task = "matpes_r2scan"
+   device = "cuda"
+   gpu_id = 0
+
+   topk_per_vacancy_count = 20
    optimizer = "bfgs"
    fmax = 0.05
    max_steps = 300
    relax_mode = "atoms"
-   cell_filter = "frechet"
 
-Formal charge and vacancy range
--------------------------------
-
-Actual dopant counts are read from each selected relaxed parent, not inferred
-from requested percentages. A dopant in formal state :math:`z_d` replacing a
-host in state :math:`z_h` contributes :math:`z_d-z_h`. Contributions from all
-co-dopants are combined before a vacancy count is calculated. Mixed states are
-represented as population counts, avoiding permutations over individual atoms.
-
-For every reachable negative total charge :math:`\Delta Q`, the upper relevant
-count is ``ceil(-delta_Q / vacancy_compensation_charge)``. The workflow explores
-the continuous range from one through the largest upper count, then applies
-``extra_vacancies``, ``max_vacancies_cap``, and the number of available oxygen
-sites. Residual charge is retained for every scenario and count; exact
-compensation is marked only when it is zero.
-
-Eight Sb3+ atoms on Sn4+ sites give ``8 × (3 - 4) = -8`` and therefore generate
-counts 1, 2, 3, and 4. Four Sb3+ plus four Nb5+ give ``-4 + 4 = 0`` and no
-defective count unless ``extra_vacancies`` is positive. For ``delta_Q = -3``,
-one vacancy has residual charge -1 and two vacancies have residual charge +1;
-both occur because the generated range ends at ``ceil(3/2) = 2``.
-
-These are formal assumptions defining the search space. They do not establish
-actual oxidation states. Later electronic-structure work may require Bader
-charges, projected densities of states, magnetic moments, local coordination,
-and charge-density differences.
-
-Parents, symmetry, and enumeration
-----------------------------------
-
-The default source is each composition's ``selected_candidates.txt``. The
-corresponding ``01_scan/POSCAR`` supplies symmetry and the selected
-``02_relax/POSCAR`` supplies coordinates. Sites are mapped by species and
-nearest periodic position; unreliable mappings fail explicitly.
-
-To process an existing collection containing many composition subdirectories,
-select a directory source. The directory is resolved relative to ``input.toml``
-unless it is absolute. Every immediate composition subdirectory may contain its
-own ``selected_candidates.txt``::
-
-   parent_source = "directory"
-   parent_directory = "Mn-Nb-Ta-Ce-Ru-In-Sn-Sb"
-
-The global ``vacancies_database.csv/json`` files are then written into that
-parent directory. Every dopant found in any processed parent, including Ce in
-this example, must have an entry in the flat oxidation-state arrays.
-
-Vacancy occupancy vectors are canonicalized under the parent's symmetry
-permutations. ``exact`` enumerates all combinations and records exact orbit
-degeneracy. ``sample`` uses ``sample_seed``, deduplicates canonical keys, and
-sets degeneracy to null because it is not exact. ``auto`` selects exact mode
-below ``max_exact_raw_configs`` and restarts in sampled mode if the exact unique
-limit is exceeded. ``minimum_vacancy_distance`` filters close periodic pairs.
-
-Monte Carlo occupation search
+Static vacancy thermodynamics
 -----------------------------
 
-Set ``search_method = "monte-carlo"`` to use Metropolis occupation sampling as
-an alternative to the default ``"enumeration"`` symmetry search. ``supercell =
-[na, nb, nc]`` expands both the scan and relaxed parent consistently before the
-formal-charge analysis and search; it is available for either method.
+Enable::
 
-One move swaps a vacancy marker with an atom on the vacancy-species sublattice.
-The other swaps two different cation species. Species are discovered from the
-parent, so the host and any number of dopant types are supported. Internal
-vacancy markers are removed before every ML calculator call.
+   static_thermodynamic_analysis = true
 
-.. code-block:: toml
-
-   search_method = "monte-carlo"
-   supercell = [2, 2, 1]
-   mc_annealing = true
-   mc_initial_temperature_K = 1500.0
-   mc_annealing_hold_steps = 500
-   mc_annealing_steps = 2000
-   mc_temperature_K = 600.0          # final target temperature
-   mc_run_mode = "combined"       # fixed, converged, or combined
-   mc_max_steps = 10000
-   mc_patience = 2000
-   mc_improvement_tolerance_eV = 1.0e-5
-   mc_energy_window_eV = 0.5
-   mc_cation_move_weight = 0.5
-   mc_vacancy_move_weight = 0.5
-   sample_seed = 42
-   sample_max_saved = 100
-
-``sample_seed`` makes the trajectory reproducible. Unique accepted occupations
-inside the energy window are archived up to ``sample_max_saved``. The existing
-``topk_per_vacancy_count`` stage selects
-candidates for relaxation and relaxed-energy reranking using the configured
-optimizer. M3GNet, UMA, MACE, and GRACE are supported through the common backend
-factory. Each count writes ``monte_carlo_summary.json`` and retains the standard
-``00_generate``/``01_scan``/``02_relax`` directory layout and ranking tables.
-When ``mc_annealing = true``, the initial temperature is held for
-``mc_annealing_hold_steps``, followed by a
-linear cooling ramp lasting ``mc_annealing_steps``. Sampling then continues at
-``mc_temperature_K``. The default ``mc_annealing = false`` runs the complete
-search isothermally at ``mc_temperature_K`` and ignores the initial, hold, and
-cooling-ramp settings.
-
-Screening, relaxation, and interpretation
-------------------------------------------
-
-The parent and every defective structure use the same common calculator
-factory. Single-point energies and relaxed energies are ranked only among
-structures having the same parent and vacancy count. The parent does not consume
-a top-k slot. Its prior relaxed energy is reused only when metadata prove
-calculator and relaxation compatibility; otherwise a consistency relaxation is
-written below the vacancy output without modifying the original parent.
-
-Raw totals across different vacancy counts are not defect formation energies,
-because the structures contain different numbers of oxygen atoms. Thermodynamic
-comparison requires an oxygen chemical potential, for example
-``E_defect - E_parent + n * mu_O``.
-
-Level-1 static-lattice thermodynamic analysis
----------------------------------------------
-
-Set ``static_thermodynamic_analysis = true`` to add the sixth analysis phase. The
-backward-compatible default is ``false``; generation, screening, and relaxation
-remain unchanged when it is disabled. Actual dopant counts are read from parent
-structures. Parents having the same rounded directory name are never combined
-unless their integer species counts and cation-site totals are identical.
-
-The default solid treatment is static-lattice: solid free energies are
-approximated by 0 K relaxed ML energies. Solid vibrational, zero-point,
-thermal-electronic, magnetic, anharmonic, thermal-expansion, and solid-pV terms
-are not included. Vacancy configurational entropy is optional:
-
-``solid_configurational_entropy = "none"``
-   Keep the static-lattice solid contribution.
-
-``solid_configurational_entropy = "ideal"``
-   Add ideal occupied/vacant oxygen-site mixing entropy.
-
-``solid_configurational_entropy = "configurational"``
-   Evaluate a canonical partition function over the exact symmetry-distinct
-   vacancy configurations and their orbit degeneracies. Exact enumeration is
-   required. If every exact orbit was relaxed, relaxed energies are used;
-   otherwise the complete exact single-point spectrum supplies a configurational
-   correction relative to its minimum, which is added to the relaxed static
-   minimum for that vacancy count. Sampled enumeration is rejected because its
-   degeneracies are not exact. This mode is therefore incompatible with Monte
-   Carlo; use ``none`` or ``ideal`` for Monte Carlo results.
-
-The finite-temperature vacancy formation free energy is then
+For each cation composition and vacancy count, DopingFlow selects the lowest
+converged relaxed final-calculator energy :math:`E_{min}(c,n)`. With oxygen
+chemical potential :math:`\mu_O`, the static cross-count term is
 
 .. math::
 
-   \Delta G_{vac}(n,T,p) =
-   E_{min}(n)-E_{min}(0) + n\mu_O(T,p) + \Delta F_{config}(n,T).
+   \Delta G_{vac}^{static}(n) =
+   E_{min}(c,n) - E_{min}(c,0) + n\mu_O.
 
-For the explicit partition function,
+The direct ``delta_mu_O`` analysis constructs exact pairwise crossings of the
+linear oxygen-grand-potential branches rather than inferring transitions from a
+coarse grid.
+
+Finite-temperature oxygen gas
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For calibrated/reference oxygen modes with NIST Shomate thermodynamics,
+
+.. math::
+
+   \mu_O(T,p) = \mu_O^{0}
+   + \frac{1}{2}[H_{O_2}(T)-H_{O_2}(298)-T S_{O_2}(T)]
+   + \frac{1}{2}k_BT\ln(p/p^\circ).
+
+``oxygen_standard_state_mode = "nist_shomate"`` supplies the continuous O2
+enthalpy/entropy contribution over its supported temperature range. The pressure
+term is ideal-gas oxygen.
+
+Solid configurational treatment
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``solid_configurational_entropy = "none"``
+   Static-lattice solid contribution only.
+
+``solid_configurational_entropy = "ideal"``
+   Adds ideal occupied/vacant mixing on the oxygen sublattice.
+
+``solid_configurational_entropy = "configurational"``
+   Evaluates a canonical partition function over exact symmetry-distinct vacancy
+   configurations and exact orbit degeneracies. This requires
+   ``search_method = "enumeration"`` and ``enumeration_mode = "exact"`` and is
+   incompatible with Monte Carlo sampling.
+
+For the exact partition-function mode,
 
 .. math::
 
    \Delta F_{config}(n,T) =
    -k_B T \ln\left[\sum_i g_i
-   \exp\left(-rac{E_i-E_{min}}{k_B T}ight)ight].
+   \exp\left(-\frac{E_i-E_{min}}{k_B T}\right)\right].
 
-The result is written for every vacancy count to
-``vacancy_formation_free_energy.csv/json``. The T-pO2 stability map minimizes
-this finite-T quantity. Direct ``delta_mu_O`` intervals remain static-lattice
-quantities because they do not define a unique temperature. Dopant-configurational
-entropy and the other solid free-energy terms listed above remain outside this
-screening level.
+Finite-temperature vacancy formation free energies are written to
+``vacancy_formation_free_energy.csv/json``. Solid vibrational, zero-point,
+magnetic, thermal-electronic, anharmonic, thermal-expansion, and solid-pV terms
+remain outside this screening-level treatment.
 
-For actual composition :math:`c`, the analysis selects the lowest converged
-relaxed energy :math:`E_{min}(c,n)` across every selected parent and relaxed
-configuration at fixed vacancy count :math:`n`. Unconverged or missing relaxed
-energies are excluded by default; there is no silent single-point fallback.
-The cross-count intercept and oxygen grand potential are
+Oxygen reference choices
+------------------------
 
-.. math::
+The vacancy analysis supports raw/reference modes such as ``reference_file`` and
+``same_calculator`` and experimental calibration modes ``global`` and
+``chemistry-specific``.
 
-   A(c,n) = E_{min}(c,n) - E_{min}(c,0) + n\mu_O^{ref}
+``global`` fits one backend/model/task-specific effective oxygen reference from
+eligible calculated binary oxides plus experimental 298 K formation enthalpies.
+``chemistry-specific`` repeats the fit for the actual host/dopant chemistry of
+each vacancy composition. Included/excluded references, residuals, spread, and
+provenance are written to ``oxygen_calibration_report.json``.
 
-.. math::
+See :doc:`oxygen_calibration` for the calibration equations and data requirements.
 
-   \Delta\Omega(c,n,\Delta\mu_O) = A(c,n) + n\Delta\mu_O
+Fitted energy correction compatibility
+--------------------------------------
 
-and the preferred count is
+When a compatible fitted backend-specific energy-correction model has already
+been produced, vacancy thermodynamics can opt in with::
 
-.. math::
+   apply_fitted_energy_correction = true
+   allow_legacy_energy_correction_provenance = false
 
-   n_{best}(c,\Delta\mu_O) = \operatorname*{argmin}_n \Delta\Omega(c,n,\Delta\mu_O).
-
-Thus there is no universal best vacancy count without a stated
-``delta_mu_O``. Exact pairwise line crossings—not a coarse grid—define the
-stability intervals, and ties are retained explicitly.
-
-Calibrated oxygen references
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Two reference modes improve the absolute oxygen scale using the existing
-``refs-build`` calculations and experimental 298 K oxide formation enthalpies:
-
-.. code-block:: toml
-
-   oxygen_reference_mode = "global"
-   # or: oxygen_reference_mode = "chemistry-specific"
-
-   oxygen_reference_file = "reference_structures/reference_energies.json"
-   oxygen_calibration_experimental_source = "kingsbury"
-   oxygen_calibration_min_references = 2
-   oxygen_calibration_include_host_oxide = true
-
-For every eligible ordinary binary oxide :math:`M_xO_y`,
+The solid vacancy reaction correction is applied as
 
 .. math::
 
-   \mu_{O,i}^{0,cal} =
-   \frac{E^{ML}(M_xO_y)-xE^{ML}(M)-\Delta H_{f,i}^{exp}(298\,K)}{y}.
+   \Delta E_{vac}^{corr} =
+   [E_{def}^{raw} - E_{parent}^{raw}]
+   + [C_{def} - C_{parent}].
 
-``global`` averages the per-O values from all eligible reference oxides.
-``chemistry-specific`` repeats the fit for each vacancy composition and retains
-only oxides whose cation belongs to the actual host/dopant chemistry. A Sn-Sb-O
-parent therefore does not use a Ti oxide merely because Ti is present elsewhere
-in ``oxides_ref``. Conversely, no Sn or Sb oxide is invented if it was not
-calculated and does not have a matching experimental record.
+Use a raw same-backend oxygen reservoir such as ``reference_file`` or
+``same_calculator`` with this path. Do not combine a fitted experimental
+formation-energy correction with ``oxygen_reference_mode = "global"`` or
+``"chemistry-specific"`` because both paths use experimental formation-enthalpy
+information for oxygen-related calibration.
 
-The backend/model/task stored by ``refs-build`` must match the vacancy
-calculator. The host oxide may be included from the calculated host reference;
-duplicate reduced formulas are counted only once. Each accepted oxide also
-requires the corresponding elemental bulk-metal reference.
+See :doc:`vacancy_energy_correction` for provenance checks and uncertainty
+propagation.
 
-The default ``kingsbury`` source uses the curated experimental dataset loaded by
-``matminer`` and therefore requires the optional ``corrections`` installation
-extra. ``custom`` and ``kingsbury+custom`` use the same explicit experimental
-CSV schema documented in :doc:`oxygen_calibration`.
+Recommended production workflow
+-------------------------------
 
-The full accepted/excluded reference list, experimental provenance, individual
-per-O values, fitted value, spread, and formation-enthalpy residuals are written
-to ``oxygen_calibration_report.json``. A large spread is therefore visible and
-can be used to judge whether one global scalar oxygen reference is sufficiently
-transferable.
+For the current large-supercell GRACE/MACE study, a practical sequence is:
 
-Temperature, gas entropy, and pressure
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#. Configure ``parent_include`` and ``parent_pick = "lowest_energy"``.
+#. Use ``output_directory`` to isolate the vacancy study from source parents.
+#. Set ``vacancy_counts = [1, 2]`` and ``supercell = [2, 2, 2]``.
+#. First smoke-test one composition with about 20 MC steps and top-k 3.
+#. In the GRACE environment run ``vacancies-mc-search``.
+#. Inspect the search archive, acceptance statistics, and candidate count.
+#. In the MACE environment run ``vacancies-finalize``.
+#. Confirm end-to-end provenance and output handoff.
+#. Restore the production MC ceiling and process the full requested parent set.
+#. Validate search convergence and GRACE/MACE ranking agreement before drawing
+   conclusions from the full campaign.
 
-For the optional ideal-gas reservoir map,
-
-.. math::
-
-   \mu_O(T,p) = \mu_O^{ref}
-   + \Delta\mu_O^{standard}(T)
-   + \frac{1}{2}k_BT\ln\left(\frac{p_{O_2}}{p^{standard}}\right).
-
-``oxygen_standard_state_mode = "nist_shomate"`` uses the published piecewise
-NIST Chemistry WebBook O2 Shomate equations (Chase 1998) for continuous gas
-enthalpy and entropy between 100 and 6000 K at 1 bar. For the calibrated
-``global`` and ``chemistry-specific`` modes, the oxygen reference was fitted to
-experimental 298 K formation enthalpies, so the enthalpy term is referenced as
-:math:`H_{O_2}(T)-H_{O_2}(298)` before :math:`-TS_{O_2}(T)` and the pressure
-term are added. This is distinct from the legacy raw isolated-O2 convention.
-The printed discrete JANAF temperatures therefore do not limit the requested
-grid; extrapolation outside the Shomate coefficient ranges fails. No explicit
-O2 zero-point energy is added.
-
-``user_table`` linearly interpolates a supplied per-O correction. With ``none``,
-the standard-state correction is zero and pressure results are marked
-qualitative relative to the standard pressure at the same temperature.
-
-Optional ideal vacancy configurational entropy
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-With ``solid_configurational_entropy = "ideal"``, the T-pO2 map also includes
-
-.. math::
-
-   S_{config} = -k_BN_O\left[x_v\ln x_v+(1-x_v)\ln(1-x_v)\right],
-
-where :math:`x_v=N_v/N_O`. The pressure-map grand potential receives
-:math:`-TS_{config}`. The term is zero for the fully occupied and fully vacant
-limits. It is not added to the temperature-independent ``delta_mu_O`` interval
-or selected-point outputs.
-
-Legacy oxygen-reference modes
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-``oxygen_reference_mode = "reference_file"`` reads O2 and the per-O
-``muO_shift_ev`` from ``reference_energies.json`` and verifies its
-backend/model/task metadata. Incompatible references fail. Metadata-free
-references fail unless ``allow_unverified_oxygen_reference = true`` is set
-deliberately, in which case outputs remain marked unverified.
-
-``same_calculator`` evaluates the configured O2 structure with the vacancy
-calculator; optional molecular relaxation uses atomic coordinates only, never a
-cell filter. Solid-trained foundation models may nevertheless describe isolated
-O2 poorly. ``explicit`` accepts a user-supplied per-O value. ``none`` writes
-composition minima but no stability intervals or best-count claims.
-
-The Results Explorer keeps the stability map, grand-potential envelope,
-grand potential versus vacancy count, and preferred count versus doping in their
-original ``delta_mu_O``-based form. Their energies and axes are independent of
-the gas standard-state conversion. Only the complete T-pO2 map offers ``Include
-delta_mu_O_standard(T)`` and ``Omit delta_mu_O_standard(T)`` views. The omitted
-view uses only the ideal-gas pressure term and is explicitly labeled approximate.
-
-The explicitly named static-lattice outputs are:
-
-- ``vacancy_static_minima.csv/json``: one minimum per exact integer
-  composition and vacancy count.
-- ``vacancy_static_stability_intervals.csv/json``: exact lower-envelope windows.
-- ``vacancy_static_best_counts.csv/json``: preferred counts and ties at requested
-  oxygen chemical potentials.
-- ``vacancy_static_pressure_map.csv/json``: T-pO2 preferred counts, including
-  the oxygen standard-state mode, source, calibration and optional
-  configurational-entropy metadata used by plots.
-- ``vacancy_static_analysis_metadata.json``: reference verification,
-  calibration scope, exclusions, missing counts, failed compositions, checksum,
-  and resolved settings.
-- ``oxygen_calibration_report.json``: written by calibrated modes and containing
-  the complete experimental-reference audit trail and fit diagnostics.
-
-The earlier compact filenames are also written as compatibility aliases.
-
-These results establish relative stability only within the generated doped-host
-structure family. They do not prove stability against decomposition into all
-competing phases; that requires a later oxygen-grand-potential convex hull. Even
-with a gas standard-state correction, missing solid free-energy terms remain.
-
-See :doc:`oxygen_calibration` for a focused description of calibration scope,
-experimental data selection, equations, and recommended settings.
-
-Outputs and resume
-------------------
-
-Each parent receives ``05_vacancies/`` containing ``parent_reference/``,
-``vacancy_counts.csv/json``, ``vacancy_results.csv/json``, and one
-``V_O_NN/`` group per count. Each configuration retains ``00_generate``,
-``01_scan``, and ``02_relax`` provenance. The structure output root also receives
-``vacancies_database.csv`` and ``vacancies_database.json``. These remain
-separate from normal formation and phase-diagram databases and retain every
-configuration for provenance. The compact files above are the plotting sources.
-
-Configuration and source checksums form a stable fingerprint. Compatible
-complete parents are skipped, compatible internal scan/relax metadata are
-resumed, and incompatible results are recomputed rather than silently reused.
-
-Run directly or append the one run-all step:
-
-.. code-block:: bash
-
-   dopingflow vacancies -c input.toml
-   dopingflow run-all -c input.toml --until vacancies
-   dopingflow run-all -c input.toml --only vacancies
+The Streamlit GUI includes a dedicated **Staged Vacancy MC** page that edits these
+settings, shows the two ``conda run`` commands, and can launch each stage in its
+own named conda environment.

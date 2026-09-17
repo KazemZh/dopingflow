@@ -21,6 +21,10 @@ from dopingflow.relax import run_relax_from_toml
 from dopingflow.scan import run_scan_from_toml
 from dopingflow.sequential_extensions import run_sequential_from_toml
 from dopingflow.vacancies import run_vacancies_from_toml
+from dopingflow.vacancy_mc_staged import (
+    run_vacancy_finalize_from_toml,
+    run_vacancy_mc_search_from_toml,
+)
 
 app = typer.Typer(help="dopingflow: ML doping workflow pipeline")
 
@@ -165,6 +169,28 @@ def vacancies_cmd(
     _init(config, verbose)
     out_path = run_vacancies_from_toml(config)
     typer.echo(f"\nWrote vacancy database CSV: {out_path}")
+
+
+@app.command("vacancies-mc-search")
+def vacancies_mc_search_cmd(
+    config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
+    verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
+) -> None:
+    """Run only Monte Carlo occupation search with the mc_* calculator."""
+    _init(config, verbose)
+    out_path = run_vacancy_mc_search_from_toml(config)
+    typer.echo(f"\nWrote MC-search database CSV: {out_path}")
+
+
+@app.command("vacancies-finalize")
+def vacancies_finalize_cmd(
+    config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
+    verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
+) -> None:
+    """Finalize a completed MC search with the ordinary vacancy calculator."""
+    _init(config, verbose)
+    out_path = run_vacancy_finalize_from_toml(config)
+    typer.echo(f"\nWrote finalized vacancy database CSV: {out_path}")
 
 
 @app.command("run-all")

@@ -1,286 +1,265 @@
 # dopingflow GUI (Streamlit)
 
 This folder contains the Streamlit-based graphical user interface for **dopingflow**.
+The GUI is optional; the CLI remains the primary interface for scripted and HPC
+workflows.
 
-The GUI provides an interactive way to:
-
-- Build and edit `input.toml`
-- Run workflow stages
-- Monitor logs
-- Visualize generated structures
-- Explore the main database and per-system phase-diagram CSVs with Plotly
-- Inspect raw/corrected phase-diagram stability in composition space
-- Plot raw/corrected energy above hull against oxygen-vacancy count
-- Configure and run the unified vacancy workflow and explore its separate database
-- Optionally apply the fitted M0/M1 correction to vacancy thermodynamics
-- Choose Enumeration or Monte Carlo vacancy search with a configurable supercell
-- Run Monte Carlo isothermally or enable a high-temperature hold and cooling ramp
-- Compare relaxed parent, generated vacancy, and relaxed vacancy structures
-- Configure calculator-verified, global-calibrated, or chemistry-specific oxygen references for vacancy thermodynamics
-- Configure none, ideal-mixing, or exact-orbit partition-function vacancy entropy
-- Select either the normal structure output or an existing directory containing many composition subdirectories
-
-The GUI is optional. The CLI remains the primary interface for scripted and HPC workflows.
+The GUI supports interactive `input.toml` editing, workflow execution, log
+inspection, structure viewing, phase-diagram analysis, vacancy thermodynamics,
+and the staged GRACE → MACE Monte Carlo vacancy workflow.
 
 ---
 
 ## Installation
 
-The GUI dependencies are defined as an optional extra in the main `pyproject.toml`.
-
-From the project root:
+Install the GUI extra from the project root:
 
 ```bash
 pip install -e ".[gui]"
 ```
 
-If the vacancy oxygen calibration or experimental energy correction should use
-the curated experimental dataset, also install:
+Install other extras only in the environments that need them. In particular,
+the staged vacancy workflow is designed for **separate GRACE and MACE
+environments**:
 
 ```bash
-pip install -e ".[corrections]"
+conda create -n dopingflow-grace python=3.11 pip -y
+conda activate dopingflow-grace
+pip install -e ".[grace,gui]"
+
+conda create -n dopingflow-mace python=3.11 pip -y
+conda activate dopingflow-mace
+pip install -e ".[mace,gui]"
 ```
 
-If you also need ML models:
-
-```bash
-pip install -e ".[m3gnet,alignn,mp,gui]"
-```
+Both environments may point to the same editable checkout. If experimental
+formation-energy correction or oxygen-reference calibration uses the curated
+dataset, install the `corrections` extra in the environment that performs that
+analysis.
 
 ---
 
 ## Launching the GUI
 
-From the project root directory:
+From the repository/project root:
 
 ```bash
 streamlit run gui/app.py
 ```
 
-A local browser window will open automatically (usually at http://localhost:8501).
-Streamlit also discovers the files under `gui/pages/`, including the dedicated
-**Phase Diagram** and **Vacancy M0/M1 Energy Correction** pages.
+Streamlit also discovers the dedicated pages under `gui/pages/`.
 
 ---
 
-## GUI Pages Overview
+## Main app pages
 
-### 1️⃣ Input Builder
+### Input Builder
 
-Interactive editor for `input.toml`.
+The main Input Builder edits the normal project-wide `input.toml` sections,
+including:
 
-- Structure definition
-- Doping setup (explicit or enumerate mode)
-- Scan, Relax, Filter, Bandgap, Formation, optional Energy correction, and one
-  flat Vacancies section
-- Vacancy oxygen-reference selector including `global` and `chemistry-specific`
-  calibration in addition to the existing raw/reference modes
-- Conditional vacancy controls: enumeration and Monte Carlo parameters are shown
-  only for the selected search, and annealing parameters appear only when enabled
-- Live TOML preview
-- Save directly to `input.toml`
+- structure and doping setup;
+- references, scan, relax, filter, bandgap, formation, and phase diagram;
+- the ordinary one-process `[vacancies]` controls;
+- vacancy oxygen-reference and thermodynamic settings;
+- optional fitted solid-energy correction controls.
 
-The Energy-correction panel exposes the experimental source, optional custom
-CSV and matminer cache path, model family, M1 scope, manifest/phase-resolved
-selection, OPTIMADE endpoint, support/CV thresholds, conditioning, fit-quality
-warning threshold, phase-mismatch override, provenance compatibility, and exact
-fit reuse.
+The ordinary vacancy panel remains useful for symmetry enumeration and for
+Monte Carlo when every requested backend is available in one Python
+environment.
 
-For oxide references the Input Builder uses the explicit oxygen convention:
-`oxygen_reference_correction_ev` changes the electronic O2 reference, while
-`delta_mu_O_ev` changes the physical oxygen chemical potential. The former must
-remain zero when experimental energy correction is enabled. O-rich requires
-`delta_mu_O_ev = 0`; O-poor permits values <= 0. A non-zero legacy
-`muO_shift_ev` is shown only as a migration case and is never silently mixed
-with the new keys.
+### Run
 
-These `[references]` oxygen controls are deliberately independent of the
-`[vacancies]` oxygen-reference mode, delta-mu grid, and T-pO2 mapping controls.
+Runs ordinary workflow stages and monitors logs. Large HPC campaigns are still
+better launched from the CLI or scheduler.
 
-GUI-generated vacancy defaults now include the opt-in correction flags explicitly:
+### Results Explorer
+
+Loads the main results database, phase-diagram outputs, and vacancy-analysis
+files. It distinguishes closed-system energy above hull from oxygen-open vacancy
+thermodynamics and can display the compact vacancy free-energy / T-pO2 outputs.
+
+### Structure Viewer
+
+Provides interactive inspection of generated, relaxed, and vacancy-containing
+structures.
+
+---
+
+## Staged Vacancy MC page
+
+`gui/pages/Vacancy_MC_Staged.py` is the dedicated interface for the current
+large-supercell GRACE-search/MACE-finalization workflow.
+
+It exposes the staged controls that are intentionally not overloaded into the
+ordinary Input Builder:
 
 ```toml
 [vacancies]
-apply_fitted_energy_correction = false
-allow_legacy_energy_correction_provenance = false
+parent_source = "directory"
+parent_directory = "vacancy-selected"
+parent_include = ["Ti_2.5Sb_2.5", "Ti_2.5Sb_5"]
+parent_pick = "lowest_energy"
+output_directory = "vacancy-mc-grace-mace"
+
+search_method = "monte-carlo"
+vacancy_counts = [1, 2]
+supercell = [2, 2, 2]
+
+mc_backend = "grace"
+mc_model = "GRACE-1L-OMAT"
+mc_task = ""
+mc_device = "cuda"
+mc_gpu_id = 0
+
+mc_annealing = true
+mc_initial_temperature_K = 1500.0
+mc_annealing_hold_steps = 5000
+mc_annealing_steps = 50000
+mc_temperature_K = 600.0
+mc_run_mode = "combined"
+mc_max_steps = 200000
+mc_patience = 100000
+mc_improvement_tolerance_eV = 1.0e-5
+mc_energy_window_eV = 1.0
+mc_cation_move_weight = 0.5
+mc_vacancy_move_weight = 0.5
+sample_seed = 42
+sample_max_saved = 100
+
+backend = "mace"
+model = "mh-1"
+task = "matpes_r2scan"
+device = "cuda"
+gpu_id = 0
+topk_per_vacancy_count = 20
+optimizer = "bfgs"
+fmax = 0.05
+max_steps = 300
 ```
 
----
-
-### 2️⃣ Run
-
-Graphical interface for:
+The page also builds separate `conda run` commands for the two environments and
+can execute them directly:
 
 ```bash
-dopingflow run-all
+conda run -n dopingflow-grace dopingflow vacancies-mc-search -c input.toml --verbose
+conda run -n dopingflow-mace  dopingflow vacancies-finalize  -c input.toml --verbose
 ```
 
-Supports full workflow execution, stage ranges, individual stages, vacancies,
-optional overrides, and log monitoring.
+The same `input.toml` and `output_directory` are used for both stages, so the
+MACE finalize process continues from the GRACE archive and
+`selected_candidates.txt` files written by Stage 1.
 
----
+### Parent selection semantics
 
-### 3️⃣ Results Explorer
+`parent_include` accepts composition labels independent of common element order
+and decimal/`p` notation. For example, `Ti_2.5Sb_5`, `Ti2p5_Sb5`, and
+`Sb5_Ti2p5` select the same composition. A selector containing `/`, such as
+`Sb5_Ti2p5/candidate_003`, is treated as an exact parent ID.
 
-The Results Explorer can load the main results database, phase-diagram output,
-vacancy-analysis tables, or a custom CSV.
+`parent_pick = "lowest_energy"` keeps the first selected parent for each
+composition. DopingFlow filtering writes `selected_candidates.txt` in ascending
+relaxed-energy order, so this corresponds to the lowest-energy filtered parent.
+Use `parent_pick = "all"` to keep every selected parent.
 
-For the existing phase-diagram view, candidate metadata matching is now
-portable across machines: the plotting helper matches the final
-`composition/candidate` path components rather than requiring identical absolute
-path prefixes. This prevents copied calculations from failing merely because
-the original output came from another workstation or HPC filesystem.
+`output_directory` mirrors selected parent IDs into a dedicated staged result
+tree while leaving the source parent calculations untouched.
 
-If corrected hull columns are present, the phase plot offers Raw/Corrected
-selection. The corrected view comes from a separately rebuilt complete hull; it
-is not a post-hoc shift of raw energy above hull.
+### Monte Carlo schedule note
 
-The phase-diagram backend also passes the candidate `Composition` to pymatgen's
-`get_decomposition()` API, avoiding the historical `PDEntry has no attribute
-get_atomic_fraction` failure caused by passing the entire `PDEntry` object.
-
-The vacancy thermodynamic panel provides grand-potential envelopes, preferred
-vacancy count, static stability intervals, T-pO2 maps, and vacancy formation
-free energies. These quantities remain distinct from energy above hull.
-
----
-
-### 4️⃣ Structure Viewer
-
-Visual inspection of generated structures using `py3Dmol`.
-
-Useful for checking dopant placement, relaxed geometries, vacancy structures,
-and Monte Carlo outputs.
-
----
-
-### Phase Diagram page
-
-The dedicated **Phase Diagram** page is the recommended interface for phase
-stability analysis. It reads `phase_diagram_results.csv` and, when available,
-`vacancy_energy_above_hull.csv`.
-
-It provides:
-
-- exact chemical-system selection;
-- Raw/Corrected hull selection;
-- a two-dopant composition map where marker color is energy above hull;
-- one-dimensional concentration curves;
-- stable-point highlighting;
-- decomposition tables;
-- corrected/raw energy above hull versus oxygen-vacancy count;
-- composition selection for vacancy-hull curves.
-
-The page also edits these `[phase_diagram]` options directly:
-
-```toml
-[phase_diagram]
-include_vacancy_minima = true
-vacancy_results_directory = "vacancy-selected"
-```
-
-After saving the settings, run:
-
-```bash
-dopingflow phase-diagram -c input.toml
-```
-
-The additional output is:
+`mc_max_steps` is the total trajectory length; the hot hold and cooling ramp are
+part of this number. In `combined`/`converged` mode the no-improvement patience
+counter is active from step 1. If the full annealing schedule must be reached,
+set
 
 ```text
-vacancy_energy_above_hull.csv
+mc_patience > mc_annealing_hold_steps + mc_annealing_steps
 ```
 
-For each cation composition, the file contains the lowest-energy relaxed
-structure at each investigated oxygen-vacancy count and its raw/corrected energy
-above hull and decomposition.
+The page uses 200,000 maximum steps and 100,000 patience as a
+production-oriented **starting point** for the present 2×2×2 / 960-atom coupled
+occupation study. These values are not a universal convergence guarantee.
 
-A lower energy above hull after introducing vacancies means that the
-oxygen-deficient composition is closer to its closed-system decomposition hull.
-This does **not** mean the same thing as a negative vacancy formation free
-energy, and it is not yet an oxygen-open grand-potential hull.
+### Current GRACE → MACE selection limitation
+
+The current staged path is:
+
+```text
+GRACE archive
+    → GRACE ranking
+    → GRACE top-k
+    → MACE single point on GRACE-selected candidates
+    → MACE relaxation
+    → MACE relaxed-energy reranking
+```
+
+MACE does not yet rescore every archived GRACE candidate before the relaxation
+top-k is chosen. The GUI therefore displays this limitation explicitly. Validate
+GRACE/MACE ranking agreement on a smaller representative archive before a very
+large production campaign.
 
 ---
 
-### Vacancy M0/M1 Energy Correction page
+## Phase Diagram page
 
-This page controls whether the fitted experimental formation-energy correction
-is also used inside the vacancy thermodynamic analysis.
+`gui/pages/Phase_Diagram.py` is the dedicated phase-stability interface. It can
+read the ordinary phase-diagram outputs and `vacancy_energy_above_hull.csv`,
+switch between raw/corrected hulls when available, and plot vacancy-resolved
+closed-system energy above hull.
 
-The common correction model is configured through the normal correction section,
-for example:
-
-```toml
-[energy_correction]
-enabled = true
-experimental_source = "kingsbury"
-model_family = "auto"
-correction_terms = ["oxide"]
-m1_elements = "workflow"
-calibration_selection = "phase_resolved"
-auto_fetch_phase_structures = true
-reuse_fitted = true
-```
-
-The vacancy page edits:
-
-```toml
-[vacancies]
-apply_fitted_energy_correction = true
-allow_legacy_energy_correction_provenance = false
-oxygen_reference_mode = "reference_file"
-```
-
-If `model_family = "auto"`, the family selected by `corrections-fit` is used.
-Run `refs-build`, `corrections-fit`, and then `vacancies` when fitting a new model.
-The vacancy stage reuses the fitted model rather than fitting a second one.
-
-The page blocks the invalid combination of a fitted M0/M1 vacancy correction
-with `oxygen_reference_mode = "global"` or `"chemistry-specific"`, because the
-two paths would reuse the same experimental formation-enthalpy information for
-oxygen-related calibration.
-
-When enabled, raw values remain available while the active vacancy
-cross-count thermodynamics use
-`ΔE_corrected = ΔE_raw + C(defect) - C(parent)`. The uncertainty is evaluated
-from the correlated reaction feature vector rather than by independently adding
-parent and defect correction errors.
-
-Correction application also validates the stored energy provenance. Known
-backend/model/task, optimizer, force-tolerance (`fmax`), maximum-step,
-convergence, or structure mismatches are rejected. The legacy-provenance option
-accepts missing historical metadata only; it does not override a known mismatch.
+A lower vacancy-containing energy above hull means the oxygen-deficient
+composition is closer to its **closed-system decomposition hull**. This is not
+the same quantity as a vacancy formation free energy and is not an oxygen-open
+grand-potential hull.
 
 ---
 
-## ⚠️ Notes
+## Vacancy energy-correction page
 
-- The GUI assumes it is launched from the project root unless another project
-  root is entered explicitly.
-- It uses the same `input.toml` as the CLI.
-- Large workflows are better executed from CLI or HPC systems.
-- The GUI is intended for development, testing, and interactive analysis.
-- Phase-diagram conclusions are only as complete as the competing phases
-  included in the calculation.
+`gui/pages/Vacancy_Energy_Correction.py` controls whether an already fitted,
+backend-compatible solid-energy correction is reused inside vacancy
+thermodynamics. It preserves raw values and validates provenance.
+
+When a fitted solid-energy correction is active, keep the oxygen reservoir on a
+raw same-backend mode such as `reference_file` or `same_calculator`. Do not
+combine it with the experimental `global` or `chemistry-specific`
+oxygen-reference calibration path.
 
 ---
 
-## Development
+## Development and tests
 
-Relevant GUI source files:
+Relevant files are:
 
 ```text
 gui/
 ├── app.py
 ├── gui_config.py
+├── vacancy_staged.py
 ├── phase_diagram_plots.py
+├── vacancy_thermo_plots.py
 ├── pages/
-│   ├── Phase_Diagram.py
-│   └── Vacancy_Energy_Correction.py
+│   ├── Vacancy_MC_Staged.py
+│   ├── Vacancy_Energy_Correction.py
+│   └── Phase_Diagram.py
 ├── io_project.py
 └── view_structure.py
 ```
 
+Focused tests cover parsing of staged vacancy controls and construction of the
+separate GRACE/MACE commands. The targeted CI workflow also compiles the staged
+GUI modules and builds the Sphinx documentation.
+
 ---
+
+## Notes
+
+- The GUI reads/writes the same `input.toml` as the CLI.
+- Large workflows should normally be launched from CLI/HPC after validating the
+  configuration in the GUI.
+- The staged GUI does not require GRACE and MACE to be importable in the same
+  Python process; it uses separate environment commands.
+- Phase-diagram conclusions are only as complete as the competing phases
+  supplied to the calculation.
 
 © 2026 Kazem Zhour
