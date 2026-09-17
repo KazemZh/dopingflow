@@ -18,7 +18,7 @@ The workflow integrates:
 - Formation energy calculations using configurable thermodynamic reference schemes
 - Optional backend-specific formation-energy corrections fitted to experimental data
 - Restricted one-dimensional alloy convex hulls and full multicomponent phase diagrams
-- Oxygen-vacancy screening, thermodynamics, optional M0/M1-corrected vacancy energetics, and optional vacancy-resolved closed-system energy-above-hull analysis
+- Oxygen-vacancy screening, thermodynamics, optional fitted vacancy-energy corrections, vacancy-resolved closed-system energy-above-hull analysis, and staged GRACE-to-MACE Monte Carlo search/finalization
 - Bandgap prediction using ALIGNN
 - Automated database collection
 - Fully reproducible, stage-isolated execution
@@ -26,7 +26,9 @@ The workflow integrates:
 All stages are controlled through a single ``input.toml`` file.
 
 The workflow is modular: each stage can be executed independently or combined
-into a full pipeline using the ``run-all`` command.
+into a full pipeline using the ``run-all`` command. Large Monte Carlo vacancy
+studies may instead use the dedicated staged search/finalize commands so the
+search and final calculators can live in separate environments.
 
 
 User Guide
@@ -41,6 +43,7 @@ User Guide
    input_file
    input_file_phase_diagram
    input_file_vacancy_correction
+   input_file_vacancy_mc
 
 
 Workflow Stages
