@@ -67,6 +67,6 @@ jobs:
             tests/test_oxidation.py \
             README.md \
             docs/source/methods/oxidation_states.rst
-          git rm tools/replace_vasp_with_gpaw.py .github/workflows/gpaw-oxidation-migration.yml
+          git rm -f tools/replace_vasp_with_gpaw.py .github/workflows/gpaw-oxidation-migration.yml
           git commit -m "Replace VASP oxidation backend with GPAW"
           git push origin HEAD:feature/oxidation-state-framework
