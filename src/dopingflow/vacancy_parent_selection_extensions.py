@@ -1,14 +1,13 @@
-"""Optional parent-selection filter for staged vacancy Monte Carlo workflows.
+"""Optional parent selection for staged vacancy Monte Carlo workflows.
 
-The staged GRACE-search/MACE-finalize commands normally process every parent
-returned by ``discover_selected_parents``.  ``[vacancies].parent_include`` lets a
-study name only the desired compositions or exact parent IDs without copying or
-symlinking directories.
+``[vacancies].parent_include`` limits the staged GRACE-search/MACE-finalize
+workflow to named compositions or exact parent IDs. ``parent_pick`` controls
+whether all selected candidates are used or only the first (lowest-energy)
+filtered candidate for each composition.
 
-Composition selectors are order/notation insensitive for the common dopingflow
-labels.  For example ``Ti_2.5Sb_5``, ``Ti2p5_Sb5`` and ``Sb5_Ti2p5`` resolve to
-the same composition.  A selector containing ``/`` is treated as an exact parent
-ID such as ``Sb5_Ti2p5/candidate_003``.
+DopingFlow's filtering stage writes ``selected_candidates.txt`` in ascending
+relaxed-energy order, so the first discovered parent for a composition is its
+lowest-energy selected candidate.
 """
 
 from __future__ import annotations
@@ -53,6 +52,24 @@ def parse_parent_include(section: dict[str, Any]) -> tuple[str, ...] | None:
     return tuple(selectors)
 
 
+def parse_parent_pick(section: dict[str, Any]) -> str:
+    """Return parent-selection mode: all or one lowest-energy parent/composition."""
+
+    raw = str(section.get("parent_pick", "all")).strip().lower().replace("-", "_")
+    aliases = {
+        "all": "all",
+        "lowest": "lowest_energy",
+        "lowest_energy": "lowest_energy",
+        "first": "lowest_energy",
+        "first_selected": "lowest_energy",
+    }
+    if raw not in aliases:
+        raise ValueError(
+            "[vacancies].parent_pick must be 'all' or 'lowest_energy'"
+        )
+    return aliases[raw]
+
+
 def _canonical_composition(label: str) -> tuple[tuple[str, Decimal], ...] | None:
     """Canonicalize common composition labels independently of element order."""
 
@@ -62,8 +79,6 @@ def _canonical_composition(label: str) -> tuple[tuple[str, Decimal], ...] | None
     matches = list(_TOKEN_RE.finditer(text))
     if not matches:
         return None
-
-    # Only separators may remain outside recognized element/percentage tokens.
     remainder = _TOKEN_RE.sub("", text).replace("_", "").replace("-", "")
     if remainder:
         return None
@@ -90,7 +105,6 @@ def _selector_matches_parent(selector: str, parent: dict[str, Any]) -> bool:
 
     if "/" in selector:
         return selector == parent_id or selector == exact_id
-
     if selector == composition:
         return True
     selector_comp = _canonical_composition(selector)
@@ -140,6 +154,40 @@ def filter_selected_parents(
     return selected
 
 
+def pick_parents(
+    parents: list[dict[str, Any]], mode: str
+) -> list[dict[str, Any]]:
+    """Optionally keep only the lowest-energy selected parent per composition.
+
+    ``discover_selected_parents`` preserves the line order of each
+    ``selected_candidates.txt`` file. The filtering stage writes those lines in
+    ascending relaxed-energy order, hence the first parent encountered for a
+    composition is the lowest-energy filtered candidate.
+    """
+
+    if mode == "all":
+        return parents
+    if mode != "lowest_energy":
+        raise ValueError(f"Unsupported parent_pick mode: {mode}")
+
+    chosen: list[dict[str, Any]] = []
+    seen_compositions: set[str] = set()
+    for parent in parents:
+        composition = str(parent.get("composition", ""))
+        if composition in seen_compositions:
+            continue
+        chosen.append(parent)
+        seen_compositions.add(composition)
+
+    log.info(
+        "Vacancy parent_pick=lowest_energy reduced %d selected parent(s) to %d "
+        "composition representative(s)",
+        len(parents),
+        len(chosen),
+    )
+    return chosen
+
+
 def _run_with_parent_filter(
     original: Callable[..., Any],
     raw: dict[str, Any],
@@ -147,14 +195,18 @@ def _run_with_parent_filter(
     *,
     config_path=None,
 ):
-    selectors = parse_parent_include(raw.get("vacancies") or {})
-    if selectors is None:
+    section = raw.get("vacancies") or {}
+    selectors = parse_parent_include(section)
+    pick_mode = parse_parent_pick(section)
+    if selectors is None and pick_mode == "all":
         return original(raw, root, config_path=config_path)
 
     discover_original = _base.discover_selected_parents
 
     def discover_filtered(parent_root):
-        return filter_selected_parents(discover_original(parent_root), selectors)
+        parents = discover_original(parent_root)
+        parents = filter_selected_parents(parents, selectors)
+        return pick_parents(parents, pick_mode)
 
     _base.discover_selected_parents = discover_filtered
     try:
@@ -192,6 +244,8 @@ __all__ = [
     "filter_selected_parents",
     "install_extensions",
     "parse_parent_include",
+    "parse_parent_pick",
+    "pick_parents",
     "run_vacancy_finalize",
     "run_vacancy_mc_search",
 ]
