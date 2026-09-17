@@ -116,6 +116,38 @@ dopingflow.ml_relaxation module
    :show-inheritance:
    :undoc-members:
 
+dopingflow.oxidation module
+---------------------------
+
+.. automodule:: dopingflow.oxidation
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+dopingflow.oxidation_structural module
+--------------------------------------
+
+.. automodule:: dopingflow.oxidation_structural
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+dopingflow.oxidation_ml module
+------------------------------
+
+.. automodule:: dopingflow.oxidation_ml
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+dopingflow.oxidation_dft module
+-------------------------------
+
+.. automodule:: dopingflow.oxidation_dft
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 dopingflow.refs module
 ----------------------
 
