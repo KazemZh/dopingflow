@@ -1,9 +1,14 @@
-"""Optional parent selection for staged vacancy Monte Carlo workflows.
+"""Parent selection and output routing for staged vacancy Monte Carlo workflows.
 
 ``[vacancies].parent_include`` limits the staged GRACE-search/MACE-finalize
 workflow to named compositions or exact parent IDs. ``parent_pick`` controls
 whether all selected candidates are used or only the first (lowest-energy)
 filtered candidate for each composition.
+
+``[vacancies].output_directory`` optionally separates the complete staged
+vacancy study from the source parent tree. GRACE writes its Monte Carlo search
+archive there and the later MACE finalize stage resolves the same mirrored
+parent paths, so it continues directly from the saved GRACE selections.
 
 DopingFlow's filtering stage writes ``selected_candidates.txt`` in ascending
 relaxed-energy order, so the first discovered parent for a composition is its
@@ -12,8 +17,10 @@ lowest-energy selected candidate.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal, InvalidOperation
 import logging
+from pathlib import Path
 import re
 from typing import Any, Callable
 
@@ -68,6 +75,22 @@ def parse_parent_pick(section: dict[str, Any]) -> str:
             "[vacancies].parent_pick must be 'all' or 'lowest_energy'"
         )
     return aliases[raw]
+
+
+def parse_output_directory(
+    section: dict[str, Any], root: Path
+) -> Path | None:
+    """Resolve an optional dedicated staged-vacancy output directory."""
+
+    if "output_directory" not in section:
+        return None
+    raw = section.get("output_directory")
+    if not isinstance(raw, str) or not raw.strip():
+        raise ValueError("[vacancies].output_directory must be a non-empty path string")
+    path = Path(raw.strip()).expanduser()
+    if not path.is_absolute():
+        path = Path(root) / path
+    return path.resolve()
 
 
 def _canonical_composition(label: str) -> tuple[tuple[str, Decimal], ...] | None:
@@ -188,6 +211,33 @@ def pick_parents(
     return chosen
 
 
+def _parent_root_from_config(cfg) -> Path:
+    """Return the source tree from which parent structures are discovered."""
+
+    parent_root = cfg.parent_directory if cfg.parent_source == "directory" else cfg.outdir
+    if parent_root is None:
+        raise ValueError("Could not resolve vacancy parent source directory")
+    return Path(parent_root)
+
+
+def _redirect_parent_to_output(
+    parent: dict[str, Any], output_root: Path
+) -> dict[str, Any]:
+    """Mirror one parent ID under the dedicated output root.
+
+    Structural source paths remain untouched, while ``candidate_dir`` is changed
+    to the result tree because the staged implementation derives every per-parent
+    GRACE/MACE path from that field.
+    """
+
+    redirected = dict(parent)
+    redirected["source_candidate_dir"] = Path(parent["candidate_dir"])
+    redirected["candidate_dir"] = (
+        output_root / str(parent["composition"]) / str(parent["candidate"])
+    )
+    return redirected
+
+
 def _run_with_parent_filter(
     original: Callable[..., Any],
     raw: dict[str, Any],
@@ -198,21 +248,85 @@ def _run_with_parent_filter(
     section = raw.get("vacancies") or {}
     selectors = parse_parent_include(section)
     pick_mode = parse_parent_pick(section)
-    if selectors is None and pick_mode == "all":
+    output_root = parse_output_directory(section, Path(root))
+
+    if selectors is None and pick_mode == "all" and output_root is None:
         return original(raw, root, config_path=config_path)
 
     discover_original = _base.discover_selected_parents
+    parse_config_original = _base.parse_vacancy_config
+    parent_reference_original = _base._parent_reference
 
-    def discover_filtered(parent_root):
-        parents = discover_original(parent_root)
+    # Resolve the input/source root before temporarily redirecting the parsed
+    # staged configuration to the dedicated result root.
+    source_cfg = parse_config_original(raw, root)
+    source_root = _parent_root_from_config(source_cfg)
+
+    if output_root is not None:
+        output_root.mkdir(parents=True, exist_ok=True)
+
+    def parse_config_redirected(raw_cfg, root_path):
+        cfg = parse_config_original(raw_cfg, root_path)
+        if output_root is None:
+            return cfg
+        if cfg.parent_source == "directory":
+            return replace(cfg, parent_directory=output_root)
+        return replace(cfg, outdir=output_root)
+
+    def discover_filtered(_parent_root):
+        # When output_directory is active, the staged workflow passes the result
+        # root here. Parent discovery must still happen in the untouched source
+        # tree. Both GRACE and MACE therefore resolve the same source parent IDs.
+        discover_root = source_root if output_root is not None else Path(_parent_root)
+        parents = discover_original(discover_root)
         parents = filter_selected_parents(parents, selectors)
-        return pick_parents(parents, pick_mode)
+        parents = pick_parents(parents, pick_mode)
+        if output_root is not None:
+            parents = [
+                _redirect_parent_to_output(parent, output_root)
+                for parent in parents
+            ]
+        return parents
+
+    def parent_reference_redirected(
+        parent, relaxed_parent, vacancy_root, cfg, calculator, fingerprint
+    ):
+        # ``_parent_reference`` may inspect the original candidate's relaxation
+        # metadata. Keep that lookup pointed at the source tree while all files
+        # it creates are still written below the supplied output vacancy_root.
+        source_candidate_dir = parent.get("source_candidate_dir")
+        if source_candidate_dir is None:
+            return parent_reference_original(
+                parent, relaxed_parent, vacancy_root, cfg, calculator, fingerprint
+            )
+        source_parent = dict(parent)
+        source_parent["candidate_dir"] = Path(source_candidate_dir)
+        return parent_reference_original(
+            source_parent,
+            relaxed_parent,
+            vacancy_root,
+            cfg,
+            calculator,
+            fingerprint,
+        )
 
     _base.discover_selected_parents = discover_filtered
+    if output_root is not None:
+        _base.parse_vacancy_config = parse_config_redirected
+        _base._parent_reference = parent_reference_redirected
+
     try:
-        return original(raw, root, config_path=config_path)
+        result = original(raw, root, config_path=config_path)
+        if output_root is not None:
+            log.info(
+                "Staged vacancy outputs routed to dedicated directory: %s",
+                output_root,
+            )
+        return result
     finally:
         _base.discover_selected_parents = discover_original
+        _base.parse_vacancy_config = parse_config_original
+        _base._parent_reference = parent_reference_original
 
 
 def run_vacancy_mc_search(raw, root, *, config_path=None):
@@ -243,6 +357,7 @@ install_extensions()
 __all__ = [
     "filter_selected_parents",
     "install_extensions",
+    "parse_output_directory",
     "parse_parent_include",
     "parse_parent_pick",
     "pick_parents",
