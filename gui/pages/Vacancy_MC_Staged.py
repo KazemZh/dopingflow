@@ -91,8 +91,8 @@ with st.form("staged_vacancy_config"):
     st.subheader("Search space")
     counts_text = st.text_input(
         "vacancy_counts",
-        value=format_int_list(vac.get("vacancy_counts", [1, 2])),
-        help="Explicit fixed vacancy counts. For the current study use 1, 2.",
+        value=format_int_list(vac.get("vacancy_counts", [1, 2, 3, 4])),
+        help="Explicit fixed vacancy counts. The current large-cell study uses 1, 2, 3, 4.",
     )
     sc = list(vac.get("supercell", [2, 2, 2]))
     if len(sc) != 3:
@@ -172,27 +172,30 @@ with st.form("staged_vacancy_config"):
     max_steps = r2.number_input(
         "mc_max_steps",
         min_value=1,
-        value=int(vac.get("mc_max_steps", 200000)),
+        value=int(vac.get("mc_max_steps", 500000)),
         step=10000,
     )
     patience = r3.number_input(
         "mc_patience",
         min_value=1,
-        value=int(vac.get("mc_patience", 100000)),
-        step=10000,
+        value=int(vac.get("mc_patience", 105000)),
+        step=5000,
     )
     st.caption(
         "mc_max_steps is the total trajectory length, including the hot hold and cooling ramp. "
-        "In combined/converged mode, patience is counted from step 1; if you require the full "
-        "annealing schedule, keep mc_patience larger than hold_steps + annealing_steps."
+        "The current implementation counts patience from step 1. With 5,000 hold + 50,000 "
+        "cooling steps, mc_patience=105,000 guarantees that a no-improvement stop cannot occur "
+        "before the schedule plus roughly 50,000 additional trial moves at 600 K."
     )
 
     p1, p2, p3 = st.columns(3)
     improvement_tol = p1.number_input(
         "mc_improvement_tolerance_eV",
         min_value=0.0,
-        value=float(vac.get("mc_improvement_tolerance_eV", 1.0e-5)),
-        format="%.8f",
+        value=float(vac.get("mc_improvement_tolerance_eV", 0.001)),
+        step=0.001,
+        format="%.6f",
+        help="Best-so-far energy improvement required to reset the no-improvement counter.",
     )
     energy_window = p2.number_input(
         "mc_energy_window_eV",
