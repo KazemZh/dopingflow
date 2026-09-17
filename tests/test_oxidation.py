@@ -92,6 +92,12 @@ def test_strategy_dispatch_and_individual_methods(tmp_path: Path) -> None:
     )
     assert ml.methods == ("toss-gnn",)
 
+    with pytest.raises(ValueError, match="Unknown oxidation-state method"):
+        parse_oxidation_config(
+            {"oxidation": {"strategy": "structural", "methods": ["toss-bayesian"]}},
+            tmp_path,
+        )
+
     with pytest.raises(ValueError, match="use strategy='combined'"):
         parse_oxidation_config(
             {"oxidation": {"strategy": "ml", "methods": ["toss-gnn", "bader"]}},

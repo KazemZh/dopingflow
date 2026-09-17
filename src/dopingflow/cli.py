@@ -206,7 +206,7 @@ def oxidation_cmd(
         None,
         "--methods",
         help=(
-            "Comma-separated method override. Choices: bond-valence,toss-bayesian,toss-gnn,"
+            "Comma-separated method override. Choices: bond-valence,toss-gnn,"
             "chgnet,bertos,dft-electronic,bader,wannier,eos"
         ),
     ),

@@ -24,8 +24,7 @@ Strategy and method selection
 Four strategy groups are exposed:
 
 ``structural``
-   ``bond-valence`` (pymatgen ``BVAnalyzer``) and ``toss-bayesian``
-   (conventional MAP/Bayesian TOSS).
+   ``bond-valence`` (pymatgen ``BVAnalyzer``).
 
 ``ml``
    ``toss-gnn``, ``chgnet``, and ``bertos``.

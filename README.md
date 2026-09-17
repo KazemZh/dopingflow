@@ -55,7 +55,7 @@ pip install -e ".[uma]"
 pip install -e ".[alignn]"
 
 # Oxidation-state optional dependencies
-pip install -e ".[oxidation-toss]"    # conventional TOSS / TOSS-GNN Python deps
+pip install -e ".[oxidation-toss]"    # TOSS-GNN Python deps
 pip install -e ".[oxidation-chgnet]"  # CHGNet magnetic-moment analysis
 pip install -e ".[oxidation-bertos]"  # BERTOS composition-token model
 
@@ -451,7 +451,7 @@ analyzed with structural, ML, DFT, or explicitly combined strategies.
 
 Available methods are:
 
-- **Structural:** pymatgen bond valence and conventional Bayesian/MAP TOSS.
+- **Structural:** pymatgen bond valence.
 - **ML:** pretrained TOSS-GNN, CHGNet magnetic-moment analysis, and BERTOS.
 - **DFT:** VASP electronic descriptors, Bader, Wannier descriptors, and validated
   EOS/charge-pumping formal assignments.

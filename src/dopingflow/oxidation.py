@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 
 
 STRATEGY_METHODS: dict[str, tuple[str, ...]] = {
-    "structural": ("bond-valence", "toss-bayesian"),
+    "structural": ("bond-valence",),
     "ml": ("toss-gnn", "chgnet", "bertos"),
     "dft": ("dft-electronic", "bader", "wannier", "eos"),
 }
@@ -29,8 +29,6 @@ _METHOD_ALIASES = {
     "bondvalence": "bond-valence",
     "pymatgen-bv": "bond-valence",
     "pymatgen_bv": "bond-valence",
-    "toss": "toss-bayesian",
-    "toss_bayesian": "toss-bayesian",
     "toss-gnn": "toss-gnn",
     "toss_gnn": "toss-gnn",
     "chgnet": "chgnet",

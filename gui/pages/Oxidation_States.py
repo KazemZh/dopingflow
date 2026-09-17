@@ -11,13 +11,12 @@ import toml
 
 
 STRATEGY_METHODS = {
-    "structural": ["bond-valence", "toss-bayesian"],
+    "structural": ["bond-valence"],
     "ml": ["toss-gnn", "chgnet", "bertos"],
     "dft": ["dft-electronic", "bader", "wannier", "eos"],
 }
 ALL_METHODS = [
     "bond-valence",
-    "toss-bayesian",
     "toss-gnn",
     "chgnet",
     "bertos",
@@ -178,17 +177,6 @@ if "bond-valence" in methods:
             b2.number_input("max_radius (Å)", min_value=0.1, value=float(bv.get("max_radius", 4.0)), step=0.1)
         )
         oxidation["bond_valence"] = bv
-
-if "toss-bayesian" in methods:
-    with st.expander("Conventional TOSS Bayesian/MAP", expanded=False):
-        toss = _table("toss_bayesian")
-        toss["repo_path"] = st.text_input(
-            "Local TOSS repository",
-            value=str(toss.get("repo_path", "")),
-            key="oxidation_toss_bayesian_repo",
-        )
-        st.caption("This is the conventional TOSS assignment, separate from the pretrained TOSS-GNN model.")
-        oxidation["toss_bayesian"] = toss
 
 if "toss-gnn" in methods:
     with st.expander("TOSS-GNN", expanded=True):

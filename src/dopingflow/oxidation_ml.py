@@ -255,7 +255,7 @@ def _run_toss_gnn(target: StructureTarget, settings: dict[str, Any]) -> dict[str
             "nc_checkpoint_sha256": _sha256(nc_checkpoint),
         },
         limitations=[
-            "TOSS-GNN is distinct from conventional Bayesian/MAP TOSS.",
+            "TOSS-GNN is distinct from conventional traditional non-GNN TOSS.",
             "The verified upstream NC_predict interface returns oxidation-state classes and coordination numbers but does not expose calibrated probabilities; no confidence values are invented here.",
             "Published broad-database performance does not establish accuracy for defective co-doped oxides; validate the target chemistry independently.",
         ],
