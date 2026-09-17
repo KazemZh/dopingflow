@@ -15,6 +15,7 @@ from dopingflow.filtering import run_filtering_from_toml
 from dopingflow.formation_oxygen_extensions import run_formation_from_toml
 from dopingflow.generate import run_generate_from_toml
 from dopingflow.logging import setup_logging
+from dopingflow.oxidation import run_oxidation_from_toml
 from dopingflow.phase_diagram_convergence_extensions import run_phase_diagram_from_toml
 from dopingflow.refs_oxygen_extensions import run_refs_build_from_toml
 from dopingflow.relax import run_relax_from_toml
@@ -88,7 +89,7 @@ def relax_cmd(
     config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
     verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
 ) -> None:
-    """Step 03: Relax scanned candidates with M3GNet Relaxer."""
+    """Step 03: Relax scanned candidates with the configured MLFF backend."""
     _init(config, verbose)
     run_relax_from_toml(config)
 
@@ -165,7 +166,7 @@ def vacancies_cmd(
     config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
     verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
 ) -> None:
-    """Search vacancies by symmetry or Monte Carlo, ML-screen, relax, and rerank."""
+    """Step 10: Search oxygen vacancies, ML-screen, relax, and rerank."""
     _init(config, verbose)
     out_path = run_vacancies_from_toml(config)
     typer.echo(f"\nWrote vacancy database CSV: {out_path}")
@@ -193,6 +194,34 @@ def vacancies_finalize_cmd(
     typer.echo(f"\nWrote finalized vacancy database CSV: {out_path}")
 
 
+@app.command("oxidation")
+def oxidation_cmd(
+    config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
+    strategy: Optional[str] = typer.Option(
+        None,
+        "--strategy",
+        help="Override [oxidation].strategy: structural, ml, dft, or combined",
+    ),
+    methods: Optional[str] = typer.Option(
+        None,
+        "--methods",
+        help=(
+            "Comma-separated method override. Choices: bond-valence,toss-bayesian,toss-gnn,"
+            "chgnet,bertos,dft-electronic,bader,wannier,eos"
+        ),
+    ),
+    verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
+) -> None:
+    """Step 11: Analyze oxidation states/electronic descriptors on relaxed parent and O-vacancy structures."""
+    _init(config, verbose)
+    out_path = run_oxidation_from_toml(
+        config,
+        strategy_override=strategy,
+        methods_override=methods,
+    )
+    typer.echo(f"\nWrote oxidation-state results JSON: {out_path}")
+
+
 @app.command("run-all")
 def run_all_cmd(
     config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
@@ -201,7 +230,7 @@ def run_all_cmd(
         "--from",
         help=(
             "Start step key (refs, corrections, generate, scan, relax, filter, "
-            "bandgap, formation, collect, alloy-hull, phase-diagram, vacancies)"
+            "bandgap, formation, collect, alloy-hull, phase-diagram, vacancies, oxidation)"
         ),
     ),
     stop: str = typer.Option("phase-diagram", "--until", help="Stop step key (inclusive)"),
@@ -222,7 +251,7 @@ def run_all_cmd(
 
     Step keys:
       refs -> corrections -> generate -> scan -> relax -> filter -> bandgap
-      -> formation -> collect -> alloy-hull -> phase-diagram -> vacancies
+      -> formation -> collect -> alloy-hull -> phase-diagram -> vacancies -> oxidation
     """
     _init(config, verbose)
 
@@ -245,6 +274,7 @@ def run_all_cmd(
         ("alloy-hull", "08 alloy-hull", lambda: run_alloy_hull_from_toml(config)),
         ("phase-diagram", "09 phase-diagram", lambda: run_phase_diagram_from_toml(config)),
         ("vacancies", "10 vacancies", lambda: run_vacancies_from_toml(config)),
+        ("oxidation", "11 oxidation", lambda: run_oxidation_from_toml(config)),
     ]
 
     key_to_idx = {k: i for i, (k, _, _) in enumerate(steps)}
@@ -284,8 +314,8 @@ def run_all_cmd(
         typer.echo(f"\n=== {title} ({k}) ===")
         res = fn()
 
-        if k in {"collect", "alloy-hull", "phase-diagram", "vacancies"} and isinstance(res, Path):
-            typer.echo(f"\nWrote output CSV: {res}")
+        if k in {"collect", "alloy-hull", "phase-diagram", "vacancies", "oxidation"} and isinstance(res, Path):
+            typer.echo(f"\nWrote output: {res}")
 
 
 @app.command("sequential-run")
