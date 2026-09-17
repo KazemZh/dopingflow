@@ -267,10 +267,9 @@ CLI::
    model_name = "0.3.0"
    device = "cpu"
    use_upstream_mn_mapping = true
-   # Optional explicit additional ranges. Each row is [min_abs_moment,
-   # max_abs_moment, formal_oxidation_state]. Do not add ranges unless they are
-   # chemically justified for the calculation/model being used.
-   moment_oxidation_ranges = { Fe = [[3.4, 4.6, 2], [4.6, 5.5, 3]] }
+   # Optional additional element-specific ranges may be supplied as
+   # moment_oxidation_ranges = { Element = [[min_abs_moment, max_abs_moment, OS], ...] }
+   # only when a chemically justified mapping is available for that element/model.
 
 CLI::
 
