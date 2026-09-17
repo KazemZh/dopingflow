@@ -152,7 +152,7 @@ GRACE joint cation + oxygen-vacancy Monte Carlo
         ↓
 low-energy GRACE archive
         ↓
-GRACE ranking and top-k selection at fixed vacancy count
+GRACE ranking and GRACE top-k selection at fixed vacancy count
         ↓
 MACE single point on selected candidates
         ↓
@@ -183,7 +183,8 @@ the persisted Stage-1 selection and continues from the same search tree.
 
 ### Parent selection and dedicated output tree
 
-The staged workflow adds three useful controls:
+The staged workflow supports composition filtering, one-parent-per-composition
+selection, and a dedicated result tree:
 
 ```toml
 [vacancies]
@@ -214,10 +215,12 @@ mirrored parent IDs during finalization.
 
 ### Explicit vacancy counts and 2×2×2 search cell
 
-For the current large-supercell study:
+The current large-supercell research profile studies one through four oxygen
+vacancies explicitly:
 
 ```toml
-vacancy_counts = [1, 2]
+max_vacancies_cap = 4
+vacancy_counts = [1, 2, 3, 4]
 supercell = [2, 2, 2]
 ```
 
@@ -226,8 +229,8 @@ For a 120-atom SnO2-based parent containing 40 cations and 80 oxygen atoms, the
 640 oxygen sites. Dopant counts are multiplied by eight while their percentages
 remain unchanged.
 
-One and two vacancies correspond to 0.15625% and 0.3125% of the oxygen
-sublattice, respectively.
+One, two, three, and four vacancies correspond to 0.15625%, 0.3125%, 0.46875%,
+and 0.625% of the oxygen sublattice, respectively.
 
 ### Coupled cation/vacancy moves
 
@@ -266,9 +269,9 @@ mc_annealing_hold_steps = 5000
 mc_annealing_steps = 50000
 mc_temperature_K = 600.0
 mc_run_mode = "combined"
-mc_max_steps = 200000
-mc_patience = 100000
-mc_improvement_tolerance_eV = 1.0e-5
+mc_max_steps = 500000
+mc_patience = 105000
+mc_improvement_tolerance_eV = 0.001
 mc_energy_window_eV = 1.0
 mc_cation_move_weight = 0.5
 mc_vacancy_move_weight = 0.5
@@ -276,16 +279,18 @@ sample_seed = 42
 sample_max_saved = 100
 ```
 
-`mc_max_steps` is the total trajectory length, including the hot hold and the
-cooling ramp. In the current implementation the no-improvement patience counter
-is active from step 1. If completing the full annealing schedule is required,
-choose `mc_patience` larger than
-`mc_annealing_hold_steps + mc_annealing_steps`.
+`mc_max_steps` is the total trajectory ceiling, including the high-temperature
+hold, the cooling ramp, and the final-temperature sampling. The current MC
+implementation counts `mc_patience` from step 1. With a 5,000-step hold and a
+50,000-step ramp, `mc_patience = 105000` ensures that a no-improvement stop
+cannot occur before the annealing schedule plus roughly 50,000 additional trial
+moves at 600 K. Any qualifying new global minimum resets that counter.
 
-The library default of 10,000 MC steps is intentionally conservative and useful
-for smoke tests; it should not be interpreted as a convergence target for this
-large search space. Production convergence must be checked for the actual
-chemistry.
+`mc_improvement_tolerance_eV = 0.001` means the best-so-far energy must improve
+by at least 1 meV to reset the convergence clock. These values are a practical
+starting profile for the current study, not a universal convergence guarantee.
+Independent seeds and energy/motif agreement remain important convergence
+checks.
 
 ### MACE finalization settings
 
@@ -313,7 +318,7 @@ candidate before top-k selection. A structure discarded by the GRACE ranking is
 not reconsidered by MACE. Validate GRACE/MACE ranking agreement on a smaller
 representative archive before a large production campaign.
 
-### Search/final provenance
+### Search/final provenance and handoff
 
 GRACE search energy and MACE final energy are recorded separately. A
 cross-backend GRACE→MACE energy difference is not labeled as a same-calculator
@@ -330,12 +335,15 @@ Typical staged global files are:
 <output_directory>/vacancies_database.json
 ```
 
-Each parent also receives `05_vacancies/` with count-specific archives,
-rankings, selections, MACE finalization metadata, and thermodynamic outputs.
+Each mirrored parent receives `05_vacancies/` with `V_O_01` through `V_O_04`,
+count-specific archives, rankings, `selected_candidates.txt`, MACE finalization
+metadata, and thermodynamic outputs. The MACE finalize stage reads the persisted
+GRACE selections from this same `output_directory`; it does not restart the
+search from the source parent tree.
 
 ### Reference-state caveat when cations move
 
-If cation swaps are enabled, defective `n=1` and `n=2` minima can differ from the
+If cation swaps are enabled, defective `n=1,2,3,4` minima can differ from the
 replicated source parent in both vacancy location and cation ordering. The
 current `n=0` parent reference is not subjected to an independent cation-only
 Monte Carlo search. Consequently, a vacancy formation free energy from such a
@@ -353,11 +361,13 @@ Enable static vacancy thermodynamics with:
 
 ```toml
 [vacancies]
+include_parent_reference = true
 static_thermodynamic_analysis = true
 ```
 
-For a fixed cation composition, DopingFlow compares final relaxed minima through
-an oxygen reservoir rather than raw total-energy differences:
+The parent reference is required for cross-count vacancy thermodynamics. For a
+fixed cation composition, DopingFlow compares final relaxed minima through an
+oxygen reservoir rather than raw total-energy differences:
 
 ```text
 ΔG_vac(n,T,pO2)
@@ -428,6 +438,7 @@ study to one composition and a tiny MC trajectory:
 
 ```toml
 parent_include = ["Ti_2.5Sb_2.5"]
+vacancy_counts = [1]
 mc_max_steps = 20
 mc_patience = 20
 sample_max_saved = 10
@@ -435,9 +446,9 @@ topk_per_vacancy_count = 3
 ```
 
 Run GRACE search, inspect the generated tree, then run MACE finalization. After
-that handoff succeeds, restore the production settings and benchmark roughly
-1,000 GRACE MC steps on one 960-atom composition before estimating the full
-campaign cost.
+that handoff succeeds, restore the `[1, 2, 3, 4]` production profile and benchmark
+roughly 1,000–5,000 GRACE MC steps on one 960-atom composition before estimating
+the full campaign cost.
 
 ---
 
@@ -455,7 +466,9 @@ dedicated pages under `gui/pages/`, including:
 
 - **Staged Vacancy MC** — edits `parent_include`, `parent_pick`,
   `output_directory`, `vacancy_counts`, `supercell`, GRACE `mc_*` settings,
-  production MC controls, and MACE finalization settings. It also builds and can
+  production MC controls, and MACE finalization settings. Its defaults reflect
+  the current `[1,2,3,4]`, 500k/105k, 1 meV research profile, while existing
+  values in `input.toml` are preserved when present. It also builds and can
   execute separate `conda run` commands for the GRACE and MACE environments.
 - **Vacancy M0/M1 Energy Correction** — configures application of an already
   fitted correction to vacancy thermodynamics.
