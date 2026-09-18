@@ -22,47 +22,8 @@ jobs:
           python-version: '3.11'
       - name: Apply Wannier descriptor analysis patch
         run: python .github/patch_wannier_analysis.py
-      - name: Make GPAW electron metadata optional and add human WF number
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          p = Path('src/dopingflow/oxidation_dft.py')
-          text = p.read_text(encoding='utf-8')
-          old = '''    return {
-        "n_bands_total": int(calc.get_number_of_bands()),
-        "n_occupied_bands": noccupied,
-        "n_spins": nspins,
-        "n_electrons": float(calc.get_number_of_electrons()),
-'''
-          new = '''    try:
-        n_electrons = float(calc.get_number_of_electrons())
-    except Exception:
-        n_electrons = None
-
-    return {
-        "n_bands_total": int(calc.get_number_of_bands()),
-        "n_occupied_bands": noccupied,
-        "n_spins": nspins,
-        "n_electrons": n_electrons,
-'''
-          if old not in text:
-              raise SystemExit('Expected n_electrons return block not found')
-          p.write_text(text.replace(old, new, 1), encoding='utf-8')
-
-          p = Path('src/dopingflow/wannier_analysis.py')
-          text = p.read_text(encoding='utf-8')
-          old = '''                "center_index": center_index,
-                "cartesian_angstrom": cart_values,
-'''
-          new = '''                "center_index": center_index,
-                "wannier_number": center_index + 1,
-                "cartesian_angstrom": cart_values,
-'''
-          if old not in text:
-              raise SystemExit('Expected center record block not found')
-          p.write_text(text.replace(old, new, 1), encoding='utf-8')
-          PY
+      - name: Apply validation compatibility fixes
+        run: python .github/fix_wannier_postpatch.py
       - name: Verify implementation compiles
         run: |
           python -m py_compile \
@@ -85,7 +46,10 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git rm .github/patch_wannier_analysis.py .github/workflows/add-wannier-analysis.yml
+          git rm \
+            .github/patch_wannier_analysis.py \
+            .github/fix_wannier_postpatch.py \
+            .github/workflows/add-wannier-analysis.yml
           git add \
             src/dopingflow/wannier_analysis.py \
             src/dopingflow/oxidation_dft.py \
