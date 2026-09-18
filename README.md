@@ -490,6 +490,8 @@ strategy = "structural"
 methods = ["bond-valence"]
 include_vacancy_free = true
 include_oxygen_vacancies = true
+# Optional: restrict expensive analysis to exact target IDs / safe IDs / glob patterns.
+# target_include = ["Sb5_Ti2p5/candidate_014"]
 output_dir = "06_oxidation"
 mapping_tolerance = 1.2
 fail_fast = false
@@ -507,9 +509,10 @@ described in the Installation section. In short:
 ```bash
 conda create -n dopingflow_gpaw python=3.11 pip -y
 conda activate dopingflow_gpaw
-conda install -c conda-forge gpaw gpaw-data
+conda install -c conda-forge gpaw gpaw-data wannier90
 pip install -e ".[gui]"
 gpaw info
+command -v wannier90.x
 python -m streamlit run gui/app.py
 ```
 
@@ -534,8 +537,11 @@ spinpol = "auto"
 The generated per-target GPAW directory can contain `oxidation.gpw`, `gpaw.txt`, `dos.csv`, `pdos_integrals.json`, `magnetic_moments.csv`, and `electronic_summary.json`. Cutoff, k-point, spin, smearing, and convergence settings must be converged for the target chemistry.
 
 The stage can analyze both selected vacancy-free parents and relaxed oxygen
-vacancy structures. When valid same-element parent mapping is available it also
-reports parent-relative changes.
+vacancy structures. `[oxidation].target_include` can restrict a run to one or more
+exact target IDs, safe IDs (`/` represented as `__`), or shell-style glob patterns.
+This is especially useful before enabling expensive GPAW, Bader, Wannier, or EOS
+execution. When valid same-element parent mapping is available it also reports
+parent-relative changes.
 
 Important interpretation rules are enforced in the implementation:
 

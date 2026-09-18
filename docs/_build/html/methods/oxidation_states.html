@@ -174,6 +174,8 @@ For example:</p>
 <span class="n">methods</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"bond-valence"</span><span class="p">,</span> <span class="s2">"toss-gnn"</span><span class="p">]</span>
 <span class="n">include_vacancy_free</span> <span class="o">=</span> <span class="n">true</span>
 <span class="n">include_oxygen_vacancies</span> <span class="o">=</span> <span class="n">true</span>
+<span class="c1"># Optional exact IDs, safe IDs, or shell-style glob patterns:</span>
+<span class="c1"># target_include = ["Sb5_Ti2p5/candidate_014"]</span>
 <span class="n">output_dir</span> <span class="o">=</span> <span class="s2">"06_oxidation"</span>
 <span class="n">mapping_tolerance</span> <span class="o">=</span> <span class="mf">1.2</span>
 <span class="n">fail_fast</span> <span class="o">=</span> <span class="n">false</span>
@@ -181,7 +183,12 @@ For example:</p>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">include_vacancy_free</span></code> and <code class="docutils literal notranslate"><span class="pre">include_oxygen_vacancies</span></code> default to <code class="docutils literal notranslate"><span class="pre">true</span></code>.
 The normal use for vacancy chemistry is to leave both enabled so parent-relative
-changes can be reported when atom mapping is valid.</p>
+changes can be reported when atom mapping is valid.  <code class="docutils literal notranslate"><span class="pre">target_include</span></code> is optional;
+when provided, only matching discovered targets are analyzed.  A selector can be an
+exact target ID (for example <code class="docutils literal notranslate"><span class="pre">Sb5_Ti2p5/candidate_014</span></code>), its safe-ID form
+(<code class="docutils literal notranslate"><span class="pre">Sb5_Ti2p5__candidate_014</span></code>), or a shell-style glob such as
+<code class="docutils literal notranslate"><span class="pre">Sb5_Ti2p5/*</span></code>.  This is the recommended way to constrain expensive DFT smoke
+tests to one structure before scaling up.</p>
 </section>
 <section id="toss-gnn">
 <h2>TOSS-GNN<a class="headerlink" href="#toss-gnn" title="Link to this heading"></a></h2>

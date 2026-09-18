@@ -50,13 +50,20 @@ The configuration entry point is::
    methods = ["bond-valence", "toss-gnn"]
    include_vacancy_free = true
    include_oxygen_vacancies = true
+   # Optional exact IDs, safe IDs, or shell-style glob patterns:
+   # target_include = ["Sb5_Ti2p5/candidate_014"]
    output_dir = "06_oxidation"
    mapping_tolerance = 1.2
    fail_fast = false
 
 ``include_vacancy_free`` and ``include_oxygen_vacancies`` default to ``true``.
 The normal use for vacancy chemistry is to leave both enabled so parent-relative
-changes can be reported when atom mapping is valid.
+changes can be reported when atom mapping is valid.  ``target_include`` is optional;
+when provided, only matching discovered targets are analyzed.  A selector can be an
+exact target ID (for example ``Sb5_Ti2p5/candidate_014``), its safe-ID form
+(``Sb5_Ti2p5__candidate_014``), or a shell-style glob such as
+``Sb5_Ti2p5/*``.  This is the recommended way to constrain expensive DFT smoke
+tests to one structure before scaling up.
 
 TOSS-GNN
 --------

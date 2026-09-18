@@ -190,6 +190,69 @@ def test_discovery_includes_parent_and_oxygen_vacancy(tmp_path: Path) -> None:
     assert targets[0].structure_path == (candidate / "02_relax" / "POSCAR").resolve()
 
 
+def test_target_include_filters_exact_safe_and_glob_targets(tmp_path: Path) -> None:
+    source_root = tmp_path / "random_structures"
+    _write_parent_tree(source_root)
+    parent = _structure()
+    vacancy = parent.copy()
+    vacancy.remove_sites([3])
+    vacancy_path = source_root / "vacancy_relaxed" / "POSCAR"
+    vacancy_path.parent.mkdir(parents=True)
+    Poscar(vacancy).write_file(vacancy_path)
+    (source_root / "vacancies_database.json").write_text(
+        json.dumps(
+            [
+                {
+                    "parent_id": "Sb25/candidate_0001",
+                    "configuration_id": "config_0001",
+                    "vacancy_species": "O",
+                    "n_vacancies": 1,
+                    "relaxed_poscar_path": str(vacancy_path),
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    def make_cfg(selector):
+        return parse_oxidation_config(
+            {
+                "structure": {"outdir": str(source_root)},
+                "oxidation": {
+                    "strategy": "structural",
+                    "methods": ["bond-valence"],
+                    "target_include": selector,
+                },
+            },
+            tmp_path,
+        )
+
+    exact = make_cfg(["Sb25/candidate_0001"])
+    assert exact.target_include == ("Sb25/candidate_0001",)
+    targets, _ = discover_oxidation_targets(exact)
+    assert [target.target_id for target in targets] == ["Sb25/candidate_0001"]
+
+    safe = make_cfg("Sb25__candidate_0001")
+    targets, _ = discover_oxidation_targets(safe)
+    assert [target.target_id for target in targets] == ["Sb25/candidate_0001"]
+
+    vacancy_only = make_cfg(["Sb25/candidate_0001/V_O_01/config_0001"])
+    targets, _ = discover_oxidation_targets(vacancy_only)
+    assert [target.target_id for target in targets] == [
+        "Sb25/candidate_0001/V_O_01/config_0001"
+    ]
+
+    wildcard = make_cfg(["Sb25/candidate_0001/*"])
+    targets, _ = discover_oxidation_targets(wildcard)
+    assert [target.target_id for target in targets] == [
+        "Sb25/candidate_0001/V_O_01/config_0001"
+    ]
+
+    missing = make_cfg(["does-not-exist"])
+    with pytest.raises(RuntimeError, match="target_include matched no discovered structures"):
+        discover_oxidation_targets(missing)
+
+
 def test_composition_level_predictions_never_become_site_assignments(tmp_path: Path) -> None:
     path = tmp_path / "POSCAR"
     Poscar(_structure()).write_file(path)

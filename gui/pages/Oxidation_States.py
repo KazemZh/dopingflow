@@ -180,6 +180,32 @@ source_root = st.text_input(
     help="Root containing selected relaxed parents and, when enabled, vacancies_database.json.",
 )
 
+saved_target_include = oxidation.get("target_include", [])
+if isinstance(saved_target_include, str):
+    saved_target_include = [
+        item.strip() for item in saved_target_include.split(",") if item.strip()
+    ]
+elif not isinstance(saved_target_include, (list, tuple)):
+    saved_target_include = []
+target_include_text = st.text_input(
+    "Target selector(s) (optional)",
+    value=", ".join(str(item) for item in saved_target_include),
+    help=(
+        "Leave empty to analyze every discovered target. Use exact target IDs such as "
+        "Sb5_Ti2p5/candidate_014, safe IDs such as Sb5_Ti2p5__candidate_014, or shell-style "
+        "wildcards such as Sb5_Ti2p5/*. Multiple selectors can be comma-separated."
+    ),
+)
+target_include = list(
+    dict.fromkeys(
+        item.strip() for item in target_include_text.split(",") if item.strip()
+    )
+)
+if target_include:
+    st.info(
+        f"Target filtering is active: only structures matching {target_include} will be analyzed."
+    )
+
 st.info(
     "Bader charge, DOS/orbital populations, magnetic moments, and static Wannier centers are "
     "supporting descriptors. They are not automatically converted into formal integer oxidation states."
@@ -534,6 +560,7 @@ oxidation.update(
         "methods": methods,
         "include_vacancy_free": bool(include_vacancy_free),
         "include_oxygen_vacancies": bool(include_oxygen_vacancies),
+        "target_include": target_include,
         "source_root": source_root,
         "output_dir": output_dir,
         "mapping_tolerance": float(mapping_tolerance),
@@ -553,6 +580,12 @@ contains_dft_execution = any(
     bool((_table(name) if name in oxidation else {}).get("execute", False))
     for name in ("dft_electronic", "bader", "wannier", "eos")
 ) or bool(followup.get("execute", False))
+
+if contains_dft_execution and not target_include:
+    st.warning(
+        "DFT execution is enabled but no target selector is active. The calculation can run for every "
+        "discovered structure. For an expensive smoke test, select one exact target first."
+    )
 
 confirm_dft = True
 if contains_dft_execution:

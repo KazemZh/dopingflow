@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import fnmatch
 import json
 import logging
 from dataclasses import asdict, dataclass, field
@@ -65,6 +66,7 @@ class OxidationConfig:
     dft_followup_candidate_limit: int
     dft_followup_execute: bool
     dft_followup_methods: tuple[str, ...]
+    target_include: tuple[str, ...] = ()
     settings: dict[str, Any] = field(default_factory=dict)
 
 
@@ -109,6 +111,33 @@ def _parse_method_list(value: Any) -> tuple[str, ...]:
         if method not in methods:
             methods.append(method)
     return tuple(methods)
+
+
+def _parse_target_include(value: Any) -> tuple[str, ...]:
+    """Parse optional exact/glob target selectors while preserving order."""
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        raw = [item.strip() for item in value.split(",") if item.strip()]
+    elif isinstance(value, (list, tuple)):
+        raw = [str(item).strip() for item in value if str(item).strip()]
+    else:
+        raise ValueError("[oxidation].target_include must be an array or comma-separated string")
+    return tuple(dict.fromkeys(raw))
+
+
+def _target_matches_include(target: StructureTarget, selectors: Sequence[str]) -> bool:
+    """Match target_id or safe_id; shell-style wildcards are supported."""
+    target_id = target.target_id.replace("\\", "/")
+    safe_id = target.safe_id
+    for selector in selectors:
+        normalized = str(selector).strip().replace("\\", "/")
+        if not normalized:
+            continue
+        safe_selector = normalized.replace("/", "__")
+        if fnmatch.fnmatchcase(target_id, normalized) or fnmatch.fnmatchcase(safe_id, safe_selector):
+            return True
+    return False
 
 
 def parse_oxidation_config(
@@ -182,6 +211,8 @@ def parse_oxidation_config(
     if mapping_tolerance <= 0:
         raise ValueError("[oxidation].mapping_tolerance must be > 0")
 
+    target_include = _parse_target_include(section.get("target_include"))
+
     followup = section.get("dft_followup", {}) or {}
     if not isinstance(followup, dict):
         raise ValueError("[oxidation.dft_followup] must be a TOML table")
@@ -213,6 +244,7 @@ def parse_oxidation_config(
         dft_followup_candidate_limit=int(followup_limit),
         dft_followup_execute=bool(followup.get("execute", False)),
         dft_followup_methods=followup_methods,
+        target_include=target_include,
         settings=settings,
     )
 
@@ -370,6 +402,26 @@ def discover_oxidation_targets(cfg: OxidationConfig) -> tuple[list[StructureTarg
         raise RuntimeError("No structures were discovered for oxidation-state analysis")
 
     targets.sort(key=lambda target: (target.parent_id, target.n_vacancies, target.target_id))
+
+    if cfg.target_include:
+        discovered = list(targets)
+        targets = [
+            target for target in discovered
+            if _target_matches_include(target, cfg.target_include)
+        ]
+        unmatched = [
+            selector for selector in cfg.target_include
+            if not any(_target_matches_include(target, (selector,)) for target in discovered)
+        ]
+        for selector in unmatched:
+            warnings.append(f"target_include selector matched no structure: {selector}")
+        if not targets:
+            sample = ", ".join(target.target_id for target in discovered[:8])
+            suffix = f" Available targets include: {sample}" if sample else ""
+            raise RuntimeError(
+                "[oxidation].target_include matched no discovered structures." + suffix
+            )
+
     return targets, warnings
 
 
