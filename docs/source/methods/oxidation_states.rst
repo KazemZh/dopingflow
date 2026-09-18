@@ -134,14 +134,20 @@ require per-structure ``INCAR``, ``KPOINTS``, ``POTCAR``, or equivalent input
 files.
 
 GPAW is intentionally not a ``pyproject.toml`` pip extra.  A pip installation
-commonly builds GPAW locally and therefore requires MPI/compiler development
-headers.  Install the compiled GPAW package and PAW datasets from conda-forge::
+can build GPAW locally and therefore require MPI/compiler development headers.
+The recommended GPAW + oxidation-GUI setup is a dedicated Conda environment::
 
+   conda create -n dopingflow_gpaw python=3.11 pip -y
+   conda activate dopingflow_gpaw
    conda install -c conda-forge gpaw gpaw-data
+   pip install -e ".[gui]"
    gpaw info
+   python -m streamlit run gui/app.py
 
-Then install dopingflow itself and, when needed, the GUI with the normal pip
-extras, for example ``pip install -e ".[gui]"``.
+Run these commands from the dopingflow repository root for the editable
+``pip install`` and GUI launch.  ``gpaw info`` should complete successfully
+before production GPAW calculations are attempted.  Reuse the same
+``dopingflow_gpaw`` environment for subsequent GPAW-backed oxidation runs.
 
 ``dft-electronic``
    Runs or reopens a GPAW ``.gpw`` ground-state calculation.  The current

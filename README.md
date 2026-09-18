@@ -72,16 +72,27 @@ pip install -e ".[corrections]"
 pip install -e ".[dev]"
 ```
 
+### Recommended GPAW + oxidation GUI environment
+
 GPAW is intentionally **not** declared as a pip optional dependency. On Linux,
-`pip install gpaw` commonly attempts a local source build and therefore needs
-MPI/compiler development headers. For the GPAW oxidation backend, install the
-compiled package and PAW datasets from conda-forge instead:
+`pip install gpaw` can fall back to a local source build and then require MPI
+and compiler development headers. For the GPAW oxidation backend, use a
+dedicated Conda environment and the precompiled conda-forge packages.
+
+From the repository root, the recommended setup is:
 
 ```bash
+conda create -n dopingflow_gpaw python=3.11 pip -y
+conda activate dopingflow_gpaw
 conda install -c conda-forge gpaw gpaw-data
-pip install -e ".[gui]"   # add the Streamlit GUI when needed
+pip install -e ".[gui]"
 gpaw info
+python -m streamlit run gui/app.py
 ```
+
+`gpaw info` should complete successfully before starting a production GPAW
+oxidation calculation. The same `dopingflow_gpaw` environment can then be
+reused whenever the GPAW-backed oxidation page is needed.
 
 The TOSS-GNN and BERTOS adapters also require local upstream repositories/model
 files as documented in the oxidation-state guide; dopingflow does not silently
@@ -489,14 +500,20 @@ Run it with:
 dopingflow oxidation -c input.toml --strategy structural --methods bond-valence
 ```
 
-For open-source DFT electronic descriptors, install the compiled GPAW package
-and its PAW datasets with conda-forge, then configure one reusable parameter set
-rather than per-structure DFT input files:
+For open-source DFT electronic descriptors, use the dedicated GPAW environment
+described in the Installation section. In short:
 
 ```bash
+conda create -n dopingflow_gpaw python=3.11 pip -y
+conda activate dopingflow_gpaw
 conda install -c conda-forge gpaw gpaw-data
+pip install -e ".[gui]"
 gpaw info
+python -m streamlit run gui/app.py
 ```
+
+Then configure one reusable GPAW parameter set rather than per-structure DFT
+input files:
 
 ```toml
 [oxidation.dft_electronic]
