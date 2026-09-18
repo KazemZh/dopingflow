@@ -29,7 +29,9 @@ jobs:
           grep -q 'use_bloch_phases = true' src/dopingflow/oxidation_dft.py
           grep -q 'GPAW + Wannier90 descriptors' gui/pages/Oxidation_States.py
       - name: Install validation dependencies
-        run: python -m pip install -e '.[dev,gui,docs]'
+        run: |
+          python -m pip install ase
+          python -m pip install -e '.[dev,gui,docs]'
       - name: Run oxidation tests
         run: pytest -q tests/test_oxidation.py
       - name: Build documentation
