@@ -23,35 +23,53 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           files = [
               Path('README.md'),
               Path('docs/source/methods/oxidation_states.rst'),
           ]
-          old = '''conda install -c conda-forge gpaw gpaw-data\npip install -e ".[gui]"\ngpaw info\n'''
-          new = '''conda install -c conda-forge gpaw gpaw-data wannier90\npip install -e ".[gui]"\ngpaw info\ncommand -v wannier90.x\n'''
+          install_old = 'conda install -c conda-forge gpaw gpaw-data'
+          install_new = 'conda install -c conda-forge gpaw gpaw-data wannier90'
           for path in files:
               text = path.read_text(encoding='utf-8')
-              if old not in text:
-                  raise SystemExit(f'Expected GPAW setup block not found in {path}')
-              text = text.replace(old, new, 1)
+              if install_new not in text:
+                  if install_old not in text:
+                      raise SystemExit(f'GPAW Conda install command not found in {path}')
+                  text = text.replace(install_old, install_new, 1)
+              if 'command -v wannier90.x' not in text:
+                  text, count = re.subn(
+                      r'(?m)^(\s*)gpaw info\s*$',
+                      lambda m: f'{m.group(1)}gpaw info\n{m.group(1)}command -v wannier90.x',
+                      text,
+                      count=1,
+                  )
+                  if count != 1:
+                      raise SystemExit(f'gpaw info command not found in {path}')
               path.write_text(text, encoding='utf-8')
 
           readme = Path('README.md')
           text = readme.read_text(encoding='utf-8')
-          marker = '''`gpaw info` should complete successfully before starting a production GPAW\noxidation calculation. The same `dopingflow_gpaw` environment can then be\nreused whenever the GPAW-backed oxidation page is needed.\n'''
-          replacement = '''`gpaw info` should complete successfully before starting a production GPAW\noxidation calculation. `wannier90` is installed in the same environment for the\noptional Wannier analysis route; `command -v wannier90.x` should resolve its\nexecutable. The same `dopingflow_gpaw` environment can then be reused whenever\nthe GPAW-backed oxidation page is needed.\n'''
-          if marker not in text:
-              raise SystemExit('README explanatory paragraph not found')
-          readme.write_text(text.replace(marker, replacement, 1), encoding='utf-8')
+          marker = '`gpaw info` should complete successfully before starting a production GPAW\noxidation calculation.'
+          extra = (' `wannier90` is installed in the same environment for the optional Wannier '
+                   'analysis route; `command -v wannier90.x` should resolve its executable.')
+          if 'optional Wannier analysis route' not in text:
+              if marker not in text:
+                  raise SystemExit('README GPAW explanation not found')
+              text = text.replace(marker, marker + extra, 1)
+          readme.write_text(text, encoding='utf-8')
 
           docs = Path('docs/source/methods/oxidation_states.rst')
           text = docs.read_text(encoding='utf-8')
-          marker = '''Run these commands from the dopingflow repository root for the editable\n``pip install`` and GUI launch.  ``gpaw info`` should complete successfully\nbefore production GPAW calculations are attempted.  Reuse the same\n``dopingflow_gpaw`` environment for subsequent GPAW-backed oxidation runs.\n'''
-          replacement = '''Run these commands from the dopingflow repository root for the editable\n``pip install`` and GUI launch.  ``gpaw info`` should complete successfully\nbefore production GPAW calculations are attempted.  Wannier90 is installed in\nthe same environment for the optional Wannier route; ``command -v wannier90.x``\nshould resolve the executable.  Reuse the same ``dopingflow_gpaw`` environment\nfor subsequent GPAW-backed oxidation runs.\n'''
-          if marker not in text:
-              raise SystemExit('Oxidation guide explanatory paragraph not found')
-          docs.write_text(text.replace(marker, replacement, 1), encoding='utf-8')
+          marker = ('``gpaw info`` should complete successfully\n'
+                    'before production GPAW calculations are attempted.')
+          extra = ('  Wannier90 is installed in the same environment for the optional Wannier '
+                   'route; ``command -v wannier90.x`` should resolve the executable.')
+          if 'optional Wannier route' not in text:
+              if marker not in text:
+                  raise SystemExit('Oxidation guide GPAW explanation not found')
+              text = text.replace(marker, marker + extra, 1)
+          docs.write_text(text, encoding='utf-8')
 
           # One-shot workflow: do not leave automation scaffolding in the feature branch.
           Path('.github/workflows/document-wannier90-setup.yml').unlink()
