@@ -77,8 +77,8 @@ oxidation-bertos = [
 
 # GPAW is intentionally not declared as a pip optional dependency. On Linux,
 # pip commonly builds GPAW from source and therefore requires MPI/compiler
-# development headers. Install the compiled GPAW package and PAW datasets with:
-#   conda install -c conda-forge gpaw gpaw-data
+# development headers. The [tool.pixi] configuration below provides a binary
+# conda-forge GPAW + gpaw-data + Bader + GUI environment from this same file.
 
 dev = [
   "pytest>=8",
@@ -102,6 +102,29 @@ gui = [
 
 [project.scripts]
 dopingflow = "dopingflow.cli:app"
+
+# Pixi reads this same pyproject.toml and can combine conda-forge binary
+# dependencies with the native Python extras above.  The `gui` feature comes
+# from [project.optional-dependencies].gui; `gpaw-gui` combines it with the
+# compiled GPAW/Bader stack below.
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[tool.pixi.dependencies]
+python = "3.11.*"
+
+[tool.pixi.feature.gpaw.dependencies]
+gpaw = ">=25.7,<26"
+gpaw-data = ">=1.0.1"
+bader = ">=1.0.5"
+
+[tool.pixi.feature.gpaw.tasks]
+gpaw-info = "gpaw info"
+oxidation-gui = "streamlit run gui/app.py"
+
+[tool.pixi.environments]
+gpaw-gui = ["gpaw", "gui"]
 
 [tool.setuptools]
 package-dir = {"" = "src" }
