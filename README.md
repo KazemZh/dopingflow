@@ -54,11 +54,10 @@ pip install -e ".[uma]"
 # ALIGNN bandgap support
 pip install -e ".[alignn]"
 
-# Oxidation-state optional dependencies
+# Oxidation-state optional Python dependencies
 pip install -e ".[oxidation-toss]"    # TOSS-GNN Python deps
 pip install -e ".[oxidation-chgnet]"  # CHGNet magnetic-moment analysis
 pip install -e ".[oxidation-bertos]"  # BERTOS composition-token model
-pip install -e ".[oxidation-gpaw]"    # GPAW single-point DFT / electronic descriptors
 
 # GUI
 pip install -e ".[gui]"
@@ -71,6 +70,17 @@ pip install -e ".[corrections]"
 
 # Development and tests
 pip install -e ".[dev]"
+```
+
+GPAW is intentionally **not** declared as a pip optional dependency. On Linux,
+`pip install gpaw` commonly attempts a local source build and therefore needs
+MPI/compiler development headers. For the GPAW oxidation backend, install the
+compiled package and PAW datasets from conda-forge instead:
+
+```bash
+conda install -c conda-forge gpaw gpaw-data
+pip install -e ".[gui]"   # add the Streamlit GUI when needed
+gpaw info
 ```
 
 The TOSS-GNN and BERTOS adapters also require local upstream repositories/model
@@ -479,11 +489,13 @@ Run it with:
 dopingflow oxidation -c input.toml --strategy structural --methods bond-valence
 ```
 
-For open-source DFT electronic descriptors, install GPAW and its PAW datasets, then configure one reusable parameter set rather than per-structure DFT input files:
+For open-source DFT electronic descriptors, install the compiled GPAW package
+and its PAW datasets with conda-forge, then configure one reusable parameter set
+rather than per-structure DFT input files:
 
 ```bash
-pip install -e ".[oxidation-gpaw]"
-gpaw install-data
+conda install -c conda-forge gpaw gpaw-data
+gpaw info
 ```
 
 ```toml
