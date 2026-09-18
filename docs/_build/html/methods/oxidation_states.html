@@ -253,15 +253,16 @@ can build GPAW locally and therefore require MPI/compiler development headers.
 The recommended GPAW + oxidation-GUI setup is a dedicated Conda environment:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">conda</span> <span class="n">create</span> <span class="o">-</span><span class="n">n</span> <span class="n">dopingflow_gpaw</span> <span class="n">python</span><span class="o">=</span><span class="mf">3.11</span> <span class="n">pip</span> <span class="o">-</span><span class="n">y</span>
 <span class="n">conda</span> <span class="n">activate</span> <span class="n">dopingflow_gpaw</span>
-<span class="n">conda</span> <span class="n">install</span> <span class="o">-</span><span class="n">c</span> <span class="n">conda</span><span class="o">-</span><span class="n">forge</span> <span class="n">gpaw</span> <span class="n">gpaw</span><span class="o">-</span><span class="n">data</span>
+<span class="n">conda</span> <span class="n">install</span> <span class="o">-</span><span class="n">c</span> <span class="n">conda</span><span class="o">-</span><span class="n">forge</span> <span class="n">gpaw</span> <span class="n">gpaw</span><span class="o">-</span><span class="n">data</span> <span class="n">wannier90</span>
 <span class="n">pip</span> <span class="n">install</span> <span class="o">-</span><span class="n">e</span> <span class="s2">".[gui]"</span>
 <span class="n">gpaw</span> <span class="n">info</span>
+<span class="n">command</span> <span class="o">-</span><span class="n">v</span> <span class="n">wannier90</span><span class="o">.</span><span class="n">x</span>
 <span class="n">python</span> <span class="o">-</span><span class="n">m</span> <span class="n">streamlit</span> <span class="n">run</span> <span class="n">gui</span><span class="o">/</span><span class="n">app</span><span class="o">.</span><span class="n">py</span>
 </pre></div>
 </div>
 <p>Run these commands from the dopingflow repository root for the editable
 <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span></code> and GUI launch.  <code class="docutils literal notranslate"><span class="pre">gpaw</span> <span class="pre">info</span></code> should complete successfully
-before production GPAW calculations are attempted.  Reuse the same
+before production GPAW calculations are attempted.  Wannier90 is installed in the same environment for the optional Wannier route; <code class="docutils literal notranslate"><span class="pre">command</span> <span class="pre">-v</span> <span class="pre">wannier90.x</span></code> should resolve the executable.  Reuse the same
 <code class="docutils literal notranslate"><span class="pre">dopingflow_gpaw</span></code> environment for subsequent GPAW-backed oxidation runs.</p>
 <dl class="simple">
 <dt><code class="docutils literal notranslate"><span class="pre">dft-electronic</span></code></dt><dd><p>Runs or reopens a GPAW <code class="docutils literal notranslate"><span class="pre">.gpw</span></code> ground-state calculation.  The current

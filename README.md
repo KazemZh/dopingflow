@@ -84,14 +84,15 @@ From the repository root, the recommended setup is:
 ```bash
 conda create -n dopingflow_gpaw python=3.11 pip -y
 conda activate dopingflow_gpaw
-conda install -c conda-forge gpaw gpaw-data
+conda install -c conda-forge gpaw gpaw-data wannier90
 pip install -e ".[gui]"
 gpaw info
+command -v wannier90.x
 python -m streamlit run gui/app.py
 ```
 
 `gpaw info` should complete successfully before starting a production GPAW
-oxidation calculation. The same `dopingflow_gpaw` environment can then be
+oxidation calculation. `wannier90` is installed in the same environment for the optional Wannier analysis route; `command -v wannier90.x` should resolve its executable. The same `dopingflow_gpaw` environment can then be
 reused whenever the GPAW-backed oxidation page is needed.
 
 The TOSS-GNN and BERTOS adapters also require local upstream repositories/model

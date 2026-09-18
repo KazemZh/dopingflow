@@ -139,14 +139,15 @@ The recommended GPAW + oxidation-GUI setup is a dedicated Conda environment::
 
    conda create -n dopingflow_gpaw python=3.11 pip -y
    conda activate dopingflow_gpaw
-   conda install -c conda-forge gpaw gpaw-data
+   conda install -c conda-forge gpaw gpaw-data wannier90
    pip install -e ".[gui]"
    gpaw info
+   command -v wannier90.x
    python -m streamlit run gui/app.py
 
 Run these commands from the dopingflow repository root for the editable
 ``pip install`` and GUI launch.  ``gpaw info`` should complete successfully
-before production GPAW calculations are attempted.  Reuse the same
+before production GPAW calculations are attempted.  Wannier90 is installed in the same environment for the optional Wannier route; ``command -v wannier90.x`` should resolve the executable.  Reuse the same
 ``dopingflow_gpaw`` environment for subsequent GPAW-backed oxidation runs.
 
 ``dft-electronic``
