@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+import os
 import shlex
 import subprocess
 from pathlib import Path
@@ -574,31 +575,320 @@ def _parse_wannier_centres(path: Path) -> list[dict[str, Any]]:
     return centres
 
 
+def _occupied_gamma_manifold_info(
+    calc: Any,
+    *,
+    occupation_tolerance: float,
+    min_gap_eV: float,
+) -> dict[str, Any]:
+    """Validate the first native Wannier mode and identify its occupied manifold."""
+    if occupation_tolerance <= 0 or occupation_tolerance >= 0.5:
+        raise ValueError("[oxidation.wannier].occupation_tolerance must be between 0 and 0.5")
+    if min_gap_eV < 0:
+        raise ValueError("[oxidation.wannier].min_gap_eV must be >= 0")
+
+    try:
+        import numpy as np
+    except ImportError as exc:
+        raise OptionalMethodUnavailable("Native GPAW/Wannier analysis requires NumPy") from exc
+
+    nspins = int(calc.get_number_of_spins())
+    if nspins != 1:
+        raise OptionalMethodUnavailable(
+            "The native occupied-manifold Wannier mode currently supports non-spin-polarized GPAW results only."
+        )
+
+    try:
+        bz_kpts = np.asarray(calc.get_bz_k_points(), dtype=float)
+    except Exception:
+        bz_kpts = np.asarray(calc.get_ibz_k_points(), dtype=float)
+    if len(bz_kpts) != 1 or not np.allclose(bz_kpts[0], 0.0, atol=1.0e-10):
+        raise OptionalMethodUnavailable(
+            "The native occupied-manifold Wannier mode currently supports Gamma-only GPAW results."
+        )
+
+    occupations = np.asarray(calc.get_occupation_numbers(kpt=0, spin=0, raw=True), dtype=float)
+    eigenvalues = np.asarray(calc.get_eigenvalues(kpt=0, spin=0), dtype=float)
+    if len(occupations) != len(eigenvalues):
+        raise RuntimeError("GPAW occupation/eigenvalue arrays have different lengths")
+
+    partial = np.where(
+        (occupations > occupation_tolerance)
+        & (occupations < 1.0 - occupation_tolerance)
+    )[0]
+    if len(partial):
+        raise OptionalMethodUnavailable(
+            "The native occupied-manifold Wannier mode requires an isolated, integer-occupied manifold; "
+            f"partially occupied bands were detected: {partial.tolist()}. Use an explicit projection/disentanglement workflow instead."
+        )
+
+    occupied = np.where(occupations >= 1.0 - occupation_tolerance)[0]
+    if not len(occupied):
+        raise RuntimeError("No fully occupied GPAW bands were found for Wannierization")
+    noccupied = int(occupied[-1]) + 1
+    if not np.array_equal(occupied, np.arange(noccupied)):
+        raise OptionalMethodUnavailable(
+            "The fully occupied GPAW bands are not a contiguous manifold starting from band 0."
+        )
+    if noccupied >= len(eigenvalues):
+        raise OptionalMethodUnavailable(
+            "At least one empty band is required to verify an insulating gap before native Wannierization."
+        )
+
+    gap = float(eigenvalues[noccupied] - eigenvalues[noccupied - 1])
+    if gap < min_gap_eV:
+        raise OptionalMethodUnavailable(
+            f"The HOMO-LUMO gap is {gap:.6f} eV, below min_gap_eV={min_gap_eV:.6f}. "
+            "Use an explicit disentanglement workflow for metallic/entangled states."
+        )
+
+    try:
+        calc.get_pseudo_wave_function(band=0, kpt=0, spin=0)
+    except Exception as exc:
+        raise OptionalMethodUnavailable(
+            "The GPAW restart does not expose stored wavefunctions. Re-run dft-electronic with "
+            "save_wavefunctions=true so oxidation.gpw is written with mode='all'."
+        ) from exc
+
+    return {
+        "n_bands_total": int(calc.get_number_of_bands()),
+        "n_occupied_bands": noccupied,
+        "n_spins": nspins,
+        "homo_eV": float(eigenvalues[noccupied - 1]),
+        "lumo_eV": float(eigenvalues[noccupied]),
+        "gap_eV": gap,
+        "fermi_level_eV": float(calc.get_fermi_level()),
+        "occupation_tolerance": occupation_tolerance,
+    }
+
+
+def _write_gamma_bloch_wannier_input(
+    path: Path,
+    atoms: Any,
+    *,
+    noccupied: int,
+    num_iter: int,
+) -> None:
+    """Write a projection-free Wannier90 input for an isolated Gamma manifold."""
+    if noccupied <= 0:
+        raise ValueError("Wannier occupied-band count must be positive")
+    if num_iter <= 0:
+        raise ValueError("[oxidation.wannier].num_iter must be positive")
+
+    lines = [
+        f"num_bands = {noccupied}",
+        f"num_wann = {noccupied}",
+        "mp_grid = 1 1 1",
+        "gamma_only = true",
+        "use_bloch_phases = true",
+        f"num_iter = {num_iter}",
+        "write_xyz = true",
+        "write_hr = true",
+        "",
+        "begin unit_cell_cart",
+        "ang",
+    ]
+    for vector in atoms.cell.array:
+        lines.append("  " + " ".join(f"{float(value):.12f}" for value in vector))
+    lines.extend(["end unit_cell_cart", "", "begin atoms_frac"])
+    for symbol, frac in zip(
+        atoms.get_chemical_symbols(), atoms.get_scaled_positions(wrap=False)
+    ):
+        lines.append(
+            f"{symbol} " + " ".join(f"{float(value):.12f}" for value in frac)
+        )
+    lines.extend(
+        [
+            "end atoms_frac",
+            "",
+            "begin kpoints",
+            "0.000000000000 0.000000000000 0.000000000000",
+            "end kpoints",
+            "",
+        ]
+    )
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _run_native_gpaw_wannier(
+    target: StructureTarget,
+    cfg: OxidationConfig,
+    settings: dict[str, Any],
+) -> tuple[Path, dict[str, Any]]:
+    workdir = _workdir(target, cfg, settings)
+    workdir.mkdir(parents=True, exist_ok=True)
+    gpw_path = workdir / str(settings.get("gpw_file", "oxidation.gpw"))
+    if not gpw_path.is_file():
+        raise OptionalMethodUnavailable(
+            f"Native Wannier execution needs the GPAW restart {gpw_path}. Run dft-electronic first "
+            "with the same output_root/workdir and save_wavefunctions=true."
+        )
+
+    try:
+        from gpaw.wannier.wannier90 import Wannier90
+    except ImportError as exc:
+        raise OptionalMethodUnavailable(
+            "Native Wannier execution requires GPAW's Wannier90 interface and the external wannier90.x executable."
+        ) from exc
+
+    atoms, calc = _gpaw_restart(gpw_path)
+    occupation_tolerance = float(settings.get("occupation_tolerance", 1.0e-4))
+    min_gap_eV = float(settings.get("min_gap_eV", 1.0e-3))
+    manifold = _occupied_gamma_manifold_info(
+        calc,
+        occupation_tolerance=occupation_tolerance,
+        min_gap_eV=min_gap_eV,
+    )
+    noccupied = int(manifold["n_occupied_bands"])
+    num_iter = int(settings.get("num_iter", 1000))
+    seed = str(settings.get("seed", "wannier90")).strip() or "wannier90"
+    if Path(seed).name != seed:
+        raise ValueError("[oxidation.wannier].seed must be a simple filename stem")
+    executable = str(settings.get("executable", "wannier90.x")).strip() or "wannier90.x"
+    less_memory = bool(settings.get("less_memory", False))
+
+    centers_file = workdir / str(settings.get("centres_file", f"{seed}_centres.xyz"))
+    if centers_file.exists():
+        centers_file.unlink()
+
+    old_cwd = Path.cwd()
+    try:
+        os.chdir(workdir)
+        w90 = Wannier90(
+            calc,
+            seed=seed,
+            bands=range(noccupied),
+            orbitals_ai=[[] for _ in atoms],
+            spin=0,
+            spinors=False,
+        )
+        _write_gamma_bloch_wannier_input(
+            Path(f"{seed}.win"),
+            atoms,
+            noccupied=noccupied,
+            num_iter=num_iter,
+        )
+
+        try:
+            pp = subprocess.run(
+                [executable, "-pp", seed],
+                check=False,
+                text=True,
+                capture_output=True,
+            )
+        except FileNotFoundError as exc:
+            raise OptionalMethodUnavailable(
+                f"Wannier90 executable '{executable}' was not found. Install it with "
+                "`conda install -c conda-forge wannier90` or configure [oxidation.wannier].executable."
+            ) from exc
+        Path("dopingflow_wannier_pp_stdout.txt").write_text(
+            pp.stdout or "", encoding="utf-8"
+        )
+        Path("dopingflow_wannier_pp_stderr.txt").write_text(
+            pp.stderr or "", encoding="utf-8"
+        )
+        if pp.returncode != 0:
+            raise RuntimeError(
+                f"wannier90 preprocessing failed with exit code {pp.returncode}; "
+                "see dopingflow_wannier_pp_stderr.txt"
+            )
+
+        # use_bloch_phases=true makes Wannier90 construct A_mn from the Bloch
+        # states directly, so an .amn projection file is intentionally omitted.
+        w90.write_eigenvalues()
+        w90.write_overlaps(less_memory=less_memory)
+
+        final = subprocess.run(
+            [executable, seed],
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        Path("dopingflow_wannier_stdout.txt").write_text(
+            final.stdout or "", encoding="utf-8"
+        )
+        Path("dopingflow_wannier_stderr.txt").write_text(
+            final.stderr or "", encoding="utf-8"
+        )
+        if final.returncode != 0:
+            raise RuntimeError(
+                f"wannier90 failed with exit code {final.returncode}; see dopingflow_wannier_stderr.txt"
+            )
+    finally:
+        os.chdir(old_cwd)
+
+    if not centers_file.is_file():
+        raise RuntimeError(
+            f"Wannier90 completed without producing the expected centres file {centers_file}"
+        )
+
+    metadata = {
+        "code": "GPAW+Wannier90",
+        "mode": "occupied-bloch",
+        "workdir": str(workdir),
+        "gpw_file": str(gpw_path),
+        "seed": seed,
+        "centres_file": str(centers_file),
+        "executable": executable,
+        "num_iter": num_iter,
+        "less_memory": less_memory,
+        **manifold,
+    }
+    (workdir / "wannier_run_metadata.json").write_text(
+        json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8"
+    )
+    return centers_file, metadata
+
+
 def _run_wannier(
     target: StructureTarget,
     cfg: OxidationConfig,
     settings: dict[str, Any],
 ) -> dict[str, Any]:
-    workdir = _maybe_execute(target, cfg, settings, stage="wannier")
-    centers_file = workdir / str(settings.get("centres_file", "wannier90_centres.xyz"))
+    workdir = _workdir(target, cfg, settings)
+    execution_mode = str(settings.get("execution_mode", "native-gpaw")).strip().lower()
+    metadata: dict[str, Any] = {}
+
+    if bool(settings.get("execute", False)):
+        if execution_mode == "native-gpaw":
+            centers_file, metadata = _run_native_gpaw_wannier(target, cfg, settings)
+        elif execution_mode == "external-command":
+            workdir = _maybe_execute(target, cfg, settings, stage="wannier")
+            centers_file = workdir / str(
+                settings.get("centres_file", "wannier90_centres.xyz")
+            )
+        else:
+            raise ValueError(
+                "[oxidation.wannier].execution_mode must be native-gpaw or external-command"
+            )
+    else:
+        centers_file = workdir / str(
+            settings.get("centres_file", "wannier90_centres.xyz")
+        )
+
     if not centers_file.is_file():
         raise OptionalMethodUnavailable(
-            f"Wannier analysis needs {centers_file}. Run Wannier90 externally or set execute=true with an explicit command."
+            f"Wannier analysis needs {centers_file}. Enable native GPAW Wannier execution, "
+            "run Wannier90 externally, or point workdir/output_root to existing centers."
         )
     centres = _parse_wannier_centres(centers_file)
+    provenance = {
+        "workdir": str(workdir),
+        "centres_file": str(centers_file),
+        "execute": bool(settings.get("execute", False)),
+        "execution_mode": execution_mode,
+        "n_wannier_centres": len(centres),
+    }
+    provenance.update(metadata)
     result = base_method_result(
         method="wannier",
         target=target,
         scope="site-resolved",
         status="descriptors-only",
-        provenance={
-            "workdir": str(workdir),
-            "centres_file": str(centers_file),
-            "execute": bool(settings.get("execute", False)),
-            "n_wannier_centres": len(centres),
-        },
+        provenance=provenance,
         limitations=[
             "Static Wannier-center information is supporting electronic evidence. It is not converted into formal integer oxidation states without an explicitly validated EOS/charge-pumping assignment procedure.",
+            "The native occupied-bloch mode currently supports isolated non-spin-polarized Gamma-only occupied manifolds; metallic, spin-polarized, multi-k, or entangled cases require an explicit projection/disentanglement workflow.",
         ],
     )
     result["wannier_descriptors"] = centres

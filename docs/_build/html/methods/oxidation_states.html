@@ -289,10 +289,19 @@ integer formal oxidation state by itself.  The GPAW all-electron-density
 grid refinement defaults to <code class="docutils literal notranslate"><span class="pre">2</span></code> to limit memory use; <code class="docutils literal notranslate"><span class="pre">1</span></code> and <code class="docutils literal notranslate"><span class="pre">4</span></code> remain
 available for convergence testing.</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">wannier</span></code></dt><dd><p>Parses <code class="docutils literal notranslate"><span class="pre">wannier90_centres.xyz</span></code> and records Wannier-center information.
-Static centers are supporting descriptors and are not converted into formal
-oxidation states automatically.  GPAW/Wannier90 can be used externally to
-generate these centers when required.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">wannier</span></code></dt><dd><p>Parses Wannier-center information and can generate it natively from an
+existing GPAW restart when <code class="docutils literal notranslate"><span class="pre">execute=true</span></code>.  The first native mode is
+deliberately conservative: it supports an isolated, non-spin-polarized,
+Gamma-only occupied manifold, requires wavefunctions stored in
+<code class="docutils literal notranslate"><span class="pre">oxidation.gpw</span></code>, detects the fully occupied bands and finite HOMO-LUMO gap,
+writes a Wannier90 input using Bloch phases as the initial gauge and
+<code class="docutils literal notranslate"><span class="pre">write_xyz=true</span></code>, lets GPAW write <code class="docutils literal notranslate"><span class="pre">.eig</span></code>/<code class="docutils literal notranslate"><span class="pre">.mmn</span></code>, and runs
+<code class="docutils literal notranslate"><span class="pre">wannier90.x</span></code>.  Because the occupied manifold is isolated, no
+disentanglement is used and no arbitrary atomic projector set is invented.
+Metallic, spin-polarized, multi-k, or entangled cases are rejected by this
+native mode and should use an explicit projection/disentanglement workflow.
+Static centers remain supporting descriptors and are not converted into
+formal oxidation states automatically.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">eos</span></code></dt><dd><p>The formal DFT-based assignment adapter.  It accepts assignments only from
 an explicitly documented external EOS/charge-pumping workflow result marked

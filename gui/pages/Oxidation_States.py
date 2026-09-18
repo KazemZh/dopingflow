@@ -485,16 +485,101 @@ if "bader" in methods:
         oxidation["bader"] = bader
 
 if "wannier" in methods:
-    with st.expander("Wannier descriptors", expanded=False):
-        dft_method_panel(
-            "wannier",
-            "wannier",
-            extra="Static Wannier centers are retained as descriptors and are not automatically converted to formal oxidation states.",
-        )
+    with st.expander("GPAW + Wannier90 descriptors", expanded=False):
         wannier = _table("wannier")
+        inherited_root = _table("dft_electronic").get("output_root") or "dft_oxidation"
+        wannier["output_root"] = st.text_input(
+            "Per-target GPAW/Wannier output root",
+            value=str(wannier.get("output_root") or inherited_root),
+            key="oxidation_wannier_root",
+            help="Use the same root as dft-electronic so Wannier can reuse oxidation.gpw.",
+        )
+        wannier["execute"] = st.checkbox(
+            "Generate Wannier centres from the GPAW restart",
+            value=bool(wannier.get("execute", False)),
+            key="oxidation_wannier_execute",
+            help="Requires oxidation.gpw written with stored wavefunctions and the wannier90.x executable.",
+        )
+        mode_options = ["native-gpaw", "external-command"]
+        current_mode = str(wannier.get("execution_mode", "native-gpaw")).lower()
+        if current_mode not in mode_options:
+            current_mode = "native-gpaw"
+        wannier["execution_mode"] = st.selectbox(
+            "Wannier execution mode",
+            mode_options,
+            index=mode_options.index(current_mode),
+            help="native-gpaw currently handles isolated non-spin-polarized Gamma-only occupied manifolds without disentanglement.",
+        )
+        w1, w2, w3 = st.columns(3)
+        wannier["gpw_file"] = w1.text_input(
+            "GPAW restart file", value=str(wannier.get("gpw_file", "oxidation.gpw"))
+        )
+        wannier["seed"] = w2.text_input(
+            "Wannier90 seed", value=str(wannier.get("seed", "wannier90"))
+        )
+        wannier["executable"] = w3.text_input(
+            "Wannier90 executable", value=str(wannier.get("executable", "wannier90.x"))
+        )
+        w4, w5, w6 = st.columns(3)
+        wannier["num_iter"] = int(
+            w4.number_input(
+                "Wannier localization iterations",
+                min_value=1,
+                value=int(wannier.get("num_iter", 1000)),
+                step=100,
+            )
+        )
+        wannier["occupation_tolerance"] = float(
+            w5.number_input(
+                "Occupation tolerance",
+                min_value=1.0e-8,
+                max_value=0.1,
+                value=float(wannier.get("occupation_tolerance", 1.0e-4)),
+                format="%.1e",
+            )
+        )
+        wannier["min_gap_eV"] = float(
+            w6.number_input(
+                "Minimum insulating gap (eV)",
+                min_value=0.0,
+                value=float(wannier.get("min_gap_eV", 1.0e-3)),
+                format="%.3e",
+            )
+        )
+        wannier["less_memory"] = st.checkbox(
+            "Low-memory GPAW overlap generation",
+            value=bool(wannier.get("less_memory", False)),
+            help=(
+                "For the current single-Gamma route leave this off unless needed. "
+                "The option is retained for future multi-k workflows."
+            ),
+        )
+        default_centres = f"{wannier['seed']}_centres.xyz"
         wannier["centres_file"] = st.text_input(
             "Wannier centres file",
-            value=str(wannier.get("centres_file", "wannier90_centres.xyz")),
+            value=str(wannier.get("centres_file", default_centres)),
+        )
+        if wannier["execution_mode"] == "external-command":
+            command_text = st.text_input(
+                "External Wannier command",
+                value=_command_text(wannier.get("command", [])),
+                disabled=not wannier["execute"],
+                help="Legacy/custom route. The native GPAW route does not need this field.",
+            )
+            wannier["command"] = _parse_command(command_text)
+            if wannier["execute"] and not wannier["command"]:
+                st.error(
+                    "wannier: external-command mode requires a command when execution is enabled."
+                )
+        else:
+            wannier.pop("command", None)
+            st.info(
+                "Native mode detects the fully occupied bands, verifies a finite gap, uses Bloch phases "
+                "as the initial gauge (no arbitrary atomic projection choice), writes .eig/.mmn through "
+                "GPAW, runs wannier90.x, and parses the resulting *_centres.xyz file."
+            )
+        st.caption(
+            "Static Wannier centers remain descriptors only. Formal oxidation states require a validated EOS/charge-pumping procedure."
         )
         oxidation["wannier"] = wannier
 

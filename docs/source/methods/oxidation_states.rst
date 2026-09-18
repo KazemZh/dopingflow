@@ -177,10 +177,19 @@ before production GPAW calculations are attempted.  Wannier90 is installed in th
    available for convergence testing.
 
 ``wannier``
-   Parses ``wannier90_centres.xyz`` and records Wannier-center information.
-   Static centers are supporting descriptors and are not converted into formal
-   oxidation states automatically.  GPAW/Wannier90 can be used externally to
-   generate these centers when required.
+   Parses Wannier-center information and can generate it natively from an
+   existing GPAW restart when ``execute=true``.  The first native mode is
+   deliberately conservative: it supports an isolated, non-spin-polarized,
+   Gamma-only occupied manifold, requires wavefunctions stored in
+   ``oxidation.gpw``, detects the fully occupied bands and finite HOMO-LUMO gap,
+   writes a Wannier90 input using Bloch phases as the initial gauge and
+   ``write_xyz=true``, lets GPAW write ``.eig``/``.mmn``, and runs
+   ``wannier90.x``.  Because the occupied manifold is isolated, no
+   disentanglement is used and no arbitrary atomic projector set is invented.
+   Metallic, spin-polarized, multi-k, or entangled cases are rejected by this
+   native mode and should use an explicit projection/disentanglement workflow.
+   Static centers remain supporting descriptors and are not converted into
+   formal oxidation states automatically.
 
 ``eos``
    The formal DFT-based assignment adapter.  It accepts assignments only from

@@ -286,7 +286,11 @@
 <li class="toctree-l4"><a class="reference internal" href="#dopingflow.scan.run_scan_from_toml"><code class="docutils literal notranslate"><span class="pre">run_scan_from_toml()</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="#dopingflow-surface-module">dopingflow.surface module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-dopingflow.surface">dopingflow.surface module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.surface.run_surface_from_toml"><code class="docutils literal notranslate"><span class="pre">run_surface_from_toml()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dopingflow.surface.run_surface"><code class="docutils literal notranslate"><span class="pre">run_surface()</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l3"><a class="reference internal" href="#module-dopingflow.utils.io">dopingflow.utils.io module</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#module-dopingflow.vacancies">dopingflow.vacancies module</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#dopingflow.vacancies.VacancyConfig"><code class="docutils literal notranslate"><span class="pre">VacancyConfig</span></code></a></li>
@@ -4245,8 +4249,36 @@ Call this before constructing the calculator.</p>
 </dd></dl>
 
 </section>
-<section id="dopingflow-surface-module">
-<h2>dopingflow.surface module<a class="headerlink" href="#dopingflow-surface-module" title="Link to this heading"></a></h2>
+<section id="module-dopingflow.surface">
+<span id="dopingflow-surface-module"></span><h2>dopingflow.surface module<a class="headerlink" href="#module-dopingflow.surface" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.surface.run_surface_from_toml">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.surface.</span></span><span class="sig-name descname"><span class="pre">run_surface_from_toml</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dopingflow.surface.run_surface_from_toml" title="Link to this definition"></a></dt>
+<dd><p>Load TOML config and run the surface generation stage.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>config_path</strong> (<em>Path</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dopingflow.surface.run_surface">
+<span class="sig-prename descclassname"><span class="pre">dopingflow.surface.</span></span><span class="sig-name descname"><span class="pre">run_surface</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dopingflow.surface.run_surface" title="Link to this definition"></a></dt>
+<dd><p>Main entry point for surface generation (+ optional surface relaxation).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>config</strong> (<em>Dict</em><em>[</em><em>str</em><em>, </em><em>Any</em><em>]</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
 <section id="module-dopingflow.utils.io">
 <span id="dopingflow-utils-io-module"></span><h2>dopingflow.utils.io module<a class="headerlink" href="#module-dopingflow.utils.io" title="Link to this heading"></a></h2>

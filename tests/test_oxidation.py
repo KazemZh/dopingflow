@@ -421,6 +421,87 @@ def test_bader_default_gridrefinement_is_two(
     assert result["assignment_status"] == "descriptors-only"
 
 
+
+def test_native_wannier_detects_isolated_occupied_gamma_manifold() -> None:
+    import numpy as np
+
+    class Calc:
+        def get_number_of_spins(self):
+            return 1
+
+        def get_bz_k_points(self):
+            return np.array([[0.0, 0.0, 0.0]])
+
+        def get_occupation_numbers(self, kpt=0, spin=0, raw=True):
+            assert (kpt, spin, raw) == (0, 0, True)
+            return np.array([1.0, 0.999999, 0.000001, 0.0])
+
+        def get_eigenvalues(self, kpt=0, spin=0):
+            assert (kpt, spin) == (0, 0)
+            return np.array([-5.0, -1.0, 0.5, 1.0])
+
+        def get_pseudo_wave_function(self, band=0, kpt=0, spin=0):
+            return np.ones((2, 2, 2))
+
+        def get_number_of_bands(self):
+            return 4
+
+        def get_fermi_level(self):
+            return -0.25
+
+    info = oxidation_dft._occupied_gamma_manifold_info(
+        Calc(), occupation_tolerance=1.0e-4, min_gap_eV=1.0e-3
+    )
+    assert info["n_occupied_bands"] == 2
+    assert info["gap_eV"] == pytest.approx(1.5)
+
+
+def test_native_wannier_rejects_partial_occupations() -> None:
+    import numpy as np
+
+    class Calc:
+        def get_number_of_spins(self):
+            return 1
+
+        def get_bz_k_points(self):
+            return np.array([[0.0, 0.0, 0.0]])
+
+        def get_occupation_numbers(self, kpt=0, spin=0, raw=True):
+            return np.array([1.0, 0.4, 0.0])
+
+        def get_eigenvalues(self, kpt=0, spin=0):
+            return np.array([-2.0, -0.1, 1.0])
+
+    with pytest.raises(OptionalMethodUnavailable, match="partially occupied bands"):
+        oxidation_dft._occupied_gamma_manifold_info(
+            Calc(), occupation_tolerance=1.0e-4, min_gap_eV=1.0e-3
+        )
+
+
+def test_native_wannier_input_uses_bloch_phases_and_xyz(tmp_path: Path) -> None:
+    from ase import Atoms
+
+    atoms = Atoms(
+        "SnO2",
+        scaled_positions=[[0, 0, 0], [0.5, 0.5, 0], [0.5, 0, 0.5]],
+        cell=[5.0, 5.0, 5.0],
+        pbc=True,
+    )
+    path = tmp_path / "wannier90.win"
+    oxidation_dft._write_gamma_bloch_wannier_input(
+        path, atoms, noccupied=7, num_iter=800
+    )
+    content = path.read_text(encoding="utf-8")
+    assert "num_bands = 7" in content
+    assert "num_wann = 7" in content
+    assert "mp_grid = 1 1 1" in content
+    assert "gamma_only = true" in content
+    assert "use_bloch_phases = true" in content
+    assert "num_iter = 800" in content
+    assert "write_xyz = true" in content
+    assert "begin projections" not in content.lower()
+
+
 def test_bader_is_descriptor_only_and_never_invents_integer_state(tmp_path: Path) -> None:
     structure = Structure(
         Lattice.cubic(5.0),

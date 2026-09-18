@@ -551,9 +551,16 @@ Important interpretation rules are enforced in the implementation:
   unsupported or ambiguous sites remain unresolved.
 - BERTOS is composition-token level and is never fabricated into site-resolved
   assignments.
-- Static Wannier centers are descriptors. Formal DFT labels are accepted only
-  from an explicitly validated EOS/charge-pumping result with a documented
-  assignment procedure.
+- Static Wannier centers are descriptors. With ``execute = true``, the native
+  GPAW/Wannier90 route can generate them automatically for an isolated,
+  non-spin-polarized Gamma-only occupied manifold from an ``oxidation.gpw``
+  that contains wavefunctions. It detects the occupied bands, uses Bloch phases
+  as the initial gauge (no arbitrary atomic projection choice), writes the GPAW
+  eigenvalue/overlap files, runs ``wannier90.x``, and parses ``*_centres.xyz``.
+  Metallic, spin-polarized, multi-k, or entangled cases still require an explicit
+  projection/disentanglement workflow. Formal DFT labels are accepted only from
+  an explicitly validated EOS/charge-pumping result with a documented assignment
+  procedure.
 - New GPAW single-point calculations are opt-in: `execute = false` is the safe default.
   When enabled, dopingflow runs GPAW directly from the relaxed structure; Bader execution
   separately requires the free `bader` executable.
