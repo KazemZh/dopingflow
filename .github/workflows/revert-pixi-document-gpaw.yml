@@ -1,0 +1,200 @@
+name: Document recommended GPAW GUI installation
+
+on:
+  push:
+    branches: [feature/oxidation-state-framework]
+
+permissions:
+  contents: write
+
+jobs:
+  update-docs:
+    if: github.event.head_commit.message == 'Document recommended GPAW GUI installation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: feature/oxidation-state-framework
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Remove Pixi and document Conda GPAW GUI setup
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          # pyproject.toml: remove the experimental Pixi manifest and leave a clear
+          # explanation that GPAW is intentionally installed through conda-forge.
+          p = Path('pyproject.toml')
+          text = p.read_text(encoding='utf-8')
+          old_comment = '''# GPAW is intentionally not declared as a pip optional dependency. On Linux,
+          # pip commonly builds GPAW from source and therefore requires MPI/compiler
+          # development headers. The [tool.pixi] configuration below provides a binary
+          # conda-forge GPAW + gpaw-data + Bader + GUI environment from this same file.
+          '''.replace('          ', '')
+          new_comment = '''# GPAW is intentionally not declared as a pip optional dependency. On Linux,
+          # pip commonly builds GPAW from source and therefore requires MPI/compiler
+          # development headers. Use a dedicated Conda environment and install the
+          # compiled GPAW package + PAW data from conda-forge, then install the GUI
+          # with `pip install -e ".[gui]"`; see README.md for the exact sequence.
+          '''.replace('          ', '')
+          if old_comment not in text:
+              raise SystemExit('pyproject GPAW comment anchor not found')
+          text = text.replace(old_comment, new_comment, 1)
+          pixi_block = '''# Pixi reads this same pyproject.toml and can combine conda-forge binary
+          # dependencies with the native Python extras above.  The `gui` feature comes
+          # from [project.optional-dependencies].gui; `gpaw-gui` combines it with the
+          # compiled GPAW/Bader stack below.
+          [tool.pixi.workspace]
+          channels = ["conda-forge"]
+          platforms = ["linux-64"]
+
+          [tool.pixi.dependencies]
+          python = "3.11.*"
+
+          [tool.pixi.feature.gpaw.dependencies]
+          gpaw = ">=25.7,<26"
+          gpaw-data = ">=1.0.1"
+          bader = ">=1.0.5"
+
+          [tool.pixi.feature.gpaw.tasks]
+          gpaw-info = "gpaw info"
+          oxidation-gui = "streamlit run gui/app.py"
+
+          [tool.pixi.environments]
+          gpaw-gui = ["gpaw", "gui"]
+
+          '''.replace('          ', '')
+          if pixi_block not in text:
+              raise SystemExit('Pixi block anchor not found')
+          text = text.replace(pixi_block, '', 1)
+          p.write_text(text, encoding='utf-8')
+
+          # README: make the dedicated GPAW GUI environment a complete copy/paste recipe.
+          p = Path('README.md')
+          text = p.read_text(encoding='utf-8')
+          old = '''GPAW is intentionally **not** declared as a pip optional dependency. On Linux,
+          `pip install gpaw` commonly attempts a local source build and therefore needs
+          MPI/compiler development headers. For the GPAW oxidation backend, install the
+          compiled package and PAW datasets from conda-forge instead:
+
+          ```bash
+          conda install -c conda-forge gpaw gpaw-data
+          pip install -e ".[gui]"   # add the Streamlit GUI when needed
+          gpaw info
+          ```
+          '''.replace('          ', '')
+          new = '''### Recommended GPAW + oxidation GUI environment
+
+          GPAW is intentionally **not** declared as a pip optional dependency. On Linux,
+          `pip install gpaw` can fall back to a local source build and then require MPI
+          and compiler development headers. For the GPAW oxidation backend, use a
+          dedicated Conda environment and the precompiled conda-forge packages.
+
+          From the repository root, the recommended setup is:
+
+          ```bash
+          conda create -n dopingflow_gpaw python=3.11 pip -y
+          conda activate dopingflow_gpaw
+          conda install -c conda-forge gpaw gpaw-data
+          pip install -e ".[gui]"
+          gpaw info
+          python -m streamlit run gui/app.py
+          ```
+
+          `gpaw info` should complete successfully before starting a production GPAW
+          oxidation calculation. The same `dopingflow_gpaw` environment can then be
+          reused whenever the GPAW-backed oxidation page is needed.
+          '''.replace('          ', '')
+          if old not in text:
+              raise SystemExit('README GPAW installation anchor not found')
+          text = text.replace(old, new, 1)
+
+          old2 = '''For open-source DFT electronic descriptors, install the compiled GPAW package
+          and its PAW datasets with conda-forge, then configure one reusable parameter set
+          rather than per-structure DFT input files:
+
+          ```bash
+          conda install -c conda-forge gpaw gpaw-data
+          gpaw info
+          ```
+          '''.replace('          ', '')
+          new2 = '''For open-source DFT electronic descriptors, use the dedicated GPAW environment
+          described in the Installation section. In short:
+
+          ```bash
+          conda create -n dopingflow_gpaw python=3.11 pip -y
+          conda activate dopingflow_gpaw
+          conda install -c conda-forge gpaw gpaw-data
+          pip install -e ".[gui]"
+          gpaw info
+          python -m streamlit run gui/app.py
+          ```
+
+          Then configure one reusable GPAW parameter set rather than per-structure DFT
+          input files:
+          '''.replace('          ', '')
+          if old2 not in text:
+              raise SystemExit('README oxidation GPAW anchor not found')
+          text = text.replace(old2, new2, 1)
+          p.write_text(text, encoding='utf-8')
+
+          # Sphinx oxidation guide: show the same complete environment setup.
+          p = Path('docs/source/methods/oxidation_states.rst')
+          text = p.read_text(encoding='utf-8')
+          old = '''GPAW is intentionally not a ``pyproject.toml`` pip extra.  A pip installation
+          commonly builds GPAW locally and therefore requires MPI/compiler development
+          headers.  Install the compiled GPAW package and PAW datasets from conda-forge::
+
+             conda install -c conda-forge gpaw gpaw-data
+             gpaw info
+
+          Then install dopingflow itself and, when needed, the GUI with the normal pip
+          extras, for example ``pip install -e ".[gui]"``.
+          '''.replace('          ', '')
+          new = '''GPAW is intentionally not a ``pyproject.toml`` pip extra.  A pip installation
+          can build GPAW locally and therefore require MPI/compiler development headers.
+          The recommended GPAW + oxidation-GUI setup is a dedicated Conda environment::
+
+             conda create -n dopingflow_gpaw python=3.11 pip -y
+             conda activate dopingflow_gpaw
+             conda install -c conda-forge gpaw gpaw-data
+             pip install -e ".[gui]"
+             gpaw info
+             python -m streamlit run gui/app.py
+
+          Run these commands from the dopingflow repository root for the editable
+          ``pip install`` and GUI launch.  ``gpaw info`` should complete successfully
+          before production GPAW calculations are attempted.  Reuse the same
+          ``dopingflow_gpaw`` environment for subsequent GPAW-backed oxidation runs.
+          '''.replace('          ', '')
+          if old not in text:
+              raise SystemExit('Sphinx GPAW installation anchor not found')
+          text = text.replace(old, new, 1)
+          p.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Install validation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,gui,docs]"
+
+      - name: Validate
+        run: |
+          python -m py_compile src/dopingflow/oxidation_dft.py gui/pages/Oxidation_States.py
+          pytest -q tests/test_oxidation.py
+          sphinx-build -b html docs/source /tmp/dopingflow-docs-html
+
+      - name: Commit documentation update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml README.md docs/source/methods/oxidation_states.rst
+          git rm .github/workflows/revert-pixi-document-gpaw.yml
+          git commit -m "Document Conda GPAW GUI setup"
+          git push origin HEAD:feature/oxidation-state-framework
