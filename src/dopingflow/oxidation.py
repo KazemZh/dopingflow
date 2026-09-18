@@ -122,6 +122,27 @@ def parse_oxidation_config(
     if not isinstance(section, dict):
         raise ValueError("[oxidation] must be a TOML table")
 
+    # Migrate the legacy GPAW output-root default saved by older GUI versions.
+    # This is intentionally limited to the former generated default name.
+    section = dict(section)
+    dft_settings = section.get("dft_electronic")
+    if isinstance(dft_settings, dict):
+        dft_settings = dict(dft_settings)
+        if str(dft_settings.get("output_root", "")).strip() == "gpaw_oxidation":
+            dft_settings["output_root"] = "dft_oxidation"
+        section["dft_electronic"] = dft_settings
+
+    bader_settings = section.get("bader")
+    if isinstance(bader_settings, dict):
+        bader_settings = dict(bader_settings)
+        if str(bader_settings.get("output_root", "")).strip() == "gpaw_oxidation":
+            inherited_root = "dft_oxidation"
+            current_dft = section.get("dft_electronic")
+            if isinstance(current_dft, dict):
+                inherited_root = str(current_dft.get("output_root") or inherited_root).strip()
+            bader_settings["output_root"] = inherited_root
+        section["bader"] = bader_settings
+
     enabled = bool(section.get("enabled", True))
     strategy = str(strategy_override or section.get("strategy", "structural")).strip().lower()
     if strategy not in {"structural", "ml", "dft", "combined"}:

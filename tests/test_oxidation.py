@@ -105,6 +105,32 @@ def test_strategy_dispatch_and_individual_methods(tmp_path: Path) -> None:
         )
 
 
+def test_legacy_gpaw_output_root_is_migrated(tmp_path: Path) -> None:
+    raw = {
+        "oxidation": {
+            "strategy": "dft",
+            "methods": ["bader"],
+            "dft_electronic": {"output_root": "gpaw_oxidation"},
+            "bader": {"output_root": "gpaw_oxidation"},
+        }
+    }
+    cfg = parse_oxidation_config(raw, tmp_path)
+    assert cfg.settings["dft_electronic"]["output_root"] == "dft_oxidation"
+    assert cfg.settings["bader"]["output_root"] == "dft_oxidation"
+
+    custom = {
+        "oxidation": {
+            "strategy": "dft",
+            "methods": ["bader"],
+            "dft_electronic": {"output_root": "my_dft_results"},
+            "bader": {"output_root": "gpaw_oxidation"},
+        }
+    }
+    cfg = parse_oxidation_config(custom, tmp_path)
+    assert cfg.settings["dft_electronic"]["output_root"] == "my_dft_results"
+    assert cfg.settings["bader"]["output_root"] == "my_dft_results"
+
+
 def test_model_cache_loads_once_per_process() -> None:
     clear_model_cache()
     calls = 0

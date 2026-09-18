@@ -51,6 +51,26 @@ if not config_path.exists():
 cfg = toml.load(str(config_path))
 oxidation = dict(cfg.get("oxidation", {}) or {})
 
+# Migrate the legacy GUI-generated GPAW output root. The migration is limited
+# to the old default name so unrelated custom paths remain untouched.
+dft_saved = oxidation.get("dft_electronic")
+if isinstance(dft_saved, dict):
+    dft_saved = dict(dft_saved)
+    if str(dft_saved.get("output_root", "")).strip() == "gpaw_oxidation":
+        dft_saved["output_root"] = "dft_oxidation"
+    oxidation["dft_electronic"] = dft_saved
+
+bader_saved = oxidation.get("bader")
+if isinstance(bader_saved, dict):
+    bader_saved = dict(bader_saved)
+    if str(bader_saved.get("output_root", "")).strip() == "gpaw_oxidation":
+        inherited_root = "dft_oxidation"
+        current_dft = oxidation.get("dft_electronic")
+        if isinstance(current_dft, dict):
+            inherited_root = str(current_dft.get("output_root") or inherited_root).strip()
+        bader_saved["output_root"] = inherited_root
+    oxidation["bader"] = bader_saved
+
 
 def _table(name: str) -> dict:
     value = oxidation.get(name, {}) or {}
