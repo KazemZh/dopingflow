@@ -125,8 +125,8 @@ def _gpaw_restart(path: Path):
         from gpaw import restart
     except ImportError as exc:
         raise OptionalMethodUnavailable(
-            "GPAW electronic analysis requires the optional GPAW package. "
-            "Install dopingflow with [oxidation-gpaw] and install GPAW PAW setup data."
+            "GPAW electronic analysis requires GPAW and its PAW datasets. Install both with "
+            "`conda install -c conda-forge gpaw gpaw-data`."
         ) from exc
     try:
         return restart(str(path), txt=None)
@@ -146,8 +146,8 @@ def _run_gpaw_single_point(
         from gpaw import FermiDirac, GPAW, PW
     except ImportError as exc:
         raise OptionalMethodUnavailable(
-            "GPAW execution requires the optional GPAW package. Install dopingflow with "
-            "[oxidation-gpaw] and install GPAW PAW setup data."
+            "GPAW execution requires GPAW and its PAW datasets. Install both with "
+            "`conda install -c conda-forge gpaw gpaw-data`."
         ) from exc
 
     mode = str(settings.get("mode", "pw")).strip().lower()
