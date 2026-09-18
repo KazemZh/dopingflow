@@ -477,3 +477,5 @@ CLI::
 
 The comparison remains descriptive.  A disagreement is a trigger for inspection
 or an explicitly enabled DFT follow-up, not a vote to select a winner.
+
+The native GPAW/Wannier90 adapter supports both the GPAW 25.7 `gpaw.wannier90` interface and the newer `gpaw.wannier.wannier90` interface.

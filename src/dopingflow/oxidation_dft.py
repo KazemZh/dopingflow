@@ -725,11 +725,19 @@ def _run_native_gpaw_wannier(
         )
 
     try:
+        # GPAW >= 26.7 moved the interface into gpaw.wannier.wannier90.
         from gpaw.wannier.wannier90 import Wannier90
-    except ImportError as exc:
-        raise OptionalMethodUnavailable(
-            "Native Wannier execution requires GPAW's Wannier90 interface and the external wannier90.x executable."
-        ) from exc
+        gpaw_wannier_module = "gpaw.wannier.wannier90"
+    except ImportError:
+        try:
+            # GPAW 25.7 and earlier expose the same Wannier90 API here.
+            from gpaw.wannier90 import Wannier90
+            gpaw_wannier_module = "gpaw.wannier90"
+        except ImportError as exc:
+            raise OptionalMethodUnavailable(
+                "Native Wannier execution requires GPAW's Wannier90 Python interface. "
+                "The installed GPAW version does not expose a supported Wannier90 interface."
+            ) from exc
 
     atoms, calc = _gpaw_restart(gpw_path)
     occupation_tolerance = float(settings.get("occupation_tolerance", 1.0e-4))
@@ -824,6 +832,7 @@ def _run_native_gpaw_wannier(
 
     metadata = {
         "code": "GPAW+Wannier90",
+        "gpaw_wannier_module": gpaw_wannier_module,
         "mode": "occupied-bloch",
         "workdir": str(workdir),
         "gpw_file": str(gpw_path),

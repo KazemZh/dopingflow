@@ -692,3 +692,5 @@ Proprietary and confidential.
 © 2026 Kazem Zhour, RWTH Aachen University.
 
 Unauthorized use, modification, or distribution is prohibited.
+
+The native GPAW/Wannier90 adapter supports both the GPAW 25.7 `gpaw.wannier90` interface and the newer `gpaw.wannier.wannier90` interface.
