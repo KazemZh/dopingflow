@@ -267,7 +267,7 @@ def dft_method_panel(method: str, table_name: str, *, extra: str = "") -> None:
     settings = _table(table_name)
     settings["output_root"] = st.text_input(
         "Per-target DFT output root",
-        value=str(settings.get("output_root", "gpaw_oxidation")),
+        value=str(settings.get("output_root", "dft_oxidation")),
         key=f"oxidation_{table_name}_root",
     )
     settings["execute"] = st.checkbox(
@@ -301,7 +301,7 @@ if "dft-electronic" in methods:
         )
         dft["output_root"] = st.text_input(
             "Per-target GPAW output root",
-            value=str(dft.get("output_root", "gpaw_oxidation")),
+            value=str(dft.get("output_root", "dft_oxidation")),
             key="oxidation_dft_electronic_root",
         )
         dft["execute"] = st.checkbox(
@@ -397,7 +397,7 @@ if "bader" in methods:
         bader = _table("bader")
         bader["output_root"] = st.text_input(
             "Per-target GPAW/Bader output root",
-            value=str(bader.get("output_root", "gpaw_oxidation")),
+            value=str(bader.get("output_root", (_table("dft_electronic").get("output_root") or "dft_oxidation"))),
             key="oxidation_bader_root",
             help="Use the same root as dft-electronic so Bader can reuse oxidation.gpw.",
         )

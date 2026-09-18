@@ -30,7 +30,7 @@ def _workdir(target: StructureTarget, cfg: OxidationConfig, settings: dict[str, 
     if explicit:
         path = _format_path(explicit, target=target)
         return (path if path.is_absolute() else cfg.root / path).resolve()
-    root_raw = str(settings.get("output_root") or "gpaw_oxidation").strip()
+    root_raw = str(settings.get("output_root") or "dft_oxidation").strip()
     root = Path(root_raw).expanduser()
     root = (root if root.is_absolute() else cfg.source_root / root).resolve()
     return root / target.safe_id

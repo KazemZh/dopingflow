@@ -1,0 +1,229 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vacancy M0/M1 Input Options &mdash; dopingflow documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=42d1b3bd"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Staged Vacancy Monte Carlo Configuration" href="input_file_vacancy_mc.html" />
+    <link rel="prev" title="Phase-Diagram Input Options" href="input_file_phase_diagram.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html">
+            
+              <img src="_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="workflow_overview.html">Workflow Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation_and_usage.html">Installation, Usage, and Outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="required_inputs.html">Required Input Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="input_file.html">Input File Specification (input.toml)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="input_file_phase_diagram.html">Phase-Diagram Input Options</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Vacancy M0/M1 Input Options</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#apply-fitted-energy-correction-boolean-default-false"><code class="docutils literal notranslate"><span class="pre">apply_fitted_energy_correction</span></code> (boolean, default: false)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#correction-candidate-provenance">Correction/candidate provenance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#allow-legacy-energy-correction-provenance-boolean-default-false"><code class="docutils literal notranslate"><span class="pre">allow_legacy_energy_correction_provenance</span></code> (boolean, default: false)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#oxygen-reference-note">Oxygen-reference note</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="input_file_vacancy_mc.html">Staged Vacancy Monte Carlo Configuration</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="methods/references.html">0. Reference Energy Construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/oxygen_thermodynamics.html">Oxygen Energy Convention and Chemical Potential</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/oxygen_calibration.html">Oxygen Reference Calibration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/generation.html">1. Structure Generation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/sequential.html">Sequential Doping Workflow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/scanning.html">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/filtering.html">4. Relaxed-Candidate Filtering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/bandgap.html">5. Bandgap Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/energy_corrections.html">Backend-Specific Energy Corrections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/formation_energy.html">6. Formation Energy Evaluation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/database.html">7. Database Collection</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/alloy_hull.html">Restricted One-Dimensional Alloy Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/phase_diagram.html">Phase Diagram and Energy Above Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/vacancy_energy_above_hull.html">Vacancy Energy Above Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/vacancy_energy_correction.html">M0/M1 Correction for Vacancy Thermodynamics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/vacancies.html">Oxygen-Vacancy Workflow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/oxidation_states.html">Oxidation-state analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/surfaces.html">Surface Generation and Relaxation</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="examples/explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/explicit_single_oxides.html">Explicit Example — Single Target Composition using Oxide References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/multi_reference_oxide.html">Multiple Oxide References and Relative Energies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/sequential_workflow.html">Sequential Example — Gradual Sb Doping</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/vacancies.html">Staged vacancy Monte Carlo example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api/modules.html">dopingflow</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Vacancy M0/M1 Input Options</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/input_file_vacancy_correction.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="vacancy-m0-m1-input-options">
+<h1>Vacancy M0/M1 Input Options<a class="headerlink" href="#vacancy-m0-m1-input-options" title="Link to this heading"></a></h1>
+<p>This page supplements <a class="reference internal" href="input_file.html"><span class="doc">Input File Specification (input.toml)</span></a>. The scientific method and output
+interpretation are described in <a class="reference internal" href="methods/vacancy_energy_correction.html"><span class="doc">M0/M1 Correction for Vacancy Thermodynamics</span></a>.</p>
+<p>A complete practical opt-in configuration has two parts. First configure and fit
+the same backend-specific correction model used by corrected bulk formation and
+phase-diagram analysis:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">energy_correction</span><span class="p">]</span>
+<span class="n">enabled</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">experimental_source</span> <span class="o">=</span> <span class="s2">"kingsbury"</span>
+<span class="n">model_family</span> <span class="o">=</span> <span class="s2">"auto"</span>        <span class="c1"># or force "m0" / "m1"</span>
+<span class="n">correction_terms</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"oxide"</span><span class="p">]</span>
+<span class="n">m1_elements</span> <span class="o">=</span> <span class="s2">"workflow"</span>
+<span class="n">calibration_selection</span> <span class="o">=</span> <span class="s2">"phase_resolved"</span>
+<span class="n">auto_fetch_phase_structures</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">reuse_fitted</span> <span class="o">=</span> <span class="n">true</span>
+</pre></div>
+</div>
+<p>Then enable application of that already fitted model inside the existing flat
+<code class="docutils literal notranslate"><span class="pre">[vacancies]</span></code> section and use a raw same-backend oxygen reservoir:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">vacancies</span><span class="p">]</span>
+<span class="n">static_thermodynamic_analysis</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">apply_fitted_energy_correction</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">allow_legacy_energy_correction_provenance</span> <span class="o">=</span> <span class="n">false</span>
+<span class="n">oxygen_reference_mode</span> <span class="o">=</span> <span class="s2">"reference_file"</span>
+<span class="n">oxygen_reference_file</span> <span class="o">=</span> <span class="s2">"reference_structures/reference_energies.json"</span>
+</pre></div>
+</div>
+<p>Run the relevant stages in this order:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">refs</span><span class="o">-</span><span class="n">build</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+<span class="n">dopingflow</span> <span class="n">corrections</span><span class="o">-</span><span class="n">fit</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+<span class="n">dopingflow</span> <span class="n">vacancies</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+</pre></div>
+</div>
+<section id="apply-fitted-energy-correction-boolean-default-false">
+<h2><code class="docutils literal notranslate"><span class="pre">apply_fitted_energy_correction</span></code> (boolean, default: false)<a class="headerlink" href="#apply-fitted-energy-correction-boolean-default-false" title="Link to this heading"></a></h2>
+<p>When true, the selected relaxed parent and vacancy minima are corrected with the
+already fitted backend-specific M0/M1 model before vacancy counts are compared.
+Raw energies are retained in the output. <code class="docutils literal notranslate"><span class="pre">model_family</span> <span class="pre">=</span> <span class="pre">&quot;auto&quot;</span></code> reuses the
+M0 or M1 family selected by the established correction-fitting procedure; the
+vacancy stage does not fit a second model.</p>
+<p>The option cannot be combined with <code class="docutils literal notranslate"><span class="pre">oxygen_reference_mode</span> <span class="pre">=</span> <span class="pre">&quot;global&quot;</span></code> or
+<code class="docutils literal notranslate"><span class="pre">&quot;chemistry-specific&quot;</span></code> because both paths use experimental formation-
+enthalpy information for oxygen-related calibration. Use a raw same-backend
+oxygen reference such as <code class="docutils literal notranslate"><span class="pre">reference_file</span></code> or <code class="docutils literal notranslate"><span class="pre">same_calculator</span></code> instead.</p>
+</section>
+<section id="correction-candidate-provenance">
+<h2>Correction/candidate provenance<a class="headerlink" href="#correction-candidate-provenance" title="Link to this heading"></a></h2>
+<p>The fitted model is tied to its backend signature. Corrected vacancy minima must
+be compatible with the fit in backend, model, task, optimizer, force tolerance
+(<code class="docutils literal notranslate"><span class="pre">fmax</span></code>), maximum relaxation steps, positive convergence, and available
+structure/energy provenance. For example, a correction fit built with
+<code class="docutils literal notranslate"><span class="pre">fmax</span> <span class="pre">=</span> <span class="pre">0.02</span></code> is not silently applied to a vacancy relaxation known to have
+used <code class="docutils literal notranslate"><span class="pre">fmax</span> <span class="pre">=</span> <span class="pre">0.05</span></code>. Rebuild/refit the correction with the intended compatible
+settings rather than relabeling an existing calculation.</p>
+</section>
+<section id="allow-legacy-energy-correction-provenance-boolean-default-false">
+<h2><code class="docutils literal notranslate"><span class="pre">allow_legacy_energy_correction_provenance</span></code> (boolean, default: false)<a class="headerlink" href="#allow-legacy-energy-correction-provenance-boolean-default-false" title="Link to this heading"></a></h2>
+<p>Explicitly accepts older vacancy relaxation metadata that lacks package-version
+or relaxed-POSCAR hash fields. Known backend/model/task, optimizer, force-
+tolerance, maximum-step, convergence, energy, or structure mismatches remain
+errors.</p>
+<p>This option exists for migration of older vacancy datasets. Keep it false for
+new calculations whenever the full provenance fields are available.</p>
+</section>
+<section id="oxygen-reference-note">
+<h2>Oxygen-reference note<a class="headerlink" href="#oxygen-reference-note" title="Link to this heading"></a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">[energy_correction]</span></code> source (for example Kingsbury) and the vacancy
+<code class="docutils literal notranslate"><span class="pre">oxygen_calibration_experimental_source</span></code> setting serve different purposes.
+When M0/M1 vacancy correction is active, the former supplies the experimental
+data used to fit the common bulk/vacancy correction model, while the latter is
+not used because the vacancy oxygen reservoir must remain a raw same-backend
+reference. This keeps corrected phase-diagram and corrected vacancy energetics
+on one correction model without double counting the experimental oxygen
+calibration.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="input_file_phase_diagram.html" class="btn btn-neutral float-left" title="Phase-Diagram Input Options" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="input_file_vacancy_mc.html" class="btn btn-neutral float-right" title="Staged Vacancy Monte Carlo Configuration" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,822 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>dopingflow &mdash; dopingflow documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=42d1b3bd"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="dopingflow package" href="dopingflow.html" />
+    <link rel="prev" title="Staged vacancy Monte Carlo example" href="../examples/vacancies.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html">
+            
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../workflow_overview.html">Workflow Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation_and_usage.html">Installation, Usage, and Outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../required_inputs.html">Required Input Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file.html">Input File Specification (input.toml)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file_phase_diagram.html">Phase-Diagram Input Options</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file_vacancy_correction.html">Vacancy M0/M1 Input Options</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file_vacancy_mc.html">Staged Vacancy Monte Carlo Configuration</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../methods/references.html">0. Reference Energy Construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/oxygen_thermodynamics.html">Oxygen Energy Convention and Chemical Potential</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/oxygen_calibration.html">Oxygen Reference Calibration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/generation.html">1. Structure Generation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/sequential.html">Sequential Doping Workflow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/scanning.html">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/filtering.html">4. Relaxed-Candidate Filtering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/bandgap.html">5. Bandgap Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/energy_corrections.html">Backend-Specific Energy Corrections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/formation_energy.html">6. Formation Energy Evaluation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/database.html">7. Database Collection</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/alloy_hull.html">Restricted One-Dimensional Alloy Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/phase_diagram.html">Phase Diagram and Energy Above Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/vacancy_energy_above_hull.html">Vacancy Energy Above Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/vacancy_energy_correction.html">M0/M1 Correction for Vacancy Thermodynamics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/vacancies.html">Oxygen-Vacancy Workflow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/oxidation_states.html">Oxidation-state analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methods/surfaces.html">Surface Generation and Relaxation</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_single_oxides.html">Explicit Example — Single Target Composition using Oxide References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/multi_reference_oxide.html">Multiple Oxide References and Relative Energies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/sequential_workflow.html">Sequential Example — Gradual Sb Doping</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/vacancies.html">Staged vacancy Monte Carlo example</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">dopingflow</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html">dopingflow package</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">dopingflow</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/modules.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="dopingflow">
+<h1>dopingflow<a class="headerlink" href="#dopingflow" title="Link to this heading"></a></h1>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="dopingflow.html">dopingflow package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.bandgap">dopingflow.bandgap module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.bandgap.BandgapConfig"><code class="docutils literal notranslate"><span class="pre">BandgapConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.bandgap.BandgapConfig.outdir"><code class="docutils literal notranslate"><span class="pre">BandgapConfig.outdir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.bandgap.BandgapConfig.skip_if_done"><code class="docutils literal notranslate"><span class="pre">BandgapConfig.skip_if_done</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.bandgap.BandgapConfig.cutoff"><code class="docutils literal notranslate"><span class="pre">BandgapConfig.cutoff</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.bandgap.BandgapConfig.max_neighbors"><code class="docutils literal notranslate"><span class="pre">BandgapConfig.max_neighbors</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.bandgap.BandgapConfig.n_workers"><code class="docutils literal notranslate"><span class="pre">BandgapConfig.n_workers</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.bandgap.BandgapConfig.device"><code class="docutils literal notranslate"><span class="pre">BandgapConfig.device</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.bandgap.BandgapConfig.gpu_id"><code class="docutils literal notranslate"><span class="pre">BandgapConfig.gpu_id</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.bandgap.BandgapConfig.batch_size"><code class="docutils literal notranslate"><span class="pre">BandgapConfig.batch_size</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.bandgap.run_bandgap"><code class="docutils literal notranslate"><span class="pre">run_bandgap()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.bandgap.run_bandgap_from_toml"><code class="docutils literal notranslate"><span class="pre">run_bandgap_from_toml()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.calibration_expansion">dopingflow.calibration_expansion module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.calibration_expansion.CalibrationDiscovery"><code class="docutils literal notranslate"><span class="pre">CalibrationDiscovery</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.calibration_expansion.CalibrationDiscovery.accepted_records"><code class="docutils literal notranslate"><span class="pre">CalibrationDiscovery.accepted_records</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.calibration_expansion.CalibrationDiscovery.report"><code class="docutils literal notranslate"><span class="pre">CalibrationDiscovery.report</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.calibration_expansion.CalibrationDiscovery.records"><code class="docutils literal notranslate"><span class="pre">CalibrationDiscovery.records</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.calibration_expansion.CachedOptimadeStructure"><code class="docutils literal notranslate"><span class="pre">CachedOptimadeStructure</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.calibration_expansion.CachedOptimadeStructure.material_id"><code class="docutils literal notranslate"><span class="pre">CachedOptimadeStructure.material_id</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.calibration_expansion.CachedOptimadeStructure.reduced_formula"><code class="docutils literal notranslate"><span class="pre">CachedOptimadeStructure.reduced_formula</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.calibration_expansion.CachedOptimadeStructure.source_url"><code class="docutils literal notranslate"><span class="pre">CachedOptimadeStructure.source_url</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.calibration_expansion.CachedOptimadeStructure.response_json_path"><code class="docutils literal notranslate"><span class="pre">CachedOptimadeStructure.response_json_path</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.calibration_expansion.CachedOptimadeStructure.structure_path"><code class="docutils literal notranslate"><span class="pre">CachedOptimadeStructure.structure_path</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.calibration_expansion.CachedOptimadeStructure.response_sha256"><code class="docutils literal notranslate"><span class="pre">CachedOptimadeStructure.response_sha256</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.calibration_expansion.CachedOptimadeStructure.structure_sha256"><code class="docutils literal notranslate"><span class="pre">CachedOptimadeStructure.structure_sha256</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.calibration_expansion.CachedOptimadeStructure.n_sites"><code class="docutils literal notranslate"><span class="pre">CachedOptimadeStructure.n_sites</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.calibration_expansion.CachedOptimadeStructure.from_cache"><code class="docutils literal notranslate"><span class="pre">CachedOptimadeStructure.from_cache</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.calibration_expansion.CachedOptimadeStructure.to_dict"><code class="docutils literal notranslate"><span class="pre">CachedOptimadeStructure.to_dict()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.calibration_expansion.is_generic_phase"><code class="docutils literal notranslate"><span class="pre">is_generic_phase()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.calibration_expansion.infer_scoped_elements"><code class="docutils literal notranslate"><span class="pre">infer_scoped_elements()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.calibration_expansion.discover_phase_resolved_oxides"><code class="docutils literal notranslate"><span class="pre">discover_phase_resolved_oxides()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.calibration_expansion.discover_phase_resolved_binary_oxides"><code class="docutils literal notranslate"><span class="pre">discover_phase_resolved_binary_oxides()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.calibration_expansion.fetch_optimade_structure"><code class="docutils literal notranslate"><span class="pre">fetch_optimade_structure()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.cli">dopingflow.cli module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.cli.refs_build_cmd"><code class="docutils literal notranslate"><span class="pre">refs_build_cmd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.cli.generate_cmd"><code class="docutils literal notranslate"><span class="pre">generate_cmd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.cli.corrections_fit_cmd"><code class="docutils literal notranslate"><span class="pre">corrections_fit_cmd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.cli.scan_cmd"><code class="docutils literal notranslate"><span class="pre">scan_cmd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.cli.relax_cmd"><code class="docutils literal notranslate"><span class="pre">relax_cmd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.cli.filter_cmd"><code class="docutils literal notranslate"><span class="pre">filter_cmd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.cli.bandgap_cmd"><code class="docutils literal notranslate"><span class="pre">bandgap_cmd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.cli.formation_cmd"><code class="docutils literal notranslate"><span class="pre">formation_cmd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.cli.collect_cmd"><code class="docutils literal notranslate"><span class="pre">collect_cmd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.cli.alloy_hull_cmd"><code class="docutils literal notranslate"><span class="pre">alloy_hull_cmd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.cli.phase_diagram_cmd"><code class="docutils literal notranslate"><span class="pre">phase_diagram_cmd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.cli.vacancies_cmd"><code class="docutils literal notranslate"><span class="pre">vacancies_cmd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.cli.vacancies_mc_search_cmd"><code class="docutils literal notranslate"><span class="pre">vacancies_mc_search_cmd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.cli.vacancies_finalize_cmd"><code class="docutils literal notranslate"><span class="pre">vacancies_finalize_cmd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.cli.oxidation_cmd"><code class="docutils literal notranslate"><span class="pre">oxidation_cmd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.cli.run_all_cmd"><code class="docutils literal notranslate"><span class="pre">run_all_cmd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.cli.sequential_run_cmd"><code class="docutils literal notranslate"><span class="pre">sequential_run_cmd()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.collect">dopingflow.collect module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.collect.DBConfig"><code class="docutils literal notranslate"><span class="pre">DBConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.collect.DBConfig.outdir"><code class="docutils literal notranslate"><span class="pre">DBConfig.outdir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.collect.DBConfig.skip_if_done"><code class="docutils literal notranslate"><span class="pre">DBConfig.skip_if_done</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.collect.read_json"><code class="docutils literal notranslate"><span class="pre">read_json()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.collect.safe_get"><code class="docutils literal notranslate"><span class="pre">safe_get()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.collect.read_selected_txt"><code class="docutils literal notranslate"><span class="pre">read_selected_txt()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.collect.read_filtered_table"><code class="docutils literal notranslate"><span class="pre">read_filtered_table()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.collect.read_scan_ranking"><code class="docutils literal notranslate"><span class="pre">read_scan_ranking()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.collect.read_bandgap_summary"><code class="docutils literal notranslate"><span class="pre">read_bandgap_summary()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.collect.read_formation_csv"><code class="docutils literal notranslate"><span class="pre">read_formation_csv()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.collect.read_formation_meta"><code class="docutils literal notranslate"><span class="pre">read_formation_meta()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.collect.run_collect"><code class="docutils literal notranslate"><span class="pre">run_collect()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.collect.run_collect_from_toml"><code class="docutils literal notranslate"><span class="pre">run_collect_from_toml()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.corrections">dopingflow.corrections module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.enabled"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.enabled</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.experimental_source"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.experimental_source</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.experimental_data"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.experimental_data</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.dataset_cache_dir"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.dataset_cache_dir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.calibration_manifest"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.calibration_manifest</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.correction_terms"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.correction_terms</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.allow_element_terms"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.allow_element_terms</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.model_family"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.model_family</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.target_elements"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.target_elements</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.m1_elements"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.m1_elements</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.calibration_selection"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.calibration_selection</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.auto_fetch_phase_structures"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.auto_fetch_phase_structures</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.optimade_base_url"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.optimade_base_url</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.min_element_compounds"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.min_element_compounds</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.min_element_stoichiometries"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.min_element_stoichiometries</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.min_cv_improvement_eV_per_atom"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.min_cv_improvement_eV_per_atom</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.require_cv_one_standard_error"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.require_cv_one_standard_error</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.exclude_polyanions"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.exclude_polyanions</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.max_relative_experimental_uncertainty"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.max_relative_experimental_uncertainty</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.max_calculated_e_above_hull_eV_per_atom"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.max_calculated_e_above_hull_eV_per_atom</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.allow_phase_mismatch"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.allow_phase_mismatch</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.allow_legacy_candidate_provenance"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.allow_legacy_candidate_provenance</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.reuse_fitted"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.reuse_fitted</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.min_degrees_of_freedom"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.min_degrees_of_freedom</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.min_term_support"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.min_term_support</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.max_condition_number"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.max_condition_number</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionConfig.poor_fit_rmse_warning_eV_per_atom"><code class="docutils literal notranslate"><span class="pre">CorrectionConfig.poor_fit_rmse_warning_eV_per_atom</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.ExperimentalRecord"><code class="docutils literal notranslate"><span class="pre">ExperimentalRecord</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.ExperimentalRecord.formula"><code class="docutils literal notranslate"><span class="pre">ExperimentalRecord.formula</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.ExperimentalRecord.reduced_formula"><code class="docutils literal notranslate"><span class="pre">ExperimentalRecord.reduced_formula</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.ExperimentalRecord.formation_enthalpy_eV_per_atom"><code class="docutils literal notranslate"><span class="pre">ExperimentalRecord.formation_enthalpy_eV_per_atom</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.ExperimentalRecord.formation_enthalpy_eV_per_formula"><code class="docutils literal notranslate"><span class="pre">ExperimentalRecord.formation_enthalpy_eV_per_formula</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.ExperimentalRecord.uncertainty_eV_per_atom"><code class="docutils literal notranslate"><span class="pre">ExperimentalRecord.uncertainty_eV_per_atom</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.ExperimentalRecord.uncertainty_eV_per_formula"><code class="docutils literal notranslate"><span class="pre">ExperimentalRecord.uncertainty_eV_per_formula</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.ExperimentalRecord.uncertainty_source"><code class="docutils literal notranslate"><span class="pre">ExperimentalRecord.uncertainty_source</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.ExperimentalRecord.phase"><code class="docutils literal notranslate"><span class="pre">ExperimentalRecord.phase</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.ExperimentalRecord.temperature"><code class="docutils literal notranslate"><span class="pre">ExperimentalRecord.temperature</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.ExperimentalRecord.source"><code class="docutils literal notranslate"><span class="pre">ExperimentalRecord.source</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.ExperimentalRecord.likely_mpid"><code class="docutils literal notranslate"><span class="pre">ExperimentalRecord.likely_mpid</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.ExperimentalRecord.doi"><code class="docutils literal notranslate"><span class="pre">ExperimentalRecord.doi</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.ExperimentalRecord.reference_id"><code class="docutils literal notranslate"><span class="pre">ExperimentalRecord.reference_id</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.ExperimentalRecord.notes"><code class="docutils literal notranslate"><span class="pre">ExperimentalRecord.notes</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.ExperimentalRecord.dataset"><code class="docutils literal notranslate"><span class="pre">ExperimentalRecord.dataset</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.ExperimentalRecord.original_units"><code class="docutils literal notranslate"><span class="pre">ExperimentalRecord.original_units</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.ExperimentalRecord.to_dict"><code class="docutils literal notranslate"><span class="pre">ExperimentalRecord.to_dict()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionApplication"><code class="docutils literal notranslate"><span class="pre">CorrectionApplication</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionApplication.correction_eV"><code class="docutils literal notranslate"><span class="pre">CorrectionApplication.correction_eV</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionApplication.uncertainty_eV"><code class="docutils literal notranslate"><span class="pre">CorrectionApplication.uncertainty_eV</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionApplication.feature_vector"><code class="docutils literal notranslate"><span class="pre">CorrectionApplication.feature_vector</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionApplication.matched_terms"><code class="docutils literal notranslate"><span class="pre">CorrectionApplication.matched_terms</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionApplication.applied"><code class="docutils literal notranslate"><span class="pre">CorrectionApplication.applied</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionApplication.reason"><code class="docutils literal notranslate"><span class="pre">CorrectionApplication.reason</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionApplication.oxide_type"><code class="docutils literal notranslate"><span class="pre">CorrectionApplication.oxide_type</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionApplication.to_dict"><code class="docutils literal notranslate"><span class="pre">CorrectionApplication.to_dict()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionModel"><code class="docutils literal notranslate"><span class="pre">CorrectionModel</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionModel.schema_version"><code class="docutils literal notranslate"><span class="pre">CorrectionModel.schema_version</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionModel.method"><code class="docutils literal notranslate"><span class="pre">CorrectionModel.method</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionModel.fit_id"><code class="docutils literal notranslate"><span class="pre">CorrectionModel.fit_id</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionModel.backend_signature"><code class="docutils literal notranslate"><span class="pre">CorrectionModel.backend_signature</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionModel.correction_terms"><code class="docutils literal notranslate"><span class="pre">CorrectionModel.correction_terms</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionModel.coefficients_eV_per_term"><code class="docutils literal notranslate"><span class="pre">CorrectionModel.coefficients_eV_per_term</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionModel.covariance_eV2"><code class="docutils literal notranslate"><span class="pre">CorrectionModel.covariance_eV2</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionModel.coefficient_uncertainties_eV_per_term"><code class="docutils literal notranslate"><span class="pre">CorrectionModel.coefficient_uncertainties_eV_per_term</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionModel.experimental_dataset"><code class="docutils literal notranslate"><span class="pre">CorrectionModel.experimental_dataset</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionModel.experimental_dataset_version"><code class="docutils literal notranslate"><span class="pre">CorrectionModel.experimental_dataset_version</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionModel.fit_input_hash"><code class="docutils literal notranslate"><span class="pre">CorrectionModel.fit_input_hash</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionModel.units"><code class="docutils literal notranslate"><span class="pre">CorrectionModel.units</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionModel.calibration_formulas"><code class="docutils literal notranslate"><span class="pre">CorrectionModel.calibration_formulas</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionModel.fit_metrics"><code class="docutils literal notranslate"><span class="pre">CorrectionModel.fit_metrics</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionModel.activation_input_hash"><code class="docutils literal notranslate"><span class="pre">CorrectionModel.activation_input_hash</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionModel.applicability_signature"><code class="docutils literal notranslate"><span class="pre">CorrectionModel.applicability_signature</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionModel.model_family"><code class="docutils literal notranslate"><span class="pre">CorrectionModel.model_family</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionModel.selection_run_hash"><code class="docutils literal notranslate"><span class="pre">CorrectionModel.selection_run_hash</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionModel.target_elements"><code class="docutils literal notranslate"><span class="pre">CorrectionModel.target_elements</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionModel.selection_metadata"><code class="docutils literal notranslate"><span class="pre">CorrectionModel.selection_metadata</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionModel.to_dict"><code class="docutils literal notranslate"><span class="pre">CorrectionModel.to_dict()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.CorrectionModel.from_dict"><code class="docutils literal notranslate"><span class="pre">CorrectionModel.from_dict()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.normalize_correction_term"><code class="docutils literal notranslate"><span class="pre">normalize_correction_term()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.infer_correction_target_elements"><code class="docutils literal notranslate"><span class="pre">infer_correction_target_elements()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.parse_correction_config"><code class="docutils literal notranslate"><span class="pre">parse_correction_config()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.load_kingsbury_dataset"><code class="docutils literal notranslate"><span class="pre">load_kingsbury_dataset()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.load_custom_experimental_dataset"><code class="docutils literal notranslate"><span class="pre">load_custom_experimental_dataset()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.merge_experimental_datasets"><code class="docutils literal notranslate"><span class="pre">merge_experimental_datasets()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.load_experimental_dataset"><code class="docutils literal notranslate"><span class="pre">load_experimental_dataset()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.impute_missing_uncertainties"><code class="docutils literal notranslate"><span class="pre">impute_missing_uncertainties()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.backend_signature_from_reference"><code class="docutils literal notranslate"><span class="pre">backend_signature_from_reference()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.backend_runtime_provenance"><code class="docutils literal notranslate"><span class="pre">backend_runtime_provenance()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.backend_slug"><code class="docutils literal notranslate"><span class="pre">backend_slug()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.model_directory"><code class="docutils literal notranslate"><span class="pre">model_directory()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.model_path"><code class="docutils literal notranslate"><span class="pre">model_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.correction_activation_hash"><code class="docutils literal notranslate"><span class="pre">correction_activation_hash()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.feature_vector"><code class="docutils literal notranslate"><span class="pre">feature_vector()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.combine_feature_vectors"><code class="docutils literal notranslate"><span class="pre">combine_feature_vectors()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.evaluate_feature_vector"><code class="docutils literal notranslate"><span class="pre">evaluate_feature_vector()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.apply_energy_correction"><code class="docutils literal notranslate"><span class="pre">apply_energy_correction()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.content_hash"><code class="docutils literal notranslate"><span class="pre">content_hash()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.fit_linear_correction_model"><code class="docutils literal notranslate"><span class="pre">fit_linear_correction_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.save_correction_model"><code class="docutils literal notranslate"><span class="pre">save_correction_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.load_correction_model"><code class="docutils literal notranslate"><span class="pre">load_correction_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.validate_applicability_compatibility"><code class="docutils literal notranslate"><span class="pre">validate_applicability_compatibility()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.validate_backend_compatibility"><code class="docutils literal notranslate"><span class="pre">validate_backend_compatibility()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.validate_candidate_energy_provenance"><code class="docutils literal notranslate"><span class="pre">validate_candidate_energy_provenance()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.validate_reference_energy_provenance"><code class="docutils literal notranslate"><span class="pre">validate_reference_energy_provenance()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.corrections.load_active_correction_model"><code class="docutils literal notranslate"><span class="pre">load_active_correction_model()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.correction_calibration">dopingflow.correction_calibration module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.correction_calibration.run_corrections_fit"><code class="docutils literal notranslate"><span class="pre">run_corrections_fit()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.correction_calibration.run_corrections_fit_from_toml"><code class="docutils literal notranslate"><span class="pre">run_corrections_fit_from_toml()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.correction_model_selection">dopingflow.correction_model_selection module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.ModelSelectionConfig"><code class="docutils literal notranslate"><span class="pre">ModelSelectionConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.ModelSelectionConfig.min_m0_compounds"><code class="docutils literal notranslate"><span class="pre">ModelSelectionConfig.min_m0_compounds</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.ModelSelectionConfig.min_independent_cation_support"><code class="docutils literal notranslate"><span class="pre">ModelSelectionConfig.min_independent_cation_support</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.ModelSelectionConfig.min_unique_oxygen_ratios"><code class="docutils literal notranslate"><span class="pre">ModelSelectionConfig.min_unique_oxygen_ratios</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.ModelSelectionConfig.max_condition_number"><code class="docutils literal notranslate"><span class="pre">ModelSelectionConfig.max_condition_number</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.ModelSelectionConfig.min_cv_rmse_improvement_eV_per_atom"><code class="docutils literal notranslate"><span class="pre">ModelSelectionConfig.min_cv_rmse_improvement_eV_per_atom</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.ModelSelectionConfig.require_one_standard_error"><code class="docutils literal notranslate"><span class="pre">ModelSelectionConfig.require_one_standard_error</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.FamilyFit"><code class="docutils literal notranslate"><span class="pre">FamilyFit</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.FamilyFit.family"><code class="docutils literal notranslate"><span class="pre">FamilyFit.family</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.FamilyFit.terms"><code class="docutils literal notranslate"><span class="pre">FamilyFit.terms</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.FamilyFit.coefficients_eV_per_term"><code class="docutils literal notranslate"><span class="pre">FamilyFit.coefficients_eV_per_term</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.FamilyFit.covariance_eV2"><code class="docutils literal notranslate"><span class="pre">FamilyFit.covariance_eV2</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.FamilyFit.coefficient_uncertainties_eV_per_term"><code class="docutils literal notranslate"><span class="pre">FamilyFit.coefficient_uncertainties_eV_per_term</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.FamilyFit.n_observations"><code class="docutils literal notranslate"><span class="pre">FamilyFit.n_observations</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.FamilyFit.rank"><code class="docutils literal notranslate"><span class="pre">FamilyFit.rank</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.FamilyFit.condition_number"><code class="docutils literal notranslate"><span class="pre">FamilyFit.condition_number</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.FamilyFit.max_loo_condition_number"><code class="docutils literal notranslate"><span class="pre">FamilyFit.max_loo_condition_number</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.FamilyFit.training_rmse_eV_per_atom"><code class="docutils literal notranslate"><span class="pre">FamilyFit.training_rmse_eV_per_atom</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.FamilyFit.loo_rmse_eV_per_atom"><code class="docutils literal notranslate"><span class="pre">FamilyFit.loo_rmse_eV_per_atom</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.FamilyFit.loo_mae_eV_per_atom"><code class="docutils literal notranslate"><span class="pre">FamilyFit.loo_mae_eV_per_atom</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.FamilyFit.formulas"><code class="docutils literal notranslate"><span class="pre">FamilyFit.formulas</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.FamilyFit.observed_corrections_eV_per_formula"><code class="docutils literal notranslate"><span class="pre">FamilyFit.observed_corrections_eV_per_formula</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.FamilyFit.fitted_corrections_eV_per_formula"><code class="docutils literal notranslate"><span class="pre">FamilyFit.fitted_corrections_eV_per_formula</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.FamilyFit.loo_predictions_eV_per_formula"><code class="docutils literal notranslate"><span class="pre">FamilyFit.loo_predictions_eV_per_formula</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.FamilyFit.to_dict"><code class="docutils literal notranslate"><span class="pre">FamilyFit.to_dict()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.ModelSelectionResult"><code class="docutils literal notranslate"><span class="pre">ModelSelectionResult</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.ModelSelectionResult.selected_family"><code class="docutils literal notranslate"><span class="pre">ModelSelectionResult.selected_family</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.ModelSelectionResult.selected_model"><code class="docutils literal notranslate"><span class="pre">ModelSelectionResult.selected_model</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.ModelSelectionResult.m0_model"><code class="docutils literal notranslate"><span class="pre">ModelSelectionResult.m0_model</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.ModelSelectionResult.m1_model"><code class="docutils literal notranslate"><span class="pre">ModelSelectionResult.m1_model</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.ModelSelectionResult.report"><code class="docutils literal notranslate"><span class="pre">ModelSelectionResult.report</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.ModelSelectionResult.to_dict"><code class="docutils literal notranslate"><span class="pre">ModelSelectionResult.to_dict()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.oxide_cation_term"><code class="docutils literal notranslate"><span class="pre">oxide_cation_term()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.infer_workflow_target_elements"><code class="docutils literal notranslate"><span class="pre">infer_workflow_target_elements()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.correction_feature_vector"><code class="docutils literal notranslate"><span class="pre">correction_feature_vector()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.correction_model_selection.select_correction_model_family"><code class="docutils literal notranslate"><span class="pre">select_correction_model_family()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.filtering">dopingflow.filtering module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.filtering.FilterConfig"><code class="docutils literal notranslate"><span class="pre">FilterConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.filtering.FilterConfig.outdir"><code class="docutils literal notranslate"><span class="pre">FilterConfig.outdir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.filtering.FilterConfig.mode"><code class="docutils literal notranslate"><span class="pre">FilterConfig.mode</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.filtering.FilterConfig.window_meV"><code class="docutils literal notranslate"><span class="pre">FilterConfig.window_meV</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.filtering.FilterConfig.max_candidates"><code class="docutils literal notranslate"><span class="pre">FilterConfig.max_candidates</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.filtering.FilterConfig.skip_if_done"><code class="docutils literal notranslate"><span class="pre">FilterConfig.skip_if_done</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.filtering.run_filtering"><code class="docutils literal notranslate"><span class="pre">run_filtering()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.filtering.run_filtering_from_toml"><code class="docutils literal notranslate"><span class="pre">run_filtering_from_toml()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.formation">dopingflow.formation module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.formation.FormationConfig"><code class="docutils literal notranslate"><span class="pre">FormationConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.formation.FormationConfig.outdir"><code class="docutils literal notranslate"><span class="pre">FormationConfig.outdir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.formation.FormationConfig.host_species"><code class="docutils literal notranslate"><span class="pre">FormationConfig.host_species</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.formation.FormationConfig.anion_species"><code class="docutils literal notranslate"><span class="pre">FormationConfig.anion_species</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.formation.FormationConfig.skip_if_done"><code class="docutils literal notranslate"><span class="pre">FormationConfig.skip_if_done</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.formation.FormationConfig.normalize"><code class="docutils literal notranslate"><span class="pre">FormationConfig.normalize</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.formation.FormationConfig.relative_enabled"><code class="docutils literal notranslate"><span class="pre">FormationConfig.relative_enabled</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.formation.FormationConfig.relative_endpoint_x"><code class="docutils literal notranslate"><span class="pre">FormationConfig.relative_endpoint_x</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.formation.CandidateRecord"><code class="docutils literal notranslate"><span class="pre">CandidateRecord</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.formation.CandidateRecord.folder"><code class="docutils literal notranslate"><span class="pre">CandidateRecord.folder</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.formation.CandidateRecord.candidate_dir"><code class="docutils literal notranslate"><span class="pre">CandidateRecord.candidate_dir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.formation.CandidateRecord.candidate"><code class="docutils literal notranslate"><span class="pre">CandidateRecord.candidate</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.formation.CandidateRecord.E_doped"><code class="docutils literal notranslate"><span class="pre">CandidateRecord.E_doped</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.formation.CandidateRecord.counts"><code class="docutils literal notranslate"><span class="pre">CandidateRecord.counts</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.formation.CandidateRecord.dopant_counts"><code class="docutils literal notranslate"><span class="pre">CandidateRecord.dopant_counts</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.formation.CandidateRecord.x_dopant"><code class="docutils literal notranslate"><span class="pre">CandidateRecord.x_dopant</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.formation.CandidateRecord.reference_results"><code class="docutils literal notranslate"><span class="pre">CandidateRecord.reference_results</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.formation.CandidateRecord.energy_provenance"><code class="docutils literal notranslate"><span class="pre">CandidateRecord.energy_provenance</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.formation.run_formation_from_toml"><code class="docutils literal notranslate"><span class="pre">run_formation_from_toml()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.generate">dopingflow.generate module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.generate.GenerateConfig"><code class="docutils literal notranslate"><span class="pre">GenerateConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.generate.GenerateConfig.base_poscar"><code class="docutils literal notranslate"><span class="pre">GenerateConfig.base_poscar</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.generate.GenerateConfig.incremental"><code class="docutils literal notranslate"><span class="pre">GenerateConfig.incremental</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.generate.GenerateConfig.outdir"><code class="docutils literal notranslate"><span class="pre">GenerateConfig.outdir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.generate.GenerateConfig.poscar_order"><code class="docutils literal notranslate"><span class="pre">GenerateConfig.poscar_order</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.generate.GenerateConfig.seed_base"><code class="docutils literal notranslate"><span class="pre">GenerateConfig.seed_base</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.generate.GenerateConfig.clean_outdir"><code class="docutils literal notranslate"><span class="pre">GenerateConfig.clean_outdir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.generate.GenerateConfig.mode"><code class="docutils literal notranslate"><span class="pre">GenerateConfig.mode</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.generate.GenerateConfig.host_species"><code class="docutils literal notranslate"><span class="pre">GenerateConfig.host_species</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.generate.GenerateConfig.compositions"><code class="docutils literal notranslate"><span class="pre">GenerateConfig.compositions</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.generate.GenerateConfig.dopants"><code class="docutils literal notranslate"><span class="pre">GenerateConfig.dopants</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.generate.GenerateConfig.must_include"><code class="docutils literal notranslate"><span class="pre">GenerateConfig.must_include</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.generate.GenerateConfig.max_dopants_total"><code class="docutils literal notranslate"><span class="pre">GenerateConfig.max_dopants_total</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.generate.GenerateConfig.allowed_totals"><code class="docutils literal notranslate"><span class="pre">GenerateConfig.allowed_totals</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.generate.GenerateConfig.levels"><code class="docutils literal notranslate"><span class="pre">GenerateConfig.levels</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.generate.validate_composition_minimal"><code class="docutils literal notranslate"><span class="pre">validate_composition_minimal()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.generate.normalize_to_counts_and_effective"><code class="docutils literal notranslate"><span class="pre">normalize_to_counts_and_effective()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.generate.normalize_incremental_counts"><code class="docutils literal notranslate"><span class="pre">normalize_incremental_counts()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.generate.build_incremental_structure_from_counts"><code class="docutils literal notranslate"><span class="pre">build_incremental_structure_from_counts()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.generate.composition_tag"><code class="docutils literal notranslate"><span class="pre">composition_tag()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.generate.stable_seed_from_tag"><code class="docutils literal notranslate"><span class="pre">stable_seed_from_tag()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.generate.build_structure_from_counts"><code class="docutils literal notranslate"><span class="pre">build_structure_from_counts()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.generate.reorder_structure_by_species"><code class="docutils literal notranslate"><span class="pre">reorder_structure_by_species()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.generate.enumerate_compositions"><code class="docutils literal notranslate"><span class="pre">enumerate_compositions()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.generate.run_generate"><code class="docutils literal notranslate"><span class="pre">run_generate()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.generate.run_generate_from_toml"><code class="docutils literal notranslate"><span class="pre">run_generate_from_toml()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.hardware">dopingflow.hardware module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.hardware.HardwareConfig"><code class="docutils literal notranslate"><span class="pre">HardwareConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.hardware.HardwareConfig.device"><code class="docutils literal notranslate"><span class="pre">HardwareConfig.device</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.hardware.HardwareConfig.gpu_id"><code class="docutils literal notranslate"><span class="pre">HardwareConfig.gpu_id</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.hardware.HardwareConfig.allow_gpu_batching"><code class="docutils literal notranslate"><span class="pre">HardwareConfig.allow_gpu_batching</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.hardware.HardwareConfig.relax_batch_size"><code class="docutils literal notranslate"><span class="pre">HardwareConfig.relax_batch_size</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.hardware.HardwareConfig.bandgap_batch_size"><code class="docutils literal notranslate"><span class="pre">HardwareConfig.bandgap_batch_size</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.hardware.resolve_torch_device"><code class="docutils literal notranslate"><span class="pre">resolve_torch_device()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.hardware.configure_tensorflow"><code class="docutils literal notranslate"><span class="pre">configure_tensorflow()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.hardware.parse_hardware_config"><code class="docutils literal notranslate"><span class="pre">parse_hardware_config()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.logging">dopingflow.logging module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.logging.setup_logging"><code class="docutils literal notranslate"><span class="pre">setup_logging()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.ml_backends">dopingflow.ml_backends module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.ml_backends.get_mace_model_choices"><code class="docutils literal notranslate"><span class="pre">get_mace_model_choices()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.ml_backends.set_default_runtime_env"><code class="docutils literal notranslate"><span class="pre">set_default_runtime_env()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.ml_backends.normalize_backend_config"><code class="docutils literal notranslate"><span class="pre">normalize_backend_config()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.ml_backends.check_backend_dependency"><code class="docutils literal notranslate"><span class="pre">check_backend_dependency()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.ml_backends.prepare_backend_runtime"><code class="docutils literal notranslate"><span class="pre">prepare_backend_runtime()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.ml_backends.build_ase_calculator"><code class="docutils literal notranslate"><span class="pre">build_ase_calculator()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.ml_relaxation">dopingflow.ml_relaxation module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.ml_relaxation.get_optimizer_class"><code class="docutils literal notranslate"><span class="pre">get_optimizer_class()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.ml_relaxation.final_fmax"><code class="docutils literal notranslate"><span class="pre">final_fmax()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.ml_relaxation.structure_energy_with_calculator"><code class="docutils literal notranslate"><span class="pre">structure_energy_with_calculator()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.ml_relaxation.build_relaxation_target"><code class="docutils literal notranslate"><span class="pre">build_relaxation_target()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.ml_relaxation.relax_structure_with_calculator"><code class="docutils literal notranslate"><span class="pre">relax_structure_with_calculator()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.oxidation">dopingflow.oxidation module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.OptionalMethodUnavailable"><code class="docutils literal notranslate"><span class="pre">OptionalMethodUnavailable</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.OxidationConfig"><code class="docutils literal notranslate"><span class="pre">OxidationConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.OxidationConfig.root"><code class="docutils literal notranslate"><span class="pre">OxidationConfig.root</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.OxidationConfig.source_root"><code class="docutils literal notranslate"><span class="pre">OxidationConfig.source_root</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.OxidationConfig.output_dir"><code class="docutils literal notranslate"><span class="pre">OxidationConfig.output_dir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.OxidationConfig.enabled"><code class="docutils literal notranslate"><span class="pre">OxidationConfig.enabled</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.OxidationConfig.strategy"><code class="docutils literal notranslate"><span class="pre">OxidationConfig.strategy</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.OxidationConfig.methods"><code class="docutils literal notranslate"><span class="pre">OxidationConfig.methods</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.OxidationConfig.include_vacancy_free"><code class="docutils literal notranslate"><span class="pre">OxidationConfig.include_vacancy_free</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.OxidationConfig.include_oxygen_vacancies"><code class="docutils literal notranslate"><span class="pre">OxidationConfig.include_oxygen_vacancies</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.OxidationConfig.mapping_tolerance"><code class="docutils literal notranslate"><span class="pre">OxidationConfig.mapping_tolerance</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.OxidationConfig.fail_fast"><code class="docutils literal notranslate"><span class="pre">OxidationConfig.fail_fast</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.OxidationConfig.dft_followup_enabled"><code class="docutils literal notranslate"><span class="pre">OxidationConfig.dft_followup_enabled</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.OxidationConfig.dft_followup_candidate_limit"><code class="docutils literal notranslate"><span class="pre">OxidationConfig.dft_followup_candidate_limit</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.OxidationConfig.dft_followup_execute"><code class="docutils literal notranslate"><span class="pre">OxidationConfig.dft_followup_execute</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.OxidationConfig.dft_followup_methods"><code class="docutils literal notranslate"><span class="pre">OxidationConfig.dft_followup_methods</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.OxidationConfig.settings"><code class="docutils literal notranslate"><span class="pre">OxidationConfig.settings</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.StructureTarget"><code class="docutils literal notranslate"><span class="pre">StructureTarget</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.StructureTarget.target_id"><code class="docutils literal notranslate"><span class="pre">StructureTarget.target_id</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.StructureTarget.parent_id"><code class="docutils literal notranslate"><span class="pre">StructureTarget.parent_id</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.StructureTarget.kind"><code class="docutils literal notranslate"><span class="pre">StructureTarget.kind</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.StructureTarget.structure_path"><code class="docutils literal notranslate"><span class="pre">StructureTarget.structure_path</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.StructureTarget.n_vacancies"><code class="docutils literal notranslate"><span class="pre">StructureTarget.n_vacancies</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.StructureTarget.vacancy_species"><code class="docutils literal notranslate"><span class="pre">StructureTarget.vacancy_species</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.StructureTarget.metadata"><code class="docutils literal notranslate"><span class="pre">StructureTarget.metadata</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.StructureTarget.safe_id"><code class="docutils literal notranslate"><span class="pre">StructureTarget.safe_id</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.parse_oxidation_config"><code class="docutils literal notranslate"><span class="pre">parse_oxidation_config()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.cached_model"><code class="docutils literal notranslate"><span class="pre">cached_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.clear_model_cache"><code class="docutils literal notranslate"><span class="pre">clear_model_cache()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.discover_oxidation_targets"><code class="docutils literal notranslate"><span class="pre">discover_oxidation_targets()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.base_method_result"><code class="docutils literal notranslate"><span class="pre">base_method_result()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.site_records"><code class="docutils literal notranslate"><span class="pre">site_records()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.unsupported_elements"><code class="docutils literal notranslate"><span class="pre">unsupported_elements()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.map_child_to_parent_sites"><code class="docutils literal notranslate"><span class="pre">map_child_to_parent_sites()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.execute_method"><code class="docutils literal notranslate"><span class="pre">execute_method()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.run_oxidation"><code class="docutils literal notranslate"><span class="pre">run_oxidation()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation.run_oxidation_from_toml"><code class="docutils literal notranslate"><span class="pre">run_oxidation_from_toml()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.oxidation_structural">dopingflow.oxidation_structural module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation_structural.run_structural_method"><code class="docutils literal notranslate"><span class="pre">run_structural_method()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.oxidation_ml">dopingflow.oxidation_ml module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation_ml.run_ml_method"><code class="docutils literal notranslate"><span class="pre">run_ml_method()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.oxidation_dft">dopingflow.oxidation_dft module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.oxidation_dft.run_dft_method"><code class="docutils literal notranslate"><span class="pre">run_dft_method()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.refs">dopingflow.refs module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig"><code class="docutils literal notranslate"><span class="pre">RefConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig.reference_mode"><code class="docutils literal notranslate"><span class="pre">RefConfig.reference_mode</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig.skip_if_done"><code class="docutils literal notranslate"><span class="pre">RefConfig.skip_if_done</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig.fmax"><code class="docutils literal notranslate"><span class="pre">RefConfig.fmax</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig.max_steps"><code class="docutils literal notranslate"><span class="pre">RefConfig.max_steps</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig.tf_threads"><code class="docutils literal notranslate"><span class="pre">RefConfig.tf_threads</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig.omp_threads"><code class="docutils literal notranslate"><span class="pre">RefConfig.omp_threads</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig.device"><code class="docutils literal notranslate"><span class="pre">RefConfig.device</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig.gpu_id"><code class="docutils literal notranslate"><span class="pre">RefConfig.gpu_id</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig.backend"><code class="docutils literal notranslate"><span class="pre">RefConfig.backend</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig.model"><code class="docutils literal notranslate"><span class="pre">RefConfig.model</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig.task"><code class="docutils literal notranslate"><span class="pre">RefConfig.task</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig.optimizer"><code class="docutils literal notranslate"><span class="pre">RefConfig.optimizer</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig.host"><code class="docutils literal notranslate"><span class="pre">RefConfig.host</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig.host_dir"><code class="docutils literal notranslate"><span class="pre">RefConfig.host_dir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig.supercell"><code class="docutils literal notranslate"><span class="pre">RefConfig.supercell</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig.metal_ref"><code class="docutils literal notranslate"><span class="pre">RefConfig.metal_ref</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig.metals_dir"><code class="docutils literal notranslate"><span class="pre">RefConfig.metals_dir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig.oxides_ref"><code class="docutils literal notranslate"><span class="pre">RefConfig.oxides_ref</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig.oxides_dir"><code class="docutils literal notranslate"><span class="pre">RefConfig.oxides_dir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig.gas_ref"><code class="docutils literal notranslate"><span class="pre">RefConfig.gas_ref</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig.gas_dir"><code class="docutils literal notranslate"><span class="pre">RefConfig.gas_dir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig.oxygen_mode"><code class="docutils literal notranslate"><span class="pre">RefConfig.oxygen_mode</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.refs.RefConfig.muO_shift_ev"><code class="docutils literal notranslate"><span class="pre">RefConfig.muO_shift_ev</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.refs.run_refs_build_from_toml"><code class="docutils literal notranslate"><span class="pre">run_refs_build_from_toml()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.relax">dopingflow.relax module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.relax.RelaxConfig"><code class="docutils literal notranslate"><span class="pre">RelaxConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.relax.RelaxConfig.fmax"><code class="docutils literal notranslate"><span class="pre">RelaxConfig.fmax</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.relax.RelaxConfig.max_steps"><code class="docutils literal notranslate"><span class="pre">RelaxConfig.max_steps</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.relax.RelaxConfig.n_workers"><code class="docutils literal notranslate"><span class="pre">RelaxConfig.n_workers</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.relax.RelaxConfig.tf_threads"><code class="docutils literal notranslate"><span class="pre">RelaxConfig.tf_threads</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.relax.RelaxConfig.omp_threads"><code class="docutils literal notranslate"><span class="pre">RelaxConfig.omp_threads</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.relax.RelaxConfig.order"><code class="docutils literal notranslate"><span class="pre">RelaxConfig.order</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.relax.RelaxConfig.outdir"><code class="docutils literal notranslate"><span class="pre">RelaxConfig.outdir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.relax.RelaxConfig.skip_if_done"><code class="docutils literal notranslate"><span class="pre">RelaxConfig.skip_if_done</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.relax.RelaxConfig.skip_candidate_if_done"><code class="docutils literal notranslate"><span class="pre">RelaxConfig.skip_candidate_if_done</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.relax.RelaxConfig.device"><code class="docutils literal notranslate"><span class="pre">RelaxConfig.device</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.relax.RelaxConfig.gpu_id"><code class="docutils literal notranslate"><span class="pre">RelaxConfig.gpu_id</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.relax.RelaxConfig.relax_mode"><code class="docutils literal notranslate"><span class="pre">RelaxConfig.relax_mode</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.relax.RelaxConfig.cell_filter"><code class="docutils literal notranslate"><span class="pre">RelaxConfig.cell_filter</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.relax.RelaxConfig.backend"><code class="docutils literal notranslate"><span class="pre">RelaxConfig.backend</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.relax.RelaxConfig.model"><code class="docutils literal notranslate"><span class="pre">RelaxConfig.model</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.relax.RelaxConfig.task"><code class="docutils literal notranslate"><span class="pre">RelaxConfig.task</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.relax.RelaxConfig.optimizer"><code class="docutils literal notranslate"><span class="pre">RelaxConfig.optimizer</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.relax.run_relax"><code class="docutils literal notranslate"><span class="pre">run_relax()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.relax.run_relax_from_toml"><code class="docutils literal notranslate"><span class="pre">run_relax_from_toml()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.scan">dopingflow.scan module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.scan.ScanConfig"><code class="docutils literal notranslate"><span class="pre">ScanConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.scan.ScanConfig.poscar_in"><code class="docutils literal notranslate"><span class="pre">ScanConfig.poscar_in</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.scan.ScanConfig.topk"><code class="docutils literal notranslate"><span class="pre">ScanConfig.topk</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.scan.ScanConfig.symprec"><code class="docutils literal notranslate"><span class="pre">ScanConfig.symprec</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.scan.ScanConfig.max_enum"><code class="docutils literal notranslate"><span class="pre">ScanConfig.max_enum</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.scan.ScanConfig.n_workers"><code class="docutils literal notranslate"><span class="pre">ScanConfig.n_workers</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.scan.ScanConfig.chunksize"><code class="docutils literal notranslate"><span class="pre">ScanConfig.chunksize</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.scan.ScanConfig.order"><code class="docutils literal notranslate"><span class="pre">ScanConfig.order</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.scan.ScanConfig.anion_species"><code class="docutils literal notranslate"><span class="pre">ScanConfig.anion_species</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.scan.ScanConfig.host_species"><code class="docutils literal notranslate"><span class="pre">ScanConfig.host_species</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.scan.ScanConfig.max_unique"><code class="docutils literal notranslate"><span class="pre">ScanConfig.max_unique</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.scan.ScanConfig.skip_if_done"><code class="docutils literal notranslate"><span class="pre">ScanConfig.skip_if_done</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.scan.ScanConfig.device"><code class="docutils literal notranslate"><span class="pre">ScanConfig.device</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.scan.ScanConfig.gpu_id"><code class="docutils literal notranslate"><span class="pre">ScanConfig.gpu_id</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.scan.ScanConfig.backend"><code class="docutils literal notranslate"><span class="pre">ScanConfig.backend</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.scan.ScanConfig.model"><code class="docutils literal notranslate"><span class="pre">ScanConfig.model</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.scan.ScanConfig.task"><code class="docutils literal notranslate"><span class="pre">ScanConfig.task</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.scan.ScanConfig.mode"><code class="docutils literal notranslate"><span class="pre">ScanConfig.mode</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.scan.ScanConfig.sample_budget"><code class="docutils literal notranslate"><span class="pre">ScanConfig.sample_budget</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.scan.ScanConfig.sample_batch_size"><code class="docutils literal notranslate"><span class="pre">ScanConfig.sample_batch_size</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.scan.ScanConfig.sample_patience"><code class="docutils literal notranslate"><span class="pre">ScanConfig.sample_patience</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.scan.ScanConfig.sample_seed"><code class="docutils literal notranslate"><span class="pre">ScanConfig.sample_seed</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.scan.ScanConfig.sample_max_saved"><code class="docutils literal notranslate"><span class="pre">ScanConfig.sample_max_saved</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.scan.run_scan"><code class="docutils literal notranslate"><span class="pre">run_scan()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.scan.run_scan_from_toml"><code class="docutils literal notranslate"><span class="pre">run_scan_from_toml()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#dopingflow-surface-module">dopingflow.surface module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.utils.io">dopingflow.utils.io module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.vacancies">dopingflow.vacancies module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig"><code class="docutils literal notranslate"><span class="pre">VacancyConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.outdir"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.outdir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.enabled"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.enabled</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.parent_source"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.parent_source</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.parent_directory"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.parent_directory</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.include_parent_reference"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.include_parent_reference</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.skip_if_done"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.skip_if_done</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.resume"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.resume</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.count_mode"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.count_mode</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.host_species"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.host_species</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.host_oxidation_state"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.host_oxidation_state</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.vacancy_species"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.vacancy_species</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.vacancy_compensation_charge"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.vacancy_compensation_charge</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.oxidation_states"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.oxidation_states</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.extra_vacancies"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.extra_vacancies</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.max_vacancies_cap"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.max_vacancies_cap</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.symprec"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.symprec</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.angle_tolerance"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.angle_tolerance</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.mapping_tolerance"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.mapping_tolerance</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.enumeration_mode"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.enumeration_mode</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.search_method"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.search_method</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.supercell"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.supercell</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_temperature_K"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.mc_temperature_K</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_annealing"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.mc_annealing</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_initial_temperature_K"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.mc_initial_temperature_K</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_annealing_hold_steps"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.mc_annealing_hold_steps</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_annealing_steps"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.mc_annealing_steps</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_run_mode"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.mc_run_mode</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_max_steps"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.mc_max_steps</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_patience"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.mc_patience</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_improvement_tolerance_eV"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.mc_improvement_tolerance_eV</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_energy_window_eV"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.mc_energy_window_eV</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_cation_move_weight"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.mc_cation_move_weight</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_vacancy_move_weight"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.mc_vacancy_move_weight</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.max_exact_raw_configs"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.max_exact_raw_configs</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.max_exact_unique_configs"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.max_exact_unique_configs</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.sample_budget"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.sample_budget</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.sample_batch_size"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.sample_batch_size</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.sample_patience"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.sample_patience</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.sample_seed"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.sample_seed</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.sample_max_saved"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.sample_max_saved</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.minimum_vacancy_distance"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.minimum_vacancy_distance</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.backend"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.backend</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.model"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.model</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.task"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.task</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.device"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.device</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.gpu_id"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.gpu_id</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.n_workers"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.n_workers</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.tf_threads"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.tf_threads</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.omp_threads"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.omp_threads</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.chunksize"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.chunksize</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.topk_per_vacancy_count"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.topk_per_vacancy_count</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.energy_normalization"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.energy_normalization</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.optimizer"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.optimizer</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.fmax"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.fmax</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.max_steps"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.max_steps</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.relax_mode"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.relax_mode</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.cell_filter"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.cell_filter</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.VacancyConfig.analysis"><code class="docutils literal notranslate"><span class="pre">VacancyConfig.analysis</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.parse_oxidation_state_arrays"><code class="docutils literal notranslate"><span class="pre">parse_oxidation_state_arrays()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.parse_vacancy_config"><code class="docutils literal notranslate"><span class="pre">parse_vacancy_config()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.reachable_charge_scenarios"><code class="docutils literal notranslate"><span class="pre">reachable_charge_scenarios()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.charge_scenarios_for_count"><code class="docutils literal notranslate"><span class="pre">charge_scenarios_for_count()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.periodic_vacancy_distances"><code class="docutils literal notranslate"><span class="pre">periodic_vacancy_distances()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.enumerate_vacancy_orbits"><code class="docutils literal notranslate"><span class="pre">enumerate_vacancy_orbits()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.discover_selected_parents"><code class="docutils literal notranslate"><span class="pre">discover_selected_parents()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.map_parent_sites"><code class="docutils literal notranslate"><span class="pre">map_parent_sites()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancies.run_vacancies_from_toml"><code class="docutils literal notranslate"><span class="pre">run_vacancies_from_toml()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#dopingflow-vacancy-monte-carlo-module">dopingflow.vacancy_monte_carlo module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_monte_carlo.annealing_temperature"><code class="docutils literal notranslate"><span class="pre">annealing_temperature()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloCandidate"><code class="docutils literal notranslate"><span class="pre">MonteCarloCandidate</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloCandidate.structure"><code class="docutils literal notranslate"><span class="pre">MonteCarloCandidate.structure</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloCandidate.energy_eV"><code class="docutils literal notranslate"><span class="pre">MonteCarloCandidate.energy_eV</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloCandidate.step"><code class="docutils literal notranslate"><span class="pre">MonteCarloCandidate.step</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloCandidate.move"><code class="docutils literal notranslate"><span class="pre">MonteCarloCandidate.move</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloCandidate.vacancy_indices"><code class="docutils literal notranslate"><span class="pre">MonteCarloCandidate.vacancy_indices</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloResult"><code class="docutils literal notranslate"><span class="pre">MonteCarloResult</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloResult.candidates"><code class="docutils literal notranslate"><span class="pre">MonteCarloResult.candidates</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloResult.steps"><code class="docutils literal notranslate"><span class="pre">MonteCarloResult.steps</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloResult.stop_reason"><code class="docutils literal notranslate"><span class="pre">MonteCarloResult.stop_reason</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloResult.best_energy_eV"><code class="docutils literal notranslate"><span class="pre">MonteCarloResult.best_energy_eV</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloResult.best_step"><code class="docutils literal notranslate"><span class="pre">MonteCarloResult.best_step</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloResult.attempted_moves"><code class="docutils literal notranslate"><span class="pre">MonteCarloResult.attempted_moves</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloResult.accepted_moves"><code class="docutils literal notranslate"><span class="pre">MonteCarloResult.accepted_moves</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_monte_carlo.monte_carlo_vacancy_search"><code class="docutils literal notranslate"><span class="pre">monte_carlo_vacancy_search()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.vacancy_analysis">dopingflow.vacancy_analysis module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.enabled"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig.enabled</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.oxygen_reference_mode"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig.oxygen_reference_mode</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.oxygen_reference_file"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig.oxygen_reference_file</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.oxygen_reference_structure"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig.oxygen_reference_structure</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.oxygen_reference_relax"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig.oxygen_reference_relax</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.mu_O_reference_eV"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig.mu_O_reference_eV</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.allow_unverified_oxygen_reference"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig.allow_unverified_oxygen_reference</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.delta_mu_O_min_eV"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig.delta_mu_O_min_eV</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.delta_mu_O_max_eV"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig.delta_mu_O_max_eV</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.delta_mu_O_points_eV"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig.delta_mu_O_points_eV</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.thermodynamic_tolerance_eV"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig.thermodynamic_tolerance_eV</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.analysis_energy_source"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig.analysis_energy_source</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.exclude_unconverged"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig.exclude_unconverged</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.pressure_mapping"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig.pressure_mapping</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.temperatures_K"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig.temperatures_K</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.standard_oxygen_pressure_bar"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig.standard_oxygen_pressure_bar</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.log10_pO2_min_bar"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig.log10_pO2_min_bar</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.log10_pO2_max_bar"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig.log10_pO2_max_bar</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.log10_pO2_step"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig.log10_pO2_step</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.oxygen_standard_state_mode"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig.oxygen_standard_state_mode</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.oxygen_standard_state_temperatures_K"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig.oxygen_standard_state_temperatures_K</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.oxygen_standard_state_delta_mu_eV_per_O"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig.oxygen_standard_state_delta_mu_eV_per_O</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.parse_vacancy_analysis_config"><code class="docutils literal notranslate"><span class="pre">parse_vacancy_analysis_config()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.parse_oxygen_reference_file"><code class="docutils literal notranslate"><span class="pre">parse_oxygen_reference_file()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.resolve_oxygen_reference"><code class="docutils literal notranslate"><span class="pre">resolve_oxygen_reference()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.format_actual_composition_key"><code class="docutils literal notranslate"><span class="pre">format_actual_composition_key()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.exact_stability_intervals"><code class="docutils literal notranslate"><span class="pre">exact_stability_intervals()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.oxygen_pressure_delta_mu_eV_per_O"><code class="docutils literal notranslate"><span class="pre">oxygen_pressure_delta_mu_eV_per_O()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.inverse_oxygen_pressure_log10"><code class="docutils literal notranslate"><span class="pre">inverse_oxygen_pressure_log10()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.nist_o2_standard_state_delta_mu_eV_per_O"><code class="docutils literal notranslate"><span class="pre">nist_o2_standard_state_delta_mu_eV_per_O()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.oxygen_standard_state_delta_mu"><code class="docutils literal notranslate"><span class="pre">oxygen_standard_state_delta_mu()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.analyze_vacancy_thermodynamics"><code class="docutils literal notranslate"><span class="pre">analyze_vacancy_thermodynamics()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_analysis.analyze_vacancies_database"><code class="docutils literal notranslate"><span class="pre">analyze_vacancies_database()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.vacancy_static_thermodynamics">dopingflow.vacancy_static_thermodynamics module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_static_thermodynamics.StaticVacancyThermodynamicsConfig"><code class="docutils literal notranslate"><span class="pre">StaticVacancyThermodynamicsConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_static_thermodynamics.StaticVacancyThermodynamicsConfig.requested_oxygen_reference_mode"><code class="docutils literal notranslate"><span class="pre">StaticVacancyThermodynamicsConfig.requested_oxygen_reference_mode</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_static_thermodynamics.StaticVacancyThermodynamicsConfig.oxygen_calibration_experimental_source"><code class="docutils literal notranslate"><span class="pre">StaticVacancyThermodynamicsConfig.oxygen_calibration_experimental_source</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_static_thermodynamics.StaticVacancyThermodynamicsConfig.oxygen_calibration_experimental_data"><code class="docutils literal notranslate"><span class="pre">StaticVacancyThermodynamicsConfig.oxygen_calibration_experimental_data</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_static_thermodynamics.StaticVacancyThermodynamicsConfig.oxygen_calibration_dataset_cache_dir"><code class="docutils literal notranslate"><span class="pre">StaticVacancyThermodynamicsConfig.oxygen_calibration_dataset_cache_dir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_static_thermodynamics.StaticVacancyThermodynamicsConfig.oxygen_calibration_min_references"><code class="docutils literal notranslate"><span class="pre">StaticVacancyThermodynamicsConfig.oxygen_calibration_min_references</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_static_thermodynamics.StaticVacancyThermodynamicsConfig.oxygen_calibration_include_host_oxide"><code class="docutils literal notranslate"><span class="pre">StaticVacancyThermodynamicsConfig.oxygen_calibration_include_host_oxide</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_static_thermodynamics.StaticVacancyThermodynamicsConfig.solid_configurational_entropy"><code class="docutils literal notranslate"><span class="pre">StaticVacancyThermodynamicsConfig.solid_configurational_entropy</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_static_thermodynamics.VacancyAnalysisConfig"><code class="docutils literal notranslate"><span class="pre">VacancyAnalysisConfig</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_static_thermodynamics.analyze_static_vacancy_thermodynamics"><code class="docutils literal notranslate"><span class="pre">analyze_static_vacancy_thermodynamics()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_static_thermodynamics.analyze_vacancies_database_static"><code class="docutils literal notranslate"><span class="pre">analyze_vacancies_database_static()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_static_thermodynamics.exact_stability_intervals"><code class="docutils literal notranslate"><span class="pre">exact_stability_intervals()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_static_thermodynamics.ideal_vacancy_configurational_entropy_eV_per_K"><code class="docutils literal notranslate"><span class="pre">ideal_vacancy_configurational_entropy_eV_per_K()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_static_thermodynamics.inverse_oxygen_pressure_log10"><code class="docutils literal notranslate"><span class="pre">inverse_oxygen_pressure_log10()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_static_thermodynamics.nist_o2_standard_state_delta_mu_eV_per_O"><code class="docutils literal notranslate"><span class="pre">nist_o2_standard_state_delta_mu_eV_per_O()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_static_thermodynamics.oxygen_pressure_delta_mu_eV_per_O"><code class="docutils literal notranslate"><span class="pre">oxygen_pressure_delta_mu_eV_per_O()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_static_thermodynamics.oxygen_standard_state_delta_mu"><code class="docutils literal notranslate"><span class="pre">oxygen_standard_state_delta_mu()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_static_thermodynamics.parse_static_vacancy_thermodynamics_config"><code class="docutils literal notranslate"><span class="pre">parse_static_vacancy_thermodynamics_config()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.vacancy_static_thermodynamics.parse_vacancy_analysis_config"><code class="docutils literal notranslate"><span class="pre">parse_vacancy_analysis_config()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.utils.symmetry">dopingflow.utils.symmetry module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.utils.symmetry.build_sublattice_symmetry_permutations"><code class="docutils literal notranslate"><span class="pre">build_sublattice_symmetry_permutations()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dopingflow.html#dopingflow.utils.symmetry.canonical_occupancy_key"><code class="docutils literal notranslate"><span class="pre">canonical_occupancy_key()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.utils.parallel">dopingflow.utils.parallel module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow.utils.pymatgen_helpers">dopingflow.utils.pymatgen_helpers module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dopingflow.html#module-dopingflow">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../examples/vacancies.html" class="btn btn-neutral float-left" title="Staged vacancy Monte Carlo example" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="dopingflow.html" class="btn btn-neutral float-right" title="dopingflow package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,1762 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Index &mdash; dopingflow documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=42d1b3bd"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="#" />
+    <link rel="search" title="Search" href="search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html">
+            
+              <img src="_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="workflow_overview.html">Workflow Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation_and_usage.html">Installation, Usage, and Outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="required_inputs.html">Required Input Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="input_file.html">Input File Specification (input.toml)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="input_file_phase_diagram.html">Phase-Diagram Input Options</a></li>
+<li class="toctree-l1"><a class="reference internal" href="input_file_vacancy_correction.html">Vacancy M0/M1 Input Options</a></li>
+<li class="toctree-l1"><a class="reference internal" href="input_file_vacancy_mc.html">Staged Vacancy Monte Carlo Configuration</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="methods/references.html">0. Reference Energy Construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/oxygen_thermodynamics.html">Oxygen Energy Convention and Chemical Potential</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/oxygen_calibration.html">Oxygen Reference Calibration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/generation.html">1. Structure Generation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/sequential.html">Sequential Doping Workflow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/scanning.html">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/filtering.html">4. Relaxed-Candidate Filtering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/bandgap.html">5. Bandgap Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/energy_corrections.html">Backend-Specific Energy Corrections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/formation_energy.html">6. Formation Energy Evaluation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/database.html">7. Database Collection</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/alloy_hull.html">Restricted One-Dimensional Alloy Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/phase_diagram.html">Phase Diagram and Energy Above Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/vacancy_energy_above_hull.html">Vacancy Energy Above Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/vacancy_energy_correction.html">M0/M1 Correction for Vacancy Thermodynamics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/vacancies.html">Oxygen-Vacancy Workflow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/oxidation_states.html">Oxidation-state analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/surfaces.html">Surface Generation and Relaxation</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="examples/explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/explicit_single_oxides.html">Explicit Example — Single Target Composition using Oxide References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/multi_reference_oxide.html">Multiple Oxide References and Relative Energies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/sequential_workflow.html">Sequential Example — Gradual Sb Doping</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/vacancies.html">Staged vacancy Monte Carlo example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api/modules.html">dopingflow</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Index</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+
+<h1 id="index">Index</h1>
+
+<div class="genindex-jumpbox">
+ <a href="#A"><strong>A</strong></a>
+ | <a href="#B"><strong>B</strong></a>
+ | <a href="#C"><strong>C</strong></a>
+ | <a href="#D"><strong>D</strong></a>
+ | <a href="#E"><strong>E</strong></a>
+ | <a href="#F"><strong>F</strong></a>
+ | <a href="#G"><strong>G</strong></a>
+ | <a href="#H"><strong>H</strong></a>
+ | <a href="#I"><strong>I</strong></a>
+ | <a href="#K"><strong>K</strong></a>
+ | <a href="#L"><strong>L</strong></a>
+ | <a href="#M"><strong>M</strong></a>
+ | <a href="#N"><strong>N</strong></a>
+ | <a href="#O"><strong>O</strong></a>
+ | <a href="#P"><strong>P</strong></a>
+ | <a href="#R"><strong>R</strong></a>
+ | <a href="#S"><strong>S</strong></a>
+ | <a href="#T"><strong>T</strong></a>
+ | <a href="#U"><strong>U</strong></a>
+ | <a href="#V"><strong>V</strong></a>
+ | <a href="#W"><strong>W</strong></a>
+ | <a href="#X"><strong>X</strong></a>
+ 
+</div>
+<h2 id="A">A</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloResult.accepted_moves">accepted_moves (dopingflow.vacancy_monte_carlo.MonteCarloResult attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.calibration_expansion.CalibrationDiscovery.accepted_records">accepted_records (dopingflow.calibration_expansion.CalibrationDiscovery attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionModel.activation_input_hash">activation_input_hash (dopingflow.corrections.CorrectionModel attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.allow_element_terms">allow_element_terms (dopingflow.corrections.CorrectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.hardware.HardwareConfig.allow_gpu_batching">allow_gpu_batching (dopingflow.hardware.HardwareConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.allow_legacy_candidate_provenance">allow_legacy_candidate_provenance (dopingflow.corrections.CorrectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.allow_phase_mismatch">allow_phase_mismatch (dopingflow.corrections.CorrectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.allow_unverified_oxygen_reference">allow_unverified_oxygen_reference (dopingflow.vacancy_analysis.VacancyAnalysisConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.generate.GenerateConfig.allowed_totals">allowed_totals (dopingflow.generate.GenerateConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.cli.alloy_hull_cmd">alloy_hull_cmd() (in module dopingflow.cli)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.analysis">analysis (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.analysis_energy_source">analysis_energy_source (dopingflow.vacancy_analysis.VacancyAnalysisConfig attribute)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_static_thermodynamics.analyze_static_vacancy_thermodynamics">analyze_static_vacancy_thermodynamics() (in module dopingflow.vacancy_static_thermodynamics)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.analyze_vacancies_database">analyze_vacancies_database() (in module dopingflow.vacancy_analysis)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_static_thermodynamics.analyze_vacancies_database_static">analyze_vacancies_database_static() (in module dopingflow.vacancy_static_thermodynamics)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.analyze_vacancy_thermodynamics">analyze_vacancy_thermodynamics() (in module dopingflow.vacancy_analysis)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.angle_tolerance">angle_tolerance (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.formation.FormationConfig.anion_species">anion_species (dopingflow.formation.FormationConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.scan.ScanConfig.anion_species">(dopingflow.scan.ScanConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_monte_carlo.annealing_temperature">annealing_temperature() (in module dopingflow.vacancy_monte_carlo)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionModel.applicability_signature">applicability_signature (dopingflow.corrections.CorrectionModel attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionApplication.applied">applied (dopingflow.corrections.CorrectionApplication attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.apply_energy_correction">apply_energy_correction() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloResult.attempted_moves">attempted_moves (dopingflow.vacancy_monte_carlo.MonteCarloResult attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.auto_fetch_phase_structures">auto_fetch_phase_structures (dopingflow.corrections.CorrectionConfig attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="B">B</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig.backend">backend (dopingflow.refs.RefConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.relax.RelaxConfig.backend">(dopingflow.relax.RelaxConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.scan.ScanConfig.backend">(dopingflow.scan.ScanConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.backend">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.backend_runtime_provenance">backend_runtime_provenance() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionModel.backend_signature">backend_signature (dopingflow.corrections.CorrectionModel attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.backend_signature_from_reference">backend_signature_from_reference() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.backend_slug">backend_slug() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.hardware.HardwareConfig.bandgap_batch_size">bandgap_batch_size (dopingflow.hardware.HardwareConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.cli.bandgap_cmd">bandgap_cmd() (in module dopingflow.cli)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.bandgap.BandgapConfig">BandgapConfig (class in dopingflow.bandgap)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.base_method_result">base_method_result() (in module dopingflow.oxidation)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.generate.GenerateConfig.base_poscar">base_poscar (dopingflow.generate.GenerateConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.bandgap.BandgapConfig.batch_size">batch_size (dopingflow.bandgap.BandgapConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloResult.best_energy_eV">best_energy_eV (dopingflow.vacancy_monte_carlo.MonteCarloResult attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloResult.best_step">best_step (dopingflow.vacancy_monte_carlo.MonteCarloResult attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.ml_backends.build_ase_calculator">build_ase_calculator() (in module dopingflow.ml_backends)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.generate.build_incremental_structure_from_counts">build_incremental_structure_from_counts() (in module dopingflow.generate)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.ml_relaxation.build_relaxation_target">build_relaxation_target() (in module dopingflow.ml_relaxation)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.generate.build_structure_from_counts">build_structure_from_counts() (in module dopingflow.generate)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.utils.symmetry.build_sublattice_symmetry_permutations">build_sublattice_symmetry_permutations() (in module dopingflow.utils.symmetry)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="C">C</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.cached_model">cached_model() (in module dopingflow.oxidation)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.calibration_expansion.CachedOptimadeStructure">CachedOptimadeStructure (class in dopingflow.calibration_expansion)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionModel.calibration_formulas">calibration_formulas (dopingflow.corrections.CorrectionModel attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.calibration_manifest">calibration_manifest (dopingflow.corrections.CorrectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.calibration_selection">calibration_selection (dopingflow.corrections.CorrectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.calibration_expansion.CalibrationDiscovery">CalibrationDiscovery (class in dopingflow.calibration_expansion)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.formation.CandidateRecord.candidate">candidate (dopingflow.formation.CandidateRecord attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.formation.CandidateRecord.candidate_dir">candidate_dir (dopingflow.formation.CandidateRecord attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.formation.CandidateRecord">CandidateRecord (class in dopingflow.formation)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloResult.candidates">candidates (dopingflow.vacancy_monte_carlo.MonteCarloResult attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.utils.symmetry.canonical_occupancy_key">canonical_occupancy_key() (in module dopingflow.utils.symmetry)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.relax.RelaxConfig.cell_filter">cell_filter (dopingflow.relax.RelaxConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.cell_filter">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.charge_scenarios_for_count">charge_scenarios_for_count() (in module dopingflow.vacancies)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.ml_backends.check_backend_dependency">check_backend_dependency() (in module dopingflow.ml_backends)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.scan.ScanConfig.chunksize">chunksize (dopingflow.scan.ScanConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.chunksize">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.generate.GenerateConfig.clean_outdir">clean_outdir (dopingflow.generate.GenerateConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.clear_model_cache">clear_model_cache() (in module dopingflow.oxidation)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.FamilyFit.coefficient_uncertainties_eV_per_term">coefficient_uncertainties_eV_per_term (dopingflow.correction_model_selection.FamilyFit attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionModel.coefficient_uncertainties_eV_per_term">(dopingflow.corrections.CorrectionModel attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.FamilyFit.coefficients_eV_per_term">coefficients_eV_per_term (dopingflow.correction_model_selection.FamilyFit attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionModel.coefficients_eV_per_term">(dopingflow.corrections.CorrectionModel attribute)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.cli.collect_cmd">collect_cmd() (in module dopingflow.cli)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.combine_feature_vectors">combine_feature_vectors() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.generate.composition_tag">composition_tag() (in module dopingflow.generate)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.generate.GenerateConfig.compositions">compositions (dopingflow.generate.GenerateConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.FamilyFit.condition_number">condition_number (dopingflow.correction_model_selection.FamilyFit attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.hardware.configure_tensorflow">configure_tensorflow() (in module dopingflow.hardware)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.content_hash">content_hash() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.correction_activation_hash">correction_activation_hash() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionApplication.correction_eV">correction_eV (dopingflow.corrections.CorrectionApplication attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.correction_feature_vector">correction_feature_vector() (in module dopingflow.correction_model_selection)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.correction_terms">correction_terms (dopingflow.corrections.CorrectionConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionModel.correction_terms">(dopingflow.corrections.CorrectionModel attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionApplication">CorrectionApplication (class in dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig">CorrectionConfig (class in dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionModel">CorrectionModel (class in dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.cli.corrections_fit_cmd">corrections_fit_cmd() (in module dopingflow.cli)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.count_mode">count_mode (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.formation.CandidateRecord.counts">counts (dopingflow.formation.CandidateRecord attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.FamilyFit.covariance_eV2">covariance_eV2 (dopingflow.correction_model_selection.FamilyFit attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionModel.covariance_eV2">(dopingflow.corrections.CorrectionModel attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.bandgap.BandgapConfig.cutoff">cutoff (dopingflow.bandgap.BandgapConfig attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="D">D</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.ExperimentalRecord.dataset">dataset (dopingflow.corrections.ExperimentalRecord attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.dataset_cache_dir">dataset_cache_dir (dopingflow.corrections.CorrectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.collect.DBConfig">DBConfig (class in dopingflow.collect)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.delta_mu_O_max_eV">delta_mu_O_max_eV (dopingflow.vacancy_analysis.VacancyAnalysisConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.delta_mu_O_min_eV">delta_mu_O_min_eV (dopingflow.vacancy_analysis.VacancyAnalysisConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.delta_mu_O_points_eV">delta_mu_O_points_eV (dopingflow.vacancy_analysis.VacancyAnalysisConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.bandgap.BandgapConfig.device">device (dopingflow.bandgap.BandgapConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.hardware.HardwareConfig.device">(dopingflow.hardware.HardwareConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig.device">(dopingflow.refs.RefConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.relax.RelaxConfig.device">(dopingflow.relax.RelaxConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.scan.ScanConfig.device">(dopingflow.scan.ScanConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.device">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.OxidationConfig.dft_followup_candidate_limit">dft_followup_candidate_limit (dopingflow.oxidation.OxidationConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.OxidationConfig.dft_followup_enabled">dft_followup_enabled (dopingflow.oxidation.OxidationConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.OxidationConfig.dft_followup_execute">dft_followup_execute (dopingflow.oxidation.OxidationConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.OxidationConfig.dft_followup_methods">dft_followup_methods (dopingflow.oxidation.OxidationConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.discover_oxidation_targets">discover_oxidation_targets() (in module dopingflow.oxidation)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.calibration_expansion.discover_phase_resolved_binary_oxides">discover_phase_resolved_binary_oxides() (in module dopingflow.calibration_expansion)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.calibration_expansion.discover_phase_resolved_oxides">discover_phase_resolved_oxides() (in module dopingflow.calibration_expansion)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.discover_selected_parents">discover_selected_parents() (in module dopingflow.vacancies)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.ExperimentalRecord.doi">doi (dopingflow.corrections.ExperimentalRecord attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.formation.CandidateRecord.dopant_counts">dopant_counts (dopingflow.formation.CandidateRecord attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.generate.GenerateConfig.dopants">dopants (dopingflow.generate.GenerateConfig attribute)</a>
+</li>
+      <li>
+    dopingflow
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.bandgap
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.bandgap">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.calibration_expansion
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.calibration_expansion">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.cli
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.cli">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.collect
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.collect">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.correction_calibration
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.correction_calibration">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.correction_model_selection
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.correction_model_selection">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.corrections
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.corrections">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.filtering
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.filtering">module</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li>
+    dopingflow.formation
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.formation">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.generate
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.generate">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.hardware
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.hardware">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.logging
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.logging">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.ml_backends
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.ml_backends">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.ml_relaxation
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.ml_relaxation">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.oxidation
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.oxidation">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.oxidation_dft
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.oxidation_dft">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.oxidation_ml
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.oxidation_ml">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.oxidation_structural
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.oxidation_structural">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.refs
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.refs">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.relax
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.relax">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.scan
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.scan">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.utils.io
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.utils.io">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.utils.parallel
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.utils.parallel">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.utils.pymatgen_helpers
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.utils.pymatgen_helpers">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.utils.symmetry
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.utils.symmetry">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.vacancies
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.vacancies">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.vacancy_analysis
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.vacancy_analysis">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.vacancy_monte_carlo
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.vacancy_monte_carlo">module</a>
+</li>
+      </ul></li>
+      <li>
+    dopingflow.vacancy_static_thermodynamics
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow.vacancy_static_thermodynamics">module</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+<h2 id="E">E</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.formation.CandidateRecord.E_doped">E_doped (dopingflow.formation.CandidateRecord attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.enabled">enabled (dopingflow.corrections.CorrectionConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.oxidation.OxidationConfig.enabled">(dopingflow.oxidation.OxidationConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.enabled">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.enabled">(dopingflow.vacancy_analysis.VacancyAnalysisConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloCandidate.energy_eV">energy_eV (dopingflow.vacancy_monte_carlo.MonteCarloCandidate attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.energy_normalization">energy_normalization (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.formation.CandidateRecord.energy_provenance">energy_provenance (dopingflow.formation.CandidateRecord attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.generate.enumerate_compositions">enumerate_compositions() (in module dopingflow.generate)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.enumerate_vacancy_orbits">enumerate_vacancy_orbits() (in module dopingflow.vacancies)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.enumeration_mode">enumeration_mode (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.evaluate_feature_vector">evaluate_feature_vector() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.exact_stability_intervals">exact_stability_intervals() (in module dopingflow.vacancy_analysis)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.vacancy_static_thermodynamics.exact_stability_intervals">(in module dopingflow.vacancy_static_thermodynamics)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.exclude_polyanions">exclude_polyanions (dopingflow.corrections.CorrectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.exclude_unconverged">exclude_unconverged (dopingflow.vacancy_analysis.VacancyAnalysisConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.execute_method">execute_method() (in module dopingflow.oxidation)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.experimental_data">experimental_data (dopingflow.corrections.CorrectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionModel.experimental_dataset">experimental_dataset (dopingflow.corrections.CorrectionModel attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionModel.experimental_dataset_version">experimental_dataset_version (dopingflow.corrections.CorrectionModel attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.experimental_source">experimental_source (dopingflow.corrections.CorrectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.ExperimentalRecord">ExperimentalRecord (class in dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.extra_vacancies">extra_vacancies (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="F">F</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.OxidationConfig.fail_fast">fail_fast (dopingflow.oxidation.OxidationConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.FamilyFit.family">family (dopingflow.correction_model_selection.FamilyFit attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.FamilyFit">FamilyFit (class in dopingflow.correction_model_selection)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionApplication.feature_vector">feature_vector (dopingflow.corrections.CorrectionApplication attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.feature_vector">feature_vector() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.calibration_expansion.fetch_optimade_structure">fetch_optimade_structure() (in module dopingflow.calibration_expansion)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.cli.filter_cmd">filter_cmd() (in module dopingflow.cli)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.filtering.FilterConfig">FilterConfig (class in dopingflow.filtering)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.ml_relaxation.final_fmax">final_fmax() (in module dopingflow.ml_relaxation)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionModel.fit_id">fit_id (dopingflow.corrections.CorrectionModel attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionModel.fit_input_hash">fit_input_hash (dopingflow.corrections.CorrectionModel attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.fit_linear_correction_model">fit_linear_correction_model() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionModel.fit_metrics">fit_metrics (dopingflow.corrections.CorrectionModel attribute)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.FamilyFit.fitted_corrections_eV_per_formula">fitted_corrections_eV_per_formula (dopingflow.correction_model_selection.FamilyFit attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig.fmax">fmax (dopingflow.refs.RefConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.relax.RelaxConfig.fmax">(dopingflow.relax.RelaxConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.fmax">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.formation.CandidateRecord.folder">folder (dopingflow.formation.CandidateRecord attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.format_actual_composition_key">format_actual_composition_key() (in module dopingflow.vacancy_analysis)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.cli.formation_cmd">formation_cmd() (in module dopingflow.cli)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.ExperimentalRecord.formation_enthalpy_eV_per_atom">formation_enthalpy_eV_per_atom (dopingflow.corrections.ExperimentalRecord attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.ExperimentalRecord.formation_enthalpy_eV_per_formula">formation_enthalpy_eV_per_formula (dopingflow.corrections.ExperimentalRecord attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.formation.FormationConfig">FormationConfig (class in dopingflow.formation)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.ExperimentalRecord.formula">formula (dopingflow.corrections.ExperimentalRecord attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.FamilyFit.formulas">formulas (dopingflow.correction_model_selection.FamilyFit attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.calibration_expansion.CachedOptimadeStructure.from_cache">from_cache (dopingflow.calibration_expansion.CachedOptimadeStructure attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionModel.from_dict">from_dict() (dopingflow.corrections.CorrectionModel class method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="G">G</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig.gas_dir">gas_dir (dopingflow.refs.RefConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig.gas_ref">gas_ref (dopingflow.refs.RefConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.cli.generate_cmd">generate_cmd() (in module dopingflow.cli)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.generate.GenerateConfig">GenerateConfig (class in dopingflow.generate)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.ml_backends.get_mace_model_choices">get_mace_model_choices() (in module dopingflow.ml_backends)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.ml_relaxation.get_optimizer_class">get_optimizer_class() (in module dopingflow.ml_relaxation)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.bandgap.BandgapConfig.gpu_id">gpu_id (dopingflow.bandgap.BandgapConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.hardware.HardwareConfig.gpu_id">(dopingflow.hardware.HardwareConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig.gpu_id">(dopingflow.refs.RefConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.relax.RelaxConfig.gpu_id">(dopingflow.relax.RelaxConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.scan.ScanConfig.gpu_id">(dopingflow.scan.ScanConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.gpu_id">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+<h2 id="H">H</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.hardware.HardwareConfig">HardwareConfig (class in dopingflow.hardware)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig.host">host (dopingflow.refs.RefConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig.host_dir">host_dir (dopingflow.refs.RefConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.host_oxidation_state">host_oxidation_state (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.formation.FormationConfig.host_species">host_species (dopingflow.formation.FormationConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.generate.GenerateConfig.host_species">(dopingflow.generate.GenerateConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.scan.ScanConfig.host_species">(dopingflow.scan.ScanConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.host_species">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+<h2 id="I">I</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_static_thermodynamics.ideal_vacancy_configurational_entropy_eV_per_K">ideal_vacancy_configurational_entropy_eV_per_K() (in module dopingflow.vacancy_static_thermodynamics)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.impute_missing_uncertainties">impute_missing_uncertainties() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.OxidationConfig.include_oxygen_vacancies">include_oxygen_vacancies (dopingflow.oxidation.OxidationConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.include_parent_reference">include_parent_reference (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.OxidationConfig.include_vacancy_free">include_vacancy_free (dopingflow.oxidation.OxidationConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.generate.GenerateConfig.incremental">incremental (dopingflow.generate.GenerateConfig attribute)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.infer_correction_target_elements">infer_correction_target_elements() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.calibration_expansion.infer_scoped_elements">infer_scoped_elements() (in module dopingflow.calibration_expansion)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.infer_workflow_target_elements">infer_workflow_target_elements() (in module dopingflow.correction_model_selection)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.inverse_oxygen_pressure_log10">inverse_oxygen_pressure_log10() (in module dopingflow.vacancy_analysis)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.vacancy_static_thermodynamics.inverse_oxygen_pressure_log10">(in module dopingflow.vacancy_static_thermodynamics)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.calibration_expansion.is_generic_phase">is_generic_phase() (in module dopingflow.calibration_expansion)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="K">K</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.StructureTarget.kind">kind (dopingflow.oxidation.StructureTarget attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="L">L</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.generate.GenerateConfig.levels">levels (dopingflow.generate.GenerateConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.ExperimentalRecord.likely_mpid">likely_mpid (dopingflow.corrections.ExperimentalRecord attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.load_active_correction_model">load_active_correction_model() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.load_correction_model">load_correction_model() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.load_custom_experimental_dataset">load_custom_experimental_dataset() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.load_experimental_dataset">load_experimental_dataset() (in module dopingflow.corrections)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.load_kingsbury_dataset">load_kingsbury_dataset() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.log10_pO2_max_bar">log10_pO2_max_bar (dopingflow.vacancy_analysis.VacancyAnalysisConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.log10_pO2_min_bar">log10_pO2_min_bar (dopingflow.vacancy_analysis.VacancyAnalysisConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.log10_pO2_step">log10_pO2_step (dopingflow.vacancy_analysis.VacancyAnalysisConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.FamilyFit.loo_mae_eV_per_atom">loo_mae_eV_per_atom (dopingflow.correction_model_selection.FamilyFit attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.FamilyFit.loo_predictions_eV_per_formula">loo_predictions_eV_per_formula (dopingflow.correction_model_selection.FamilyFit attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.FamilyFit.loo_rmse_eV_per_atom">loo_rmse_eV_per_atom (dopingflow.correction_model_selection.FamilyFit attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="M">M</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.ModelSelectionResult.m0_model">m0_model (dopingflow.correction_model_selection.ModelSelectionResult attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.m1_elements">m1_elements (dopingflow.corrections.CorrectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.ModelSelectionResult.m1_model">m1_model (dopingflow.correction_model_selection.ModelSelectionResult attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.map_child_to_parent_sites">map_child_to_parent_sites() (in module dopingflow.oxidation)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.map_parent_sites">map_parent_sites() (in module dopingflow.vacancies)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.OxidationConfig.mapping_tolerance">mapping_tolerance (dopingflow.oxidation.OxidationConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.mapping_tolerance">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionApplication.matched_terms">matched_terms (dopingflow.corrections.CorrectionApplication attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.calibration_expansion.CachedOptimadeStructure.material_id">material_id (dopingflow.calibration_expansion.CachedOptimadeStructure attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.max_calculated_e_above_hull_eV_per_atom">max_calculated_e_above_hull_eV_per_atom (dopingflow.corrections.CorrectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.filtering.FilterConfig.max_candidates">max_candidates (dopingflow.filtering.FilterConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.ModelSelectionConfig.max_condition_number">max_condition_number (dopingflow.correction_model_selection.ModelSelectionConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.max_condition_number">(dopingflow.corrections.CorrectionConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.generate.GenerateConfig.max_dopants_total">max_dopants_total (dopingflow.generate.GenerateConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.scan.ScanConfig.max_enum">max_enum (dopingflow.scan.ScanConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.max_exact_raw_configs">max_exact_raw_configs (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.max_exact_unique_configs">max_exact_unique_configs (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.FamilyFit.max_loo_condition_number">max_loo_condition_number (dopingflow.correction_model_selection.FamilyFit attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.bandgap.BandgapConfig.max_neighbors">max_neighbors (dopingflow.bandgap.BandgapConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.max_relative_experimental_uncertainty">max_relative_experimental_uncertainty (dopingflow.corrections.CorrectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig.max_steps">max_steps (dopingflow.refs.RefConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.relax.RelaxConfig.max_steps">(dopingflow.relax.RelaxConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.max_steps">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.scan.ScanConfig.max_unique">max_unique (dopingflow.scan.ScanConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.max_vacancies_cap">max_vacancies_cap (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_annealing">mc_annealing (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_annealing_hold_steps">mc_annealing_hold_steps (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_annealing_steps">mc_annealing_steps (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_cation_move_weight">mc_cation_move_weight (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_energy_window_eV">mc_energy_window_eV (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_improvement_tolerance_eV">mc_improvement_tolerance_eV (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_initial_temperature_K">mc_initial_temperature_K (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_max_steps">mc_max_steps (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_patience">mc_patience (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_run_mode">mc_run_mode (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_temperature_K">mc_temperature_K (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.mc_vacancy_move_weight">mc_vacancy_move_weight (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.merge_experimental_datasets">merge_experimental_datasets() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.StructureTarget.metadata">metadata (dopingflow.oxidation.StructureTarget attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig.metal_ref">metal_ref (dopingflow.refs.RefConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig.metals_dir">metals_dir (dopingflow.refs.RefConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionModel.method">method (dopingflow.corrections.CorrectionModel attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.OxidationConfig.methods">methods (dopingflow.oxidation.OxidationConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.min_cv_improvement_eV_per_atom">min_cv_improvement_eV_per_atom (dopingflow.corrections.CorrectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.ModelSelectionConfig.min_cv_rmse_improvement_eV_per_atom">min_cv_rmse_improvement_eV_per_atom (dopingflow.correction_model_selection.ModelSelectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.min_degrees_of_freedom">min_degrees_of_freedom (dopingflow.corrections.CorrectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.min_element_compounds">min_element_compounds (dopingflow.corrections.CorrectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.min_element_stoichiometries">min_element_stoichiometries (dopingflow.corrections.CorrectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.ModelSelectionConfig.min_independent_cation_support">min_independent_cation_support (dopingflow.correction_model_selection.ModelSelectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.ModelSelectionConfig.min_m0_compounds">min_m0_compounds (dopingflow.correction_model_selection.ModelSelectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.min_term_support">min_term_support (dopingflow.corrections.CorrectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.ModelSelectionConfig.min_unique_oxygen_ratios">min_unique_oxygen_ratios (dopingflow.correction_model_selection.ModelSelectionConfig attribute)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.minimum_vacancy_distance">minimum_vacancy_distance (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.filtering.FilterConfig.mode">mode (dopingflow.filtering.FilterConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.generate.GenerateConfig.mode">(dopingflow.generate.GenerateConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.scan.ScanConfig.mode">(dopingflow.scan.ScanConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig.model">model (dopingflow.refs.RefConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.relax.RelaxConfig.model">(dopingflow.relax.RelaxConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.scan.ScanConfig.model">(dopingflow.scan.ScanConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.model">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.model_directory">model_directory() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.model_family">model_family (dopingflow.corrections.CorrectionConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionModel.model_family">(dopingflow.corrections.CorrectionModel attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.model_path">model_path() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.ModelSelectionConfig">ModelSelectionConfig (class in dopingflow.correction_model_selection)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.ModelSelectionResult">ModelSelectionResult (class in dopingflow.correction_model_selection)</a>
+</li>
+      <li>
+    module
+
+      <ul>
+        <li><a href="api/dopingflow.html#module-dopingflow">dopingflow</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.bandgap">dopingflow.bandgap</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.calibration_expansion">dopingflow.calibration_expansion</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.cli">dopingflow.cli</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.collect">dopingflow.collect</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.correction_calibration">dopingflow.correction_calibration</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.correction_model_selection">dopingflow.correction_model_selection</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.corrections">dopingflow.corrections</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.filtering">dopingflow.filtering</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.formation">dopingflow.formation</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.generate">dopingflow.generate</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.hardware">dopingflow.hardware</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.logging">dopingflow.logging</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.ml_backends">dopingflow.ml_backends</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.ml_relaxation">dopingflow.ml_relaxation</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.oxidation">dopingflow.oxidation</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.oxidation_dft">dopingflow.oxidation_dft</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.oxidation_ml">dopingflow.oxidation_ml</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.oxidation_structural">dopingflow.oxidation_structural</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.refs">dopingflow.refs</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.relax">dopingflow.relax</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.scan">dopingflow.scan</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.utils.io">dopingflow.utils.io</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.utils.parallel">dopingflow.utils.parallel</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.utils.pymatgen_helpers">dopingflow.utils.pymatgen_helpers</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.utils.symmetry">dopingflow.utils.symmetry</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.vacancies">dopingflow.vacancies</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.vacancy_analysis">dopingflow.vacancy_analysis</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.vacancy_monte_carlo">dopingflow.vacancy_monte_carlo</a>
+</li>
+        <li><a href="api/dopingflow.html#module-dopingflow.vacancy_static_thermodynamics">dopingflow.vacancy_static_thermodynamics</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_monte_carlo.monte_carlo_vacancy_search">monte_carlo_vacancy_search() (in module dopingflow.vacancy_monte_carlo)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloCandidate">MonteCarloCandidate (class in dopingflow.vacancy_monte_carlo)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloResult">MonteCarloResult (class in dopingflow.vacancy_monte_carlo)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloCandidate.move">move (dopingflow.vacancy_monte_carlo.MonteCarloCandidate attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.mu_O_reference_eV">mu_O_reference_eV (dopingflow.vacancy_analysis.VacancyAnalysisConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig.muO_shift_ev">muO_shift_ev (dopingflow.refs.RefConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.generate.GenerateConfig.must_include">must_include (dopingflow.generate.GenerateConfig attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="N">N</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.FamilyFit.n_observations">n_observations (dopingflow.correction_model_selection.FamilyFit attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.calibration_expansion.CachedOptimadeStructure.n_sites">n_sites (dopingflow.calibration_expansion.CachedOptimadeStructure attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.StructureTarget.n_vacancies">n_vacancies (dopingflow.oxidation.StructureTarget attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.bandgap.BandgapConfig.n_workers">n_workers (dopingflow.bandgap.BandgapConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.relax.RelaxConfig.n_workers">(dopingflow.relax.RelaxConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.scan.ScanConfig.n_workers">(dopingflow.scan.ScanConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.n_workers">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.nist_o2_standard_state_delta_mu_eV_per_O">nist_o2_standard_state_delta_mu_eV_per_O() (in module dopingflow.vacancy_analysis)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.vacancy_static_thermodynamics.nist_o2_standard_state_delta_mu_eV_per_O">(in module dopingflow.vacancy_static_thermodynamics)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.formation.FormationConfig.normalize">normalize (dopingflow.formation.FormationConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.ml_backends.normalize_backend_config">normalize_backend_config() (in module dopingflow.ml_backends)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.normalize_correction_term">normalize_correction_term() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.generate.normalize_incremental_counts">normalize_incremental_counts() (in module dopingflow.generate)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.generate.normalize_to_counts_and_effective">normalize_to_counts_and_effective() (in module dopingflow.generate)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.ExperimentalRecord.notes">notes (dopingflow.corrections.ExperimentalRecord attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="O">O</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.FamilyFit.observed_corrections_eV_per_formula">observed_corrections_eV_per_formula (dopingflow.correction_model_selection.FamilyFit attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig.omp_threads">omp_threads (dopingflow.refs.RefConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.relax.RelaxConfig.omp_threads">(dopingflow.relax.RelaxConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.omp_threads">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.optimade_base_url">optimade_base_url (dopingflow.corrections.CorrectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig.optimizer">optimizer (dopingflow.refs.RefConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.relax.RelaxConfig.optimizer">(dopingflow.relax.RelaxConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.optimizer">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.OptionalMethodUnavailable">OptionalMethodUnavailable</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.relax.RelaxConfig.order">order (dopingflow.relax.RelaxConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.scan.ScanConfig.order">(dopingflow.scan.ScanConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.ExperimentalRecord.original_units">original_units (dopingflow.corrections.ExperimentalRecord attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.bandgap.BandgapConfig.outdir">outdir (dopingflow.bandgap.BandgapConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.collect.DBConfig.outdir">(dopingflow.collect.DBConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.filtering.FilterConfig.outdir">(dopingflow.filtering.FilterConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.formation.FormationConfig.outdir">(dopingflow.formation.FormationConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.generate.GenerateConfig.outdir">(dopingflow.generate.GenerateConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.relax.RelaxConfig.outdir">(dopingflow.relax.RelaxConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.outdir">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.OxidationConfig.output_dir">output_dir (dopingflow.oxidation.OxidationConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.cli.oxidation_cmd">oxidation_cmd() (in module dopingflow.cli)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.oxidation_states">oxidation_states (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.OxidationConfig">OxidationConfig (class in dopingflow.oxidation)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.oxide_cation_term">oxide_cation_term() (in module dopingflow.correction_model_selection)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionApplication.oxide_type">oxide_type (dopingflow.corrections.CorrectionApplication attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig.oxides_dir">oxides_dir (dopingflow.refs.RefConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig.oxides_ref">oxides_ref (dopingflow.refs.RefConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_static_thermodynamics.StaticVacancyThermodynamicsConfig.oxygen_calibration_dataset_cache_dir">oxygen_calibration_dataset_cache_dir (dopingflow.vacancy_static_thermodynamics.StaticVacancyThermodynamicsConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_static_thermodynamics.StaticVacancyThermodynamicsConfig.oxygen_calibration_experimental_data">oxygen_calibration_experimental_data (dopingflow.vacancy_static_thermodynamics.StaticVacancyThermodynamicsConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_static_thermodynamics.StaticVacancyThermodynamicsConfig.oxygen_calibration_experimental_source">oxygen_calibration_experimental_source (dopingflow.vacancy_static_thermodynamics.StaticVacancyThermodynamicsConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_static_thermodynamics.StaticVacancyThermodynamicsConfig.oxygen_calibration_include_host_oxide">oxygen_calibration_include_host_oxide (dopingflow.vacancy_static_thermodynamics.StaticVacancyThermodynamicsConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_static_thermodynamics.StaticVacancyThermodynamicsConfig.oxygen_calibration_min_references">oxygen_calibration_min_references (dopingflow.vacancy_static_thermodynamics.StaticVacancyThermodynamicsConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig.oxygen_mode">oxygen_mode (dopingflow.refs.RefConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.oxygen_pressure_delta_mu_eV_per_O">oxygen_pressure_delta_mu_eV_per_O() (in module dopingflow.vacancy_analysis)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.vacancy_static_thermodynamics.oxygen_pressure_delta_mu_eV_per_O">(in module dopingflow.vacancy_static_thermodynamics)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.oxygen_reference_file">oxygen_reference_file (dopingflow.vacancy_analysis.VacancyAnalysisConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.oxygen_reference_mode">oxygen_reference_mode (dopingflow.vacancy_analysis.VacancyAnalysisConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.oxygen_reference_relax">oxygen_reference_relax (dopingflow.vacancy_analysis.VacancyAnalysisConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.oxygen_reference_structure">oxygen_reference_structure (dopingflow.vacancy_analysis.VacancyAnalysisConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.oxygen_standard_state_delta_mu">oxygen_standard_state_delta_mu() (in module dopingflow.vacancy_analysis)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.vacancy_static_thermodynamics.oxygen_standard_state_delta_mu">(in module dopingflow.vacancy_static_thermodynamics)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.oxygen_standard_state_delta_mu_eV_per_O">oxygen_standard_state_delta_mu_eV_per_O (dopingflow.vacancy_analysis.VacancyAnalysisConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.oxygen_standard_state_mode">oxygen_standard_state_mode (dopingflow.vacancy_analysis.VacancyAnalysisConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.oxygen_standard_state_temperatures_K">oxygen_standard_state_temperatures_K (dopingflow.vacancy_analysis.VacancyAnalysisConfig attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="P">P</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.parent_directory">parent_directory (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.StructureTarget.parent_id">parent_id (dopingflow.oxidation.StructureTarget attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.parent_source">parent_source (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.parse_correction_config">parse_correction_config() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.hardware.parse_hardware_config">parse_hardware_config() (in module dopingflow.hardware)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.parse_oxidation_config">parse_oxidation_config() (in module dopingflow.oxidation)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.parse_oxidation_state_arrays">parse_oxidation_state_arrays() (in module dopingflow.vacancies)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.parse_oxygen_reference_file">parse_oxygen_reference_file() (in module dopingflow.vacancy_analysis)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_static_thermodynamics.parse_static_vacancy_thermodynamics_config">parse_static_vacancy_thermodynamics_config() (in module dopingflow.vacancy_static_thermodynamics)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.parse_vacancy_analysis_config">parse_vacancy_analysis_config() (in module dopingflow.vacancy_analysis)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.vacancy_static_thermodynamics.parse_vacancy_analysis_config">(in module dopingflow.vacancy_static_thermodynamics)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.parse_vacancy_config">parse_vacancy_config() (in module dopingflow.vacancies)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.periodic_vacancy_distances">periodic_vacancy_distances() (in module dopingflow.vacancies)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.ExperimentalRecord.phase">phase (dopingflow.corrections.ExperimentalRecord attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.cli.phase_diagram_cmd">phase_diagram_cmd() (in module dopingflow.cli)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.poor_fit_rmse_warning_eV_per_atom">poor_fit_rmse_warning_eV_per_atom (dopingflow.corrections.CorrectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.scan.ScanConfig.poscar_in">poscar_in (dopingflow.scan.ScanConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.generate.GenerateConfig.poscar_order">poscar_order (dopingflow.generate.GenerateConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.ml_backends.prepare_backend_runtime">prepare_backend_runtime() (in module dopingflow.ml_backends)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.pressure_mapping">pressure_mapping (dopingflow.vacancy_analysis.VacancyAnalysisConfig attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="R">R</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.FamilyFit.rank">rank (dopingflow.correction_model_selection.FamilyFit attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.reachable_charge_scenarios">reachable_charge_scenarios() (in module dopingflow.vacancies)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.collect.read_bandgap_summary">read_bandgap_summary() (in module dopingflow.collect)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.collect.read_filtered_table">read_filtered_table() (in module dopingflow.collect)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.collect.read_formation_csv">read_formation_csv() (in module dopingflow.collect)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.collect.read_formation_meta">read_formation_meta() (in module dopingflow.collect)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.collect.read_json">read_json() (in module dopingflow.collect)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.collect.read_scan_ranking">read_scan_ranking() (in module dopingflow.collect)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.collect.read_selected_txt">read_selected_txt() (in module dopingflow.collect)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionApplication.reason">reason (dopingflow.corrections.CorrectionApplication attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.calibration_expansion.CalibrationDiscovery.records">records (dopingflow.calibration_expansion.CalibrationDiscovery property)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.calibration_expansion.CachedOptimadeStructure.reduced_formula">reduced_formula (dopingflow.calibration_expansion.CachedOptimadeStructure attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.corrections.ExperimentalRecord.reduced_formula">(dopingflow.corrections.ExperimentalRecord attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig">RefConfig (class in dopingflow.refs)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.ExperimentalRecord.reference_id">reference_id (dopingflow.corrections.ExperimentalRecord attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig.reference_mode">reference_mode (dopingflow.refs.RefConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.formation.CandidateRecord.reference_results">reference_results (dopingflow.formation.CandidateRecord attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.cli.refs_build_cmd">refs_build_cmd() (in module dopingflow.cli)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.formation.FormationConfig.relative_enabled">relative_enabled (dopingflow.formation.FormationConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.formation.FormationConfig.relative_endpoint_x">relative_endpoint_x (dopingflow.formation.FormationConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.hardware.HardwareConfig.relax_batch_size">relax_batch_size (dopingflow.hardware.HardwareConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.cli.relax_cmd">relax_cmd() (in module dopingflow.cli)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.relax.RelaxConfig.relax_mode">relax_mode (dopingflow.relax.RelaxConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.relax_mode">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.ml_relaxation.relax_structure_with_calculator">relax_structure_with_calculator() (in module dopingflow.ml_relaxation)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.relax.RelaxConfig">RelaxConfig (class in dopingflow.relax)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.generate.reorder_structure_by_species">reorder_structure_by_species() (in module dopingflow.generate)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.calibration_expansion.CalibrationDiscovery.report">report (dopingflow.calibration_expansion.CalibrationDiscovery attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.ModelSelectionResult.report">(dopingflow.correction_model_selection.ModelSelectionResult attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_static_thermodynamics.StaticVacancyThermodynamicsConfig.requested_oxygen_reference_mode">requested_oxygen_reference_mode (dopingflow.vacancy_static_thermodynamics.StaticVacancyThermodynamicsConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.require_cv_one_standard_error">require_cv_one_standard_error (dopingflow.corrections.CorrectionConfig attribute)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.ModelSelectionConfig.require_one_standard_error">require_one_standard_error (dopingflow.correction_model_selection.ModelSelectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.resolve_oxygen_reference">resolve_oxygen_reference() (in module dopingflow.vacancy_analysis)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.hardware.resolve_torch_device">resolve_torch_device() (in module dopingflow.hardware)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.calibration_expansion.CachedOptimadeStructure.response_json_path">response_json_path (dopingflow.calibration_expansion.CachedOptimadeStructure attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.calibration_expansion.CachedOptimadeStructure.response_sha256">response_sha256 (dopingflow.calibration_expansion.CachedOptimadeStructure attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.resume">resume (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.reuse_fitted">reuse_fitted (dopingflow.corrections.CorrectionConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.OxidationConfig.root">root (dopingflow.oxidation.OxidationConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.cli.run_all_cmd">run_all_cmd() (in module dopingflow.cli)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.bandgap.run_bandgap">run_bandgap() (in module dopingflow.bandgap)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.bandgap.run_bandgap_from_toml">run_bandgap_from_toml() (in module dopingflow.bandgap)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.collect.run_collect">run_collect() (in module dopingflow.collect)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.collect.run_collect_from_toml">run_collect_from_toml() (in module dopingflow.collect)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_calibration.run_corrections_fit">run_corrections_fit() (in module dopingflow.correction_calibration)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_calibration.run_corrections_fit_from_toml">run_corrections_fit_from_toml() (in module dopingflow.correction_calibration)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation_dft.run_dft_method">run_dft_method() (in module dopingflow.oxidation_dft)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.filtering.run_filtering">run_filtering() (in module dopingflow.filtering)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.filtering.run_filtering_from_toml">run_filtering_from_toml() (in module dopingflow.filtering)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.formation.run_formation_from_toml">run_formation_from_toml() (in module dopingflow.formation)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.generate.run_generate">run_generate() (in module dopingflow.generate)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.generate.run_generate_from_toml">run_generate_from_toml() (in module dopingflow.generate)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation_ml.run_ml_method">run_ml_method() (in module dopingflow.oxidation_ml)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.run_oxidation">run_oxidation() (in module dopingflow.oxidation)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.run_oxidation_from_toml">run_oxidation_from_toml() (in module dopingflow.oxidation)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.refs.run_refs_build_from_toml">run_refs_build_from_toml() (in module dopingflow.refs)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.relax.run_relax">run_relax() (in module dopingflow.relax)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.relax.run_relax_from_toml">run_relax_from_toml() (in module dopingflow.relax)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.scan.run_scan">run_scan() (in module dopingflow.scan)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.scan.run_scan_from_toml">run_scan_from_toml() (in module dopingflow.scan)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation_structural.run_structural_method">run_structural_method() (in module dopingflow.oxidation_structural)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.run_vacancies_from_toml">run_vacancies_from_toml() (in module dopingflow.vacancies)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="S">S</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.collect.safe_get">safe_get() (in module dopingflow.collect)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.StructureTarget.safe_id">safe_id (dopingflow.oxidation.StructureTarget property)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.scan.ScanConfig.sample_batch_size">sample_batch_size (dopingflow.scan.ScanConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.sample_batch_size">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.scan.ScanConfig.sample_budget">sample_budget (dopingflow.scan.ScanConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.sample_budget">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.scan.ScanConfig.sample_max_saved">sample_max_saved (dopingflow.scan.ScanConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.sample_max_saved">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.scan.ScanConfig.sample_patience">sample_patience (dopingflow.scan.ScanConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.sample_patience">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.scan.ScanConfig.sample_seed">sample_seed (dopingflow.scan.ScanConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.sample_seed">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.save_correction_model">save_correction_model() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.cli.scan_cmd">scan_cmd() (in module dopingflow.cli)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.scan.ScanConfig">ScanConfig (class in dopingflow.scan)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionModel.schema_version">schema_version (dopingflow.corrections.CorrectionModel attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.search_method">search_method (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.generate.GenerateConfig.seed_base">seed_base (dopingflow.generate.GenerateConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.select_correction_model_family">select_correction_model_family() (in module dopingflow.correction_model_selection)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.ModelSelectionResult.selected_family">selected_family (dopingflow.correction_model_selection.ModelSelectionResult attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.ModelSelectionResult.selected_model">selected_model (dopingflow.correction_model_selection.ModelSelectionResult attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionModel.selection_metadata">selection_metadata (dopingflow.corrections.CorrectionModel attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionModel.selection_run_hash">selection_run_hash (dopingflow.corrections.CorrectionModel attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.cli.sequential_run_cmd">sequential_run_cmd() (in module dopingflow.cli)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.ml_backends.set_default_runtime_env">set_default_runtime_env() (in module dopingflow.ml_backends)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.OxidationConfig.settings">settings (dopingflow.oxidation.OxidationConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.logging.setup_logging">setup_logging() (in module dopingflow.logging)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.site_records">site_records() (in module dopingflow.oxidation)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.relax.RelaxConfig.skip_candidate_if_done">skip_candidate_if_done (dopingflow.relax.RelaxConfig attribute)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.bandgap.BandgapConfig.skip_if_done">skip_if_done (dopingflow.bandgap.BandgapConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.collect.DBConfig.skip_if_done">(dopingflow.collect.DBConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.filtering.FilterConfig.skip_if_done">(dopingflow.filtering.FilterConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.formation.FormationConfig.skip_if_done">(dopingflow.formation.FormationConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig.skip_if_done">(dopingflow.refs.RefConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.relax.RelaxConfig.skip_if_done">(dopingflow.relax.RelaxConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.scan.ScanConfig.skip_if_done">(dopingflow.scan.ScanConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.skip_if_done">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_static_thermodynamics.StaticVacancyThermodynamicsConfig.solid_configurational_entropy">solid_configurational_entropy (dopingflow.vacancy_static_thermodynamics.StaticVacancyThermodynamicsConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.ExperimentalRecord.source">source (dopingflow.corrections.ExperimentalRecord attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.OxidationConfig.source_root">source_root (dopingflow.oxidation.OxidationConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.calibration_expansion.CachedOptimadeStructure.source_url">source_url (dopingflow.calibration_expansion.CachedOptimadeStructure attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.generate.stable_seed_from_tag">stable_seed_from_tag() (in module dopingflow.generate)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.standard_oxygen_pressure_bar">standard_oxygen_pressure_bar (dopingflow.vacancy_analysis.VacancyAnalysisConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_static_thermodynamics.StaticVacancyThermodynamicsConfig">StaticVacancyThermodynamicsConfig (class in dopingflow.vacancy_static_thermodynamics)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloCandidate.step">step (dopingflow.vacancy_monte_carlo.MonteCarloCandidate attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloResult.steps">steps (dopingflow.vacancy_monte_carlo.MonteCarloResult attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloResult.stop_reason">stop_reason (dopingflow.vacancy_monte_carlo.MonteCarloResult attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.OxidationConfig.strategy">strategy (dopingflow.oxidation.OxidationConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloCandidate.structure">structure (dopingflow.vacancy_monte_carlo.MonteCarloCandidate attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.ml_relaxation.structure_energy_with_calculator">structure_energy_with_calculator() (in module dopingflow.ml_relaxation)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.calibration_expansion.CachedOptimadeStructure.structure_path">structure_path (dopingflow.calibration_expansion.CachedOptimadeStructure attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.oxidation.StructureTarget.structure_path">(dopingflow.oxidation.StructureTarget attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.calibration_expansion.CachedOptimadeStructure.structure_sha256">structure_sha256 (dopingflow.calibration_expansion.CachedOptimadeStructure attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.StructureTarget">StructureTarget (class in dopingflow.oxidation)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig.supercell">supercell (dopingflow.refs.RefConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.supercell">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.scan.ScanConfig.symprec">symprec (dopingflow.scan.ScanConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.symprec">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+<h2 id="T">T</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionConfig.target_elements">target_elements (dopingflow.corrections.CorrectionConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionModel.target_elements">(dopingflow.corrections.CorrectionModel attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.StructureTarget.target_id">target_id (dopingflow.oxidation.StructureTarget attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig.task">task (dopingflow.refs.RefConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.relax.RelaxConfig.task">(dopingflow.relax.RelaxConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.scan.ScanConfig.task">(dopingflow.scan.ScanConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.task">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.ExperimentalRecord.temperature">temperature (dopingflow.corrections.ExperimentalRecord attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.temperatures_K">temperatures_K (dopingflow.vacancy_analysis.VacancyAnalysisConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.FamilyFit.terms">terms (dopingflow.correction_model_selection.FamilyFit attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.refs.RefConfig.tf_threads">tf_threads (dopingflow.refs.RefConfig attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.relax.RelaxConfig.tf_threads">(dopingflow.relax.RelaxConfig attribute)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.tf_threads">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig.thermodynamic_tolerance_eV">thermodynamic_tolerance_eV (dopingflow.vacancy_analysis.VacancyAnalysisConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.calibration_expansion.CachedOptimadeStructure.to_dict">to_dict() (dopingflow.calibration_expansion.CachedOptimadeStructure method)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.FamilyFit.to_dict">(dopingflow.correction_model_selection.FamilyFit method)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.ModelSelectionResult.to_dict">(dopingflow.correction_model_selection.ModelSelectionResult method)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionApplication.to_dict">(dopingflow.corrections.CorrectionApplication method)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionModel.to_dict">(dopingflow.corrections.CorrectionModel method)</a>
+</li>
+        <li><a href="api/dopingflow.html#dopingflow.corrections.ExperimentalRecord.to_dict">(dopingflow.corrections.ExperimentalRecord method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.scan.ScanConfig.topk">topk (dopingflow.scan.ScanConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.topk_per_vacancy_count">topk_per_vacancy_count (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.correction_model_selection.FamilyFit.training_rmse_eV_per_atom">training_rmse_eV_per_atom (dopingflow.correction_model_selection.FamilyFit attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="U">U</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionApplication.uncertainty_eV">uncertainty_eV (dopingflow.corrections.CorrectionApplication attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.ExperimentalRecord.uncertainty_eV_per_atom">uncertainty_eV_per_atom (dopingflow.corrections.ExperimentalRecord attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.ExperimentalRecord.uncertainty_eV_per_formula">uncertainty_eV_per_formula (dopingflow.corrections.ExperimentalRecord attribute)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.ExperimentalRecord.uncertainty_source">uncertainty_source (dopingflow.corrections.ExperimentalRecord attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.CorrectionModel.units">units (dopingflow.corrections.CorrectionModel attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.unsupported_elements">unsupported_elements() (in module dopingflow.oxidation)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="V">V</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.cli.vacancies_cmd">vacancies_cmd() (in module dopingflow.cli)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.cli.vacancies_finalize_cmd">vacancies_finalize_cmd() (in module dopingflow.cli)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.cli.vacancies_mc_search_cmd">vacancies_mc_search_cmd() (in module dopingflow.cli)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.vacancy_compensation_charge">vacancy_compensation_charge (dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_monte_carlo.MonteCarloCandidate.vacancy_indices">vacancy_indices (dopingflow.vacancy_monte_carlo.MonteCarloCandidate attribute)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.oxidation.StructureTarget.vacancy_species">vacancy_species (dopingflow.oxidation.StructureTarget attribute)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig.vacancy_species">(dopingflow.vacancies.VacancyConfig attribute)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.vacancy_analysis.VacancyAnalysisConfig">VacancyAnalysisConfig (class in dopingflow.vacancy_analysis)</a>
+
+      <ul>
+        <li><a href="api/dopingflow.html#dopingflow.vacancy_static_thermodynamics.VacancyAnalysisConfig">(in module dopingflow.vacancy_static_thermodynamics)</a>
+</li>
+      </ul></li>
+      <li><a href="api/dopingflow.html#dopingflow.vacancies.VacancyConfig">VacancyConfig (class in dopingflow.vacancies)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.validate_applicability_compatibility">validate_applicability_compatibility() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.validate_backend_compatibility">validate_backend_compatibility() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.validate_candidate_energy_provenance">validate_candidate_energy_provenance() (in module dopingflow.corrections)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.generate.validate_composition_minimal">validate_composition_minimal() (in module dopingflow.generate)</a>
+</li>
+      <li><a href="api/dopingflow.html#dopingflow.corrections.validate_reference_energy_provenance">validate_reference_energy_provenance() (in module dopingflow.corrections)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="W">W</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.filtering.FilterConfig.window_meV">window_meV (dopingflow.filtering.FilterConfig attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="X">X</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/dopingflow.html#dopingflow.formation.CandidateRecord.x_dopant">x_dopant (dopingflow.formation.CandidateRecord attribute)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

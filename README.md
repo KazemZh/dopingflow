@@ -518,7 +518,7 @@ input files:
 ```toml
 [oxidation.dft_electronic]
 code = "gpaw"
-output_root = "gpaw_oxidation"
+output_root = "dft_oxidation"
 execute = false              # true runs the single point directly
 mode = "pw"
 ecut_eV = 500.0

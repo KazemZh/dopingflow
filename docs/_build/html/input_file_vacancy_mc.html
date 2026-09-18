@@ -1,0 +1,497 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Staged Vacancy Monte Carlo Configuration &mdash; dopingflow documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=42d1b3bd"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="0. Reference Energy Construction" href="methods/references.html" />
+    <link rel="prev" title="Vacancy M0/M1 Input Options" href="input_file_vacancy_correction.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html">
+            
+              <img src="_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="workflow_overview.html">Workflow Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation_and_usage.html">Installation, Usage, and Outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="required_inputs.html">Required Input Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="input_file.html">Input File Specification (input.toml)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="input_file_phase_diagram.html">Phase-Diagram Input Options</a></li>
+<li class="toctree-l1"><a class="reference internal" href="input_file_vacancy_correction.html">Vacancy M0/M1 Input Options</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Staged Vacancy Monte Carlo Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#parent-source-and-selection">Parent source and selection</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#parent-source"><code class="docutils literal notranslate"><span class="pre">parent_source</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#parent-include"><code class="docutils literal notranslate"><span class="pre">parent_include</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#parent-pick"><code class="docutils literal notranslate"><span class="pre">parent_pick</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#output-directory"><code class="docutils literal notranslate"><span class="pre">output_directory</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#explicit-vacancy-counts-and-supercell">Explicit vacancy counts and supercell</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#vacancy-counts"><code class="docutils literal notranslate"><span class="pre">vacancy_counts</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#supercell"><code class="docutils literal notranslate"><span class="pre">supercell</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#stage-1-monte-carlo-calculator">Stage-1 Monte Carlo calculator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#coupled-cation-vacancy-moves">Coupled cation/vacancy moves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#annealing-and-stopping-controls">Annealing and stopping controls</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#archive-and-selection">Archive and selection</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#stage-2-final-calculator">Stage-2 final calculator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#two-environment-execution">Two-environment execution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#output-layout">Output layout</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#thermodynamic-compatibility">Thermodynamic compatibility</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#reference-state-caveat-when-cations-move">Reference-state caveat when cations move</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#gui">GUI</a></li>
+</ul>
+</li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="methods/references.html">0. Reference Energy Construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/oxygen_thermodynamics.html">Oxygen Energy Convention and Chemical Potential</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/oxygen_calibration.html">Oxygen Reference Calibration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/generation.html">1. Structure Generation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/sequential.html">Sequential Doping Workflow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/scanning.html">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/filtering.html">4. Relaxed-Candidate Filtering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/bandgap.html">5. Bandgap Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/energy_corrections.html">Backend-Specific Energy Corrections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/formation_energy.html">6. Formation Energy Evaluation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/database.html">7. Database Collection</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/alloy_hull.html">Restricted One-Dimensional Alloy Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/phase_diagram.html">Phase Diagram and Energy Above Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/vacancy_energy_above_hull.html">Vacancy Energy Above Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/vacancy_energy_correction.html">M0/M1 Correction for Vacancy Thermodynamics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/vacancies.html">Oxygen-Vacancy Workflow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/oxidation_states.html">Oxidation-state analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/surfaces.html">Surface Generation and Relaxation</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="examples/explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/explicit_single_oxides.html">Explicit Example — Single Target Composition using Oxide References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/multi_reference_oxide.html">Multiple Oxide References and Relative Energies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/sequential_workflow.html">Sequential Example — Gradual Sb Doping</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/vacancies.html">Staged vacancy Monte Carlo example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api/modules.html">dopingflow</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Staged Vacancy Monte Carlo Configuration</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/input_file_vacancy_mc.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="staged-vacancy-monte-carlo-configuration">
+<h1>Staged Vacancy Monte Carlo Configuration<a class="headerlink" href="#staged-vacancy-monte-carlo-configuration" title="Link to this heading"></a></h1>
+<p>This page documents the extra <code class="docutils literal notranslate"><span class="pre">[vacancies]</span></code> controls used by the two-stage
+Monte Carlo workflow:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">vacancies</span><span class="o">-</span><span class="n">mc</span><span class="o">-</span><span class="n">search</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+<span class="n">dopingflow</span> <span class="n">vacancies</span><span class="o">-</span><span class="n">finalize</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+</pre></div>
+</div>
+<p>The staged path is intended for cases where the fast search backend and final
+backend live in incompatible Python environments, for example GRACE for the
+occupation search and MACE for final single points, relaxation, reranking, and
+thermodynamics.</p>
+<p>The ordinary one-process command remains available:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">vacancies</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+</pre></div>
+</div>
+<p>Use it for symmetry enumeration or for Monte Carlo when all requested backends
+coexist in one environment.</p>
+<section id="parent-source-and-selection">
+<h2>Parent source and selection<a class="headerlink" href="#parent-source-and-selection" title="Link to this heading"></a></h2>
+<section id="parent-source">
+<h3><code class="docutils literal notranslate"><span class="pre">parent_source</span></code><a class="headerlink" href="#parent-source" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">&quot;selected_candidates&quot;</span></code> uses the normal structure output tree.
+<code class="docutils literal notranslate"><span class="pre">&quot;directory&quot;</span></code> uses an explicit multi-composition tree supplied by
+<code class="docutils literal notranslate"><span class="pre">parent_directory</span></code>.</p>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">parent_source</span> <span class="o">=</span> <span class="s2">"directory"</span>
+<span class="n">parent_directory</span> <span class="o">=</span> <span class="s2">"/home/user/project/vacancy-selected"</span>
+</pre></div>
+</div>
+</section>
+<section id="parent-include">
+<h3><code class="docutils literal notranslate"><span class="pre">parent_include</span></code><a class="headerlink" href="#parent-include" title="Link to this heading"></a></h3>
+<p>Optional string array limiting staged search/finalization to selected
+compositions or exact parents:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">parent_include</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">"Ti_2.5Sb_2.5"</span><span class="p">,</span>
+    <span class="s2">"Ti_2.5Sb_5"</span><span class="p">,</span>
+    <span class="s2">"Ce_2.5Sb_2.5"</span><span class="p">,</span>
+<span class="p">]</span>
+</pre></div>
+</div>
+<p>For common composition directory labels, element order and decimal/<code class="docutils literal notranslate"><span class="pre">p</span></code>
+notation are canonicalized. Thus <code class="docutils literal notranslate"><span class="pre">Ti_2.5Sb_5</span></code>, <code class="docutils literal notranslate"><span class="pre">Ti2p5_Sb5</span></code> and
+<code class="docutils literal notranslate"><span class="pre">Sb5_Ti2p5</span></code> match the same composition.</p>
+<p>A selector containing <code class="docutils literal notranslate"><span class="pre">/</span></code> is treated as an exact parent ID, for example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">parent_include</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"Sb5_Ti2p5/candidate_003"</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>A requested selector that matches no discovered parent is an error.</p>
+</section>
+<section id="parent-pick">
+<h3><code class="docutils literal notranslate"><span class="pre">parent_pick</span></code><a class="headerlink" href="#parent-pick" title="Link to this heading"></a></h3>
+<p>Controls how many selected parents are kept per composition:</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">&quot;all&quot;</span></code></dt><dd><p>Keep every discovered selected parent. This is the backward-compatible
+behavior.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">&quot;lowest_energy&quot;</span></code></dt><dd><p>Keep the first selected parent for each composition. The normal DopingFlow
+filtering stage writes <code class="docutils literal notranslate"><span class="pre">selected_candidates.txt</span></code> in ascending relaxed
+energy, so the first selected parent is the lowest-energy filtered candidate.</p>
+</dd>
+</dl>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">parent_pick</span> <span class="o">=</span> <span class="s2">"lowest_energy"</span>
+</pre></div>
+</div>
+</section>
+<section id="output-directory">
+<h3><code class="docutils literal notranslate"><span class="pre">output_directory</span></code><a class="headerlink" href="#output-directory" title="Link to this heading"></a></h3>
+<p>Optional dedicated output root for the complete staged study:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">output_directory</span> <span class="o">=</span> <span class="s2">"vacancy-mc-grace-mace"</span>
+</pre></div>
+</div>
+<p>Relative paths are resolved from the directory containing <code class="docutils literal notranslate"><span class="pre">input.toml</span></code>.
+Source parent structures remain in <code class="docutils literal notranslate"><span class="pre">parent_directory</span></code> or
+<code class="docutils literal notranslate"><span class="pre">structure.outdir</span></code>. Search and finalization mirror the selected
+<code class="docutils literal notranslate"><span class="pre">composition/candidate</span></code> IDs below <code class="docutils literal notranslate"><span class="pre">output_directory</span></code> and therefore share a
+persistent on-disk handoff.</p>
+</section>
+</section>
+<section id="explicit-vacancy-counts-and-supercell">
+<h2>Explicit vacancy counts and supercell<a class="headerlink" href="#explicit-vacancy-counts-and-supercell" title="Link to this heading"></a></h2>
+<section id="vacancy-counts">
+<h3><code class="docutils literal notranslate"><span class="pre">vacancy_counts</span></code><a class="headerlink" href="#vacancy-counts" title="Link to this heading"></a></h3>
+<p>Optional explicit positive integer list. When present, it defines the vacancy
+counts searched rather than deriving the generation range from formal charge.
+Formal-charge scenarios are still retained as metadata.</p>
+<p>For the present study:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">vacancy_counts</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>When using the explicit 1–4-vacancy research design, keep the cap consistent:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">max_vacancies_cap</span> <span class="o">=</span> <span class="mi">4</span>
+</pre></div>
+</div>
+</section>
+<section id="supercell">
+<h3><code class="docutils literal notranslate"><span class="pre">supercell</span></code><a class="headerlink" href="#supercell" title="Link to this heading"></a></h3>
+<p>Three positive integers applied before the occupation search:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">supercell</span> <span class="o">=</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>For a 120-atom SnO2-based source parent with 40 cations and 80 oxygen sites, a
+2x2x2 replication contains 960 atoms before vacancies: 320 cations and 640
+oxygen sites. Dopant counts are multiplied by eight while their percentages are
+unchanged.</p>
+<p>One, two, three, and four vacancies correspond to 0.15625%, 0.3125%, 0.46875%,
+and 0.625% of the 640-site oxygen sublattice, respectively.</p>
+</section>
+</section>
+<section id="stage-1-monte-carlo-calculator">
+<h2>Stage-1 Monte Carlo calculator<a class="headerlink" href="#stage-1-monte-carlo-calculator" title="Link to this heading"></a></h2>
+<p>The search calculator is independent of the final calculator:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">mc_backend</span> <span class="o">=</span> <span class="s2">"grace"</span>
+<span class="n">mc_model</span> <span class="o">=</span> <span class="s2">"GRACE-1L-OMAT"</span>
+<span class="n">mc_task</span> <span class="o">=</span> <span class="s2">""</span>
+<span class="n">mc_device</span> <span class="o">=</span> <span class="s2">"cuda"</span>
+<span class="n">mc_gpu_id</span> <span class="o">=</span> <span class="mi">0</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">vacancies-mc-search</span></code> checks and builds only this calculator. The ordinary
+<code class="docutils literal notranslate"><span class="pre">backend</span></code> calculator is not instantiated in the search environment.</p>
+</section>
+<section id="coupled-cation-vacancy-moves">
+<h2>Coupled cation/vacancy moves<a class="headerlink" href="#coupled-cation-vacancy-moves" title="Link to this heading"></a></h2>
+<p>The Monte Carlo state contains both the vacancy occupation and cation species
+occupation at fixed composition and fixed vacancy count.</p>
+<p><code class="docutils literal notranslate"><span class="pre">mc_vacancy_move_weight</span></code> controls moves that exchange a vacancy marker with an
+occupied vacancy-species site. <code class="docutils literal notranslate"><span class="pre">mc_cation_move_weight</span></code> controls swaps between
+two sites occupied by different cation species.</p>
+<p>For coupled dopant-vacancy ordering:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">mc_cation_move_weight</span> <span class="o">=</span> <span class="mf">0.5</span>
+<span class="n">mc_vacancy_move_weight</span> <span class="o">=</span> <span class="mf">0.5</span>
+</pre></div>
+</div>
+<p>At least one move weight must be positive. Internal vacancy markers are removed
+before ML energy evaluation.</p>
+</section>
+<section id="annealing-and-stopping-controls">
+<h2>Annealing and stopping controls<a class="headerlink" href="#annealing-and-stopping-controls" title="Link to this heading"></a></h2>
+<p>A production-oriented starting point for the present 960-atom coupled search is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">mc_annealing</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">mc_initial_temperature_K</span> <span class="o">=</span> <span class="mf">1500.0</span>
+<span class="n">mc_annealing_hold_steps</span> <span class="o">=</span> <span class="mi">5000</span>
+<span class="n">mc_annealing_steps</span> <span class="o">=</span> <span class="mi">50000</span>
+<span class="n">mc_temperature_K</span> <span class="o">=</span> <span class="mf">600.0</span>
+
+<span class="n">mc_run_mode</span> <span class="o">=</span> <span class="s2">"combined"</span>
+<span class="n">mc_max_steps</span> <span class="o">=</span> <span class="mi">500000</span>
+<span class="n">mc_patience</span> <span class="o">=</span> <span class="mi">105000</span>
+<span class="n">mc_improvement_tolerance_eV</span> <span class="o">=</span> <span class="mf">0.001</span>
+
+<span class="n">mc_energy_window_eV</span> <span class="o">=</span> <span class="mf">1.0</span>
+<span class="n">sample_seed</span> <span class="o">=</span> <span class="mi">42</span>
+<span class="n">sample_max_saved</span> <span class="o">=</span> <span class="mi">100</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">mc_max_steps</span></code> is the total trajectory length. The hot hold and cooling ramp
+are included in this total.</p>
+<p><code class="docutils literal notranslate"><span class="pre">mc_run_mode</span></code> accepts:</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">&quot;fixed&quot;</span></code></dt><dd><p>Stop only when <code class="docutils literal notranslate"><span class="pre">mc_max_steps</span></code> is reached.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">&quot;converged&quot;</span></code></dt><dd><p>Stop after <code class="docutils literal notranslate"><span class="pre">mc_patience</span></code> consecutive steps without a new global-best
+improvement larger than <code class="docutils literal notranslate"><span class="pre">mc_improvement_tolerance_eV</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">&quot;combined&quot;</span></code></dt><dd><p>Apply both the maximum-step ceiling and no-improvement stopping condition.</p>
+</dd>
+</dl>
+<p>The current no-improvement counter is active from step 1, including the high-
+temperature hold and cooling ramp. For the present schedule, the annealing phase
+lasts 5,000 + 50,000 = 55,000 trial moves. Setting <code class="docutils literal notranslate"><span class="pre">mc_patience</span> <span class="pre">=</span> <span class="pre">105000</span></code>
+therefore prevents a no-improvement stop before the complete annealing schedule
+plus roughly 50,000 additional trial moves at 600 K. Any new best structure that
+improves the previous global minimum by at least 1 meV resets the patience
+counter.</p>
+<p>The package-level 10,000-step/2,000-patience defaults are intentionally small
+and are useful for development/smoke tests. The larger 500,000-step ceiling and
+105,000-step patience above are project-specific production starting values, not
+a universal convergence guarantee. Independent replicas/seeds and low-energy
+motif agreement provide stronger convergence evidence than a single trajectory.</p>
+</section>
+<section id="archive-and-selection">
+<h2>Archive and selection<a class="headerlink" href="#archive-and-selection" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">sample_max_saved</span></code> caps the retained unique accepted occupation archive.
+<code class="docutils literal notranslate"><span class="pre">mc_energy_window_eV</span></code> limits the archive to structures sufficiently close to
+the current archived minimum.</p>
+<p>After Stage 1, each fixed vacancy-count group is sorted by the MC-search energy.
+<code class="docutils literal notranslate"><span class="pre">topk_per_vacancy_count</span></code> determines how many structures are written to
+<code class="docutils literal notranslate"><span class="pre">selected_candidates.txt</span></code> for finalization. With <code class="docutils literal notranslate"><span class="pre">vacancy_counts</span> <span class="pre">=</span> <span class="pre">[1,</span> <span class="pre">2,</span> <span class="pre">3,</span>
+<span class="pre">4]</span></code>, this selection is performed independently for all four vacancy counts.</p>
+<p>Current staged selection sequence:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">GRACE</span> <span class="n">archive</span>
+   <span class="o">-&gt;</span> <span class="n">GRACE</span> <span class="n">ranking</span>
+   <span class="o">-&gt;</span> <span class="n">GRACE</span> <span class="n">top</span><span class="o">-</span><span class="n">k</span>
+   <span class="o">-&gt;</span> <span class="n">MACE</span> <span class="n">single</span> <span class="n">point</span> <span class="n">on</span> <span class="n">selected</span> <span class="n">candidates</span>
+   <span class="o">-&gt;</span> <span class="n">MACE</span> <span class="n">relaxation</span>
+   <span class="o">-&gt;</span> <span class="n">MACE</span> <span class="n">relaxed</span><span class="o">-</span><span class="n">energy</span> <span class="n">reranking</span>
+</pre></div>
+</div>
+<p>MACE does not currently rescore the complete GRACE archive before the top-k is
+chosen. A GRACE-low/MACE-high ranking disagreement can therefore affect which
+structures reach final relaxation. Validate cross-backend ranking agreement on a
+smaller archive before a large production campaign.</p>
+</section>
+<section id="stage-2-final-calculator">
+<h2>Stage-2 final calculator<a class="headerlink" href="#stage-2-final-calculator" title="Link to this heading"></a></h2>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">backend</span> <span class="o">=</span> <span class="s2">"mace"</span>
+<span class="n">model</span> <span class="o">=</span> <span class="s2">"mh-1"</span>
+<span class="n">task</span> <span class="o">=</span> <span class="s2">"matpes_r2scan"</span>
+<span class="n">device</span> <span class="o">=</span> <span class="s2">"cuda"</span>
+<span class="n">gpu_id</span> <span class="o">=</span> <span class="mi">0</span>
+
+<span class="n">topk_per_vacancy_count</span> <span class="o">=</span> <span class="mi">20</span>
+<span class="n">optimizer</span> <span class="o">=</span> <span class="s2">"bfgs"</span>
+<span class="n">fmax</span> <span class="o">=</span> <span class="mf">0.05</span>
+<span class="n">max_steps</span> <span class="o">=</span> <span class="mi">300</span>
+<span class="n">relax_mode</span> <span class="o">=</span> <span class="s2">"atoms"</span>
+<span class="n">cell_filter</span> <span class="o">=</span> <span class="s2">"frechet"</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">vacancies-finalize</span></code> checks/builds only this final calculator. It reads the
+persisted Stage-1 selection, evaluates a final-backend single point before
+relaxation, relaxes, reranks by final relaxed energy, and then runs the configured
+vacancy thermodynamic analysis.</p>
+<p>The pre-relaxation final-backend single point is stored separately from the GRACE
+search energy. A GRACE-to-MACE energy difference is never reported as a
+same-calculator relaxation energy change.</p>
+</section>
+<section id="two-environment-execution">
+<h2>Two-environment execution<a class="headerlink" href="#two-environment-execution" title="Link to this heading"></a></h2>
+<p>A typical environment setup is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">conda</span> <span class="n">create</span> <span class="o">-</span><span class="n">n</span> <span class="n">dopingflow</span><span class="o">-</span><span class="n">grace</span> <span class="n">python</span><span class="o">=</span><span class="mf">3.11</span> <span class="n">pip</span> <span class="o">-</span><span class="n">y</span>
+<span class="n">conda</span> <span class="n">activate</span> <span class="n">dopingflow</span><span class="o">-</span><span class="n">grace</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="o">-</span><span class="n">e</span> <span class="s2">".[grace]"</span>
+
+<span class="n">conda</span> <span class="n">create</span> <span class="o">-</span><span class="n">n</span> <span class="n">dopingflow</span><span class="o">-</span><span class="n">mace</span> <span class="n">python</span><span class="o">=</span><span class="mf">3.11</span> <span class="n">pip</span> <span class="o">-</span><span class="n">y</span>
+<span class="n">conda</span> <span class="n">activate</span> <span class="n">dopingflow</span><span class="o">-</span><span class="n">mace</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="o">-</span><span class="n">e</span> <span class="s2">".[mace]"</span>
+</pre></div>
+</div>
+<p>Run Stage 1:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">conda</span> <span class="n">activate</span> <span class="n">dopingflow</span><span class="o">-</span><span class="n">grace</span>
+<span class="n">dopingflow</span> <span class="n">vacancies</span><span class="o">-</span><span class="n">mc</span><span class="o">-</span><span class="n">search</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span> <span class="o">--</span><span class="n">verbose</span>
+</pre></div>
+</div>
+<p>Then Stage 2:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">conda</span> <span class="n">activate</span> <span class="n">dopingflow</span><span class="o">-</span><span class="n">mace</span>
+<span class="n">dopingflow</span> <span class="n">vacancies</span><span class="o">-</span><span class="n">finalize</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span> <span class="o">--</span><span class="n">verbose</span>
+</pre></div>
+</div>
+<p>Both stages must use the same <code class="docutils literal notranslate"><span class="pre">input.toml</span></code> and compatible search settings. A
+search fingerprint prevents finalization from silently consuming a search made
+with a different search space, MC calculator, or source parent structure.</p>
+</section>
+<section id="output-layout">
+<h2>Output layout<a class="headerlink" href="#output-layout" title="Link to this heading"></a></h2>
+<p>With <code class="docutils literal notranslate"><span class="pre">output_directory</span> <span class="pre">=</span> <span class="pre">&quot;vacancy-mc-grace-mace&quot;</span></code> the main files are:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>vacancy-mc-grace-mace/
+├── vacancy_mc_search_database.csv
+├── vacancy_mc_search_database.json
+├── vacancies_database.csv
+├── vacancies_database.json
+└── &lt;composition&gt;/
+    └── &lt;candidate&gt;/
+        └── 05_vacancies/
+            ├── mc_search_meta.json
+            ├── mc_search_results.csv
+            ├── mc_search_results.json
+            ├── parent_reference/
+            ├── V_O_01/
+            │   ├── monte_carlo_summary.json
+            │   ├── ranking_scan.csv
+            │   ├── selected_candidates.txt
+            │   └── mc_*/
+            ├── V_O_02/
+            ├── V_O_03/
+            └── V_O_04/
+</pre></div>
+</div>
+<p>Each selected Stage-1 configuration contains a generated POSCAR and GRACE search
+metadata. Stage 2 adds a final-backend single-point record, relaxed structure,
+and final metadata in the same dedicated output tree.</p>
+</section>
+<section id="thermodynamic-compatibility">
+<h2>Thermodynamic compatibility<a class="headerlink" href="#thermodynamic-compatibility" title="Link to this heading"></a></h2>
+<p>Monte Carlo may use:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">solid_configurational_entropy</span> <span class="o">=</span> <span class="s2">"none"</span>
+</pre></div>
+</div>
+<p>or:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">solid_configurational_entropy</span> <span class="o">=</span> <span class="s2">"ideal"</span>
+</pre></div>
+</div>
+<p>The explicit canonical partition-function mode <code class="docutils literal notranslate"><span class="pre">&quot;configurational&quot;</span></code> requires
+exact symmetry enumeration and exact orbit degeneracies and is therefore not
+available for Monte Carlo.</p>
+<p>If an experimentally fitted solid-energy correction is applied to vacancy
+thermodynamics, use a raw same-backend oxygen reservoir such as
+<code class="docutils literal notranslate"><span class="pre">reference_file</span></code> or <code class="docutils literal notranslate"><span class="pre">same_calculator</span></code>. Do not combine the fitted solid-energy
+correction with <code class="docutils literal notranslate"><span class="pre">oxygen_reference_mode</span> <span class="pre">=</span> <span class="pre">&quot;global&quot;</span></code> or
+<code class="docutils literal notranslate"><span class="pre">&quot;chemistry-specific&quot;</span></code> because both paths use experimental formation-enthalpy
+information for oxygen-related calibration.</p>
+</section>
+<section id="reference-state-caveat-when-cations-move">
+<h2>Reference-state caveat when cations move<a class="headerlink" href="#reference-state-caveat-when-cations-move" title="Link to this heading"></a></h2>
+<p>The current Stage-2 <code class="docutils literal notranslate"><span class="pre">n=0</span></code> parent reference is the replicated source parent; it
+is not subjected to an independent cation-only Monte Carlo search. When
+<code class="docutils literal notranslate"><span class="pre">mc_cation_move_weight</span></code> is non-zero, the defective <code class="docutils literal notranslate"><span class="pre">n=1,2,3,4</span></code> minima may
+therefore contain both vacancy rearrangement and cation reordering relative to
+the source parent.</p>
+<p>This is appropriate for a coupled ordering search. A strict vacancy formation
+free energy referenced to an equilibrated cation arrangement would require an
+independently equilibrated <code class="docutils literal notranslate"><span class="pre">n=0</span></code> cation-ordering baseline.</p>
+</section>
+<section id="gui">
+<h2>GUI<a class="headerlink" href="#gui" title="Link to this heading"></a></h2>
+<p>The dedicated Streamlit page <code class="docutils literal notranslate"><span class="pre">gui/pages/Vacancy_MC_Staged.py</span></code> exposes the
+staged parent selection, output routing, explicit vacancy counts, supercell,
+GRACE calculator, MC schedule, move weights, and MACE finalization settings. It
+also builds separate <code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">run</span></code> commands for the GRACE and MACE environments.</p>
+<p>See <a class="reference internal" href="methods/vacancies.html"><span class="doc">Oxygen-Vacancy Workflow</span></a> for the complete scientific workflow and
+<a class="reference internal" href="examples/vacancies.html"><span class="doc">Staged vacancy Monte Carlo example</span></a> for the checked-in production-oriented example.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="input_file_vacancy_correction.html" class="btn btn-neutral float-left" title="Vacancy M0/M1 Input Options" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="methods/references.html" class="btn btn-neutral float-right" title="0. Reference Energy Construction" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
