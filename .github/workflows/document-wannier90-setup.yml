@@ -1,4 +1,5 @@
 name: Document Wannier90 GPAW setup
+# One-shot workflow to document the verified Conda installation path.
 
 on:
   push:
