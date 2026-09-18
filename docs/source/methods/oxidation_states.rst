@@ -186,6 +186,27 @@ before production GPAW calculations are attempted.  Wannier90 is installed in th
    ``write_xyz=true``, lets GPAW write ``.eig``/``.mmn``, and runs
    ``wannier90.x``.  Because the occupied manifold is isolated, no
    disentanglement is used and no arbitrary atomic projector set is invented.
+
+   Completed Wannier results are also analyzed without rerunning Wannier90 when
+   ``execute=false``.  Periodic minimum-image distances classify centers as
+   atom-centered, bond-centered, or multicenter/ambiguous using configurable
+   geometric thresholds.  A separate spread threshold flags anomalous or
+   delocalized Wannier functions.  The defaults are ``0.45 Å`` for the
+   atom-center cutoff, ``1.35 Å`` for the bond-center cutoff, ``0.30 Å`` for the
+   two-neighbor distance balance, and ``3.0 Å²`` for the spread-outlier
+   threshold.  These are screening heuristics, not universal chemical
+   boundaries, and should be inspected for the material class.
+
+   The post-processing writes ``wannier_centres_analysis.csv``,
+   ``wannier_site_summary.csv``, and ``wannier_analysis.json`` beside the
+   Wannier90 files.  Per-site counts and paired-electron equivalents are
+   geometric bookkeeping descriptors; they are not atomic populations, Bader
+   charges, or formal oxidation states.  Vacancy-free structures can be
+   analyzed completely on their own.  If a matched oxygen-vacancy structure
+   and its parent are both analyzed later, dopingflow additionally reports
+   parent-relative changes in these per-site Wannier descriptors.  No vacancy
+   structure is required for the standalone analysis.
+
    Metallic, spin-polarized, multi-k, or entangled cases are rejected by this
    native mode and should use an explicit projection/disentanglement workflow.
    Static centers remain supporting descriptors and are not converted into

@@ -12,6 +12,12 @@ from typing import Any, Sequence
 from pymatgen.core import Structure
 from pymatgen.io.ase import AseAtomsAdaptor
 
+from dopingflow.wannier_analysis import (
+    analyze_wannier_centres,
+    parse_wannier_spreads,
+    write_wannier_analysis_files,
+)
+
 from dopingflow.oxidation import (
     OptionalMethodUnavailable,
     OxidationConfig,
@@ -650,10 +656,16 @@ def _occupied_gamma_manifold_info(
             "save_wavefunctions=true so oxidation.gpw is written with mode='all'."
         ) from exc
 
+    try:
+        n_electrons = float(calc.get_number_of_electrons())
+    except Exception:
+        n_electrons = None
+
     return {
         "n_bands_total": int(calc.get_number_of_bands()),
         "n_occupied_bands": noccupied,
         "n_spins": nspins,
+        "n_electrons": n_electrons,
         "homo_eV": float(eigenvalues[noccupied - 1]),
         "lumo_eV": float(eigenvalues[noccupied]),
         "gap_eV": gap,
@@ -880,13 +892,90 @@ def _run_wannier(
             f"Wannier analysis needs {centers_file}. Enable native GPAW Wannier execution, "
             "run Wannier90 externally, or point workdir/output_root to existing centers."
         )
+
+    metadata_file = workdir / "wannier_run_metadata.json"
+    if not metadata and metadata_file.is_file():
+        try:
+            loaded = json.loads(metadata_file.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                metadata = loaded
+        except Exception:
+            metadata = {}
+
     centres = _parse_wannier_centres(centers_file)
+    seed = str(metadata.get("seed") or settings.get("seed", "wannier90")).strip() or "wannier90"
+    wout_file = workdir / str(settings.get("wout_file", f"{seed}.wout"))
+    spreads = parse_wannier_spreads(wout_file)
+    structure = Structure.from_file(target.structure_path)
+
+    paired_native = (
+        str(metadata.get("mode") or "") == "occupied-bloch"
+        and int(metadata.get("n_spins") or 0) == 1
+    )
+    electrons_per_wf = 2.0 if paired_native else None
+    enriched, site_summary, analysis = analyze_wannier_centres(
+        structure,
+        centres,
+        spreads,
+        atom_center_cutoff_angstrom=float(settings.get("atom_center_cutoff_angstrom", 0.45)),
+        bond_center_cutoff_angstrom=float(settings.get("bond_center_cutoff_angstrom", 1.35)),
+        bond_distance_balance_angstrom=float(settings.get("bond_distance_balance_angstrom", 0.30)),
+        delocalized_spread_threshold_ang2=float(
+            settings.get("delocalized_spread_threshold_ang2", 3.0)
+        ),
+        electrons_per_wf=electrons_per_wf,
+    )
+
+    expected_centres = metadata.get("n_occupied_bands")
+    if expected_centres is not None:
+        expected_centres = int(expected_centres)
+    analysis.update(
+        {
+            "target_id": target.target_id,
+            "structure_kind": target.kind,
+            "n_atoms": len(structure),
+            "wout_file": str(wout_file) if wout_file.is_file() else None,
+            "expected_centres_from_occupied_bands": expected_centres,
+            "center_count_consistent_with_occupied_bands": (
+                len(enriched) == expected_centres if expected_centres is not None else None
+            ),
+            "gpaw_electrons": (
+                float(metadata["n_electrons"])
+                if metadata.get("n_electrons") is not None
+                else None
+            ),
+            "electron_count_consistent_with_gpaw": None,
+            "parent_relative_comparison": (
+                "not-applicable-vacancy-free"
+                if target.kind == "vacancy-free"
+                else "available-only-when-matched-parent-wannier-result-is-analyzed"
+            ),
+        }
+    )
+    if analysis.get("represented_electrons") is not None and analysis.get("gpaw_electrons") is not None:
+        analysis["electron_count_consistent_with_gpaw"] = math.isclose(
+            float(analysis["represented_electrons"]),
+            float(analysis["gpaw_electrons"]),
+            rel_tol=0.0,
+            abs_tol=1.0e-6,
+        )
+
+    analysis_paths = write_wannier_analysis_files(
+        workdir,
+        enriched,
+        site_summary,
+        analysis,
+    )
+    analysis["output_files"] = analysis_paths
+
     provenance = {
         "workdir": str(workdir),
         "centres_file": str(centers_file),
+        "wout_file": str(wout_file) if wout_file.is_file() else None,
         "execute": bool(settings.get("execute", False)),
         "execution_mode": execution_mode,
-        "n_wannier_centres": len(centres),
+        "n_wannier_centres": len(enriched),
+        "analysis_files": analysis_paths,
     }
     provenance.update(metadata)
     result = base_method_result(
@@ -897,10 +986,14 @@ def _run_wannier(
         provenance=provenance,
         limitations=[
             "Static Wannier-center information is supporting electronic evidence. It is not converted into formal integer oxidation states without an explicitly validated EOS/charge-pumping assignment procedure.",
+            "Atom-/bond-/multicenter labels are configurable periodic geometric classifications, not formal charges or oxidation states.",
+            "Nearest-center electron equivalents are bookkeeping descriptors for paired occupied Wannier functions and must not be interpreted as atomic electron populations.",
             "The native occupied-bloch mode currently supports isolated non-spin-polarized Gamma-only occupied manifolds; metallic, spin-polarized, multi-k, or entangled cases require an explicit projection/disentanglement workflow.",
         ],
     )
-    result["wannier_descriptors"] = centres
+    result["wannier_descriptors"] = enriched
+    result["wannier_site_summary"] = site_summary
+    result["wannier_analysis"] = analysis
     return result
 
 

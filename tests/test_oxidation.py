@@ -9,6 +9,7 @@ from pymatgen.io.vasp import Poscar
 
 import dopingflow.oxidation as oxidation
 import dopingflow.oxidation_dft as oxidation_dft
+import dopingflow.wannier_analysis as wannier_analysis
 from dopingflow.oxidation import (
     OptionalMethodUnavailable,
     OxidationConfig,
@@ -479,14 +480,20 @@ def test_native_wannier_rejects_partial_occupations() -> None:
 
 
 def test_native_wannier_input_uses_bloch_phases_and_xyz(tmp_path: Path) -> None:
-    from ase import Atoms
+    class Cell:
+        array = [[5.0, 0.0, 0.0], [0.0, 5.0, 0.0], [0.0, 0.0, 5.0]]
 
-    atoms = Atoms(
-        "SnO2",
-        scaled_positions=[[0, 0, 0], [0.5, 0.5, 0], [0.5, 0, 0.5]],
-        cell=[5.0, 5.0, 5.0],
-        pbc=True,
-    )
+    class AtomsLike:
+        cell = Cell()
+
+        def get_chemical_symbols(self):
+            return ["Sn", "O", "O"]
+
+        def get_scaled_positions(self, wrap=False):
+            assert wrap is False
+            return [[0, 0, 0], [0.5, 0.5, 0], [0.5, 0, 0.5]]
+
+    atoms = AtomsLike()
     path = tmp_path / "wannier90.win"
     oxidation_dft._write_gamma_bloch_wannier_input(
         path, atoms, noccupied=7, num_iter=800
@@ -684,3 +691,63 @@ def test_per_structure_outputs_and_quiet_failure_summary(
     assert (source_root / "06_oxidation" / "oxidation_structure_index.csv").exists()
     assert not [record for record in caplog.records if record.levelname == "ERROR"]
     assert "without an assignment" in caplog.text
+
+
+
+def test_wannier_xyz_and_spread_parsers_use_only_wf_centres_and_final_spreads(tmp_path: Path) -> None:
+    xyz = tmp_path / "wannier90_centres.xyz"
+    xyz.write_text(
+        "4\nWannier centers plus atoms\n"
+        "X 0.1 0.2 0.3\n"
+        "X 1.1 1.2 1.3\n"
+        "Sn 0.0 0.0 0.0\n"
+        "O 2.0 2.0 2.0\n",
+        encoding="utf-8",
+    )
+    centres = oxidation_dft._parse_wannier_centres(xyz)
+    assert len(centres) == 2
+
+    wout = tmp_path / "wannier90.wout"
+    wout.write_text(
+        " WF centre and spread    1  ( 0.0, 0.0, 0.0 )     2.50000000\n"
+        " WF centre and spread    2  ( 1.0, 1.0, 1.0 )     0.70000000\n"
+        " WF centre and spread    1  ( 0.0, 0.0, 0.0 )     0.65000000\n",
+        encoding="utf-8",
+    )
+    spreads = wannier_analysis.parse_wannier_spreads(wout)
+    assert spreads == {0: pytest.approx(0.65), 1: pytest.approx(0.7)}
+
+
+def test_wannier_geometric_analysis_uses_periodic_distances_and_flags_spread_outlier() -> None:
+    structure = Structure(
+        Lattice.cubic(10.0),
+        ["Sn", "O", "O"],
+        [[0.0, 0.0, 0.0], [0.5, 0.0, 0.0], [0.0, 0.5, 0.0]],
+    )
+    centres = [
+        {"center_index": 0, "cartesian_angstrom": [9.9, 0.0, 0.0]},
+        {"center_index": 1, "cartesian_angstrom": [2.5, 0.0, 0.0]},
+        {"center_index": 2, "cartesian_angstrom": [2.5, 2.5, 0.0]},
+        {"center_index": 3, "cartesian_angstrom": [0.2, 0.0, 0.0]},
+    ]
+    enriched, site_summary, summary = wannier_analysis.analyze_wannier_centres(
+        structure,
+        centres,
+        {0: 0.6, 1: 0.7, 2: 0.8, 3: 5.0},
+        atom_center_cutoff_angstrom=0.4,
+        bond_center_cutoff_angstrom=3.0,
+        bond_distance_balance_angstrom=0.2,
+        delocalized_spread_threshold_ang2=3.0,
+        electrons_per_wf=2.0,
+    )
+    assert enriched[0]["classification"] == "atom-centered"
+    assert enriched[0]["nearest_site_index"] == 0
+    assert enriched[0]["nearest_distance_angstrom"] == pytest.approx(0.1)
+    assert enriched[1]["classification"] == "bond-centered"
+    assert enriched[2]["classification"] == "multicenter/ambiguous"
+    assert enriched[3]["classification"] == "anomalous/delocalized"
+    assert enriched[3]["geometric_classification"] == "atom-centered"
+    assert summary["represented_electrons"] == pytest.approx(8.0)
+    assert summary["n_delocalized_spread_outliers"] == 1
+    assert summary["max_spread_center_index"] == 3
+    assert site_summary[0]["nearest_wf_count"] >= 2

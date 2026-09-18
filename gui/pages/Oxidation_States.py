@@ -554,6 +554,43 @@ if "wannier" in methods:
                 "The option is retained for future multi-k workflows."
             ),
         )
+        st.markdown("**Wannier-center classification thresholds**")
+        wc1, wc2, wc3, wc4 = st.columns(4)
+        wannier["atom_center_cutoff_angstrom"] = float(
+            wc1.number_input(
+                "Atom-center cutoff (Å)",
+                min_value=0.01,
+                value=float(wannier.get("atom_center_cutoff_angstrom", 0.45)),
+                step=0.05,
+            )
+        )
+        wannier["bond_center_cutoff_angstrom"] = float(
+            wc2.number_input(
+                "Bond-center cutoff (Å)",
+                min_value=0.05,
+                value=float(wannier.get("bond_center_cutoff_angstrom", 1.35)),
+                step=0.05,
+            )
+        )
+        wannier["bond_distance_balance_angstrom"] = float(
+            wc3.number_input(
+                "Bond distance balance (Å)",
+                min_value=0.0,
+                value=float(wannier.get("bond_distance_balance_angstrom", 0.30)),
+                step=0.05,
+            )
+        )
+        wannier["delocalized_spread_threshold_ang2"] = float(
+            wc4.number_input(
+                "Delocalized spread threshold (Å²)",
+                min_value=0.01,
+                value=float(wannier.get("delocalized_spread_threshold_ang2", 3.0)),
+                step=0.25,
+            )
+        )
+        st.caption(
+            "These cutoffs classify periodic center geometry and spread outliers only; they do not define formal oxidation states."
+        )
         default_centres = f"{wannier['seed']}_centres.xyz"
         wannier["centres_file"] = st.text_input(
             "Wannier centres file",
@@ -833,6 +870,74 @@ else:
                         else "No assignment was produced for this structure."
                     )
                 )
+
+            if selected_method == "wannier":
+                analysis = method_result.get("wannier_analysis", {}) or {}
+                if analysis:
+                    st.markdown("#### Wannier-center analysis")
+                    wm1, wm2, wm3, wm4 = st.columns(4)
+                    wm1.metric("Wannier centers", int(analysis.get("n_wannier_centres", 0)))
+                    represented = analysis.get("represented_electrons")
+                    wm2.metric(
+                        "Electron equivalent",
+                        "-" if represented is None else f"{float(represented):.0f}",
+                    )
+                    wm3.metric(
+                        "Spread outliers",
+                        int(analysis.get("n_delocalized_spread_outliers", 0)),
+                    )
+                    max_spread = analysis.get("max_spread_ang2")
+                    wm4.metric(
+                        "Max spread (Å²)",
+                        "-" if max_spread is None else f"{float(max_spread):.3f}",
+                    )
+                    counts = analysis.get("classification_counts", {}) or {}
+                    if counts:
+                        st.dataframe(
+                            pd.DataFrame(
+                                [
+                                    {"classification": name, "count": count}
+                                    for name, count in counts.items()
+                                ]
+                            ),
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+                    if analysis.get("center_count_consistent_with_occupied_bands") is False:
+                        st.warning("Wannier-center count does not match the occupied-band count recorded for this run.")
+
+                site_summary = method_result.get("wannier_site_summary", []) or []
+                if site_summary:
+                    st.markdown("##### Per-site geometric Wannier descriptors")
+                    st.dataframe(
+                        pd.DataFrame(site_summary),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+                centre_rows = method_result.get("wannier_descriptors", []) or []
+                if centre_rows:
+                    with st.expander("Wannier centers and spreads", expanded=False):
+                        center_df = pd.DataFrame(centre_rows)
+                        if "spread_ang2" in center_df.columns:
+                            center_df = center_df.sort_values(
+                                "spread_ang2", ascending=False, na_position="last"
+                            )
+                        st.dataframe(center_df, use_container_width=True, hide_index=True)
+
+                parent_changes = method_result.get("parent_relative_changes", []) or []
+                if parent_changes:
+                    st.markdown("##### Parent-relative Wannier descriptor changes")
+                    st.dataframe(
+                        pd.DataFrame(parent_changes),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+                elif str(selected_meta.get("structure_kind", "")) == "vacancy-free":
+                    st.info(
+                        "This is a standalone vacancy-free Wannier analysis. No oxygen-vacancy result is required. "
+                        "Parent-relative deltas will appear only after a matched vacancy structure is also analyzed."
+                    )
 
             if target_sites_file.exists():
                 try:

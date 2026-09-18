@@ -685,6 +685,23 @@ tests/
 
 ---
 
+
+### Wannier-center descriptor analysis
+
+The GPAW/Wannier90 oxidation route can post-process an already completed
+Wannier calculation with `execute = false`; it does not require Wannier90 to be
+rerun.  It parses final Wannier spreads, associates centers with atoms using
+periodic minimum-image distances, classifies atom-/bond-/multicenter geometry,
+and flags configurable spread outliers.  It writes
+`wannier_centres_analysis.csv`, `wannier_site_summary.csv`, and
+`wannier_analysis.json`.  These outputs are electronic-structure descriptors,
+not automatic formal oxidation-state assignments.
+
+A vacancy-free structure is a complete standalone analysis target.  If matched
+oxygen-vacancy structures are added later and both parent and vacancy are
+analyzed with Wannier, parent-relative per-site descriptor changes are generated
+then; vacancy data is not required up front.
+
 ## License
 
 Proprietary and confidential.

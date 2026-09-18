@@ -677,10 +677,10 @@ def _add_parent_relative_changes(
             parent_targets[target.parent_id] = target
 
     # Parent-relative changes are provided only when both method results exist;
-    # this keeps provenance explicit rather than silently adding work.
+    # no vacancy calculation is required for standalone parent analysis.
     by_key = {(result["target_id"], result["method"]): result for result in results}
-
     structures: dict[str, Structure] = {}
+
     for result in results:
         target = target_by_id.get(result["target_id"])
         if target is None or target.kind != "oxygen-vacancy":
@@ -691,10 +691,6 @@ def _add_parent_relative_changes(
             result.setdefault("limitations", []).append(
                 "Parent-relative changes unavailable because the matched parent was not analyzed with this method."
             )
-            continue
-        child_formal = _formal_by_site(result)
-        parent_formal = _formal_by_site(parent_result)
-        if not child_formal or not parent_formal:
             continue
         try:
             parent_structure = structures.setdefault(
@@ -712,6 +708,56 @@ def _add_parent_relative_changes(
             result.setdefault("limitations", []).append(
                 f"Parent-relative atom mapping failed: {type(exc).__name__}: {exc}"
             )
+            continue
+
+        if result.get("method") == "wannier":
+            child_sites = {
+                int(rec["site_index"]): rec
+                for rec in result.get("wannier_site_summary", [])
+                if rec.get("site_index") is not None
+            }
+            parent_sites = {
+                int(rec["site_index"]): rec
+                for rec in parent_result.get("wannier_site_summary", [])
+                if rec.get("site_index") is not None
+            }
+            if not child_sites or not parent_sites:
+                continue
+            fields = (
+                "nearest_wf_count",
+                "nearest_wf_electron_equivalent",
+                "atom_centered_wf_count",
+                "bond_centered_wf_participation",
+                "ambiguous_wf_participation",
+                "delocalized_wf_nearest_count",
+            )
+            changes = []
+            for child_idx, parent_idx in mapping.items():
+                child_rec = child_sites.get(child_idx)
+                parent_rec = parent_sites.get(parent_idx)
+                if child_rec is None or parent_rec is None:
+                    continue
+                row: dict[str, Any] = {
+                    "site_index": child_idx,
+                    "parent_site_index": parent_idx,
+                    "element": child_structure[child_idx].specie.symbol,
+                }
+                for field in fields:
+                    child_value = child_rec.get(field)
+                    parent_value = parent_rec.get(field)
+                    row[field] = child_value
+                    row[f"parent_{field}"] = parent_value
+                    if isinstance(child_value, (int, float)) and isinstance(parent_value, (int, float)):
+                        row[f"delta_{field}"] = float(child_value) - float(parent_value)
+                    else:
+                        row[f"delta_{field}"] = None
+                changes.append(row)
+            result["parent_relative_changes"] = changes
+            continue
+
+        child_formal = _formal_by_site(result)
+        parent_formal = _formal_by_site(parent_result)
+        if not child_formal or not parent_formal:
             continue
         changes = []
         for child_idx, parent_idx in mapping.items():
@@ -758,6 +804,7 @@ def _flatten_site_rows(results: Sequence[dict[str, Any]]) -> list[dict[str, Any]
             "orbital_populations": "orbital_populations",
             "magnetic_moments": "magnetic_moment",
             "coordination": "coordination_number",
+            "wannier_site_summary": "nearest_wf_count",
         }
         for field_name, default_key in descriptor_fields.items():
             for rec in result.get(field_name, []):
