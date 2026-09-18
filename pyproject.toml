@@ -75,9 +75,10 @@ oxidation-bertos = [
   "transformers>=4.30",
 ]
 
-oxidation-gpaw = [
-  "gpaw>=24.6",
-]
+# GPAW is intentionally not declared as a pip optional dependency. On Linux,
+# pip commonly builds GPAW from source and therefore requires MPI/compiler
+# development headers. Install the compiled GPAW package and PAW datasets with:
+#   conda install -c conda-forge gpaw gpaw-data
 
 dev = [
   "pytest>=8",
