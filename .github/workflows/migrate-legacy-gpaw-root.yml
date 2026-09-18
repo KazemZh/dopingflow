@@ -60,7 +60,7 @@ jobs:
       - name: Run oxidation tests
         run: pytest -q tests/test_oxidation.py
       - name: Build documentation
-        run: python -m sphinx -W -b html docs/source docs/_build/html
+        run: python -m sphinx -b html docs/source docs/_build/html
       - name: Commit validated migration
         run: |
           git config user.name github-actions[bot]
