@@ -461,7 +461,7 @@ def _run_bader(
     gpw_path = workdir / str(settings.get("gpw_file", "oxidation.gpw"))
     density_path = workdir / str(settings.get("density_file", "density.cube"))
     acf = workdir / str(settings.get("acf_file", "ACF.dat"))
-    gridrefinement = int(settings.get("gridrefinement", 4))
+    gridrefinement = int(settings.get("gridrefinement", 2))
 
     if bool(settings.get("execute", False)):
         workdir.mkdir(parents=True, exist_ok=True)

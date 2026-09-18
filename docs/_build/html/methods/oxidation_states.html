@@ -277,7 +277,9 @@ in the units expected by the Bader program, and invokes the free external
 <code class="docutils literal notranslate"><span class="pre">bader</span></code> executable.  Because the density contains all electrons, the
 reported continuous partial charge is <code class="docutils literal notranslate"><span class="pre">Z</span> <span class="pre">-</span> <span class="pre">N_Bader</span></code>; no POTCAR or
 user-supplied valence-electron table is required.  Bader never emits an
-integer formal oxidation state by itself.</p>
+integer formal oxidation state by itself.  The GPAW all-electron-density
+grid refinement defaults to <code class="docutils literal notranslate"><span class="pre">2</span></code> to limit memory use; <code class="docutils literal notranslate"><span class="pre">1</span></code> and <code class="docutils literal notranslate"><span class="pre">4</span></code> remain
+available for convergence testing.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">wannier</span></code></dt><dd><p>Parses <code class="docutils literal notranslate"><span class="pre">wannier90_centres.xyz</span></code> and records Wannier-center information.
 Static centers are supporting descriptors and are not converted into formal

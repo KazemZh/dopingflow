@@ -164,7 +164,9 @@ before production GPAW calculations are attempted.  Reuse the same
    ``bader`` executable.  Because the density contains all electrons, the
    reported continuous partial charge is ``Z - N_Bader``; no POTCAR or
    user-supplied valence-electron table is required.  Bader never emits an
-   integer formal oxidation state by itself.
+   integer formal oxidation state by itself.  The GPAW all-electron-density
+   grid refinement defaults to ``2`` to limit memory use; ``1`` and ``4`` remain
+   available for convergence testing.
 
 ``wannier``
    Parses ``wannier90_centres.xyz`` and records Wannier-center information.

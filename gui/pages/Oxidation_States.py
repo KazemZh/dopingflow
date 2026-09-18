@@ -438,9 +438,9 @@ if "bader" in methods:
             "Bader ACF file", value=str(bader.get("acf_file", "ACF.dat"))
         )
         grid_options = [1, 2, 4]
-        grid_current = int(bader.get("gridrefinement", 4))
+        grid_current = int(bader.get("gridrefinement", 2))
         if grid_current not in grid_options:
-            grid_current = 4
+            grid_current = 2
         bader["gridrefinement"] = st.selectbox(
             "GPAW all-electron density grid refinement",
             grid_options,

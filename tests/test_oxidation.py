@@ -8,6 +8,7 @@ from pymatgen.core import Lattice, Structure
 from pymatgen.io.vasp import Poscar
 
 import dopingflow.oxidation as oxidation
+import dopingflow.oxidation_dft as oxidation_dft
 from dopingflow.oxidation import (
     OptionalMethodUnavailable,
     OxidationConfig,
@@ -298,6 +299,63 @@ def test_ml_only_mode_never_dispatches_dft(
     }
     run_oxidation(raw, tmp_path)
     assert dispatched == ["toss-gnn"]
+
+
+def test_bader_default_gridrefinement_is_two(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    structure = Structure(
+        Lattice.cubic(5.0),
+        ["Sn", "O"],
+        [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]],
+    )
+    structure_path = tmp_path / "POSCAR"
+    Poscar(structure).write_file(structure_path)
+    target = StructureTarget(
+        target_id="parent",
+        parent_id="parent",
+        kind="vacancy-free",
+        structure_path=structure_path,
+        n_vacancies=0,
+        vacancy_species=None,
+    )
+    cfg = _cfg(tmp_path)
+    workdir = tmp_path / "bader-default-grid"
+    workdir.mkdir()
+    (workdir / "oxidation.gpw").write_text("stub", encoding="utf-8")
+    captured: dict[str, int] = {}
+
+    def fake_density(gpw_path, density_path, *, gridrefinement):
+        del gpw_path
+        captured["gridrefinement"] = gridrefinement
+        density_path.write_text("stub density", encoding="utf-8")
+
+    class Completed:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def fake_run(tokens, *, cwd, check, text, capture_output):
+        del tokens, check, text, capture_output
+        Path(cwd, "ACF.dat").write_text(
+            "# X Y Z CHARGE MIN_DIST ATOMIC_VOL\n"
+            "---------------------------------------------\n"
+            "1 0.0 0.0 0.0 49.60 0.50 10.0\n"
+            "2 2.5 2.5 2.5 8.30 0.50 11.0\n",
+            encoding="utf-8",
+        )
+        return Completed()
+
+    monkeypatch.setattr(oxidation_dft, "_write_gpaw_all_electron_density", fake_density)
+    monkeypatch.setattr(oxidation_dft.subprocess, "run", fake_run)
+    result = oxidation_dft.run_dft_method(
+        "bader",
+        target,
+        cfg,
+        {"workdir": str(workdir), "execute": True},
+    )
+    assert captured["gridrefinement"] == 2
+    assert result["assignment_status"] == "descriptors-only"
 
 
 def test_bader_is_descriptor_only_and_never_invents_integer_state(tmp_path: Path) -> None:
