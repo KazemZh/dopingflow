@@ -1,0 +1,88 @@
+name: Fix GPAW/Bader output root default
+
+on:
+  push:
+    branches: [feature/oxidation-state-framework]
+    paths: [.github/workflows/fix-dft-output-root-default.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/oxidation-state-framework
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Apply output-root fix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          backend = Path('src/dopingflow/oxidation_dft.py')
+          text = backend.read_text(encoding='utf-8')
+          old = 'root_raw = str(settings.get("output_root") or "gpaw_oxidation").strip()'
+          new = 'root_raw = str(settings.get("output_root") or "dft_oxidation").strip()'
+          if old not in text:
+              raise SystemExit('Expected backend gpaw_oxidation default was not found')
+          backend.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          gui = Path('gui/pages/Oxidation_States.py')
+          text = gui.read_text(encoding='utf-8')
+          text = text.replace(
+              'value=str(settings.get("output_root", "gpaw_oxidation"))',
+              'value=str(settings.get("output_root", "dft_oxidation"))',
+          )
+          text = text.replace(
+              'value=str(dft.get("output_root", "gpaw_oxidation"))',
+              'value=str(dft.get("output_root", "dft_oxidation"))',
+          )
+          old_bader = 'value=str(bader.get("output_root", "gpaw_oxidation"))'
+          if old_bader not in text:
+              raise SystemExit('Expected Bader GUI default was not found')
+          new_bader = (
+              'value=str(bader.get("output_root", '
+              '(_table("dft_electronic").get("output_root") or "dft_oxidation")))'
+          )
+          text = text.replace(old_bader, new_bader, 1)
+          gui.write_text(text, encoding='utf-8')
+
+          # Keep user-facing examples consistent with the real default.
+          for filename in ('README.md', 'docs/source/methods/oxidation_states.rst'):
+              path = Path(filename)
+              text = path.read_text(encoding='utf-8')
+              path.write_text(text.replace('gpaw_oxidation', 'dft_oxidation'), encoding='utf-8')
+
+          # The workflow is one-shot and should not remain in the branch.
+          Path('.github/workflows/fix-dft-output-root-default.yml').unlink()
+          PY
+
+      - name: Verify implementation
+        run: |
+          ! grep -R 'gpaw_oxidation' src/dopingflow/oxidation_dft.py gui/pages/Oxidation_States.py README.md docs/source/methods/oxidation_states.rst
+          grep -n 'dft_oxidation' src/dopingflow/oxidation_dft.py gui/pages/Oxidation_States.py README.md docs/source/methods/oxidation_states.rst
+          python -m compileall -q src/dopingflow gui/pages/Oxidation_States.py
+
+      - name: Install validation dependencies
+        run: python -m pip install -e '.[dev,gui,docs]'
+
+      - name: Run oxidation tests
+        run: pytest -q tests/test_oxidation.py
+
+      - name: Build documentation
+        run: sphinx-build -b html docs/source docs/_build/html
+
+      - name: Commit validated fix
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'Use dft_oxidation for GPAW and Bader outputs'
+          git push origin HEAD:feature/oxidation-state-framework
