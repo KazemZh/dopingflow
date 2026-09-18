@@ -131,10 +131,17 @@ DFT interpretation
 The DFT strategy uses **GPAW** as its electronic-structure backend.  GPAW is
 open source and is driven directly from Python/ASE, so dopingflow does not
 require per-structure ``INCAR``, ``KPOINTS``, ``POTCAR``, or equivalent input
-files.  Install the optional dependency and GPAW PAW datasets before execution::
+files.
 
-   pip install -e ".[oxidation-gpaw]"
-   gpaw install-data
+GPAW is intentionally not a ``pyproject.toml`` pip extra.  A pip installation
+commonly builds GPAW locally and therefore requires MPI/compiler development
+headers.  Install the compiled GPAW package and PAW datasets from conda-forge::
+
+   conda install -c conda-forge gpaw gpaw-data
+   gpaw info
+
+Then install dopingflow itself and, when needed, the GUI with the normal pip
+extras, for example ``pip install -e ".[gui]"``.
 
 ``dft-electronic``
    Runs or reopens a GPAW ``.gpw`` ground-state calculation.  The current
@@ -327,7 +334,7 @@ CLI::
    dopingflow oxidation -c input.toml --strategy ml --methods bertos
 
 5. GPAW plus Bader and orbital analysis
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The two methods intentionally share the same per-target output root.  GPAW can
 run the single point directly from the relaxed structure.  Bader can then
