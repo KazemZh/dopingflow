@@ -476,8 +476,7 @@ Available methods are:
 
 - **Structural:** pymatgen bond valence.
 - **ML:** pretrained TOSS-GNN, CHGNet magnetic-moment analysis, and BERTOS.
-- **DFT:** GPAW single-point electronic descriptors, GPAW all-electron-density Bader analysis, Wannier descriptors, and validated
-  EOS/charge-pumping formal assignments.
+- **DFT:** `dft-auto` for an automated per-atom formal oxidation-state suggestion backed by GPAW, Bader, band-edge localization, and conditional Wannier analysis; the lower-level GPAW electronic, Bader, Wannier, and validated EOS routes remain available separately.
 - **Combined:** an explicit set of methods from multiple groups. Every method is
   retained separately; labels are not averaged and no majority vote is used.
 
@@ -516,14 +515,44 @@ command -v wannier90.x
 python -m streamlit run gui/app.py
 ```
 
-Then configure one reusable GPAW parameter set rather than per-structure DFT
-input files:
+For the automated route, the user can select only `dft-auto` and provide the
+structure/target. Existing compatible DFT outputs are reused automatically; missing
+steps are launched only when the explicit execution gate is enabled:
+
+```toml
+[oxidation]
+enabled = true
+strategy = "dft"
+methods = ["dft-auto"]
+
+[oxidation.dft_auto]
+output_root = "dft_oxidation"
+execute = false              # true runs missing GPAW/Bader/Wannier steps
+reuse_existing = true
+xc = "PBE"
+ecut_eV = 500.0
+kpts = [1, 1, 1]
+gamma = true
+smearing_eV = 0.05
+spinpol = "auto"
+band_edge_analysis = true
+wannier_mode = "auto"        # only when electronic compensation needs clarification
+```
+
+The automated result contains one suggested integer oxidation state per atom,
+a confidence value, the Bader descriptor, and any residual electronic
+compensation (electrons or holes). It deliberately does not force charge
+neutrality by inventing localized mixed-valence atoms when DFT descriptors show
+no such site separation. Optional same-method Bader reference fingerprints can
+further strengthen absolute oxidation-state discrimination.
+
+The lower-level GPAW electronic route can still be configured directly:
 
 ```toml
 [oxidation.dft_electronic]
 code = "gpaw"
 output_root = "dft_oxidation"
-execute = false              # true runs the single point directly
+execute = false
 mode = "pw"
 ecut_eV = 500.0
 xc = "PBE"
@@ -534,7 +563,7 @@ convergence_density = 1e-5
 spinpol = "auto"
 ```
 
-The generated per-target GPAW directory can contain `oxidation.gpw`, `gpaw.txt`, `dos.csv`, `pdos_integrals.json`, `magnetic_moments.csv`, and `electronic_summary.json`. Cutoff, k-point, spin, smearing, and convergence settings must be converged for the target chemistry.
+The generated per-target GPAW directory can contain `oxidation.gpw`, `gpaw.txt`, `dos.csv`, `pdos_integrals.json`, `magnetic_moments.csv`, `electronic_summary.json`, `band_edge_analysis.json`, `band_edge_site_weights.csv`, `oxidation_state_suggestions.json`, and `oxidation_state_suggestions.csv`. Cutoff, k-point, spin, smearing, and convergence settings must be converged for the target chemistry.
 
 The stage can analyze both selected vacancy-free parents and relaxed oxygen
 vacancy structures. `[oxidation].target_include` can restrict a run to one or more
@@ -545,8 +574,7 @@ parent-relative changes.
 
 Important interpretation rules are enforced in the implementation:
 
-- Bader charges are continuous descriptors and never become formal integer
-  oxidation states automatically.
+- Bader charges remain continuous descriptors and are never rounded directly into oxidation states. In `dft-auto`, they are used as supporting evidence together with local chemistry, band-edge localization, magnetic information when available, optional same-method reference fingerprints, and conditional Wannier descriptors.
 - CHGNet magnetic moments are stored separately from inferred oxidation labels;
   unsupported or ambiguous sites remain unresolved.
 - BERTOS is composition-token level and is never fabricated into site-resolved
