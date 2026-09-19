@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 STRATEGY_METHODS: dict[str, tuple[str, ...]] = {
     "structural": ("bond-valence",),
     "ml": ("toss-gnn", "chgnet", "bertos"),
-    "dft": ("dft-electronic", "bader", "wannier", "eos"),
+    "dft": ("dft-auto", "dft-electronic", "bader", "wannier", "eos"),
 }
 METHOD_STRATEGY = {
     method: strategy
@@ -34,7 +34,10 @@ _METHOD_ALIASES = {
     "toss_gnn": "toss-gnn",
     "chgnet": "chgnet",
     "bertos": "bertos",
-    "dft": "dft-electronic",
+    "dft": "dft-auto",
+    "dft-auto": "dft-auto",
+    "dft_auto": "dft-auto",
+    "auto-dft": "dft-auto",
     "dft_electronic": "dft-electronic",
     "bader": "bader",
     "wannier": "wannier",
@@ -186,7 +189,7 @@ def parse_oxidation_config(
             raise ValueError(
                 "[oxidation].methods is required for strategy='combined'; select methods explicitly"
             )
-        methods = STRATEGY_METHODS[strategy]
+        methods = ("dft-auto",) if strategy == "dft" else STRATEGY_METHODS[strategy]
 
     if strategy != "combined":
         wrong = [method for method in methods if METHOD_STRATEGY[method] != strategy]
