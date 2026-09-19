@@ -30,7 +30,7 @@ Four strategy groups are exposed:
    ``toss-gnn``, ``chgnet``, and ``bertos``.
 
 ``dft``
-   ``dft-electronic``, ``bader``, ``wannier``, and ``eos``.
+   ``dft-auto`` (the default), plus the lower-level ``dft-electronic``, ``bader``, ``wannier``, and ``eos`` methods.
 
 ``combined``
    An explicitly selected mixture of methods from any groups.
@@ -157,6 +157,53 @@ Run these commands from the dopingflow repository root for the editable
 before production GPAW calculations are attempted.  Wannier90 is installed in the same environment for the optional Wannier route; ``command -v wannier90.x`` should resolve the executable.  Reuse the same
 ``dopingflow_gpaw`` environment for subsequent GPAW-backed oxidation runs.
 
+``dft-auto``
+   The automated site-resolved DFT route. The user selects the structure and
+   one method; dopingflow then reuses or runs the required GPAW, Bader,
+   band-edge-localization, and, when useful, Wannier steps. It emits one
+   suggested integer formal oxidation state per atom together with a confidence
+   score and an explicit electronic-compensation term.
+
+   The assignment intentionally does **not** force ionic charge neutrality by
+   choosing arbitrary atoms to be reduced or oxidized. A local bond-valence
+   prior proposes chemically plausible integer states, while same-element Bader
+   populations and local magnetic moments test whether a proposed mixed-valence
+   split is actually resolved by DFT. If the DFT descriptors do not separate
+   those sites, the workflow collapses the unsupported split to the dominant
+   state and records the remaining charge as electrons or holes. Real-space
+   HOMO/LUMO participation classifies that compensation as localized,
+   intermediate, or delocalized. With ``wannier_mode = "auto"``, Wannier
+   analysis is attempted only when residual electronic compensation needs
+   additional evidence.
+
+   Same-method Bader reference fingerprints are optional. When supplied they
+   strengthen absolute discrimination between oxidation states of the same
+   element; Bader values are never rounded directly to integer oxidation states.
+
+   A compact configuration is::
+
+      [oxidation]
+      strategy = "dft"
+      methods = ["dft-auto"]
+
+      [oxidation.dft_auto]
+      output_root = "dft_oxidation"
+      execute = false
+      reuse_existing = true
+      xc = "PBE"
+      ecut_eV = 500.0
+      kpts = [1, 1, 1]
+      gamma = true
+      smearing_eV = 0.05
+      spinpol = "auto"
+      band_edge_analysis = true
+      wannier_mode = "auto"
+
+   The per-target DFT directory additionally contains
+   ``band_edge_analysis.json``, ``band_edge_site_weights.csv``,
+   ``oxidation_state_suggestions.json``, and
+   ``oxidation_state_suggestions.csv``.
+
 ``dft-electronic``
    Runs or reopens a GPAW ``.gpw`` ground-state calculation.  The current
    direct-execution path uses periodic plane-wave mode and records total energy,
@@ -219,8 +266,10 @@ before production GPAW calculations are attempted.  Wannier90 is installed in th
    static Wannier centers.
 
 The GPAW single-point path is opt-in.  ``execute=false`` only post-processes an
-existing ``oxidation.gpw``.  ``execute=true`` runs GPAW directly with the shared
-settings in ``[oxidation.dft_electronic]``.  Energy cutoff, k-point sampling,
+existing ``oxidation.gpw``.  ``execute=true`` runs GPAW directly. ``dft-auto``
+uses ``[oxidation.dft_auto]`` as its compact front end while inheriting compatible
+lower-level settings when present; the standalone electronic route uses
+``[oxidation.dft_electronic]``. Energy cutoff, k-point sampling,
 spin initialization, smearing, and SCF convergence remain scientific convergence
 parameters and must be validated for the target chemistry.  Bader has its own
 ``execute`` gate because running the external Bader executable is a separate
