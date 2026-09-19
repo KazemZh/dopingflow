@@ -1,0 +1,747 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Backend-Specific Energy Corrections &mdash; dopingflow documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=42d1b3bd"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="6. Formation Energy Evaluation" href="formation_energy.html" />
+    <link rel="prev" title="5. Bandgap Prediction" href="bandgap.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html">
+            
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../workflow_overview.html">Workflow Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation_and_usage.html">Installation, Usage, and Outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../required_inputs.html">Required Input Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file.html">Input File Specification (input.toml)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file_phase_diagram.html">Phase-Diagram Input Options</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file_vacancy_correction.html">Vacancy M0/M1 Input Options</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file_vacancy_mc.html">Staged Vacancy Monte Carlo Configuration</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="references.html">0. Reference Energy Construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="oxygen_thermodynamics.html">Oxygen Energy Convention and Chemical Potential</a></li>
+<li class="toctree-l1"><a class="reference internal" href="oxygen_calibration.html">Oxygen Reference Calibration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generation.html">1. Structure Generation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sequential.html">Sequential Doping Workflow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scanning.html">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="filtering.html">4. Relaxed-Candidate Filtering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bandgap.html">5. Bandgap Prediction</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Backend-Specific Energy Corrections</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#purpose-and-scope">Purpose and scope</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#installation">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#configuration">Configuration</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#existing-candidates-from-older-dopingflow-versions">Existing candidates from older dopingflow versions</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#experimental-sources">Experimental sources</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#curated-kingsbury-data">Curated Kingsbury data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kingsbury-plus-custom-records">Kingsbury plus custom records</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fully-custom-records">Fully custom records</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#units-and-uncertainty">Units and uncertainty</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#calibration-data-are-separate-from-competing-phases">Calibration data are separate from competing phases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#calibration-manifest">Calibration manifest</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#phase-resolved-calibration-expansion">Phase-resolved calibration expansion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#correction-basis">Correction basis</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#model-families">Model families</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#fit-and-validation">Fit and validation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#application-and-balanced-reactions">Application and balanced reactions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#scientific-consequences-of-the-conservative-oxide-only-model">Scientific consequences of the conservative oxide-only model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#corrected-phase-diagrams">Corrected phase diagrams</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#artifacts-and-cache-compatibility">Artifacts and cache compatibility</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#output-fields">Output fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#reference">Reference</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="formation_energy.html">6. Formation Energy Evaluation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="database.html">7. Database Collection</a></li>
+<li class="toctree-l1"><a class="reference internal" href="alloy_hull.html">Restricted One-Dimensional Alloy Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="phase_diagram.html">Phase Diagram and Energy Above Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="vacancy_energy_above_hull.html">Vacancy Energy Above Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="vacancy_energy_correction.html">M0/M1 Correction for Vacancy Thermodynamics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="vacancies.html">Oxygen-Vacancy Workflow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="oxidation_states.html">Oxidation-state analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="surfaces.html">Surface Generation and Relaxation</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_single_oxides.html">Explicit Example — Single Target Composition using Oxide References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/multi_reference_oxide.html">Multiple Oxide References and Relative Energies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/sequential_workflow.html">Sequential Example — Gradual Sb Doping</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/vacancies.html">Staged vacancy Monte Carlo example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../api/modules.html">dopingflow</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Backend-Specific Energy Corrections</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/methods/energy_corrections.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="backend-specific-energy-corrections">
+<h1>Backend-Specific Energy Corrections<a class="headerlink" href="#backend-specific-energy-corrections" title="Link to this heading"></a></h1>
+<section id="purpose-and-scope">
+<h2>Purpose and scope<a class="headerlink" href="#purpose-and-scope" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">dopingflow</span></code> can optionally fit systematic energy corrections using measured
+solid-state formation enthalpies and total energies evaluated with the same ML
+backend used by the workflow.  The implementation follows the simultaneous,
+uncertainty-weighted linear framework described by Wang, Kingsbury <em>et al.</em>,
+<code class="docutils literal notranslate"><span class="pre">A</span> <span class="pre">framework</span> <span class="pre">for</span> <span class="pre">quantifying</span> <span class="pre">uncertainty</span> <span class="pre">in</span> <span class="pre">DFT</span> <span class="pre">energy</span> <span class="pre">corrections</span></code>.</p>
+<p>The feature is disabled by default.  It does <strong>not</strong> apply the pre-fitted
+MP2020 numerical coefficients to UMA, MACE, GRACE, M3GNet, or another ML
+potential.  MP2020 coefficients belong to a particular Materials Project
+GGA/GGA+U methodology and are not transferable model parameters.</p>
+<p>When enabled, the data flow is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">experimental</span> <span class="n">formation</span> <span class="n">enthalpies</span>
+    <span class="o">+</span> <span class="n">phase</span><span class="o">-</span><span class="n">matched</span> <span class="n">structures</span> <span class="n">evaluated</span> <span class="n">by</span> <span class="n">one</span> <span class="n">ML</span> <span class="n">backend</span><span class="o">/</span><span class="n">model</span><span class="o">/</span><span class="n">task</span>
+    <span class="o">-&gt;</span> <span class="n">uncertainty</span><span class="o">-</span><span class="n">weighted</span> <span class="n">correction</span> <span class="n">fit</span>
+    <span class="o">-&gt;</span> <span class="n">corrected</span> <span class="n">compound</span> <span class="ow">and</span> <span class="n">balanced</span><span class="o">-</span><span class="n">reaction</span> <span class="n">energies</span>
+    <span class="o">-&gt;</span> <span class="n">a</span> <span class="n">second</span><span class="p">,</span> <span class="n">independently</span> <span class="n">rebuilt</span> <span class="n">corrected</span> <span class="n">phase</span> <span class="n">diagram</span>
+</pre></div>
+</div>
+<p>Raw energies and raw hull results are always retained.</p>
+</section>
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h2>
+<p>The curated Kingsbury source is provided by matminer.  Install the optional
+dependency with:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="s2">"dopingflow[corrections]"</span>
+</pre></div>
+</div>
+<p>Matminer 0.10.1 or newer in the 0.10 series is selected on Python 3.11 and
+newer.  The compatible 0.9 series is selected on Python 3.10.  Matminer owns
+the download and local cache of the dataset.  The fitting stage also writes a
+project-local snapshot of the exact accepted records, so a completed fit does
+not depend on a later network lookup for provenance.</p>
+</section>
+<section id="configuration">
+<h2>Configuration<a class="headerlink" href="#configuration" title="Link to this heading"></a></h2>
+<p>The conservative default uses one ordinary-oxide oxygen term:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">energy_correction</span><span class="p">]</span>
+<span class="n">enabled</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">experimental_source</span> <span class="o">=</span> <span class="s2">"kingsbury"</span>
+<span class="n">calibration_manifest</span> <span class="o">=</span> <span class="s2">"reference_structures/corrections/calibration_manifest.csv"</span>
+<span class="n">correction_terms</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"oxide"</span><span class="p">]</span>
+<span class="n">exclude_polyanions</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">"SO4"</span><span class="p">,</span> <span class="s2">"SO3"</span><span class="p">,</span> <span class="s2">"CO3"</span><span class="p">,</span> <span class="s2">"NO3"</span><span class="p">,</span> <span class="s2">"NO2"</span><span class="p">,</span> <span class="s2">"OCl3"</span><span class="p">,</span> <span class="s2">"ClO3"</span><span class="p">,</span> <span class="s2">"ClO4"</span><span class="p">,</span>
+    <span class="s2">"HO"</span><span class="p">,</span> <span class="s2">"ClO"</span><span class="p">,</span> <span class="s2">"SeO3"</span><span class="p">,</span> <span class="s2">"TiO3"</span><span class="p">,</span> <span class="s2">"TiO4"</span><span class="p">,</span> <span class="s2">"WO4"</span><span class="p">,</span> <span class="s2">"SiO3"</span><span class="p">,</span> <span class="s2">"SiO4"</span><span class="p">,</span>
+    <span class="s2">"Si2O5"</span><span class="p">,</span> <span class="s2">"PO3"</span><span class="p">,</span> <span class="s2">"PO4"</span><span class="p">,</span> <span class="s2">"P2O7"</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">max_relative_experimental_uncertainty</span> <span class="o">=</span> <span class="mf">0.10</span>
+<span class="n">max_calculated_e_above_hull_eV_per_atom</span> <span class="o">=</span> <span class="mf">0.10</span>
+<span class="n">allow_phase_mismatch</span> <span class="o">=</span> <span class="n">false</span>
+<span class="n">allow_legacy_candidate_provenance</span> <span class="o">=</span> <span class="n">false</span>
+<span class="n">allow_element_terms</span> <span class="o">=</span> <span class="n">false</span>
+<span class="n">reuse_fitted</span> <span class="o">=</span> <span class="n">true</span>
+
+<span class="n">min_degrees_of_freedom</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="n">min_term_support</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="n">max_condition_number</span> <span class="o">=</span> <span class="mf">1.0e8</span>
+<span class="n">poor_fit_rmse_warning_eV_per_atom</span> <span class="o">=</span> <span class="mf">0.20</span>
+</pre></div>
+</div>
+<p>The legacy-compatible default is <code class="docutils literal notranslate"><span class="pre">model_family</span> <span class="pre">=</span> <span class="pre">&quot;manual&quot;</span></code> with
+<code class="docutils literal notranslate"><span class="pre">calibration_selection</span> <span class="pre">=</span> <span class="pre">&quot;manifest&quot;</span></code>. Automatic family selection and
+phase-resolved calibration expansion are explicit opt-ins, for example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">energy_correction</span><span class="p">]</span>
+<span class="n">enabled</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">experimental_source</span> <span class="o">=</span> <span class="s2">"kingsbury"</span>
+<span class="n">correction_terms</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"oxide"</span><span class="p">]</span>
+
+<span class="n">model_family</span> <span class="o">=</span> <span class="s2">"auto"</span>
+<span class="n">m1_elements</span> <span class="o">=</span> <span class="s2">"workflow"</span>
+<span class="n">calibration_selection</span> <span class="o">=</span> <span class="s2">"phase_resolved"</span>
+<span class="n">auto_fetch_phase_structures</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">optimade_base_url</span> <span class="o">=</span> <span class="s2">"https://optimade.materialsproject.org/v1"</span>
+
+<span class="n">min_element_compounds</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">min_element_stoichiometries</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">min_cv_improvement_eV_per_atom</span> <span class="o">=</span> <span class="mf">0.01</span>
+<span class="n">require_cv_one_standard_error</span> <span class="o">=</span> <span class="n">true</span>
+</pre></div>
+</div>
+<p>Run the optional fit after reference construction:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">refs</span><span class="o">-</span><span class="n">build</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+<span class="n">dopingflow</span> <span class="n">corrections</span><span class="o">-</span><span class="n">fit</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">dopingflow</span> <span class="pre">run-all</span></code> places the optional <code class="docutils literal notranslate"><span class="pre">corrections</span></code> stage immediately
+after <code class="docutils literal notranslate"><span class="pre">refs</span></code>.  When <code class="docutils literal notranslate"><span class="pre">enabled</span> <span class="pre">=</span> <span class="pre">false</span></code> or the table is absent, this stage is
+a no-op and the legacy raw workflow is unchanged.</p>
+<p>Correction fitting uses the <code class="docutils literal notranslate"><span class="pre">[references]</span></code> backend/model/task. Candidate
+energies used later by formation and phase-diagram analysis must come from the
+same <code class="docutils literal notranslate"><span class="pre">[relax]</span></code> backend/model/task and the same resolved package/checkpoint
+provenance. Align those sections before running. A package upgrade or local
+checkpoint-content change requires rebuilding references, refitting/reusing the
+new signature-specific correction, and rerunning stale candidate relaxations.
+For registry-hosted model names whose resolved weight file is not exposed by
+the backend, provenance is limited to the model identifier plus package
+version; pin the backend artifact externally when byte-level reproducibility is
+required.</p>
+<section id="existing-candidates-from-older-dopingflow-versions">
+<h3>Existing candidates from older dopingflow versions<a class="headerlink" href="#existing-candidates-from-older-dopingflow-versions" title="Link to this heading"></a></h3>
+<p>Correction application normally requires the package version and a stored hash
+binding each relaxed POSCAR to its evaluated energy. Older candidate metadata
+may predate those fields even when it records the correct backend, model, task,
+optimizer, force tolerance, step limit, convergence, and energy. Repeating the
+physical relaxation is not required merely to evaluate a composition-linear
+correction. An explicit compatibility mode is available:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">allow_legacy_candidate_provenance</span> <span class="o">=</span> <span class="n">true</span>
+</pre></div>
+</div>
+<p>This mode still rejects every known mismatch, an unconverged result, a missing
+energy or POSCAR, and a changed POSCAR when an original hash exists. For fields
+that were never recorded, it adopts the current POSCAR and existing energy
+without claiming that their original byte-level binding or historical package
+version has been proven. Formation databases and phase-diagram CSVs label the
+result <code class="docutils literal notranslate"><span class="pre">legacy_explicitly_accepted</span></code> and serialize every assumption. CPU versus
+GPU execution is recorded separately and is not treated as a different
+correction Hamiltonian. Keep this option false for newly generated data.</p>
+</section>
+</section>
+<section id="experimental-sources">
+<h2>Experimental sources<a class="headerlink" href="#experimental-sources" title="Link to this heading"></a></h2>
+<section id="curated-kingsbury-data">
+<h3>Curated Kingsbury data<a class="headerlink" href="#curated-kingsbury-data" title="Link to this heading"></a></h3>
+<p>The default source is matminer’s
+<code class="docutils literal notranslate"><span class="pre">expt_formation_enthalpy_kingsbury</span></code> dataset.  The verified fields are:</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">formula</span></code></dt><dd><p>Chemical formula.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">expt_form_e</span></code></dt><dd><p>Experimental standard formation enthalpy at 298 K, in eV/atom.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">uncertainty</span></code></dt><dd><p>Reported experimental uncertainty, in eV/atom.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">phaseinfo</span></code></dt><dd><p>Reported crystal/phase information.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">reference</span></code></dt><dd><p>Original experimental source.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">likely_mpid</span></code></dt><dd><p>A likely Materials Project association.  It is provenance, not proof of
+polymorph identity.</p>
+</dd>
+</dl>
+<p>The inspected matminer 0.10.1 artifact contains 2,135 rows and has compressed
+dataset SHA-256
+<code class="docutils literal notranslate"><span class="pre">a2d2ced98d40349abd2041f169d9ed9c7f49453e86a77f82cab8c61c70dcb7ca</span></code>.
+Matminer validates its cached artifact; dopingflow additionally fingerprints
+the normalized experimental records entering each fit and saves the exact
+accepted snapshot.</p>
+<p>The normal user does not need to create an experimental CSV.</p>
+</section>
+<section id="kingsbury-plus-custom-records">
+<h3>Kingsbury plus custom records<a class="headerlink" href="#kingsbury-plus-custom-records" title="Link to this heading"></a></h3>
+<p>Use:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">experimental_source</span> <span class="o">=</span> <span class="s2">"kingsbury+custom"</span>
+<span class="n">experimental_data</span> <span class="o">=</span> <span class="s2">"path/to/custom_formation_enthalpies.csv"</span>
+</pre></div>
+</div>
+<p>Custom records override only an unambiguous reduced-formula, phase, and
+temperature match; when a custom <code class="docutils literal notranslate"><span class="pre">likely_mpid</span></code> is supplied it must match as
+well. A blank-phase record supplements rather than silently replacing a
+phase-specific curated row. Ambiguous polymorph matches are rejected instead
+of selecting a row arbitrarily.</p>
+</section>
+<section id="fully-custom-records">
+<h3>Fully custom records<a class="headerlink" href="#fully-custom-records" title="Link to this heading"></a></h3>
+<p>Use:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">experimental_source</span> <span class="o">=</span> <span class="s2">"custom"</span>
+<span class="n">experimental_data</span> <span class="o">=</span> <span class="s2">"path/to/custom_formation_enthalpies.csv"</span>
+</pre></div>
+</div>
+<p>The CSV requires these columns:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>formula,formation_enthalpy,uncertainty,phase,temperature,units,source
+</pre></div>
+</div>
+<p>Optional columns are <code class="docutils literal notranslate"><span class="pre">likely_mpid</span></code>, <code class="docutils literal notranslate"><span class="pre">doi</span></code>, <code class="docutils literal notranslate"><span class="pre">reference_id</span></code>, and <code class="docutils literal notranslate"><span class="pre">notes</span></code>.
+Accepted units are explicit variants of <code class="docutils literal notranslate"><span class="pre">eV/atom</span></code> and
+<code class="docutils literal notranslate"><span class="pre">eV/formula_unit</span></code>.  A bare <code class="docutils literal notranslate"><span class="pre">eV</span></code> value is rejected as ambiguous.  Missing
+uncertainty is an empty value, never zero statistical error. The current fit
+targets standard formation enthalpy near 298 K; nonstandard or ambiguous custom
+temperatures are rejected instead of mixed silently.</p>
+</section>
+</section>
+<section id="units-and-uncertainty">
+<h2>Units and uncertainty<a class="headerlink" href="#units-and-uncertainty" title="Link to this heading"></a></h2>
+<p>The curated values are converted from eV/atom to eV/reduced-formula unit.  If
+the reduced formula has <span class="math notranslate nohighlight">\(N\)</span> atoms,</p>
+<div class="math notranslate nohighlight">
+\[H_{f,i}^{\mathrm{FU}} = N_i H_{f,i}^{\mathrm{atom}},\qquad
+\sigma_i^{\mathrm{FU}} = N_i \sigma_i^{\mathrm{atom}}.\]</div>
+<p>For example, SnO2 has three atoms per reduced formula unit.  Both its measured
+value and uncertainty are multiplied by three before fitting.</p>
+<p>The backend values are relaxed static ML energies, whereas the measurements
+are standard formation enthalpies near 298 K, following the empirical
+calibration convention of the cited framework. The fitted coefficient can
+therefore absorb systematic static-energy and standard-state differences; it
+is not an explicit phonon, configurational-entropy, or finite-temperature Gibbs
+free-energy calculation and must not be interpreted as one.</p>
+<p>Missing, zero, or non-finite uncertainties do not receive infinite weight.
+After all formula, phase, stability, elemental-reference, and applicability
+filters have run, missing uncertainties are imputed using the mean positive
+per-atom uncertainty of the records that actually enter the fit.  The saved
+snapshot marks each value as <code class="docutils literal notranslate"><span class="pre">reported</span></code> or <code class="docutils literal notranslate"><span class="pre">imputed_mean</span></code>.</p>
+</section>
+<section id="calibration-data-are-separate-from-competing-phases">
+<h2>Calibration data are separate from competing phases<a class="headerlink" href="#calibration-data-are-separate-from-competing-phases" title="Link to this heading"></a></h2>
+<p>Three inventories have different roles:</p>
+<ul class="simple">
+<li><p>the experimental database supplies measured formation enthalpies;</p></li>
+<li><p>the calibration manifest identifies phase-matched structures/energies used
+to fit coefficients;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[references].oxides_ref</span></code> supplies chemical-potential references and/or
+competing phase-diagram entries.</p></li>
+</ul>
+<p>An oxide in <code class="docutils literal notranslate"><span class="pre">oxides_ref</span></code> is never silently added to the fit.  Conversely, a
+calibration compound need not be a competing phase in the final diagram.</p>
+</section>
+<section id="calibration-manifest">
+<h2>Calibration manifest<a class="headerlink" href="#calibration-manifest" title="Link to this heading"></a></h2>
+<p>The manifest contains one calculated polymorph per reduced formula.  Its
+minimum practical schema is:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>formula,phase,space_group,structure_path,include,
+energy_total_eV,e_above_hull_eV_per_atom,e_above_hull_provenance,
+e_above_hull_backend,e_above_hull_model,e_above_hull_task,
+e_above_hull_backend_version,e_above_hull_calculation_settings_hash,
+oxide_type,structure_id,backend,model,task,backend_version,
+calculation_settings,calculation_settings_hash,converged
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">structure_path</span></code> is always required.  The structure composition is checked
+against <code class="docutils literal notranslate"><span class="pre">formula</span></code> and its detected space group is recorded.  If
+<code class="docutils literal notranslate"><span class="pre">space_group</span></code> is supplied it must equal the source structure’s detected
+space group.  Formula or <code class="docutils literal notranslate"><span class="pre">likely_mpid</span></code> alone is insufficient to establish a
+phase match.</p>
+<p>Phase labels are intentionally strict. Empty or generic labels such as
+<code class="docutils literal notranslate"><span class="pre">solid</span></code>, <code class="docutils literal notranslate"><span class="pre">crystalline</span></code>, <code class="docutils literal notranslate"><span class="pre">unknown</span></code>, or <code class="docutils literal notranslate"><span class="pre">N/A</span></code> do not match an
+experimental polymorph. A crystal-system or space-group label must also agree
+with the supplied structure. <code class="docutils literal notranslate"><span class="pre">allow_phase_mismatch</span> <span class="pre">=</span> <span class="pre">true</span></code> can admit only an
+otherwise unambiguous formula match and records that expert override in the
+fit artifacts.</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">energy_total_eV</span></code> is empty, the structure is relaxed and evaluated using
+the <code class="docutils literal notranslate"><span class="pre">[references]</span></code> backend/model/task and relaxation infrastructure.  Source
+and relaxed space groups are compared; reconstructive phase changes require
+review and are not admitted automatically.</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">energy_total_eV</span></code> is supplied, <code class="docutils literal notranslate"><span class="pre">backend</span></code>, <code class="docutils literal notranslate"><span class="pre">model</span></code>, <code class="docutils literal notranslate"><span class="pre">task</span></code>,
+<code class="docutils literal notranslate"><span class="pre">backend_version</span></code>, and <code class="docutils literal notranslate"><span class="pre">calculation_settings</span></code> are mandatory provenance.
+The row must also declare <code class="docutils literal notranslate"><span class="pre">converged</span> <span class="pre">=</span> <span class="pre">true</span></code>; an unconverged or unspecified
+pre-relaxed geometry is not accepted as calibration evidence.
+The backend/model/task and backend package version must match the active
+<code class="docutils literal notranslate"><span class="pre">[references]</span></code> calculation exactly. <code class="docutils literal notranslate"><span class="pre">calculation_settings_hash</span></code> must equal
+the hash of the active resolved reference-relaxation signature; descriptive
+<code class="docutils literal notranslate"><span class="pre">calculation_settings</span></code> text alone is insufficient. A supplied
+energy-above-hull value also requires non-empty <code class="docutils literal notranslate"><span class="pre">e_above_hull_provenance</span></code>.
+Its backend/model/task, installed backend version, and calculation-settings
+hash columns must exactly match <code class="docutils literal notranslate"><span class="pre">[references]</span></code>. Materials Project hull values
+must not be presented as same-backend ML hull values.</p>
+<p>The default 0.10 eV/atom hull limit is active when the configuration key is
+omitted. Set <code class="docutils literal notranslate"><span class="pre">max_calculated_e_above_hull_eV_per_atom</span> <span class="pre">=</span> <span class="pre">false</span></code> explicitly to
+disable this filter; doing so removes an instability safeguard and should be a
+deliberate expert choice.</p>
+<p>Phase mismatches are excluded by default.  <code class="docutils literal notranslate"><span class="pre">allow_phase_mismatch</span> <span class="pre">=</span> <span class="pre">true</span></code> is
+an explicit expert override and the mismatch remains in the calibration
+snapshot/report.</p>
+</section>
+<section id="phase-resolved-calibration-expansion">
+<h2>Phase-resolved calibration expansion<a class="headerlink" href="#phase-resolved-calibration-expansion" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">calibration_selection</span> <span class="pre">=</span> <span class="pre">&quot;phase_resolved&quot;</span></code> derives a project-wide target
+scope from the non-oxygen host and every configured dopant. It considers all
+experimental records in that scope that are strict, non-generic, ordinary
+oxides: each record must contain O, contain no element outside the target
+host/dopant chemistry, and carry
+specific phase information, and have a valid curated <code class="docutils literal notranslate"><span class="pre">likely_mpid</span></code>. Known
+peroxide/superoxide formulas and structures classified with a non-ordinary
+oxygen environment are excluded. The accepted and rejected records, reasons,
+coverage, and target scope are written to
+<code class="docutils literal notranslate"><span class="pre">calibration_expansion_snapshot.json</span></code>.</p>
+<p>An exact phase-matched structure in <code class="docutils literal notranslate"><span class="pre">calibration_manifest</span></code> is used when
+available. Otherwise, <code class="docutils literal notranslate"><span class="pre">auto_fetch_phase_structures</span> <span class="pre">=</span> <span class="pre">true</span></code> retrieves the exact
+<code class="docutils literal notranslate"><span class="pre">likely_mpid</span></code> structure from <code class="docutils literal notranslate"><span class="pre">optimade_base_url</span></code>. The default is the
+Materials Project OPTIMADE endpoint. Both the canonical response and generated
+POSCAR are stored under <code class="docutils literal notranslate"><span class="pre">phase_structures/</span></code> with SHA-256 hashes. This cache is
+immutable: a complete matching pair is validated and reused, while a partial,
+changed, composition-mismatched, or identifier-mismatched entry stops the fit
+instead of being overwritten. If automatic fetching is false, every selected
+record must have an exact phase-verified manifest structure. Failure to
+materialize any selected record stops the expansion rather than silently
+shrinking it.</p>
+<p>OPTIMADE supplies structure geometry only. It does not supply a correction
+energy or a hull value. Each newly materialized calibration structure is
+relaxed and evaluated with the active <code class="docutils literal notranslate"><span class="pre">[references]</span></code> backend/model/task.
+Missing calibration hull values are then constructed from same-backend
+chemical-system energies, compatible entries in <code class="docutils literal notranslate"><span class="pre">reference_energies.json</span></code>, and the
+elemental terminals before the configured hull filter is applied. Materials
+Project DFT energies or hull distances are never presented as ML-backend
+evidence.</p>
+<p>This expansion affects calibration structures only. <code class="docutils literal notranslate"><span class="pre">corrections-fit</span></code> does
+not fetch, alter, or rerelax a doped workflow candidate; downstream stages apply
+the selected composition-linear model to existing, provenance-compatible raw
+energies. A real backend/package/checkpoint change still requires the normal
+reference and candidate recalculation described above.</p>
+</section>
+<section id="correction-basis">
+<h2>Correction basis<a class="headerlink" href="#correction-basis" title="Link to this heading"></a></h2>
+<p>The default <code class="docutils literal notranslate"><span class="pre">[&quot;oxide&quot;]</span></code> basis applies a coefficient per O atom classified
+as an ordinary oxide.  Oxygen environments are detected from the actual
+structure with pymatgen’s oxide classifier and a recorded relative cutoff of
+1.05.  A declared manifest <code class="docutils literal notranslate"><span class="pre">oxide_type</span></code> must agree with the structure-derived
+classification.</p>
+<p><code class="docutils literal notranslate"><span class="pre">peroxide</span></code> and <code class="docutils literal notranslate"><span class="pre">superoxide</span></code> terms are available only when named explicitly
+and require their own phase-matched calibration coverage.  If a target requires
+an oxygen-environment term absent from the fitted model, correction fails
+instead of silently applying an ordinary-oxide value.</p>
+<section id="model-families">
+<h3>Model families<a class="headerlink" href="#model-families" title="Link to this heading"></a></h3>
+<p>The nested families requested by the workflow are</p>
+<div class="math notranslate nohighlight">
+\[C_{M0}=\beta_{O}N_{O},\]</div>
+<p>and</p>
+<div class="math notranslate nohighlight">
+\[C_{M1}=\beta_{O}N_{O}+\sum_{M\in\mathcal{S}}\beta_M N_M,\]</div>
+<p>where <span class="math notranslate nohighlight">\(\mathcal{S}\)</span> contains only workflow cations that pass the
+independent coverage and validation gates below. The <span class="math notranslate nohighlight">\(N_M\)</span> features are
+evaluated only for ordinary oxides.</p>
+<p><code class="docutils literal notranslate"><span class="pre">model_family</span></code> accepts four values:</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">manual</span></code></dt><dd><p>Fits exactly the user-provided <code class="docutils literal notranslate"><span class="pre">correction_terms</span></code> and preserves the
+previous behavior. This is the default.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">m0</span></code></dt><dd><p>Forces the conservative M0 family: one ordinary-oxide correction per O atom.
+The automatic-family path currently requires <code class="docutils literal notranslate"><span class="pre">correction_terms</span> <span class="pre">=</span> <span class="pre">[&quot;oxide&quot;]</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">m1</span></code></dt><dd><p>Forces an admissible M1 family: M0 plus one or more independently supported
+<code class="docutils literal notranslate"><span class="pre">oxide_cation:&lt;Element&gt;</span></code> terms. It fails if no valid M1 candidate remains.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">auto</span></code></dt><dd><p>Compares the admissible M0 and M1 candidates on identical leave-one-out
+observations and publishes M1 only when it clears every configured gate.
+Otherwise it deterministically falls back to M0; equality also goes to M0.</p>
+</dd>
+</dl>
+<p>With <code class="docutils literal notranslate"><span class="pre">m1_elements</span> <span class="pre">=</span> <span class="pre">&quot;workflow&quot;</span></code>, candidate M1 elements are the non-oxygen
+host and dopants inferred from <code class="docutils literal notranslate"><span class="pre">[references].host</span></code> and <code class="docutils literal notranslate"><span class="pre">[doping]</span></code>. An array
+such as <code class="docutils literal notranslate"><span class="pre">m1_elements</span> <span class="pre">=</span> <span class="pre">[&quot;Sn&quot;,</span> <span class="pre">&quot;Sb&quot;]</span></code> explicitly sets the candidate M1
+elements, but phase-resolved discovery remains scoped to the complete workflow
+host-and-dopant inventory. Elements without enough independent calibration
+support are excluded individually and reported; they are never assigned a
+guessed or zero coefficient.</p>
+<p>An <code class="docutils literal notranslate"><span class="pre">oxide_cation:X</span></code> term is deliberately narrower than the manual
+<code class="docutils literal notranslate"><span class="pre">element:X</span></code> term. It counts X only when the actual target structure is
+classified as an ordinary oxide, and is zero for elemental and non-oxide
+entries. It is not a local coordination, oxidation-state, or dopant-site
+descriptor. M1 therefore remains a composition-linear oxide model, not a model
+of a particular doped supercell.</p>
+<p>Automatic-family coverage requires at least <code class="docutils literal notranslate"><span class="pre">min_element_compounds</span></code>
+independent formula/oxygen-ratio pairs for each admitted cation (minimum 3;
+default 3) and <code class="docutils literal notranslate"><span class="pre">min_element_stoichiometries</span></code> distinct O/cation ratios (minimum
+2; default 3). M1 must also remain full-rank and well-conditioned and must not
+worsen the cation-specific leave-one-out RMSE. For <code class="docutils literal notranslate"><span class="pre">auto</span></code> to publish M1, its
+overall leave-one-out RMSE must improve on M0 by strictly more than
+<code class="docutils literal notranslate"><span class="pre">min_cv_improvement_eV_per_atom</span></code> (default 0.01 eV/atom). When
+<code class="docutils literal notranslate"><span class="pre">require_cv_one_standard_error</span> <span class="pre">=</span> <span class="pre">true</span></code> (default), the paired improvement in
+squared leave-one-out loss must additionally exceed one standard error.
+Automatic selection requires at least eight independent ordinary-oxide
+formulas and caps the effective condition-number threshold at <code class="docutils literal notranslate"><span class="pre">1e4</span></code> even if
+the broader manual-fit limit is larger. Forced <code class="docutils literal notranslate"><span class="pre">m0</span></code> and <code class="docutils literal notranslate"><span class="pre">m1</span></code> modes still run and record these admission
+diagnostics. Forced <code class="docutils literal notranslate"><span class="pre">m1</span></code> may override the final automatic RMSE or
+one-standard-error preference, but it cannot create an M1 candidate that fails
+coverage, rank, conditioning, or cation-specific non-worsening requirements.</p>
+<p>Advanced <code class="docutils literal notranslate"><span class="pre">element:&lt;symbol&gt;</span></code> terms use a FERE-like composition term in every
+non-elemental compound containing that element.  They are disabled unless
+<code class="docutils literal notranslate"><span class="pre">allow_element_terms</span> <span class="pre">=</span> <span class="pre">true</span></code> is also set.  This is an explicit scientific
+assumption, not an automatically inferred dopant coefficient.  Such a basis
+must be full-rank, well-conditioned, independently validated, and justified for
+the ML backend.  In particular:</p>
+<ul class="simple">
+<li><p>the paper’s transition-metal MP terms repair GGA/GGA+U mixing and are not a
+default for a uniform ML backend;</p></li>
+<li><p>the paper’s <code class="docutils literal notranslate"><span class="pre">Sb</span></code> term describes Sb as an anion in antimonides, not Sb as a
+cation dopant in an oxide;</p></li>
+<li><p>no Sn, Sb, Ti, or other coefficient is created merely because that element
+appears in a doping request.</p></li>
+</ul>
+<p>The default <code class="docutils literal notranslate"><span class="pre">exclude_polyanions</span></code> list rejects sulfate, sulfite, carbonate,
+nitrate/nitrite, chlorate/perchlorate, hydroxyl-like, selenite, titanate,
+tungstate, silicate, and phosphate formula tokens before fitting. These oxygen
+chemistries are outside the conservative ordinary-oxide basis. Clearing or
+changing the list is supported, but it is a scientific model change and
+requires calibration coverage and validation appropriate to the added terms.
+The policy is serialized with the model and the same excluded formula tokens
+are rejected at application time, so a competing polyanion phase cannot enter a
+hull with an ordinary-oxide correction silently extrapolated onto it.</p>
+</section>
+</section>
+<section id="fit-and-validation">
+<h2>Fit and validation<a class="headerlink" href="#fit-and-validation" title="Link to this heading"></a></h2>
+<p>For calibration compound <span class="math notranslate nohighlight">\(i\)</span>,</p>
+<div class="math notranslate nohighlight">
+\[h_i^{\mathrm{raw}} = E_i^{\mathrm{ML}} - \sum_e n_{ie}\mu_e^{\mathrm{ML}},\]</div>
+<div class="math notranslate nohighlight">
+\[d_i = h_i^{\mathrm{expt}} - h_i^{\mathrm{raw}}.\]</div>
+<p>The coefficient vector <span class="math notranslate nohighlight">\(\beta\)</span> minimizes</p>
+<div class="math notranslate nohighlight">
+\[\sum_i \left(\frac{\mathbf{x}_i^T\beta-d_i}{\sigma_i}\right)^2.\]</div>
+<p>All coefficients are fitted simultaneously.  The implementation requires full
+weighted-design rank, at least the configured residual degrees of freedom, at
+least <code class="docutils literal notranslate"><span class="pre">min_term_support</span></code> accepted compounds with nonzero support for every
+term, and a condition number below <code class="docutils literal notranslate"><span class="pre">max_condition_number</span></code> (default
+<code class="docutils literal notranslate"><span class="pre">1e8</span></code>).  It stores the full
+parameter covariance</p>
+<div class="math notranslate nohighlight">
+\[C_\beta=(X^T W X)^{-1},\]</div>
+<p>including off-diagonal correlations.  The fit report contains residual RMSE,
+MAE, maximum residual, weighted metrics, leave-one-out diagnostics, and
+leave-element-family-out diagnostics where the remaining design stays
+identifiable.</p>
+<p>For M0/M1 modes, <code class="docutils literal notranslate"><span class="pre">correction_model_selection.json</span></code> additionally records both
+candidate scores, coverage and exclusion reasons, thresholds, the automatic and
+published families, and a selection-run hash. Full candidate parameters and fit
+reports are retained in <code class="docutils literal notranslate"><span class="pre">candidate_models/</span></code>. The selected model alone is
+published as <code class="docutils literal notranslate"><span class="pre">correction_parameters.json</span></code> and is the only model consumed by
+formation and phase-diagram stages.</p>
+<p>Residual and cross-validation errors are model-validation diagnostics.  They
+are not treated as experimental uncertainty or automatically combined with the
+coefficient covariance.</p>
+<p>When any fit or cross-validation RMSE exceeds
+<code class="docutils literal notranslate"><span class="pre">poor_fit_rmse_warning_eV_per_atom</span></code>, the model is still saved so that its
+diagnostics remain reproducible, but <code class="docutils literal notranslate"><span class="pre">correction_fit_report.json</span></code> records a
+<code class="docutils literal notranslate"><span class="pre">quality_warning</span></code>.  Treat that warning as a stop condition for production
+formation energies and phase diagrams: broaden or revise the scientifically
+justified calibration basis instead of discarding inconvenient compounds or
+raising the warning threshold merely to accept the fit.</p>
+</section>
+<section id="application-and-balanced-reactions">
+<h2>Application and balanced reactions<a class="headerlink" href="#application-and-balanced-reactions" title="Link to this heading"></a></h2>
+<p>For a target structure,</p>
+<div class="math notranslate nohighlight">
+\[C_s=\mathbf{x}_s^T\hat\beta,\qquad
+E_s^{\mathrm{corrected}}=E_s^{\mathrm{raw}}+C_s.\]</div>
+<p>For a balanced reaction, the combined feature vector is</p>
+<div class="math notranslate nohighlight">
+\[\mathbf{q}=\sum_j \nu_j\mathbf{x}_j,\]</div>
+<p>and therefore</p>
+<div class="math notranslate nohighlight">
+\[\Delta E^{\mathrm{corrected}} = \Delta E^{\mathrm{raw}}
++\mathbf{q}^T\hat\beta,\]</div>
+<div class="math notranslate nohighlight">
+\[u(\Delta C)=\sqrt{\mathbf{q}^T C_\beta\mathbf{q}}.\]</div>
+<p>This reaction-vector calculation retains the exact parameter correlations.
+Adding separate phase uncertainties in quadrature would incorrectly discard
+correlation and cancellation.</p>
+<p>Elemental terminal entries, including the O2 reference, receive no compound
+correction.  This is consistent with the fitted formation-energy convention
+and avoids double counting.</p>
+</section>
+<section id="scientific-consequences-of-the-conservative-oxide-only-model">
+<h2>Scientific consequences of the conservative oxide-only model<a class="headerlink" href="#scientific-consequences-of-the-conservative-oxide-only-model" title="Link to this heading"></a></h2>
+<p>An ordinary-oxide correction is composition-linear.  It does not represent a
+local dopant or vacancy environment.  Consequently:</p>
+<ul class="simple">
+<li><p>a metal-reference substitution reaction with unchanged oxygen count has a
+zero reaction correction;</p></li>
+<li><p>isocompositional candidate ordering cannot change;</p></li>
+<li><p>oxide-to-oxide decompositions that retain all oxygen in compounds cancel;</p></li>
+<li><p>redox reactions exchanging oxygen with uncorrected elemental O2 can shift;</p></li>
+<li><p>an oxygen-vacancy reaction has a nonzero oxygen reaction vector, but the
+current vacancy workflow does not yet publish corrected vacancy
+thermodynamics automatically.</p></li>
+</ul>
+<p>For SnO2:Sb or SnO2:Sb+Ti, the default correction may therefore cancel in the
+substitution energy.  This is a scientifically meaningful zero, not a missing
+calculation.  A dopant-specific shift requires a separately justified,
+identifiable, and validated correction basis; it must not be invented merely
+to force a numerical change.</p>
+<p>An admitted M1 oxide-cation term can make that balanced substitution correction
+nonzero, but only because independent ordinary-oxide calibration data
+passed the coverage and cross-validation gates. It remains composition-linear
+and cannot distinguish dopant arrangements with the same composition.</p>
+</section>
+<section id="corrected-phase-diagrams">
+<h2>Corrected phase diagrams<a class="headerlink" href="#corrected-phase-diagrams" title="Link to this heading"></a></h2>
+<p>The full <code class="docutils literal notranslate"><span class="pre">phase-diagram</span></code> stage builds two complete entry sets:</p>
+<ol class="arabic simple">
+<li><p>raw references and candidates, followed by a raw <code class="docutils literal notranslate"><span class="pre">PhaseDiagram</span></code>;</p></li>
+<li><p>corrected copies of every applicable non-elemental reference and candidate,
+followed by a new corrected <code class="docutils literal notranslate"><span class="pre">PhaseDiagram</span></code>.</p></li>
+</ol>
+<p>Corrected energy above hull is evaluated only on the second hull.  It is never
+computed by adding a correction to raw energy above hull.  If any participating
+non-elemental entry lacks a structure, has an incompatible backend, or needs an
+unfitted environment term, the corrected diagram for that system is rejected.
+There is no partially corrected/raw hull.</p>
+<p>The specialized one-dimensional <code class="docutils literal notranslate"><span class="pre">alloy-hull</span></code> stage remains a raw diagnostic;
+corrected multicomponent stability is reported by <code class="docutils literal notranslate"><span class="pre">phase-diagram</span></code>.</p>
+</section>
+<section id="artifacts-and-cache-compatibility">
+<h2>Artifacts and cache compatibility<a class="headerlink" href="#artifacts-and-cache-compatibility" title="Link to this heading"></a></h2>
+<p>Artifacts are stored under a backend/model/task-specific directory whose final
+10 hexadecimal characters hash the complete resolved backend signature,
+including package/checkpoint provenance:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">reference_structures</span><span class="o">/</span><span class="n">corrections</span><span class="o">/&lt;</span><span class="n">backend</span><span class="o">-</span><span class="n">model</span><span class="o">-</span><span class="n">task</span><span class="o">&gt;-&lt;</span><span class="n">signature</span><span class="o">-</span><span class="nb">hash</span><span class="o">&gt;/</span>
+    <span class="n">correction_parameters</span><span class="o">.</span><span class="n">json</span>
+    <span class="n">correction_fit_report</span><span class="o">.</span><span class="n">json</span>
+    <span class="n">correction_metadata</span><span class="o">.</span><span class="n">json</span>
+    <span class="n">experimental_calibration_used</span><span class="o">.</span><span class="n">json</span>
+    <span class="n">calibration_calculated_energies</span><span class="o">.</span><span class="n">json</span>
+    <span class="n">calibration_rejected</span><span class="o">.</span><span class="n">json</span>
+    <span class="n">relaxed_calibration</span><span class="o">/</span>
+    <span class="n">correction_model_selection</span><span class="o">.</span><span class="n">json</span>        <span class="c1"># M0/M1 modes</span>
+    <span class="n">candidate_models</span><span class="o">/</span>                       <span class="c1"># M0/M1 modes</span>
+        <span class="n">m0</span><span class="o">.</span><span class="n">json</span>
+        <span class="n">m0_fit_report</span><span class="o">.</span><span class="n">json</span>
+        <span class="n">m1</span><span class="o">.</span><span class="n">json</span>                             <span class="c1"># when admissible</span>
+        <span class="n">m1_fit_report</span><span class="o">.</span><span class="n">json</span>                  <span class="c1"># when admissible</span>
+    <span class="n">calibration_expansion_snapshot</span><span class="o">.</span><span class="n">json</span>    <span class="c1"># phase_resolved mode</span>
+    <span class="n">phase_structures</span><span class="o">/</span>                       <span class="c1"># fetched OPTIMADE inputs</span>
+        <span class="n">mp</span><span class="o">-&lt;</span><span class="nb">id</span><span class="o">&gt;.</span><span class="n">optimade</span><span class="o">.</span><span class="n">json</span>
+        <span class="n">mp</span><span class="o">-&lt;</span><span class="nb">id</span><span class="o">&gt;.</span><span class="n">POSCAR</span>
+</pre></div>
+</div>
+<p>The model records the backend, model, task, relaxation settings, terms,
+calibration records, units, dataset/version, fit-input hash, coefficients, full
+covariance, and a fit ID. M0/M1 models additionally bind the selected family,
+target elements, selection-run hash, selection-report hash, and expansion
+snapshot hash. Reuse requires these files and hashes to agree exactly.
+Formation and phase-diagram analyses rebuild whenever correction is enabled,
+while collection verifies the current fit and formation-input fingerprint
+before publishing corrected rows.</p>
+<p>Reference reuse and correction application also require positive convergence,
+an identical relaxation signature for the host and every elemental, gas, and
+compound reference, and matching hashes for every stored relaxed structure.
+Editing a relaxed host, metal, O2, or oxide POSCAR after its energy was evaluated
+invalidates the reference set and requires <code class="docutils literal notranslate"><span class="pre">refs-build</span></code> followed by
+<code class="docutils literal notranslate"><span class="pre">corrections-fit</span></code>.</p>
+<p>For example, a MACE <code class="docutils literal notranslate"><span class="pre">small</span></code> fit with no task is stored under a slug shaped
+like <code class="docutils literal notranslate"><span class="pre">mace-small-1a2b3c4d5e</span></code>. The hash, not the illustrative characters in
+this example, distinguishes signatures that share the same visible
+backend/model/task label but differ in resolved settings, package version, or
+checkpoint content.</p>
+</section>
+<section id="output-fields">
+<h2>Output fields<a class="headerlink" href="#output-fields" title="Link to this heading"></a></h2>
+<p>Formation metadata and CSV output retain legacy <code class="docutils literal notranslate"><span class="pre">E_form_*</span></code> fields as raw and
+add fields including:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">formation_energy_raw_eV_total</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">energy_correction_eV_total</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">correction_uncertainty_eV_total</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">E_form_corrected_eV_total</span></code> and normalized variants;</p></li>
+<li><p>method, dataset, backend, parameter set, fit ID, and selected model family.</p></li>
+</ul>
+<p>Phase-diagram output retains the legacy raw aliases and adds:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">energy_raw_eV</span></code> and <code class="docutils literal notranslate"><span class="pre">energy_corrected_eV</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">energy_above_hull_raw_eV_per_atom</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">energy_above_hull_corrected_eV_per_atom</span></code>;</p></li>
+<li><p>corrected-minus-raw hull change, fixed-facet parameter shift, combined
+reaction vector, and full-covariance uncertainty;</p></li>
+<li><p>raw/corrected stability and decomposition;</p></li>
+<li><p>correction applicability and provenance.</p></li>
+</ul>
+<p>Uncertainty categories remain separate.  Experimental measurement uncertainty,
+coefficient/correction uncertainty, ML ensemble uncertainty (if a backend ever
+provides it), and residual validation error are not combined without an
+explicit statistical model.</p>
+</section>
+<section id="reference">
+<h2>Reference<a class="headerlink" href="#reference" title="Link to this heading"></a></h2>
+<p>A. Wang, R. Kingsbury, M. McDermott, M. Horton, A. Jain, S. P. Ong,
+S. Dwaraknath, and K. A. Persson, <em>A framework for quantifying uncertainty in
+DFT energy corrections</em>, Scientific Reports <strong>11</strong>, 15496 (2021).</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="bandgap.html" class="btn btn-neutral float-left" title="5. Bandgap Prediction" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="formation_energy.html" class="btn btn-neutral float-right" title="6. Formation Energy Evaluation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

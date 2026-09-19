@@ -1,0 +1,2214 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Input File Specification (input.toml) &mdash; dopingflow documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=42d1b3bd"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Phase-Diagram Input Options" href="input_file_phase_diagram.html" />
+    <link rel="prev" title="Required Input Files" href="required_inputs.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html">
+            
+              <img src="_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="workflow_overview.html">Workflow Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation_and_usage.html">Installation, Usage, and Outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="required_inputs.html">Required Input Files</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Input File Specification (input.toml)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#execution-model">Execution Model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#execution-behavior">Execution Behavior</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#vacancies">[vacancies]</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#references">[references]</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#common-parameters">Common Parameters</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#reference-mode-string-default-metal">reference_mode (string, default: “metal”)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#skip-if-done-boolean-default-true">skip_if_done (boolean, default: true)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#fmax-float-default-0-02">fmax (float, default: 0.02)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#supercell-array-of-3-integers-required">supercell (array of 3 integers, required)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#host-string-required">host (string, required)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#host-dir-string-default-reference-structures-oxides">host_dir (string, default: “reference_structures/oxides”)</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#metal-reference-mode">Metal Reference Mode</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#metal-ref-array-of-strings-required-in-metal-mode">metal_ref (array of strings, required in metal mode)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#metals-dir-string-default-reference-structures-metals">metals_dir (string, default: “reference_structures/metals”)</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#oxide-reference-mode">Oxide Reference Mode</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#oxides-ref-array-of-strings-required-in-oxide-mode-optional-in-metal-mode">oxides_ref (array of strings; required in oxide mode, optional in metal mode)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#oxides-dir-string-default-reference-structures-oxides">oxides_dir (string, default: “reference_structures/oxides”)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#gas-ref-string-default-o2">gas_ref (string, default: “O2”)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#gas-dir-string-default-reference-structures-gas">gas_dir (string, default: “reference_structures/gas”)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#oxygen-mode-string-default-o-rich">oxygen_mode (string, default: “O-rich”)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#oxygen-reference-correction-ev-float-default-0-0">oxygen_reference_correction_ev (float, default: 0.0)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#delta-mu-o-ev-float-default-0-0">delta_mu_O_ev (float, default: 0.0)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#legacy-muo-shift-ev">Legacy <code class="docutils literal notranslate"><span class="pre">muO_shift_ev</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#energy-correction">[energy_correction]</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#enabled-boolean-default-false">enabled (boolean, default: false)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#experimental-source-string-default-kingsbury">experimental_source (string, default: “kingsbury”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#experimental-data-string-conditionally-required">experimental_data (string, conditionally required)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#dataset-cache-dir-string-optional">dataset_cache_dir (string, optional)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#model-family-string-default-manual">model_family (string, default: “manual”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#m1-elements-string-or-array-default-workflow">m1_elements (string or array, default: “workflow”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#calibration-selection-string-default-manifest">calibration_selection (string, default: “manifest”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#auto-fetch-phase-structures-boolean-default-false">auto_fetch_phase_structures (boolean, default: false)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#optimade-base-url-string-default-materials-project-optimade-v1">optimade_base_url (string, default: Materials Project OPTIMADE v1)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#calibration-manifest-string-default-shown-above">calibration_manifest (string, default shown above)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#correction-terms-array-of-strings-default-oxide">correction_terms (array of strings, default: [“oxide”])</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#allow-element-terms-boolean-default-false">allow_element_terms (boolean, default: false)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#exclude-polyanions-array-of-strings-conservative-list-by-default">exclude_polyanions (array of strings, conservative list by default)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#max-relative-experimental-uncertainty-float-default-0-10">max_relative_experimental_uncertainty (float, default: 0.10)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#max-calculated-e-above-hull-ev-per-atom-float-default-0-10">max_calculated_e_above_hull_eV_per_atom (float, default: 0.10)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#allow-phase-mismatch-boolean-default-false">allow_phase_mismatch (boolean, default: false)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#allow-legacy-candidate-provenance-boolean-default-false">allow_legacy_candidate_provenance (boolean, default: false)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#reuse-fitted-boolean-default-true">reuse_fitted (boolean, default: true)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#min-degrees-of-freedom-integer-default-1">min_degrees_of_freedom (integer, default: 1)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#min-term-support-integer-default-2">min_term_support (integer, default: 2)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#min-element-compounds-integer-default-3-minimum-3">min_element_compounds (integer, default: 3; minimum: 3)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#min-element-stoichiometries-integer-default-3-minimum-2">min_element_stoichiometries (integer, default: 3; minimum: 2)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#min-cv-improvement-ev-per-atom-float-default-0-01">min_cv_improvement_eV_per_atom (float, default: 0.01)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#require-cv-one-standard-error-boolean-default-true">require_cv_one_standard_error (boolean, default: true)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#max-condition-number-float-default-1e8">max_condition_number (float, default: 1e8)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#poor-fit-rmse-warning-ev-per-atom-float-default-0-20">poor_fit_rmse_warning_eV_per_atom (float, default: 0.20)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#structure">[structure]</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#outdir-string-default-random-structures">outdir (string, default: “random_structures”)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#doping">[doping]</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#host-species-string-required">host_species (string, required)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#mode-string-default-explicit">mode (string, default: “explicit”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#explicit-mode">Explicit Mode</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#compositions-array-of-tables-required-in-explicit-mode">compositions (array of tables, required in explicit mode)</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#enumerate-mode">Enumerate Mode</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#dopants-array-of-strings-required-in-enumerate-mode">dopants (array of strings, required in enumerate mode)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#must-include-array-of-strings-default">must_include (array of strings, default: [])</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#max-dopants-total-integer-default-2">max_dopants_total (integer, default: 2)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#allowed-totals-array-of-floats-required-in-enumerate-mode">allowed_totals (array of floats, required in enumerate mode)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#levels-array-of-floats-required-in-enumerate-mode">levels (array of floats, required in enumerate mode)</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#sequential">[sequential]</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#outdir-string-default-sequential-structures">outdir (string, default: “sequential_structures”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#mode-string-default-full">mode (string, default: “full”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#example">Example</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#generate">[generate]</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#important">Important</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#parameters">Parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#seed-base-integer-default-0">seed_base (integer, default: 0)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#poscar-order-array-of-strings-default">poscar_order (array of strings, default: [])</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#clean-outdir-boolean-default-true">clean_outdir (boolean, default: true)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#output">Output</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#scan">[scan]</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id1">Parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#backend-string-default-m3gnet">backend (string, default: “m3gnet”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#model-string-default-default">model (string, default: “default”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#task-string-default">task (string, default: “”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#poscar-in-string-default-poscar">poscar_in (string, default: “POSCAR”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#topk-integer-default-15">topk (integer, default: 15)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#symprec-float-default-1e-3">symprec (float, default: 1e-3)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#mode-string-default-auto">mode (string, default: “auto”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#max-enum-integer-default-300000">max_enum (integer, default: 300000)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#max-unique-integer-default-100000">max_unique (integer, default: 100000)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#device-string-default-cpu">device (string, default: “cpu”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#n-workers-integer-default-12">n_workers (integer, default: 12)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#chunksize-integer-default-50">chunksize (integer, default: 50)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gpu-id-integer-default-0">gpu_id (integer, default: 0)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#anion-species-array-of-strings-default-o">anion_species (array of strings, default: [“O”])</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#host-species-from-doping">host_species (from [doping])</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id2">skip_if_done (boolean, default: true)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sampling-parameters">Sampling parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sample-budget-integer-default-20000">sample_budget (integer, default: 20000)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sample-batch-size-integer-default-256">sample_batch_size (integer, default: 256)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sample-patience-integer-default-4000">sample_patience (integer, default: 4000)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sample-seed-integer-default-42">sample_seed (integer, default: 42)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sample-max-saved-integer-default-50000">sample_max_saved (integer, default: 50000)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#notes">Notes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id3">Output</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#relax">[relax]</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id4">Parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id5">backend (string, default: “m3gnet”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id6">model (string, default: “default”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id7">task (string, default: “”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#relax-mode-string-default-atoms">relax_mode (string, default: “atoms”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#cell-filter-string-default-frechet">cell_filter (string, default: “frechet”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#optimizer-string-default-bfgs">optimizer (string, default: “bfgs”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fmax-float-default-0-05">fmax (float, default: 0.05)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#max-steps-integer-default-300">max_steps (integer, default: 300)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id8">device (string, default: “cpu”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id9">gpu_id (integer, default: 0)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#n-workers-integer-default-6">n_workers (integer, default: 6)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#tf-threads-integer-default-1">tf_threads (integer, default: 1)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#omp-threads-integer-default-1">omp_threads (integer, default: 1)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id10">skip_if_done (boolean, default: true)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#skip-candidate-if-done-boolean-default-true">skip_candidate_if_done (boolean, default: true)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id11">Notes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id12">Output</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#filter">[filter]</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#mode-string-default-window">mode (string, default: “window”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#window-mev-float-default-50-0">window_meV (float, default: 50.0)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#max-candidates-integer-default-12">max_candidates (integer, default: 12)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id13">skip_if_done (boolean, default: true)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#bandgap">[bandgap]</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#enabled-boolean-default-true">enabled (boolean, default: true)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id14">skip_if_done (boolean, default: true)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#cutoff-float-default-8-0">cutoff (float, default: 8.0)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#max-neighbors-integer-default-12">max_neighbors (integer, default: 12)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id15">device (string, default: “cpu”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id16">gpu_id (integer, default: 0)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#batch-size-integer-default-32">batch_size (integer, default: 32)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#n-workers-integer-default-1">n_workers (integer, default: 1)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id17">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#formation">[formation]</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id18">skip_if_done (boolean, default: true)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#normalize-string-default-per-dopant">normalize (string, default: “per_dopant”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#relative-enabled-boolean-default-false">relative_enabled (boolean, default: false)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#endpoint-x-string-or-float-default-auto">endpoint_x (string or float, default: “auto”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id19">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#database">[database]</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id20">skip_if_done (boolean, default: true)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#phase-diagram">[phase_diagram]</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#id21">skip_if_done (boolean, default: true)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#stable-threshold-ev-per-atom-float-default-1e-8">stable_threshold_eV_per_atom (float, default: 1e-8)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#id22">[vacancies]</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#surface">[surface]</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#candidate-selection">Candidate Selection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#orientation-modes">Orientation Modes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#orientation-mode-string">orientation_mode (string)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#miller-list-list">miller_list (list)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#max-miller-integer">max_miller (integer)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#max-orientations-integer">max_orientations (integer)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#slab-construction">Slab Construction</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#min-slab-size-float">min_slab_size (float)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#min-vacuum-size-float">min_vacuum_size (float)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#center-slab-boolean">center_slab (boolean)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#in-unit-planes-boolean">in_unit_planes (boolean)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#lll-reduce-boolean">lll_reduce (boolean)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#primitive-boolean">primitive (boolean)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#reorient-lattice-boolean">reorient_lattice (boolean)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#orthogonal-c-boolean">orthogonal_c (boolean)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#surface-terminations">Surface Terminations</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#termination-mode-string">termination_mode (string)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#max-terminations-per-orientation-integer">max_terminations_per_orientation (integer)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fixed-atoms">Fixed Atoms</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fix-atoms-boolean">fix_atoms (boolean)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fix-region-string">fix_region (string)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fix-method-string">fix_method (string)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fix-n-layers-integer">fix_n_layers (integer)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fix-thickness-a-float">fix_thickness_A (float)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fix-layer-tolerance-a-float">fix_layer_tolerance_A (float)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id23">Notes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#surface-relaxation">Surface Relaxation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#relax-surface-boolean">relax_surface (boolean)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#surface-backend-string-default-m3gnet">surface_backend (string, default: “m3gnet”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#surface-model-string-default-default">surface_model (string, default: “default”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#surface-task-string-default">surface_task (string, default: “”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#surface-optimizer-string-default-bfgs">surface_optimizer (string, default: “bfgs”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#surface-fmax-float">surface_fmax (float)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#surface-max-steps-integer-default-300">surface_max_steps (integer, default: 300)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#surface-device-string-default-cpu">surface_device (string, default: “cpu”)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#surface-gpu-id-integer-default-0">surface_gpu_id (integer, default: 0)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#surface-tf-threads-integer">surface_tf_threads (integer)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#surface-omp-threads-integer">surface_omp_threads (integer)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id24">Notes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#surface-energy">Surface energy</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#requirements">Requirements</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#output-fields">Output fields</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#surface-energy-status-string">surface_energy_status (string)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#surface-energy-ev-a2-float">surface_energy_eV_A2 (float)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#surface-energy-j-m2-float">surface_energy_J_m2 (float)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#surface-energy-reference-bulk-ev-float">surface_energy_reference_bulk_eV (float)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#surface-energy-n-bulk-equiv-float">surface_energy_n_bulk_equiv (float)</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id25">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#id26">Output</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id27">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#design-principles">Design Principles</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="input_file_phase_diagram.html">Phase-Diagram Input Options</a></li>
+<li class="toctree-l1"><a class="reference internal" href="input_file_vacancy_correction.html">Vacancy M0/M1 Input Options</a></li>
+<li class="toctree-l1"><a class="reference internal" href="input_file_vacancy_mc.html">Staged Vacancy Monte Carlo Configuration</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="methods/references.html">0. Reference Energy Construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/oxygen_thermodynamics.html">Oxygen Energy Convention and Chemical Potential</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/oxygen_calibration.html">Oxygen Reference Calibration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/generation.html">1. Structure Generation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/sequential.html">Sequential Doping Workflow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/scanning.html">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/filtering.html">4. Relaxed-Candidate Filtering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/bandgap.html">5. Bandgap Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/energy_corrections.html">Backend-Specific Energy Corrections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/formation_energy.html">6. Formation Energy Evaluation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/database.html">7. Database Collection</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/alloy_hull.html">Restricted One-Dimensional Alloy Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/phase_diagram.html">Phase Diagram and Energy Above Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/vacancy_energy_above_hull.html">Vacancy Energy Above Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/vacancy_energy_correction.html">M0/M1 Correction for Vacancy Thermodynamics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/vacancies.html">Oxygen-Vacancy Workflow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/oxidation_states.html">Oxidation-state analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods/surfaces.html">Surface Generation and Relaxation</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="examples/explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/explicit_single_oxides.html">Explicit Example — Single Target Composition using Oxide References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/multi_reference_oxide.html">Multiple Oxide References and Relative Energies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/sequential_workflow.html">Sequential Example — Gradual Sb Doping</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/vacancies.html">Staged vacancy Monte Carlo example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api/modules.html">dopingflow</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Input File Specification (input.toml)</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/input_file.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="input-file-specification-input-toml">
+<span id="input-file-spec"></span><h1>Input File Specification (input.toml)<a class="headerlink" href="#input-file-specification-input-toml" title="Link to this heading"></a></h1>
+<p>The workflow is fully controlled through a single TOML configuration file.</p>
+<p>Each stage reads only the parameters relevant to it.</p>
+<section id="execution-model">
+<h2>Execution Model<a class="headerlink" href="#execution-model" title="Link to this heading"></a></h2>
+<p>Each stage defines both:</p>
+<ul class="simple">
+<li><p><strong>what it does</strong> (physics / workflow logic)</p></li>
+<li><p><strong>how it runs</strong> (CPU / GPU / parallelization)</p></li>
+</ul>
+<p>There is <strong>no global hardware section</strong>. Instead:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">[scan]</span></code> controls screening</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[relax]</span></code> controls structural relaxation</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[bandgap]</span></code> controls band gap prediction</p></li>
+</ul>
+<p>Each stage independently defines:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">device</span></code> (cpu or cuda)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">gpu_id</span></code> (for GPU execution)</p></li>
+</ul>
+<p>This design gives full flexibility and avoids cross-stage conflicts.</p>
+</section>
+<section id="execution-behavior">
+<h2>Execution Behavior<a class="headerlink" href="#execution-behavior" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Stage</p></th>
+<th class="head"><p>Device</p></th>
+<th class="head"><p>Strategy</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>scan</p></td>
+<td><p>CPU</p></td>
+<td><p>multiprocessing</p></td>
+</tr>
+<tr class="row-odd"><td><p>relax</p></td>
+<td><p>CPU / GPU</p></td>
+<td><p>workers or single GPU</p></td>
+</tr>
+<tr class="row-even"><td><p>bandgap</p></td>
+<td><p>CPU</p></td>
+<td><p>multiprocessing</p></td>
+</tr>
+<tr class="row-odd"><td><p>bandgap</p></td>
+<td><p>GPU</p></td>
+<td><p>batched inference</p></td>
+</tr>
+</tbody>
+</table>
+<p>This design allows each stage to control its own parallelization strategy
+while sharing a consistent hardware configuration.</p>
+<p>All paths are interpreted relative to the directory containing <code class="docutils literal notranslate"><span class="pre">input.toml</span></code>.</p>
+<p>The following sections are supported:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">[references]</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[structure]</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[doping]</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[sequential]</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[generate]</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[scan]</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[relax]</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[filter]</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[bandgap]</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[energy_correction]</span></code> (optional)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[formation]</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[database]</span></code> (optional)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">[vacancies]</span></code> (required only by the vacancy workflow)</p></li>
+</ul>
+<p>Not all sections are required for every stage. Each stage reads only what it needs.</p>
+</section>
+<hr class="docutils" />
+<section id="vacancies">
+<h2>[vacancies]<a class="headerlink" href="#vacancies" title="Link to this heading"></a></h2>
+<p>The complete oxygen-vacancy workflow is configured in exactly one flat section
+and run with <code class="docutils literal notranslate"><span class="pre">dopingflow</span> <span class="pre">vacancies</span> <span class="pre">-c</span> <span class="pre">input.toml</span></code>. Parallel arrays represent
+mixed formal oxidation states without creating TOML subsections.</p>
+<p><code class="docutils literal notranslate"><span class="pre">host_species</span></code>, <code class="docutils literal notranslate"><span class="pre">oxidation_state_elements</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">oxidation_state_values</span></code> are required chemistry-specific inputs.
+<code class="docutils literal notranslate"><span class="pre">parent_directory</span></code> is additionally required when
+<code class="docutils literal notranslate"><span class="pre">parent_source</span> <span class="pre">=</span> <span class="pre">&quot;directory&quot;</span></code>. All other vacancy parameters shown below have
+runtime defaults; this example intentionally overrides the default
+M3GNet/CPU calculator with MACE/CUDA.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">vacancies</span><span class="p">]</span>
+<span class="n">enabled</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">parent_source</span> <span class="o">=</span> <span class="s2">"selected_candidates"</span>
+<span class="n">include_parent_reference</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">skip_if_done</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">resume</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">count_mode</span> <span class="o">=</span> <span class="s2">"all_reachable"</span>
+<span class="n">host_species</span> <span class="o">=</span> <span class="s2">"Sn"</span>
+<span class="n">host_oxidation_state</span> <span class="o">=</span> <span class="mi">4</span>
+<span class="n">vacancy_species</span> <span class="o">=</span> <span class="s2">"O"</span>
+<span class="n">vacancy_compensation_charge</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="n">oxidation_state_elements</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"Sb"</span><span class="p">,</span> <span class="s2">"Nb"</span><span class="p">]</span>
+<span class="n">oxidation_state_values</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">],</span> <span class="p">[</span><span class="mi">5</span><span class="p">]]</span>
+<span class="n">extra_vacancies</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="n">max_vacancies_cap</span> <span class="o">=</span> <span class="mi">8</span>
+<span class="n">search_method</span> <span class="o">=</span> <span class="s2">"enumeration"</span>
+<span class="n">supercell</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+<span class="n">symprec</span> <span class="o">=</span> <span class="mf">1.0e-3</span>
+<span class="n">angle_tolerance</span> <span class="o">=</span> <span class="mf">5.0</span>
+<span class="n">mapping_tolerance</span> <span class="o">=</span> <span class="mf">1.0</span>
+<span class="n">enumeration_mode</span> <span class="o">=</span> <span class="s2">"auto"</span>
+<span class="n">max_exact_raw_configs</span> <span class="o">=</span> <span class="mi">300000</span>
+<span class="n">max_exact_unique_configs</span> <span class="o">=</span> <span class="mi">100000</span>
+<span class="n">sample_budget</span> <span class="o">=</span> <span class="mi">20000</span>
+<span class="n">sample_batch_size</span> <span class="o">=</span> <span class="mi">256</span>
+<span class="n">sample_patience</span> <span class="o">=</span> <span class="mi">4000</span>
+<span class="n">sample_seed</span> <span class="o">=</span> <span class="mi">42</span>
+<span class="n">sample_max_saved</span> <span class="o">=</span> <span class="mi">50000</span>
+<span class="n">minimum_vacancy_distance</span> <span class="o">=</span> <span class="mf">0.0</span>
+
+<span class="c1"># Monte Carlo settings are used only with search_method = "monte-carlo".</span>
+<span class="n">mc_temperature_K</span> <span class="o">=</span> <span class="mf">300.0</span>
+<span class="n">mc_annealing</span> <span class="o">=</span> <span class="n">false</span>
+<span class="n">mc_initial_temperature_K</span> <span class="o">=</span> <span class="mf">1200.0</span>
+<span class="n">mc_annealing_hold_steps</span> <span class="o">=</span> <span class="mi">500</span>
+<span class="n">mc_annealing_steps</span> <span class="o">=</span> <span class="mi">2000</span>
+<span class="n">mc_run_mode</span> <span class="o">=</span> <span class="s2">"combined"</span>
+<span class="n">mc_max_steps</span> <span class="o">=</span> <span class="mi">10000</span>
+<span class="n">mc_patience</span> <span class="o">=</span> <span class="mi">2000</span>
+<span class="n">mc_improvement_tolerance_eV</span> <span class="o">=</span> <span class="mf">1.0e-5</span>
+<span class="n">mc_energy_window_eV</span> <span class="o">=</span> <span class="mf">0.5</span>
+<span class="n">mc_cation_move_weight</span> <span class="o">=</span> <span class="mf">0.5</span>
+<span class="n">mc_vacancy_move_weight</span> <span class="o">=</span> <span class="mf">0.5</span>
+<span class="n">backend</span> <span class="o">=</span> <span class="s2">"mace"</span>
+<span class="n">model</span> <span class="o">=</span> <span class="s2">"medium-mpa-0"</span>
+<span class="n">task</span> <span class="o">=</span> <span class="s2">""</span>
+<span class="n">device</span> <span class="o">=</span> <span class="s2">"cuda"</span>
+<span class="n">gpu_id</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="n">n_workers</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="n">tf_threads</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="n">omp_threads</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="n">chunksize</span> <span class="o">=</span> <span class="mi">25</span>
+<span class="n">topk_per_vacancy_count</span> <span class="o">=</span> <span class="mi">15</span>
+<span class="n">energy_normalization</span> <span class="o">=</span> <span class="s2">"per_vacancy"</span>
+<span class="n">optimizer</span> <span class="o">=</span> <span class="s2">"bfgs"</span>
+<span class="n">fmax</span> <span class="o">=</span> <span class="mf">0.05</span>
+<span class="n">max_steps</span> <span class="o">=</span> <span class="mi">300</span>
+<span class="n">relax_mode</span> <span class="o">=</span> <span class="s2">"atoms"</span>
+<span class="n">cell_filter</span> <span class="o">=</span> <span class="s2">"frechet"</span>
+<span class="n">static_thermodynamic_analysis</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">oxygen_reference_mode</span> <span class="o">=</span> <span class="s2">"reference_file"</span>
+<span class="n">oxygen_reference_file</span> <span class="o">=</span> <span class="s2">"reference_structures/reference_energies.json"</span>
+<span class="n">oxygen_reference_structure</span> <span class="o">=</span> <span class="s2">"reference_structures/gas/O2.POSCAR"</span>
+<span class="n">oxygen_reference_relax</span> <span class="o">=</span> <span class="n">false</span>
+<span class="n">allow_unverified_oxygen_reference</span> <span class="o">=</span> <span class="n">false</span>
+<span class="n">delta_mu_O_min_eV</span> <span class="o">=</span> <span class="o">-</span><span class="mf">3.0</span>
+<span class="n">delta_mu_O_max_eV</span> <span class="o">=</span> <span class="mf">0.0</span>
+<span class="n">delta_mu_O_points_eV</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">3.0</span><span class="p">]</span>
+<span class="n">thermodynamic_tolerance_eV</span> <span class="o">=</span> <span class="mf">1.0e-8</span>
+<span class="n">static_energy_source</span> <span class="o">=</span> <span class="s2">"relaxed_only"</span>
+<span class="n">exclude_unconverged</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">pressure_mapping</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">temperatures_K</span> <span class="o">=</span> <span class="p">[</span><span class="mf">300.0</span><span class="p">,</span> <span class="mf">600.0</span><span class="p">,</span> <span class="mf">900.0</span><span class="p">,</span> <span class="mf">1200.0</span><span class="p">,</span> <span class="mf">1500.0</span><span class="p">]</span>
+<span class="n">standard_oxygen_pressure_bar</span> <span class="o">=</span> <span class="mf">1.0</span>
+<span class="n">log10_pO2_min_bar</span> <span class="o">=</span> <span class="o">-</span><span class="mf">30.0</span>
+<span class="n">log10_pO2_max_bar</span> <span class="o">=</span> <span class="mf">1.0</span>
+<span class="n">log10_pO2_step</span> <span class="o">=</span> <span class="mf">0.5</span>
+<span class="n">oxygen_standard_state_mode</span> <span class="o">=</span> <span class="s2">"nist_shomate"</span>
+<span class="n">oxygen_standard_state_temperatures_K</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="n">oxygen_standard_state_delta_mu_eV_per_O</span> <span class="o">=</span> <span class="p">[]</span>
+</pre></div>
+</div>
+<p>The same resolved backend/model/task is used for parent energies, defective
+single points, and every relaxation. See <a class="reference internal" href="methods/vacancies.html"><span class="doc">Oxygen-Vacancy Workflow</span></a> for the full
+algorithm, output layout, resume rules, and interpretation limits.</p>
+<p><code class="docutils literal notranslate"><span class="pre">search_method</span></code> accepts <code class="docutils literal notranslate"><span class="pre">&quot;enumeration&quot;</span></code> (default) or <code class="docutils literal notranslate"><span class="pre">&quot;monte-carlo&quot;</span></code>.
+<code class="docutils literal notranslate"><span class="pre">supercell</span></code> is a three-positive-integer expansion applied consistently to the
+scan and relaxed parent before either search. Enumeration uses the symmetry,
+exact/sample, sampling-budget, and minimum-distance fields. Monte Carlo uses
+<code class="docutils literal notranslate"><span class="pre">sample_seed</span></code> and <code class="docutils literal notranslate"><span class="pre">sample_max_saved</span></code> plus the <code class="docutils literal notranslate"><span class="pre">mc_*</span></code> fields; enumeration
+limits are ignored by that search. With <code class="docutils literal notranslate"><span class="pre">mc_annealing</span> <span class="pre">=</span> <span class="pre">false</span></code>, all steps use
+the constant <code class="docutils literal notranslate"><span class="pre">mc_temperature_K</span></code>. With annealing enabled, the search holds
+<code class="docutils literal notranslate"><span class="pre">mc_initial_temperature_K</span></code>, cools linearly during <code class="docutils literal notranslate"><span class="pre">mc_annealing_steps</span></code>, and
+then remains at <code class="docutils literal notranslate"><span class="pre">mc_temperature_K</span></code>. The initial temperature must not be lower
+than the target.</p>
+<p>For a directory that already contains many composition subdirectories, use:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">parent_source</span> <span class="o">=</span> <span class="s2">"directory"</span>
+<span class="n">parent_directory</span> <span class="o">=</span> <span class="s2">"Mn-Nb-Ta-Ce-Ru-In-Sn-Sb"</span>
+</pre></div>
+</div>
+<p>Each subdirectory is discovered through its own <code class="docutils literal notranslate"><span class="pre">selected_candidates.txt</span></code>.
+The directory path remains a flat key in <code class="docutils literal notranslate"><span class="pre">[vacancies]</span></code>.</p>
+<p>Static-lattice thermodynamic analysis is disabled by default for compatibility. When
+enabled, all keys remain in this same flat table. <code class="docutils literal notranslate"><span class="pre">oxygen_reference_mode</span></code> is
+<code class="docutils literal notranslate"><span class="pre">reference_file</span></code>, <code class="docutils literal notranslate"><span class="pre">same_calculator</span></code>, <code class="docutils literal notranslate"><span class="pre">explicit</span></code>, <code class="docutils literal notranslate"><span class="pre">none</span></code>, <code class="docutils literal notranslate"><span class="pre">global</span></code>, or
+<code class="docutils literal notranslate"><span class="pre">chemistry-specific</span></code>. The last two modes fit a backend/model/task-specific
+per-O reference from eligible calculated binary oxides and experimental 298 K
+formation enthalpies; they use the <code class="docutils literal notranslate"><span class="pre">oxygen_calibration_*</span></code> fields. Explicit
+mode requires <code class="docutils literal notranslate"><span class="pre">mu_O_reference_eV</span></code> per oxygen atom. Reference-file mode rejects
+incompatible or unverifiable backend/model/task metadata unless the latter is
+deliberately acknowledged with <code class="docutils literal notranslate"><span class="pre">allow_unverified_oxygen_reference</span> <span class="pre">=</span> <span class="pre">true</span></code>.
+<code class="docutils literal notranslate"><span class="pre">relaxed_only</span></code> plus <code class="docutils literal notranslate"><span class="pre">exclude_unconverged</span> <span class="pre">=</span> <span class="pre">true</span></code> is the safe default energy
+policy. <code class="docutils literal notranslate"><span class="pre">oxygen_standard_state_mode</span> <span class="pre">=</span> <span class="pre">&quot;nist_shomate&quot;</span></code> evaluates the published
+piecewise NIST O2 equations continuously at any requested temperature from 100
+to 6000 K. <code class="docutils literal notranslate"><span class="pre">user_table</span></code> accepts another convention; <code class="docutils literal notranslate"><span class="pre">none</span></code> is qualitative
+relative to the standard pressure at the same temperature. See
+<a class="reference internal" href="methods/vacancies.html"><span class="doc">Oxygen-Vacancy Workflow</span></a> for equations, exact intervals, outputs, and limits.</p>
+</section>
+<hr class="docutils" />
+<section id="references">
+<h2>[references]<a class="headerlink" href="#references" title="Link to this heading"></a></h2>
+<p>Step 00 — Reference construction and relaxation.</p>
+<p>This stage prepares <strong>all thermodynamic reference structures</strong> and writes:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">reference_structures</span><span class="o">/</span><span class="n">reference_energies</span><span class="o">.</span><span class="n">json</span>
+</pre></div>
+</div>
+<p>It performs:</p>
+<ul class="simple">
+<li><p>Relaxation of the host oxide unit cell</p></li>
+<li><p>Construction and relaxation of the host supercell</p></li>
+<li><p>Relaxation of metal reference phases (metal mode)</p></li>
+<li><p>Relaxation of oxide reference phases (oxide mode)</p></li>
+<li><p>Relaxation of O₂ gas (oxide mode)</p></li>
+<li><p>Storage of all relaxed POSCAR files for reuse</p></li>
+</ul>
+<section id="common-parameters">
+<h3>Common Parameters<a class="headerlink" href="#common-parameters" title="Link to this heading"></a></h3>
+<p>The required chemistry inputs are <code class="docutils literal notranslate"><span class="pre">host</span></code> and <code class="docutils literal notranslate"><span class="pre">supercell</span></code>. <code class="docutils literal notranslate"><span class="pre">metal_ref</span></code> is
+required in metal mode; <code class="docutils literal notranslate"><span class="pre">oxides_ref</span></code> and a non-empty <code class="docutils literal notranslate"><span class="pre">gas_ref</span></code> are required
+in oxide mode. Omitted execution settings safely default to
+<code class="docutils literal notranslate"><span class="pre">backend</span> <span class="pre">=</span> <span class="pre">&quot;m3gnet&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">model</span> <span class="pre">=</span> <span class="pre">&quot;default&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">task</span> <span class="pre">=</span> <span class="pre">&quot;&quot;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">optimizer</span> <span class="pre">=</span> <span class="pre">&quot;bfgs&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">device</span> <span class="pre">=</span> <span class="pre">&quot;cpu&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">gpu_id</span> <span class="pre">=</span> <span class="pre">0</span></code>,
+<code class="docutils literal notranslate"><span class="pre">max_steps</span> <span class="pre">=</span> <span class="pre">300</span></code>, and one TensorFlow/OpenMP thread. Backend-specific blank
+model/task values are normalized to the compatible choices listed under
+<code class="docutils literal notranslate"><span class="pre">[scan]</span></code>.</p>
+<section id="reference-mode-string-default-metal">
+<h4>reference_mode (string, default: “metal”)<a class="headerlink" href="#reference-mode-string-default-metal" title="Link to this heading"></a></h4>
+<p>Choose reference scheme:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;metal&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;oxide&quot;</span></code></p></li>
+</ul>
+</section>
+<section id="skip-if-done-boolean-default-true">
+<h4>skip_if_done (boolean, default: true)<a class="headerlink" href="#skip-if-done-boolean-default-true" title="Link to this heading"></a></h4>
+<p>Skip reconstruction if JSON cache exists.</p>
+</section>
+<section id="fmax-float-default-0-02">
+<h4>fmax (float, default: 0.02)<a class="headerlink" href="#fmax-float-default-0-02" title="Link to this heading"></a></h4>
+<p>Force convergence criterion used in relaxation (eV/Å).</p>
+</section>
+<section id="supercell-array-of-3-integers-required">
+<h4>supercell (array of 3 integers, required)<a class="headerlink" href="#supercell-array-of-3-integers-required" title="Link to this heading"></a></h4>
+<p>Supercell used later for doping.
+The host supercell is constructed and relaxed at this stage.</p>
+</section>
+<section id="host-string-required">
+<h4>host (string, required)<a class="headerlink" href="#host-string-required" title="Link to this heading"></a></h4>
+<p>Chemical formula of the host oxide (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;SnO2&quot;</span></code>).</p>
+</section>
+<section id="host-dir-string-default-reference-structures-oxides">
+<h4>host_dir (string, default: “reference_structures/oxides”)<a class="headerlink" href="#host-dir-string-default-reference-structures-oxides" title="Link to this heading"></a></h4>
+<p>Directory containing <code class="docutils literal notranslate"><span class="pre">&lt;host&gt;.POSCAR</span></code>.</p>
+</section>
+</section>
+<section id="metal-reference-mode">
+<h3>Metal Reference Mode<a class="headerlink" href="#metal-reference-mode" title="Link to this heading"></a></h3>
+<p>Used when <code class="docutils literal notranslate"><span class="pre">reference_mode</span> <span class="pre">=</span> <span class="pre">&quot;metal&quot;</span></code>.</p>
+<section id="metal-ref-array-of-strings-required-in-metal-mode">
+<h4>metal_ref (array of strings, required in metal mode)<a class="headerlink" href="#metal-ref-array-of-strings-required-in-metal-mode" title="Link to this heading"></a></h4>
+<p>List of metal element symbols used as reference phases.</p>
+</section>
+<section id="metals-dir-string-default-reference-structures-metals">
+<h4>metals_dir (string, default: “reference_structures/metals”)<a class="headerlink" href="#metals-dir-string-default-reference-structures-metals" title="Link to this heading"></a></h4>
+<p>Directory containing <code class="docutils literal notranslate"><span class="pre">&lt;Element&gt;.POSCAR</span></code> files.</p>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">reference_structures</span><span class="o">/</span><span class="n">metals</span><span class="o">/</span><span class="n">Sn</span><span class="o">.</span><span class="n">POSCAR</span>
+<span class="n">reference_structures</span><span class="o">/</span><span class="n">metals</span><span class="o">/</span><span class="n">Sb</span><span class="o">.</span><span class="n">POSCAR</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="oxide-reference-mode">
+<h3>Oxide Reference Mode<a class="headerlink" href="#oxide-reference-mode" title="Link to this heading"></a></h3>
+<p>Used when <code class="docutils literal notranslate"><span class="pre">reference_mode</span> <span class="pre">=</span> <span class="pre">&quot;oxide&quot;</span></code>.</p>
+<section id="oxides-ref-array-of-strings-required-in-oxide-mode-optional-in-metal-mode">
+<h4>oxides_ref (array of strings; required in oxide mode, optional in metal mode)<a class="headerlink" href="#oxides-ref-array-of-strings-required-in-oxide-mode-optional-in-metal-mode" title="Link to this heading"></a></h4>
+<p>List of oxide formulas (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;Sb2O5&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;SnO&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;Sn3O4&quot;</span></code>).
+These structures are also relaxed when <code class="docutils literal notranslate"><span class="pre">reference_mode</span> <span class="pre">=</span> <span class="pre">&quot;metal&quot;</span></code> so they
+can serve as competing phases in the phase diagram without changing the
+formation-energy reference scheme.</p>
+<p>With <code class="docutils literal notranslate"><span class="pre">skip_if_done</span> <span class="pre">=</span> <span class="pre">true</span></code>, reference construction checks each source
+POSCAR and the relaxation settings independently. Compatible cached results
+are reused, while newly added or changed references are relaxed. Setting
+<code class="docutils literal notranslate"><span class="pre">skip_if_done</span> <span class="pre">=</span> <span class="pre">false</span></code> forces all host and reference relaxations to run.</p>
+</section>
+<section id="oxides-dir-string-default-reference-structures-oxides">
+<h4>oxides_dir (string, default: “reference_structures/oxides”)<a class="headerlink" href="#oxides-dir-string-default-reference-structures-oxides" title="Link to this heading"></a></h4>
+<p>Directory containing oxide POSCAR files.</p>
+</section>
+<section id="gas-ref-string-default-o2">
+<h4>gas_ref (string, default: “O2”)<a class="headerlink" href="#gas-ref-string-default-o2" title="Link to this heading"></a></h4>
+<p>Gas reference formula (typically <code class="docutils literal notranslate"><span class="pre">&quot;O2&quot;</span></code>).</p>
+</section>
+<section id="gas-dir-string-default-reference-structures-gas">
+<h4>gas_dir (string, default: “reference_structures/gas”)<a class="headerlink" href="#gas-dir-string-default-reference-structures-gas" title="Link to this heading"></a></h4>
+<p>Directory containing gas POSCAR file.</p>
+</section>
+<section id="oxygen-mode-string-default-o-rich">
+<h4>oxygen_mode (string, default: “O-rich”)<a class="headerlink" href="#oxygen-mode-string-default-o-rich" title="Link to this heading"></a></h4>
+<p>Selects the oxygen thermodynamic convention:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;O-rich&quot;</span></code> requires <code class="docutils literal notranslate"><span class="pre">delta_mu_O_ev</span> <span class="pre">=</span> <span class="pre">0.0</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;O-poor&quot;</span></code> permits <code class="docutils literal notranslate"><span class="pre">delta_mu_O_ev</span> <span class="pre">&lt;=</span> <span class="pre">0.0</span></code>.</p></li>
+</ul>
+</section>
+<section id="oxygen-reference-correction-ev-float-default-0-0">
+<h4>oxygen_reference_correction_ev (float, default: 0.0)<a class="headerlink" href="#oxygen-reference-correction-ev-float-default-0-0" title="Link to this heading"></a></h4>
+<p>Empirical/electronic correction to the raw same-backend oxygen reference, in
+eV per O atom. If the raw molecular energy is <span class="math notranslate nohighlight">\(E_{O_2}^{raw}\)</span>, then</p>
+<div class="math notranslate nohighlight">
+\[E_{O_2}^{ref} = E_{O_2}^{raw} + 2\,\Delta E_O^{ref}.\]</div>
+<p>When <code class="docutils literal notranslate"><span class="pre">[energy_correction].enabled</span> <span class="pre">=</span> <span class="pre">true</span></code>, this value must be zero because the
+fitted formation-energy correction is already calibrated against the raw
+same-backend oxygen reference. A second empirical oxygen shift would double
+count an oxygen-linear correction.</p>
+</section>
+<section id="delta-mu-o-ev-float-default-0-0">
+<h4>delta_mu_O_ev (float, default: 0.0)<a class="headerlink" href="#delta-mu-o-ev-float-default-0-0" title="Link to this heading"></a></h4>
+<p>Physical thermodynamic oxygen chemical-potential shift relative to the O-rich
+reference, in eV per O atom:</p>
+<div class="math notranslate nohighlight">
+\[\mu_O = \frac{1}{2} E_{O_2}^{ref} + \Delta\mu_O.\]</div>
+<p>This quantity may be used together with a fitted formation-energy correction.
+It must be exactly zero in <code class="docutils literal notranslate"><span class="pre">O-rich</span></code> mode and zero or negative in <code class="docutils literal notranslate"><span class="pre">O-poor</span></code>
+mode.</p>
+</section>
+<section id="legacy-muo-shift-ev">
+<h4>Legacy <code class="docutils literal notranslate"><span class="pre">muO_shift_ev</span></code><a class="headerlink" href="#legacy-muo-shift-ev" title="Link to this heading"></a></h4>
+<p><code class="docutils literal notranslate"><span class="pre">muO_shift_ev</span></code> is retained only as a migration aid. A zero value is harmless.
+A non-zero legacy value is interpreted conservatively as the historical
+empirical oxygen-reference shift when energy correction is disabled, and is
+rejected when <code class="docutils literal notranslate"><span class="pre">[energy_correction].enabled</span> <span class="pre">=</span> <span class="pre">true</span></code>. A non-zero legacy value
+must not be mixed with either explicit new oxygen key. New input files should
+use <code class="docutils literal notranslate"><span class="pre">oxygen_reference_correction_ev</span></code> and <code class="docutils literal notranslate"><span class="pre">delta_mu_O_ev</span></code> instead.</p>
+<p>These <code class="docutils literal notranslate"><span class="pre">[references]</span></code> settings are distinct from the independent oxygen
+chemical-potential grid and temperature/pressure controls in <code class="docutils literal notranslate"><span class="pre">[vacancies]</span></code>.</p>
+</section>
+</section>
+</section>
+<hr class="docutils" />
+<section id="energy-correction">
+<h2>[energy_correction]<a class="headerlink" href="#energy-correction" title="Link to this heading"></a></h2>
+<p>Optional backend-specific formation-energy correction fitting. The section may
+be omitted. <code class="docutils literal notranslate"><span class="pre">enabled</span> <span class="pre">=</span> <span class="pre">false</span></code> is a hard no-op and preserves the legacy raw
+workflow. No pre-fitted MP2020 coefficient is applied.</p>
+<p>Minimal curated configuration:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">energy_correction</span><span class="p">]</span>
+<span class="n">enabled</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">experimental_source</span> <span class="o">=</span> <span class="s2">"kingsbury"</span>
+<span class="n">calibration_manifest</span> <span class="o">=</span> <span class="s2">"reference_structures/corrections/calibration_manifest.csv"</span>
+<span class="n">correction_terms</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"oxide"</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>Automatic M0/M1 selection with complete phase-resolved calibration is an
+explicit opt-in:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">energy_correction</span><span class="p">]</span>
+<span class="n">enabled</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">experimental_source</span> <span class="o">=</span> <span class="s2">"kingsbury"</span>
+<span class="n">correction_terms</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"oxide"</span><span class="p">]</span>
+<span class="n">model_family</span> <span class="o">=</span> <span class="s2">"auto"</span>
+<span class="n">m1_elements</span> <span class="o">=</span> <span class="s2">"workflow"</span>
+<span class="n">calibration_selection</span> <span class="o">=</span> <span class="s2">"phase_resolved"</span>
+<span class="n">auto_fetch_phase_structures</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">optimade_base_url</span> <span class="o">=</span> <span class="s2">"https://optimade.materialsproject.org/v1"</span>
+<span class="n">min_element_compounds</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">min_element_stoichiometries</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">min_cv_improvement_eV_per_atom</span> <span class="o">=</span> <span class="mf">0.01</span>
+<span class="n">require_cv_one_standard_error</span> <span class="o">=</span> <span class="n">true</span>
+</pre></div>
+</div>
+<section id="enabled-boolean-default-false">
+<h3>enabled (boolean, default: false)<a class="headerlink" href="#enabled-boolean-default-false" title="Link to this heading"></a></h3>
+<p>Enables fitting/reuse, corrected balanced formation reactions, and an
+independently rebuilt corrected full phase diagram. Raw values remain present.
+The <code class="docutils literal notranslate"><span class="pre">[references]</span></code> and <code class="docutils literal notranslate"><span class="pre">[relax]</span></code> backend, model, and task must agree. The
+stored package version and local-checkpoint hash are also part of the energy
+provenance; rerun references, correction fitting, and stale candidate
+relaxations after either changes.</p>
+</section>
+<section id="experimental-source-string-default-kingsbury">
+<h3>experimental_source (string, default: “kingsbury”)<a class="headerlink" href="#experimental-source-string-default-kingsbury" title="Link to this heading"></a></h3>
+<p>One of <code class="docutils literal notranslate"><span class="pre">&quot;kingsbury&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;kingsbury+custom&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;custom&quot;</span></code>. The curated
+source is matminer’s <code class="docutils literal notranslate"><span class="pre">expt_formation_enthalpy_kingsbury</span></code> dataset.</p>
+</section>
+<section id="experimental-data-string-conditionally-required">
+<h3>experimental_data (string, conditionally required)<a class="headerlink" href="#experimental-data-string-conditionally-required" title="Link to this heading"></a></h3>
+<p>Custom experimental CSV used by <code class="docutils literal notranslate"><span class="pre">custom</span></code> or <code class="docutils literal notranslate"><span class="pre">kingsbury+custom</span></code>. It requires
+<code class="docutils literal notranslate"><span class="pre">formula</span></code>, <code class="docutils literal notranslate"><span class="pre">formation_enthalpy</span></code>, <code class="docutils literal notranslate"><span class="pre">uncertainty</span></code>, <code class="docutils literal notranslate"><span class="pre">phase</span></code>, <code class="docutils literal notranslate"><span class="pre">temperature</span></code>,
+<code class="docutils literal notranslate"><span class="pre">units</span></code>, and <code class="docutils literal notranslate"><span class="pre">source</span></code>. Units must explicitly be eV/atom or eV/formula unit.
+The current model accepts standard-temperature values near 298 K and rejects a
+custom table that would mix another temperature into that population.</p>
+</section>
+<section id="dataset-cache-dir-string-optional">
+<h3>dataset_cache_dir (string, optional)<a class="headerlink" href="#dataset-cache-dir-string-optional" title="Link to this heading"></a></h3>
+<p>Optional matminer dataset cache directory. Matminer’s normal local cache is
+used when omitted. Every fit also saves the exact accepted records in the
+project correction directory.</p>
+</section>
+<section id="model-family-string-default-manual">
+<h3>model_family (string, default: “manual”)<a class="headerlink" href="#model-family-string-default-manual" title="Link to this heading"></a></h3>
+<p>One of <code class="docutils literal notranslate"><span class="pre">&quot;manual&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;m0&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;m1&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;auto&quot;</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">manual</span></code> fits exactly <code class="docutils literal notranslate"><span class="pre">correction_terms</span></code> and preserves the previous
+behavior.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">m0</span></code> forces one ordinary-oxide coefficient per O atom.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">m1</span></code> forces an admissible M0-plus-<code class="docutils literal notranslate"><span class="pre">oxide_cation:&lt;Element&gt;</span></code> model and fails
+when no M1 candidate passes the support and validation gates.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">auto</span></code> compares admissible M0 and M1 fits on identical leave-one-out
+observations and publishes M1 only when it clears every configured gate;
+otherwise it falls back deterministically to M0.</p></li>
+</ul>
+<p>The non-manual modes require <code class="docutils literal notranslate"><span class="pre">correction_terms</span> <span class="pre">=</span> <span class="pre">[&quot;oxide&quot;]</span></code>. They record the
+automatic decision even when <code class="docutils literal notranslate"><span class="pre">m0</span></code> or <code class="docutils literal notranslate"><span class="pre">m1</span></code> forces the published family.</p>
+</section>
+<section id="m1-elements-string-or-array-default-workflow">
+<h3>m1_elements (string or array, default: “workflow”)<a class="headerlink" href="#m1-elements-string-or-array-default-workflow" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">&quot;workflow&quot;</span></code> derives candidate M1 cations from the non-oxygen host and all
+configured dopants. An explicit array such as <code class="docutils literal notranslate"><span class="pre">[&quot;Sn&quot;,</span> <span class="pre">&quot;Sb&quot;]</span></code> overrides the
+candidate M1 elements. Elements without independent support are excluded and
+reported rather than assigned guessed coefficients. The array does not narrow
+the complete host-and-dopant scope used by phase-resolved discovery.</p>
+</section>
+<section id="calibration-selection-string-default-manifest">
+<h3>calibration_selection (string, default: “manifest”)<a class="headerlink" href="#calibration-selection-string-default-manifest" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">&quot;manifest&quot;</span></code> uses only the explicitly listed calibration rows.
+<code class="docutils literal notranslate"><span class="pre">&quot;phase_resolved&quot;</span></code> considers every strict non-generic ordinary oxide
+experimental record whose non-oxygen elements are all in the complete
+host-and-dopant target scope. A selected
+record must have a specific phase and valid curated <code class="docutils literal notranslate"><span class="pre">likely_mpid</span></code>; known or
+structure-classified peroxide/superoxide records are excluded. All selections,
+rejections, coverage, and materialized structures are snapshotted.</p>
+</section>
+<section id="auto-fetch-phase-structures-boolean-default-false">
+<h3>auto_fetch_phase_structures (boolean, default: false)<a class="headerlink" href="#auto-fetch-phase-structures-boolean-default-false" title="Link to this heading"></a></h3>
+<p>Only valid with <code class="docutils literal notranslate"><span class="pre">calibration_selection</span> <span class="pre">=</span> <span class="pre">&quot;phase_resolved&quot;</span></code>. When true, a
+selected record without an exact phase-matched manifest structure is retrieved
+by <code class="docutils literal notranslate"><span class="pre">likely_mpid</span></code> from OPTIMADE. The response and POSCAR form an immutable,
+hash-validated cache under the backend-specific correction directory. When
+false, all selected records must be materialized by the manifest. Missing,
+partial, mismatched, or changed inputs fail explicitly. Fetching and relaxation
+apply only to calibration structures; doped workflow candidates are not
+rerelaxed.</p>
+</section>
+<section id="optimade-base-url-string-default-materials-project-optimade-v1">
+<h3>optimade_base_url (string, default: Materials Project OPTIMADE v1)<a class="headerlink" href="#optimade-base-url-string-default-materials-project-optimade-v1" title="Link to this heading"></a></h3>
+<p>Base endpoint used for automatic structure acquisition. The default is
+<code class="docutils literal notranslate"><span class="pre">https://optimade.materialsproject.org/v1</span></code>; <code class="docutils literal notranslate"><span class="pre">/structures/&lt;likely_mpid&gt;</span></code> is
+appended as needed. OPTIMADE contributes geometry only, never a DFT correction
+coefficient, calculated formation energy, or hull distance.</p>
+</section>
+<section id="calibration-manifest-string-default-shown-above">
+<h3>calibration_manifest (string, default shown above)<a class="headerlink" href="#calibration-manifest-string-default-shown-above" title="Link to this heading"></a></h3>
+<p>CSV containing the phase-matched calibration structures and same-backend
+energies. This is deliberately separate from <code class="docutils literal notranslate"><span class="pre">[references].oxides_ref</span></code>.
+Formula, actual structure composition, phase/space-group information, energy
+provenance, and same-backend energy-above-hull provenance are validated.
+Generic labels such as <code class="docutils literal notranslate"><span class="pre">solid</span></code>, <code class="docutils literal notranslate"><span class="pre">crystalline</span></code>, or an empty phase do not
+constitute a phase match unless the explicit <code class="docutils literal notranslate"><span class="pre">allow_phase_mismatch</span></code> expert
+override is used for an unambiguous formula. The file is required in
+<code class="docutils literal notranslate"><span class="pre">manifest</span></code> mode. It may be absent in <code class="docutils literal notranslate"><span class="pre">phase_resolved</span></code> mode only when every
+selected structure can be acquired automatically; otherwise it supplies exact
+phase-verified local structures.</p>
+</section>
+<section id="correction-terms-array-of-strings-default-oxide">
+<h3>correction_terms (array of strings, default: [“oxide”])<a class="headerlink" href="#correction-terms-array-of-strings-default-oxide" title="Link to this heading"></a></h3>
+<p>Supported oxygen-environment terms are <code class="docutils literal notranslate"><span class="pre">oxide</span></code>, <code class="docutils literal notranslate"><span class="pre">peroxide</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">superoxide</span></code>. Each named term must be identifiable from the accepted
+calibration set. Advanced <code class="docutils literal notranslate"><span class="pre">element:&lt;symbol&gt;</span></code> composition terms are rejected
+unless <code class="docutils literal notranslate"><span class="pre">allow_element_terms</span> <span class="pre">=</span> <span class="pre">true</span></code> is also set. Explicit element or
+<code class="docutils literal notranslate"><span class="pre">oxide_cation</span></code> terms are manual-mode controls; M0/M1 derives scoped
+<code class="docutils literal notranslate"><span class="pre">oxide_cation</span></code> terms from admitted calibration evidence.</p>
+</section>
+<section id="allow-element-terms-boolean-default-false">
+<h3>allow_element_terms (boolean, default: false)<a class="headerlink" href="#allow-element-terms-boolean-default-false" title="Link to this heading"></a></h3>
+<p>Explicit expert acceptance of a FERE-like term applied to every non-elemental
+compound containing the named element. This is not an automatically inferred
+dopant correction and requires separate scientific justification/validation.</p>
+</section>
+<section id="exclude-polyanions-array-of-strings-conservative-list-by-default">
+<h3>exclude_polyanions (array of strings, conservative list by default)<a class="headerlink" href="#exclude-polyanions-array-of-strings-conservative-list-by-default" title="Link to this heading"></a></h3>
+<p>Formula tokens excluded from calibration before fitting because sulfate,
+carbonate, nitrate, phosphate, silicate, and related oxygen chemistries are not
+represented reliably by the simple ordinary-oxide basis. Set <code class="docutils literal notranslate"><span class="pre">[]</span></code> or change
+the list only after validating a correction basis that covers those compounds.</p>
+</section>
+<section id="max-relative-experimental-uncertainty-float-default-0-10">
+<h3>max_relative_experimental_uncertainty (float, default: 0.10)<a class="headerlink" href="#max-relative-experimental-uncertainty-float-default-0-10" title="Link to this heading"></a></h3>
+<p>Rejects measurements whose reported relative uncertainty exceeds the limit.
+Missing uncertainty is imputed from the final accepted calibration population,
+never assigned zero.</p>
+</section>
+<section id="max-calculated-e-above-hull-ev-per-atom-float-default-0-10">
+<h3>max_calculated_e_above_hull_eV_per_atom (float, default: 0.10)<a class="headerlink" href="#max-calculated-e-above-hull-ev-per-atom-float-default-0-10" title="Link to this heading"></a></h3>
+<p>Rejects unstable calibration polymorphs. The manifest must give explicit
+same-backend provenance plus matching <code class="docutils literal notranslate"><span class="pre">e_above_hull_backend</span></code>,
+<code class="docutils literal notranslate"><span class="pre">e_above_hull_model</span></code>, <code class="docutils literal notranslate"><span class="pre">e_above_hull_task</span></code>,
+<code class="docutils literal notranslate"><span class="pre">e_above_hull_backend_version</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">e_above_hull_calculation_settings_hash</span></code> fields. Set the option
+explicitly to <code class="docutils literal notranslate"><span class="pre">false</span></code> only after deliberately choosing not to apply this
+filter. Omitting the key does <strong>not</strong> disable it; omission selects the default
+limit of 0.10 eV/atom. For materialized phase-resolved rows without a supplied
+hull value, dopingflow builds the chemical-system hull from same-backend relaxed
+calibration energies, compatible <code class="docutils literal notranslate"><span class="pre">reference_energies.json</span></code> entries, and the
+elemental terminals before applying this filter. Materials Project hull values
+are not treated as same-backend ML values.</p>
+</section>
+<section id="allow-phase-mismatch-boolean-default-false">
+<h3>allow_phase_mismatch (boolean, default: false)<a class="headerlink" href="#allow-phase-mismatch-boolean-default-false" title="Link to this heading"></a></h3>
+<p>Expert override for a reviewed experimental/calculated phase mismatch. The
+mismatch remains recorded. Formula and <code class="docutils literal notranslate"><span class="pre">likely_mpid</span></code> alone do not establish
+polymorph identity.</p>
+</section>
+<section id="allow-legacy-candidate-provenance-boolean-default-false">
+<h3>allow_legacy_candidate_provenance (boolean, default: false)<a class="headerlink" href="#allow-legacy-candidate-provenance-boolean-default-false" title="Link to this heading"></a></h3>
+<p>Explicitly accepts existing candidate energies from older dopingflow metadata
+that lacks the original backend-package and relaxed-POSCAR hash fields. Known
+backend/model/task, optimizer, force tolerance, maximum steps, positive
+convergence, energy, and POSCAR availability are still required and checked.
+All unprovable assumptions are written to corrected formation and phase-diagram
+outputs. This option does not alter or rerelax the structure.</p>
+</section>
+<section id="reuse-fitted-boolean-default-true">
+<h3>reuse_fitted (boolean, default: true)<a class="headerlink" href="#reuse-fitted-boolean-default-true" title="Link to this heading"></a></h3>
+<p>Reuses a model only when its backend signature, terms, calibration inputs,
+dataset/filter settings, and fit-input hash match exactly.</p>
+</section>
+<section id="min-degrees-of-freedom-integer-default-1">
+<h3>min_degrees_of_freedom (integer, default: 1)<a class="headerlink" href="#min-degrees-of-freedom-integer-default-1" title="Link to this heading"></a></h3>
+<p>Minimum number of accepted compounds beyond the number of fitted terms.</p>
+</section>
+<section id="min-term-support-integer-default-2">
+<h3>min_term_support (integer, default: 2)<a class="headerlink" href="#min-term-support-integer-default-2" title="Link to this heading"></a></h3>
+<p>Minimum number of accepted calibration compounds with nonzero support for
+each fitted term. This is enforced in addition to full-rank and residual-
+degrees-of-freedom checks.</p>
+</section>
+<section id="min-element-compounds-integer-default-3-minimum-3">
+<h3>min_element_compounds (integer, default: 3; minimum: 3)<a class="headerlink" href="#min-element-compounds-integer-default-3-minimum-3" title="Link to this heading"></a></h3>
+<p>Minimum independent formula/oxygen-ratio support required before an M1
+<code class="docutils literal notranslate"><span class="pre">oxide_cation:&lt;Element&gt;</span></code> term is admitted.</p>
+</section>
+<section id="min-element-stoichiometries-integer-default-3-minimum-2">
+<h3>min_element_stoichiometries (integer, default: 3; minimum: 2)<a class="headerlink" href="#min-element-stoichiometries-integer-default-3-minimum-2" title="Link to this heading"></a></h3>
+<p>Minimum number of distinct O/cation ratios required for each admitted M1
+element.</p>
+</section>
+<section id="min-cv-improvement-ev-per-atom-float-default-0-01">
+<h3>min_cv_improvement_eV_per_atom (float, default: 0.01)<a class="headerlink" href="#min-cv-improvement-ev-per-atom-float-default-0-01" title="Link to this heading"></a></h3>
+<p>M1 must improve identical-observation leave-one-out RMSE over M0 by strictly
+more than this non-negative value. An exact threshold tie selects M0.</p>
+</section>
+<section id="require-cv-one-standard-error-boolean-default-true">
+<h3>require_cv_one_standard_error (boolean, default: true)<a class="headerlink" href="#require-cv-one-standard-error-boolean-default-true" title="Link to this heading"></a></h3>
+<p>When true, M1’s paired improvement in squared leave-one-out loss must also
+exceed one standard error. Failure selects the parsimonious M0 model in
+<code class="docutils literal notranslate"><span class="pre">auto</span></code> mode; forced <code class="docutils literal notranslate"><span class="pre">m1</span></code> still cannot bypass M1 admission and identifiability
+requirements.</p>
+</section>
+<section id="max-condition-number-float-default-1e8">
+<h3>max_condition_number (float, default: 1e8)<a class="headerlink" href="#max-condition-number-float-default-1e8" title="Link to this heading"></a></h3>
+<p>Maximum allowed weighted-design condition number. A rank-deficient or
+ill-conditioned correction basis fails rather than overfitting. Automatic
+M0/M1 selection uses the stricter of this value and <code class="docutils literal notranslate"><span class="pre">1e4</span></code>.</p>
+</section>
+<section id="poor-fit-rmse-warning-ev-per-atom-float-default-0-20">
+<h3>poor_fit_rmse_warning_eV_per_atom (float, default: 0.20)<a class="headerlink" href="#poor-fit-rmse-warning-ev-per-atom-float-default-0-20" title="Link to this heading"></a></h3>
+<p>Adds a prominent fit-quality warning without conflating residual error with
+coefficient uncertainty. The diagnostic model is saved, but a
+<code class="docutils literal notranslate"><span class="pre">quality_warning</span></code> in <code class="docutils literal notranslate"><span class="pre">correction_fit_report.json</span></code> should be treated as a
+stop condition for production correction application.</p>
+<p>See <a class="reference internal" href="methods/energy_corrections.html"><span class="doc">Backend-Specific Energy Corrections</span></a> for the manifest schema, equations,
+outputs, phase-diagram consistency rules, and scientific limitations.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="structure">
+<h2>[structure]<a class="headerlink" href="#structure" title="Link to this heading"></a></h2>
+<p>Defines workflow I/O only.</p>
+<section id="outdir-string-default-random-structures">
+<h3>outdir (string, default: “random_structures”)<a class="headerlink" href="#outdir-string-default-random-structures" title="Link to this heading"></a></h3>
+<p>Directory where generated composition folders are written.</p>
+<p>This directory becomes the root for:</p>
+<ul class="simple">
+<li><p>Step 01 outputs</p></li>
+<li><p>Step 02–06 per-composition subfolders</p></li>
+</ul>
+</section>
+</section>
+<hr class="docutils" />
+<section id="doping">
+<h2>[doping]<a class="headerlink" href="#doping" title="Link to this heading"></a></h2>
+<p>Defines substitutional doping behavior.</p>
+<section id="host-species-string-required">
+<h3>host_species (string, required)<a class="headerlink" href="#host-species-string-required" title="Link to this heading"></a></h3>
+<p>Element symbol of the host species to be substituted.</p>
+</section>
+<section id="mode-string-default-explicit">
+<h3>mode (string, default: “explicit”)<a class="headerlink" href="#mode-string-default-explicit" title="Link to this heading"></a></h3>
+<p>Defines doping mode:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;explicit&quot;</span></code> — user provides exact compositions.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;enumerate&quot;</span></code> — workflow constructs compositions combinatorially.</p></li>
+</ul>
+</section>
+<section id="explicit-mode">
+<h3>Explicit Mode<a class="headerlink" href="#explicit-mode" title="Link to this heading"></a></h3>
+<section id="compositions-array-of-tables-required-in-explicit-mode">
+<h4>compositions (array of tables, required in explicit mode)<a class="headerlink" href="#compositions-array-of-tables-required-in-explicit-mode" title="Link to this heading"></a></h4>
+<p>List of dictionaries:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">compositions</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">{</span> <span class="n">Sb</span> <span class="o">=</span> <span class="mi">5</span> <span class="p">},</span>
+    <span class="p">{</span> <span class="n">Sb</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span> <span class="n">Zr</span> <span class="o">=</span> <span class="mi">5</span> <span class="p">}</span>
+<span class="p">]</span>
+</pre></div>
+</div>
+<p>Percentages are defined relative to host sites.</p>
+</section>
+</section>
+<section id="enumerate-mode">
+<h3>Enumerate Mode<a class="headerlink" href="#enumerate-mode" title="Link to this heading"></a></h3>
+<section id="dopants-array-of-strings-required-in-enumerate-mode">
+<h4>dopants (array of strings, required in enumerate mode)<a class="headerlink" href="#dopants-array-of-strings-required-in-enumerate-mode" title="Link to this heading"></a></h4>
+<p>Allowed dopant elements.</p>
+</section>
+<section id="must-include-array-of-strings-default">
+<h4>must_include (array of strings, default: [])<a class="headerlink" href="#must-include-array-of-strings-default" title="Link to this heading"></a></h4>
+<p>Dopants that must appear in each composition.</p>
+</section>
+<section id="max-dopants-total-integer-default-2">
+<h4>max_dopants_total (integer, default: 2)<a class="headerlink" href="#max-dopants-total-integer-default-2" title="Link to this heading"></a></h4>
+<p>Maximum number of distinct dopants per structure.</p>
+</section>
+<section id="allowed-totals-array-of-floats-required-in-enumerate-mode">
+<h4>allowed_totals (array of floats, required in enumerate mode)<a class="headerlink" href="#allowed-totals-array-of-floats-required-in-enumerate-mode" title="Link to this heading"></a></h4>
+<p>Allowed total dopant percentages.</p>
+</section>
+<section id="levels-array-of-floats-required-in-enumerate-mode">
+<h4>levels (array of floats, required in enumerate mode)<a class="headerlink" href="#levels-array-of-floats-required-in-enumerate-mode" title="Link to this heading"></a></h4>
+<p>Discrete concentration values per dopant.</p>
+</section>
+</section>
+</section>
+<hr class="docutils" />
+<section id="sequential">
+<h2>[sequential]<a class="headerlink" href="#sequential" title="Link to this heading"></a></h2>
+<p>Controls the gradual sequential doping workflow executed with:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">sequential</span><span class="o">-</span><span class="n">run</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span>
+</pre></div>
+</div>
+<p>When <code class="docutils literal notranslate"><span class="pre">[energy_correction].enabled</span> <span class="pre">=</span> <span class="pre">true</span></code>, <code class="docutils literal notranslate"><span class="pre">sequential-run</span></code> fits or reuses
+the correction model once before entering the composition loop. It does not
+refit separately for every sequential step. The reference cache and calibration
+inputs must therefore already be valid for the active backend signature.</p>
+<section id="outdir-string-default-sequential-structures">
+<h3>outdir (string, default: “sequential_structures”)<a class="headerlink" href="#outdir-string-default-sequential-structures" title="Link to this heading"></a></h3>
+<p>Directory where sequential step folders are written.</p>
+</section>
+<section id="mode-string-default-full">
+<h3>mode (string, default: “full”)<a class="headerlink" href="#mode-string-default-full" title="Link to this heading"></a></h3>
+<p>Controls the sequential execution mode:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;full&quot;</span></code> — run the full stepwise workflow:
+generate → scan → relax → filter → optional bandgap → formation → collect.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;recompute_energies&quot;</span></code> — reuse existing relaxed sequential structures and
+rerun only formation energy and database collection. This is useful when the
+user wants to change the thermodynamic reference, for example from <code class="docutils literal notranslate"><span class="pre">Sb2O3</span></code>
+to <code class="docutils literal notranslate"><span class="pre">Sb2O5</span></code>, without regenerating or relaxing structures.</p></li>
+</ul>
+</section>
+<section id="example">
+<h3>Example<a class="headerlink" href="#example" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">sequential</span><span class="p">]</span>
+<span class="n">outdir</span> <span class="o">=</span> <span class="s2">"sequential_structures"</span>
+<span class="n">mode</span> <span class="o">=</span> <span class="s2">"full"</span>
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="generate">
+<h2>[generate]<a class="headerlink" href="#generate" title="Link to this heading"></a></h2>
+<p>Step 01 — Structure generation.</p>
+<p>This step generates one doped structure per composition by substituting
+host atoms inside the <strong>relaxed host supercell</strong> produced by <code class="docutils literal notranslate"><span class="pre">refs-build</span></code>.</p>
+<section id="important">
+<h3>Important<a class="headerlink" href="#important" title="Link to this heading"></a></h3>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">refs-build</span></code> must be executed first.</p></li>
+<li><p>The relaxed host supercell is loaded from:</p>
+<p><code class="docutils literal notranslate"><span class="pre">reference_structures/reference_energies.json</span></code></p>
+</li>
+<li><p>No supercell is constructed in this step.</p></li>
+</ul>
+</section>
+<section id="parameters">
+<h3>Parameters<a class="headerlink" href="#parameters" title="Link to this heading"></a></h3>
+</section>
+<section id="seed-base-integer-default-0">
+<h3>seed_base (integer, default: 0)<a class="headerlink" href="#seed-base-integer-default-0" title="Link to this heading"></a></h3>
+<p>Base seed used for deterministic random substitution.</p>
+<p>Each composition generates a stable hash-based seed.</p>
+</section>
+<section id="poscar-order-array-of-strings-default">
+<h3>poscar_order (array of strings, default: [])<a class="headerlink" href="#poscar-order-array-of-strings-default" title="Link to this heading"></a></h3>
+<p>Defines element ordering in written POSCAR files.</p>
+<p>If empty, pymatgen default ordering is used.</p>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">poscar_order</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"Zr"</span><span class="p">,</span> <span class="s2">"Ti"</span><span class="p">,</span> <span class="s2">"Sb"</span><span class="p">,</span> <span class="s2">"Sn"</span><span class="p">,</span> <span class="s2">"O"</span><span class="p">]</span>
+</pre></div>
+</div>
+</section>
+<section id="clean-outdir-boolean-default-true">
+<h3>clean_outdir (boolean, default: true)<a class="headerlink" href="#clean-outdir-boolean-default-true" title="Link to this heading"></a></h3>
+<p>If true, existing output directory is deleted before writing new structures.</p>
+</section>
+<section id="output">
+<h3>Output<a class="headerlink" href="#output" title="Link to this heading"></a></h3>
+<p>For each composition:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">&lt;</span><span class="n">outdir</span><span class="o">&gt;/&lt;</span><span class="n">composition_tag</span><span class="o">&gt;/</span>
+    <span class="n">POSCAR</span>
+    <span class="n">metadata</span><span class="o">.</span><span class="n">json</span>
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="scan">
+<h2>[scan]<a class="headerlink" href="#scan" title="Link to this heading"></a></h2>
+<p>Step 02 — Dopant configuration prescreening using machine-learning interatomic potentials.</p>
+<p>For each generated structure folder inside <code class="docutils literal notranslate"><span class="pre">[structure].outdir</span></code>:</p>
+<ol class="arabic simple">
+<li><p>Generates doped configurations on the cation sublattice</p></li>
+<li><p>Identifies symmetry-unique configurations</p></li>
+<li><p>Evaluates single-point energies using the selected ML backend</p></li>
+<li><p>Ranks configurations by energy</p></li>
+<li><p>Keeps the lowest-energy <code class="docutils literal notranslate"><span class="pre">topk</span></code> candidates</p></li>
+<li><p>Writes candidate folders and ranking files</p></li>
+</ol>
+<p>Depending on the scan mode, configurations are obtained either by:</p>
+<ul class="simple">
+<li><p>exact symmetry-unique enumeration</p></li>
+<li><p>random symmetry-unique sampling</p></li>
+</ul>
+<p>This step operates only on subfolders created in Step 01.</p>
+<section id="id1">
+<h3>Parameters<a class="headerlink" href="#id1" title="Link to this heading"></a></h3>
+</section>
+<section id="backend-string-default-m3gnet">
+<h3>backend (string, default: “m3gnet”)<a class="headerlink" href="#backend-string-default-m3gnet" title="Link to this heading"></a></h3>
+<p>Selects the ML model used for energy prediction.</p>
+<p>Available options:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;m3gnet&quot;</span></code> — TensorFlow-based universal interatomic potential</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;uma&quot;</span></code> — FAIR-Chem universal model (requires Hugging Face access)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;mace&quot;</span></code> — MACE foundation models (MP, MPA, OMAT, MATPES, and MH)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;grace&quot;</span></code> — GRACE graph neural network models (if installed)</p></li>
+</ul>
+<p>Each backend has its own supported models and execution characteristics.</p>
+</section>
+<section id="model-string-default-default">
+<h3>model (string, default: “default”)<a class="headerlink" href="#model-string-default-default" title="Link to this heading"></a></h3>
+<p>Specifies the pretrained model variant used by the selected backend.</p>
+<p>An omitted, empty, or <code class="docutils literal notranslate"><span class="pre">&quot;default&quot;</span></code> value is normalized to a compatible model:
+<code class="docutils literal notranslate"><span class="pre">default</span></code> for M3GNet, <code class="docutils literal notranslate"><span class="pre">uma-s-1p2</span></code> for UMA, <code class="docutils literal notranslate"><span class="pre">small</span></code> for MACE, and
+<code class="docutils literal notranslate"><span class="pre">GRACE-1L-OMAT</span></code> for GRACE.</p>
+<p>Behavior depends on backend:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">m3gnet</span></code>:
+- <code class="docutils literal notranslate"><span class="pre">&quot;default&quot;</span></code> → loads the standard M3GNet universal model</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">uma</span></code>:
+- <code class="docutils literal notranslate"><span class="pre">&quot;uma-s-1p2&quot;</span></code>
+- <code class="docutils literal notranslate"><span class="pre">&quot;uma-s-1p1&quot;</span></code>
+- <code class="docutils literal notranslate"><span class="pre">&quot;uma-m-1p1&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mace</span></code>:</p>
+<ul>
+<li><p>accepts every alias exposed by the installed MACE <code class="docutils literal notranslate"><span class="pre">mace_mp</span></code> calculator</p></li>
+<li><p>common aliases include <code class="docutils literal notranslate"><span class="pre">&quot;small&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;medium&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;large&quot;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">&quot;medium-mpa-0&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;small-omat-0&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;medium-omat-0&quot;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">&quot;mace-matpes-pbe-0&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;mace-matpes-r2scan-0&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;mh-0&quot;</span></code>,
+and <code class="docutils literal notranslate"><span class="pre">&quot;mh-1&quot;</span></code></p></li>
+<li><p>a local <code class="docutils literal notranslate"><span class="pre">.model</span></code>, <code class="docutils literal notranslate"><span class="pre">.pt</span></code>, or <code class="docutils literal notranslate"><span class="pre">.pth</span></code> checkpoint path is also accepted</p></li>
+<li><p>named model weights are downloaded and cached by MACE on first use</p></li>
+</ul>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">grace</span></code>:
+- <code class="docutils literal notranslate"><span class="pre">GRACE-1L-OMAT</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-1L-OMAT-M-base</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-1L-OMAT-M</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-1L-OMAT-L-base</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-1L-OMAT-L</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-OMAT</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-OMAT-M-base</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-OMAT-M</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-OMAT-L-base</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-OMAT-L</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-1L-OAM</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-1L-OAM-M</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-1L-OAM-L</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-OAM</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-OAM-M</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-OAM-L</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-1L-SMAX-L</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-1L-SMAX-OMAT-L</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-SMAX-M</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-SMAX-L</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-SMAX-OMAT-M</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-SMAX-OMAT-L</span></code></p></li>
+</ul>
+</section>
+<section id="task-string-default">
+<h3>task (string, default: “”)<a class="headerlink" href="#task-string-default" title="Link to this heading"></a></h3>
+<p>Optional task specification (used only for certain backends).</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">uma</span></code> uses <code class="docutils literal notranslate"><span class="pre">&quot;omat&quot;</span></code> when <code class="docutils literal notranslate"><span class="pre">task</span></code> is omitted or empty. Supported values are:
+- <code class="docutils literal notranslate"><span class="pre">&quot;omat&quot;</span></code>
+- <code class="docutils literal notranslate"><span class="pre">&quot;oc20&quot;</span></code>
+- <code class="docutils literal notranslate"><span class="pre">&quot;oc22&quot;</span></code>
+- <code class="docutils literal notranslate"><span class="pre">&quot;oc25&quot;</span></code>
+- <code class="docutils literal notranslate"><span class="pre">&quot;omol&quot;</span></code>
+- <code class="docutils literal notranslate"><span class="pre">&quot;odac&quot;</span></code>
+- <code class="docutils literal notranslate"><span class="pre">&quot;omc&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mace</span></code> uses <code class="docutils literal notranslate"><span class="pre">task</span></code> to select the training domain (the <code class="docutils literal notranslate"><span class="pre">head</span></code>) of a
+multi-head model. For <code class="docutils literal notranslate"><span class="pre">model</span> <span class="pre">=</span> <span class="pre">&quot;mh-1&quot;</span></code>, an omitted or empty value is
+resolved by dopingflow to the compatible <code class="docutils literal notranslate"><span class="pre">omat_pbe</span></code> head. Set a supported
+head explicitly, such as <code class="docutils literal notranslate"><span class="pre">task</span> <span class="pre">=</span> <span class="pre">&quot;matpes_r2scan&quot;</span></code>, when that training
+domain and level of theory is desired.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">m3gnet</span></code>, <code class="docutils literal notranslate"><span class="pre">grace</span></code>:
+- Not used → keep empty (<code class="docutils literal notranslate"><span class="pre">&quot;&quot;</span></code>)</p></li>
+</ul>
+</section>
+<section id="poscar-in-string-default-poscar">
+<h3>poscar_in (string, default: “POSCAR”)<a class="headerlink" href="#poscar-in-string-default-poscar" title="Link to this heading"></a></h3>
+<p>Filename inside each composition folder used as input.</p>
+</section>
+<section id="topk-integer-default-15">
+<h3>topk (integer, default: 15)<a class="headerlink" href="#topk-integer-default-15" title="Link to this heading"></a></h3>
+<p>Number of lowest-energy configurations retained.</p>
+</section>
+<section id="symprec-float-default-1e-3">
+<h3>symprec (float, default: 1e-3)<a class="headerlink" href="#symprec-float-default-1e-3" title="Link to this heading"></a></h3>
+<p>Tolerance used for symmetry detection in <code class="docutils literal notranslate"><span class="pre">SpacegroupAnalyzer</span></code>.</p>
+</section>
+<section id="mode-string-default-auto">
+<h3>mode (string, default: “auto”)<a class="headerlink" href="#mode-string-default-auto" title="Link to this heading"></a></h3>
+<p>Scan strategy.</p>
+<p>Possible values:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">auto</span></code>
+Automatically chooses exact enumeration for manageable problems and switches
+to sampling when the configuration space becomes too large.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">exact</span></code>
+Forces full symmetry-unique enumeration of all configurations.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sample</span></code>
+Uses random symmetry-unique sampling instead of full enumeration.</p></li>
+</ul>
+</section>
+<section id="max-enum-integer-default-300000">
+<h3>max_enum (integer, default: 300000)<a class="headerlink" href="#max-enum-integer-default-300000" title="Link to this heading"></a></h3>
+<p>Maximum allowed number of raw combinatorial configurations in exact mode.</p>
+<p>If this limit is exceeded and <code class="docutils literal notranslate"><span class="pre">mode</span> <span class="pre">=</span> <span class="pre">&quot;auto&quot;</span></code>, the scan automatically switches
+to sampling mode.</p>
+</section>
+<section id="max-unique-integer-default-100000">
+<h3>max_unique (integer, default: 100000)<a class="headerlink" href="#max-unique-integer-default-100000" title="Link to this heading"></a></h3>
+<p>Maximum allowed number of symmetry-unique configurations in exact mode.</p>
+<p>Prevents excessive memory usage for very large configuration spaces.</p>
+</section>
+<section id="device-string-default-cpu">
+<h3>device (string, default: “cpu”)<a class="headerlink" href="#device-string-default-cpu" title="Link to this heading"></a></h3>
+<p>Execution device:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;cpu&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;cuda&quot;</span></code></p></li>
+</ul>
+<p>Behavior depends on backend:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">m3gnet</span></code>:
+- GPU mode uses a single worker (TensorFlow limitation)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">uma</span></code>:
+- GPU supported via PyTorch</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mace</span></code>:
+- GPU supported and recommended for performance</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">grace</span></code>:
+- GPU support depends on model implementation</p></li>
+</ul>
+</section>
+<section id="n-workers-integer-default-12">
+<h3>n_workers (integer, default: 12)<a class="headerlink" href="#n-workers-integer-default-12" title="Link to this heading"></a></h3>
+<p>Number of parallel worker processes.</p>
+<ul class="simple">
+<li><p>Used only when <code class="docutils literal notranslate"><span class="pre">device</span> <span class="pre">=</span> <span class="pre">&quot;cpu&quot;</span></code></p></li>
+<li><p>Some backends may internally limit parallelism:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">m3gnet</span></code> (GPU): forces single worker</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mace</span></code>: typically runs efficiently in single-process mode</p></li>
+</ul>
+</li>
+<li><p>Ignored when <code class="docutils literal notranslate"><span class="pre">device</span> <span class="pre">=</span> <span class="pre">&quot;cuda&quot;</span></code> (GPU mode uses a single worker)</p></li>
+</ul>
+</section>
+<section id="chunksize-integer-default-50">
+<h3>chunksize (integer, default: 50)<a class="headerlink" href="#chunksize-integer-default-50" title="Link to this heading"></a></h3>
+<p>Chunk size used in the multiprocessing pool.</p>
+<p>Relevant only when <code class="docutils literal notranslate"><span class="pre">device</span> <span class="pre">=</span> <span class="pre">&quot;cpu&quot;</span></code>.</p>
+</section>
+<section id="gpu-id-integer-default-0">
+<h3>gpu_id (integer, default: 0)<a class="headerlink" href="#gpu-id-integer-default-0" title="Link to this heading"></a></h3>
+<p>GPU index used when <code class="docutils literal notranslate"><span class="pre">device</span> <span class="pre">=</span> <span class="pre">&quot;cuda&quot;</span></code>.</p>
+</section>
+<section id="anion-species-array-of-strings-default-o">
+<h3>anion_species (array of strings, default: [“O”])<a class="headerlink" href="#anion-species-array-of-strings-default-o" title="Link to this heading"></a></h3>
+<p>Species excluded from substitutional enumeration.
+Typically contains oxygen:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">anion_species</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"O"</span><span class="p">]</span>
+</pre></div>
+</div>
+</section>
+<section id="host-species-from-doping">
+<h3>host_species (from [doping])<a class="headerlink" href="#host-species-from-doping" title="Link to this heading"></a></h3>
+<p>Used to define the cation sublattice.
+Must match the host element defined in <code class="docutils literal notranslate"><span class="pre">[doping]</span></code>.</p>
+</section>
+<section id="id2">
+<h3>skip_if_done (boolean, default: true)<a class="headerlink" href="#id2" title="Link to this heading"></a></h3>
+<p>If true, skip a structure folder if <code class="docutils literal notranslate"><span class="pre">ranking_scan.csv</span></code> already exists.</p>
+</section>
+<section id="sampling-parameters">
+<h3>Sampling parameters<a class="headerlink" href="#sampling-parameters" title="Link to this heading"></a></h3>
+<p>Used when:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">mode</span> <span class="pre">=</span> <span class="pre">&quot;sample&quot;</span></code></p></li>
+<li><p>or <code class="docutils literal notranslate"><span class="pre">mode</span> <span class="pre">=</span> <span class="pre">&quot;auto&quot;</span></code> selects sampling for large configuration spaces</p></li>
+</ul>
+</section>
+<section id="sample-budget-integer-default-20000">
+<h3>sample_budget (integer, default: 20000)<a class="headerlink" href="#sample-budget-integer-default-20000" title="Link to this heading"></a></h3>
+<p>Maximum number of random sampling attempts.</p>
+</section>
+<section id="sample-batch-size-integer-default-256">
+<h3>sample_batch_size (integer, default: 256)<a class="headerlink" href="#sample-batch-size-integer-default-256" title="Link to this heading"></a></h3>
+<p>Number of new symmetry-unique sampled configurations evaluated per batch.</p>
+</section>
+<section id="sample-patience-integer-default-4000">
+<h3>sample_patience (integer, default: 4000)<a class="headerlink" href="#sample-patience-integer-default-4000" title="Link to this heading"></a></h3>
+<p>Sampling stops after this many sampled configurations fail to improve the
+current best candidate.</p>
+</section>
+<section id="sample-seed-integer-default-42">
+<h3>sample_seed (integer, default: 42)<a class="headerlink" href="#sample-seed-integer-default-42" title="Link to this heading"></a></h3>
+<p>Random seed used for reproducible sampling.</p>
+</section>
+<section id="sample-max-saved-integer-default-50000">
+<h3>sample_max_saved (integer, default: 50000)<a class="headerlink" href="#sample-max-saved-integer-default-50000" title="Link to this heading"></a></h3>
+<p>Maximum number of sampled canonical configurations stored to avoid duplicates.</p>
+</section>
+<section id="notes">
+<h3>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>If <code class="docutils literal notranslate"><span class="pre">device</span> <span class="pre">=</span> <span class="pre">&quot;cuda&quot;</span></code>, scan runs on a single GPU and <code class="docutils literal notranslate"><span class="pre">n_workers</span></code> is ignored.</p></li>
+<li><p>If <code class="docutils literal notranslate"><span class="pre">device</span> <span class="pre">=</span> <span class="pre">&quot;cpu&quot;</span></code>, parallelization is controlled via <code class="docutils literal notranslate"><span class="pre">n_workers</span></code> and <code class="docutils literal notranslate"><span class="pre">chunksize</span></code>.</p></li>
+<li><p>GPU mode is recommended for faster single-structure evaluation, while CPU mode scales better across many configurations.</p></li>
+<li><p>The scan backend can be selected via <code class="docutils literal notranslate"><span class="pre">backend</span></code>.</p></li>
+<li><p>Different backends have different accuracy/speed trade-offs:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">m3gnet</span></code>: stable, general-purpose</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">uma</span></code>: high-quality FAIR-Chem models (requires authentication)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mace</span></code>: fast and scalable foundation models</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">grace</span></code>: advanced GNN-based models (experimental)</p></li>
+</ul>
+</li>
+<li><p>For large configuration spaces, sampling mode is recommended.</p></li>
+<li><p>GPU acceleration is backend-dependent and may not always scale with multiprocessing.</p></li>
+</ul>
+</section>
+<section id="id3">
+<h3>Output<a class="headerlink" href="#id3" title="Link to this heading"></a></h3>
+<p>For each composition folder:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ranking_scan</span><span class="o">.</span><span class="n">csv</span>
+<span class="n">scan_summary</span><span class="o">.</span><span class="n">txt</span>
+<span class="n">candidate_001</span><span class="o">/</span><span class="mi">01</span><span class="n">_scan</span><span class="o">/</span><span class="n">POSCAR</span>
+<span class="n">candidate_001</span><span class="o">/</span><span class="mi">01</span><span class="n">_scan</span><span class="o">/</span><span class="n">meta</span><span class="o">.</span><span class="n">json</span>
+<span class="o">...</span>
+</pre></div>
+</div>
+<p>Each candidate folder contains:</p>
+<ul class="simple">
+<li><p>symmetry-unique configuration</p></li>
+<li><p>single-point energy (from selected backend)</p></li>
+<li><p>dopant site signature</p></li>
+<li><p>scan metadata</p></li>
+</ul>
+<p>The following metadata is recorded:</p>
+<ul class="simple">
+<li><p>backend</p></li>
+<li><p>model</p></li>
+<li><p>task</p></li>
+<li><p>energy_sp_eV</p></li>
+<li><p>configuration details</p></li>
+</ul>
+</section>
+</section>
+<hr class="docutils" />
+<section id="relax">
+<h2>[relax]<a class="headerlink" href="#relax" title="Link to this heading"></a></h2>
+<p>Step 03 — Structural relaxation using machine-learning interatomic potentials.</p>
+<p>This stage relaxes the low-energy candidates selected in Step 02.
+For each structure folder in <code class="docutils literal notranslate"><span class="pre">[structure].outdir</span></code>, the workflow reads:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">candidate_</span><span class="o">*/</span><span class="mi">01</span><span class="n">_scan</span><span class="o">/</span><span class="n">POSCAR</span>
+</pre></div>
+</div>
+<p>and writes relaxed structures and metadata to:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">candidate_</span><span class="o">*/</span><span class="mi">02</span><span class="n">_relax</span><span class="o">/</span>
+</pre></div>
+</div>
+<p>Relaxation is performed using the selected ML backend together with an ASE optimizer.</p>
+<p>Supported backends:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;m3gnet&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;uma&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;mace&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;grace&quot;</span></code></p></li>
+</ul>
+<p>Supported optimizers:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;bfgs&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;lbfgs&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;fire&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;mdmin&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;quasinewton&quot;</span></code></p></li>
+</ul>
+<p>Relaxation stops when either:</p>
+<ul class="simple">
+<li><p>the maximum atomic force drops below <code class="docutils literal notranslate"><span class="pre">fmax</span></code></p></li>
+<li><p>the number of optimizer steps reaches <code class="docutils literal notranslate"><span class="pre">max_steps</span></code></p></li>
+</ul>
+<section id="id4">
+<h3>Parameters<a class="headerlink" href="#id4" title="Link to this heading"></a></h3>
+</section>
+<section id="id5">
+<h3>backend (string, default: “m3gnet”)<a class="headerlink" href="#id5" title="Link to this heading"></a></h3>
+<p>Selects the ML backend used for structural relaxation.</p>
+<p>Available options:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;m3gnet&quot;</span></code> — TensorFlow-based universal interatomic potential</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;uma&quot;</span></code> — FAIR-Chem universal model (requires Hugging Face access)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;mace&quot;</span></code> — MACE foundation models</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;grace&quot;</span></code> — GRACE graph neural network models (if installed)</p></li>
+</ul>
+</section>
+<section id="id6">
+<h3>model (string, default: “default”)<a class="headerlink" href="#id6" title="Link to this heading"></a></h3>
+<p>Specifies the pretrained model variant used by the selected relaxation backend.</p>
+<p>An omitted, empty, or <code class="docutils literal notranslate"><span class="pre">&quot;default&quot;</span></code> value is normalized to a compatible model:
+<code class="docutils literal notranslate"><span class="pre">default</span></code> for M3GNet, <code class="docutils literal notranslate"><span class="pre">uma-s-1p2</span></code> for UMA, <code class="docutils literal notranslate"><span class="pre">small</span></code> for MACE, and
+<code class="docutils literal notranslate"><span class="pre">GRACE-1L-OMAT</span></code> for GRACE.</p>
+<p>Behavior depends on backend:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">m3gnet</span></code>:
+- <code class="docutils literal notranslate"><span class="pre">&quot;default&quot;</span></code> → loads the standard pretrained M3GNet model</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">uma</span></code>:
+- <code class="docutils literal notranslate"><span class="pre">&quot;uma-s-1p2&quot;</span></code>
+- <code class="docutils literal notranslate"><span class="pre">&quot;uma-s-1p1&quot;</span></code>
+- <code class="docutils literal notranslate"><span class="pre">&quot;uma-m-1p1&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mace</span></code>:</p>
+<ul>
+<li><p>accepts every alias exposed by the installed MACE <code class="docutils literal notranslate"><span class="pre">mace_mp</span></code> calculator</p></li>
+<li><p>common aliases include <code class="docutils literal notranslate"><span class="pre">&quot;small&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;medium&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;large&quot;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">&quot;medium-mpa-0&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;small-omat-0&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;medium-omat-0&quot;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">&quot;mace-matpes-pbe-0&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;mace-matpes-r2scan-0&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;mh-0&quot;</span></code>,
+and <code class="docutils literal notranslate"><span class="pre">&quot;mh-1&quot;</span></code></p></li>
+<li><p>local <code class="docutils literal notranslate"><span class="pre">.model</span></code>, <code class="docutils literal notranslate"><span class="pre">.pt</span></code>, and <code class="docutils literal notranslate"><span class="pre">.pth</span></code> checkpoint paths are accepted</p></li>
+</ul>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">grace</span></code>:
+- <code class="docutils literal notranslate"><span class="pre">GRACE-1L-OMAT</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-1L-OMAT-M-base</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-1L-OMAT-M</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-1L-OMAT-L-base</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-1L-OMAT-L</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-OMAT</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-OMAT-M-base</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-OMAT-M</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-OMAT-L-base</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-OMAT-L</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-1L-OAM</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-1L-OAM-M</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-1L-OAM-L</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-OAM</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-OAM-M</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-OAM-L</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-1L-SMAX-L</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-1L-SMAX-OMAT-L</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-SMAX-M</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-SMAX-L</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-SMAX-OMAT-M</span></code>
+- <code class="docutils literal notranslate"><span class="pre">GRACE-2L-SMAX-OMAT-L</span></code></p></li>
+</ul>
+</section>
+<section id="id7">
+<h3>task (string, default: “”)<a class="headerlink" href="#id7" title="Link to this heading"></a></h3>
+<p>Optional task specification used for <code class="docutils literal notranslate"><span class="pre">uma</span></code> and multi-head MACE models.</p>
+<p>For UMA, an omitted or empty value resolves to <code class="docutils literal notranslate"><span class="pre">&quot;omat&quot;</span></code>. Allowed values are:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;omat&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;oc20&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;oc22&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;oc25&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;omol&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;odac&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;omc&quot;</span></code></p></li>
+</ul>
+<p>For MACE, <code class="docutils literal notranslate"><span class="pre">task</span></code> is passed as the optional model <code class="docutils literal notranslate"><span class="pre">head</span></code>. An omitted or empty
+value uses a compatible dopingflow default; MACE-MH-1 resolves to
+<code class="docutils literal notranslate"><span class="pre">omat_pbe</span></code>. For
+<code class="docutils literal notranslate"><span class="pre">m3gnet</span></code> and <code class="docutils literal notranslate"><span class="pre">grace</span></code>, this parameter is ignored.</p>
+</section>
+<section id="relax-mode-string-default-atoms">
+<h3>relax_mode (string, default: “atoms”)<a class="headerlink" href="#relax-mode-string-default-atoms" title="Link to this heading"></a></h3>
+<p>Controls which degrees of freedom are optimized.</p>
+<p>Available options:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;atoms&quot;</span></code> — relax atomic positions only.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;full&quot;</span></code> — relax atomic positions, cell shape, and volume.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;isotropic&quot;</span></code> — relax atomic positions with uniform cell scaling.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;volume&quot;</span></code> — relax volume only while keeping fractional atomic positions fixed.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;shape&quot;</span></code> — relax cell shape at nearly constant volume.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;xy&quot;</span></code> — relax only the in-plane <code class="docutils literal notranslate"><span class="pre">a</span></code> and <code class="docutils literal notranslate"><span class="pre">b</span></code> cell lengths, keeping <code class="docutils literal notranslate"><span class="pre">c</span></code> and angles fixed.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;cell_only&quot;</span></code> — relax the cell while keeping fractional atomic positions fixed.</p></li>
+</ul>
+</section>
+<section id="cell-filter-string-default-frechet">
+<h3>cell_filter (string, default: “frechet”)<a class="headerlink" href="#cell-filter-string-default-frechet" title="Link to this heading"></a></h3>
+<p>ASE cell filter used when <code class="docutils literal notranslate"><span class="pre">relax_mode</span></code> involves cell relaxation.</p>
+<p>Available options:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;frechet&quot;</span></code> — recommended default.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;unit&quot;</span></code> — simpler direct cell filter.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;exp&quot;</span></code> — older exponential cell filter, mainly for compatibility.</p></li>
+</ul>
+</section>
+<section id="optimizer-string-default-bfgs">
+<h3>optimizer (string, default: “bfgs”)<a class="headerlink" href="#optimizer-string-default-bfgs" title="Link to this heading"></a></h3>
+<p>ASE optimizer used during relaxation.</p>
+<p>Available options:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;bfgs&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;lbfgs&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;fire&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;mdmin&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;quasinewton&quot;</span></code></p></li>
+</ul>
+</section>
+<section id="fmax-float-default-0-05">
+<h3>fmax (float, default: 0.05)<a class="headerlink" href="#fmax-float-default-0-05" title="Link to this heading"></a></h3>
+<p>Maximum force convergence criterion (eV/Å).</p>
+<p>Relaxation is considered converged when the maximum atomic force falls below this threshold.</p>
+</section>
+<section id="max-steps-integer-default-300">
+<h3>max_steps (integer, default: 300)<a class="headerlink" href="#max-steps-integer-default-300" title="Link to this heading"></a></h3>
+<p>Maximum number of optimizer steps.</p>
+<p>If this limit is reached before the force threshold is satisfied, the relaxation stops and the final structure is still written to disk.</p>
+</section>
+<section id="id8">
+<h3>device (string, default: “cpu”)<a class="headerlink" href="#id8" title="Link to this heading"></a></h3>
+<p>Execution device:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;cpu&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;cuda&quot;</span></code></p></li>
+</ul>
+<p>Behavior depends on backend and runtime environment.
+GPU execution uses a single effective worker.</p>
+</section>
+<section id="id9">
+<h3>gpu_id (integer, default: 0)<a class="headerlink" href="#id9" title="Link to this heading"></a></h3>
+<p>GPU index used when <code class="docutils literal notranslate"><span class="pre">device</span> <span class="pre">=</span> <span class="pre">&quot;cuda&quot;</span></code>.</p>
+</section>
+<section id="n-workers-integer-default-6">
+<h3>n_workers (integer, default: 6)<a class="headerlink" href="#n-workers-integer-default-6" title="Link to this heading"></a></h3>
+<p>Number of parallel relaxation workers (one candidate per worker process).</p>
+<p>Relevant mainly when <code class="docutils literal notranslate"><span class="pre">device</span> <span class="pre">=</span> <span class="pre">&quot;cpu&quot;</span></code>.</p>
+</section>
+<section id="tf-threads-integer-default-1">
+<h3>tf_threads (integer, default: 1)<a class="headerlink" href="#tf-threads-integer-default-1" title="Link to this heading"></a></h3>
+<p>TensorFlow thread count per worker.</p>
+<p>Mainly relevant for the <code class="docutils literal notranslate"><span class="pre">m3gnet</span></code> backend.
+Keep small (typically 1) when using multiple workers.</p>
+</section>
+<section id="omp-threads-integer-default-1">
+<h3>omp_threads (integer, default: 1)<a class="headerlink" href="#omp-threads-integer-default-1" title="Link to this heading"></a></h3>
+<p>OpenMP thread count per worker.</p>
+<p>Keep small to avoid CPU oversubscription.</p>
+</section>
+<section id="id10">
+<h3>skip_if_done (boolean, default: true)<a class="headerlink" href="#id10" title="Link to this heading"></a></h3>
+<p>Skip an entire composition folder if <code class="docutils literal notranslate"><span class="pre">ranking_relax.csv</span></code> already exists.</p>
+</section>
+<section id="skip-candidate-if-done-boolean-default-true">
+<h3>skip_candidate_if_done (boolean, default: true)<a class="headerlink" href="#skip-candidate-if-done-boolean-default-true" title="Link to this heading"></a></h3>
+<p>Skip an individual candidate if both of the following already exist:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">candidate_</span><span class="o">*/</span><span class="mi">02</span><span class="n">_relax</span><span class="o">/</span><span class="n">meta</span><span class="o">.</span><span class="n">json</span>
+<span class="n">candidate_</span><span class="o">*/</span><span class="mi">02</span><span class="n">_relax</span><span class="o">/</span><span class="n">POSCAR</span>
+</pre></div>
+</div>
+</section>
+<section id="id11">
+<h3>Notes<a class="headerlink" href="#id11" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>If <code class="docutils literal notranslate"><span class="pre">device</span> <span class="pre">=</span> <span class="pre">&quot;cuda&quot;</span></code>, relaxation uses a single effective worker and <code class="docutils literal notranslate"><span class="pre">n_workers</span></code> is ignored.</p></li>
+<li><p>If <code class="docutils literal notranslate"><span class="pre">device</span> <span class="pre">=</span> <span class="pre">&quot;cpu&quot;</span></code>, parallelization is controlled via <code class="docutils literal notranslate"><span class="pre">n_workers</span></code>.</p></li>
+<li><p>The relaxed <code class="docutils literal notranslate"><span class="pre">POSCAR</span></code> follows the species ordering defined by <code class="docutils literal notranslate"><span class="pre">[generate].poscar_order</span></code>.</p></li>
+<li><p>If <code class="docutils literal notranslate"><span class="pre">poscar_order</span></code> is empty, the default pymatgen ordering is used.</p></li>
+</ul>
+</section>
+<section id="id12">
+<h3>Output<a class="headerlink" href="#id12" title="Link to this heading"></a></h3>
+<p>For each candidate:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">candidate_</span><span class="c1">###/02_relax/POSCAR</span>
+<span class="n">candidate_</span><span class="c1">###/02_relax/meta.json</span>
+</pre></div>
+</div>
+<p>For each structure folder:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ranking_relax</span><span class="o">.</span><span class="n">csv</span>
+</pre></div>
+</div>
+<p>The metadata records:</p>
+<ul class="simple">
+<li><p>backend</p></li>
+<li><p>model</p></li>
+<li><p>task</p></li>
+<li><p>optimizer</p></li>
+<li><p>relaxed energy</p></li>
+<li><p>convergence target</p></li>
+<li><p>final maximum force</p></li>
+<li><p>optimizer step count</p></li>
+<li><p>convergence status</p></li>
+<li><p>walltime</p></li>
+<li><p>link to the original scan metadata</p></li>
+</ul>
+</section>
+</section>
+<section id="filter">
+<h2>[filter]<a class="headerlink" href="#filter" title="Link to this heading"></a></h2>
+<p>Step 04 — Candidate selection.</p>
+<section id="mode-string-default-window">
+<h3>mode (string, default: “window”)<a class="headerlink" href="#mode-string-default-window" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;window&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;topn&quot;</span></code></p></li>
+</ul>
+</section>
+<section id="window-mev-float-default-50-0">
+<h3>window_meV (float, default: 50.0)<a class="headerlink" href="#window-mev-float-default-50-0" title="Link to this heading"></a></h3>
+<p>Energy window above the lowest relaxed energy (in meV).</p>
+<p>Candidates with:</p>
+<blockquote>
+<div><p>E_relaxed &lt;= E_min + window_meV</p>
+</div></blockquote>
+<p>are retained.</p>
+<p>A value of 0 keeps only the lowest-energy structure.</p>
+<p>If no candidate satisfies the filtering criteria, the workflow raises an error.</p>
+</section>
+<section id="max-candidates-integer-default-12">
+<h3>max_candidates (integer, default: 12)<a class="headerlink" href="#max-candidates-integer-default-12" title="Link to this heading"></a></h3>
+<p>Number of candidates kept when mode = <code class="docutils literal notranslate"><span class="pre">&quot;topn&quot;</span></code>.</p>
+</section>
+<section id="id13">
+<h3>skip_if_done (boolean, default: true)<a class="headerlink" href="#id13" title="Link to this heading"></a></h3>
+<p>Skip filtering if output exists.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="bandgap">
+<h2>[bandgap]<a class="headerlink" href="#bandgap" title="Link to this heading"></a></h2>
+<p>Step 05 — Bandgap prediction using a local ALIGNN model.</p>
+<p>Requires environment variable <code class="docutils literal notranslate"><span class="pre">ALIGNN_MODEL_DIR</span></code> pointing to
+a local ALIGNN model directory.</p>
+<section id="enabled-boolean-default-true">
+<h3>enabled (boolean, default: true)<a class="headerlink" href="#enabled-boolean-default-true" title="Link to this heading"></a></h3>
+<p>If false, <code class="docutils literal notranslate"><span class="pre">sequential-run</span></code> skips the bandgap stage. The final database is still
+written, but <code class="docutils literal notranslate"><span class="pre">bandgap_eV</span></code> is left empty.</p>
+</section>
+<section id="id14">
+<h3>skip_if_done (boolean, default: true)<a class="headerlink" href="#id14" title="Link to this heading"></a></h3>
+<p>If true, previously computed bandgap results are reused.</p>
+<p>Behavior:
+- If <code class="docutils literal notranslate"><span class="pre">candidate_*/03_band/meta.json</span></code> already exists, the stored bandgap value is reused and prediction is skipped for that candidate.
+- The summary CSV is rebuilt from existing metadata.
+- This allows safe re-running of the workflow without recomputing already processed candidates.</p>
+<p>If a candidate prediction fails:
+- The error is recorded in <code class="docutils literal notranslate"><span class="pre">candidate_*/03_band/meta.json</span></code>.
+- The workflow continues with remaining candidates.
+- Failed candidates appear in the summary CSV with <code class="docutils literal notranslate"><span class="pre">NaN</span></code> bandgap.</p>
+</section>
+<section id="cutoff-float-default-8-0">
+<h3>cutoff (float, default: 8.0)<a class="headerlink" href="#cutoff-float-default-8-0" title="Link to this heading"></a></h3>
+<p>Neighbor cutoff radius (Å) used to construct the atomic graph
+for ALIGNN inference. Must be &gt; 0.</p>
+</section>
+<section id="max-neighbors-integer-default-12">
+<h3>max_neighbors (integer, default: 12)<a class="headerlink" href="#max-neighbors-integer-default-12" title="Link to this heading"></a></h3>
+<p>Maximum number of neighbors retained per atom when building the graph.
+Must be &gt; 0.</p>
+</section>
+<section id="id15">
+<h3>device (string, default: “cpu”)<a class="headerlink" href="#id15" title="Link to this heading"></a></h3>
+<p>Execution device:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;cpu&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;cuda&quot;</span></code></p></li>
+</ul>
+</section>
+<section id="id16">
+<h3>gpu_id (integer, default: 0)<a class="headerlink" href="#id16" title="Link to this heading"></a></h3>
+<p>GPU index used when <code class="docutils literal notranslate"><span class="pre">device</span> <span class="pre">=</span> <span class="pre">&quot;cuda&quot;</span></code>.</p>
+</section>
+<section id="batch-size-integer-default-32">
+<h3>batch_size (integer, default: 32)<a class="headerlink" href="#batch-size-integer-default-32" title="Link to this heading"></a></h3>
+<p>Batch size used for GPU inference.</p>
+</section>
+<section id="n-workers-integer-default-1">
+<h3>n_workers (integer, default: 1)<a class="headerlink" href="#n-workers-integer-default-1" title="Link to this heading"></a></h3>
+<p>Number of CPU workers used for parallel bandgap prediction.</p>
+</section>
+<section id="id17">
+<h3>Notes<a class="headerlink" href="#id17" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>CPU mode → multiprocessing over structures using <code class="docutils literal notranslate"><span class="pre">n_workers</span></code></p></li>
+<li><p>GPU mode → batched inference using <code class="docutils literal notranslate"><span class="pre">batch_size</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">n_workers</span></code> is ignored when using GPU</p></li>
+</ul>
+</section>
+</section>
+<hr class="docutils" />
+<section id="formation">
+<h2>[formation]<a class="headerlink" href="#formation" title="Link to this heading"></a></h2>
+<p>Step 06 — Formation energy calculation.</p>
+<p>Formation energies are computed using the chemical potentials written by
+<code class="docutils literal notranslate"><span class="pre">refs-build</span></code> in <code class="docutils literal notranslate"><span class="pre">reference_structures/reference_energies.json</span></code>.</p>
+<p>The reference scheme (metal or oxide) is automatically determined from
+<code class="docutils literal notranslate"><span class="pre">[references].reference_mode</span></code> and no additional user input is required here.</p>
+<section id="id18">
+<h3>skip_if_done (boolean, default: true)<a class="headerlink" href="#id18" title="Link to this heading"></a></h3>
+<p>If true, skip formation calculation if <code class="docutils literal notranslate"><span class="pre">formation_energies.csv</span></code> already exists
+in a composition folder.</p>
+</section>
+<section id="normalize-string-default-per-dopant">
+<h3>normalize (string, default: “per_dopant”)<a class="headerlink" href="#normalize-string-default-per-dopant" title="Link to this heading"></a></h3>
+<p>Defines how the reported formation energy is normalized:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;total&quot;</span></code> — total formation energy (eV)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;per_dopant&quot;</span></code> — eV per substituted dopant atom</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;per_host&quot;</span></code> — eV per atom in the supercell</p></li>
+</ul>
+</section>
+<section id="relative-enabled-boolean-default-false">
+<h3>relative_enabled (boolean, default: false)<a class="headerlink" href="#relative-enabled-boolean-default-false" title="Link to this heading"></a></h3>
+<p>If true, write reference-specific relative formation and mixing-energy columns.
+In oxide mode these values preserve the already tie-line-referenced per-cation
+energies and include explicit oxide-endmember provenance.</p>
+</section>
+<section id="endpoint-x-string-or-float-default-auto">
+<h3>endpoint_x (string or float, default: “auto”)<a class="headerlink" href="#endpoint-x-string-or-float-default-auto" title="Link to this heading"></a></h3>
+<p>Controls endpoint metadata and the compatibility calculation for older result
+databases. <code class="docutils literal notranslate"><span class="pre">&quot;auto&quot;</span></code> uses the pure oxide endmember for new oxide-reference
+results. A numeric value must lie in <code class="docutils literal notranslate"><span class="pre">(0,</span> <span class="pre">1]</span></code>.</p>
+<p>Formation energies require:</p>
+<ul class="simple">
+<li><p>Successful execution of <code class="docutils literal notranslate"><span class="pre">refs-build</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">reference_structures/reference_energies.json</span></code></p></li>
+<li><p>Relaxed candidate structures in <code class="docutils literal notranslate"><span class="pre">candidate_*/02_relax/</span></code></p></li>
+</ul>
+</section>
+<section id="id19">
+<h3>Notes<a class="headerlink" href="#id19" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>The same substitution formula is used for both reference schemes.</p></li>
+<li><p>In <code class="docutils literal notranslate"><span class="pre">metal</span></code> mode, elemental metal references define the chemical potentials.</p></li>
+<li><p>In <code class="docutils literal notranslate"><span class="pre">oxide</span></code> mode, chemical potentials are derived from oxide references
+and the chosen oxygen condition (<code class="docutils literal notranslate"><span class="pre">O-rich</span></code> or <code class="docutils literal notranslate"><span class="pre">O-poor</span></code>).</p></li>
+<li><p>The selected reference mode is stored in
+<code class="docutils literal notranslate"><span class="pre">candidate_*/04_formation/meta.json</span></code> for reproducibility.</p></li>
+</ul>
+</section>
+</section>
+<hr class="docutils" />
+<section id="database">
+<h2>[database]<a class="headerlink" href="#database" title="Link to this heading"></a></h2>
+<p>Step 07 — Final database collection.</p>
+<section id="id20">
+<h3>skip_if_done (boolean, default: true)<a class="headerlink" href="#id20" title="Link to this heading"></a></h3>
+<p>If true, do not overwrite existing <code class="docutils literal notranslate"><span class="pre">results_database.csv</span></code>.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="phase-diagram">
+<h2>[phase_diagram]<a class="headerlink" href="#phase-diagram" title="Link to this heading"></a></h2>
+<p>Step 09 — Per-chemical-system phase-diagram analysis.</p>
+<section id="id21">
+<h3>skip_if_done (boolean, default: true)<a class="headerlink" href="#id21" title="Link to this heading"></a></h3>
+<p>If true and <code class="docutils literal notranslate"><span class="pre">phase_diagram_results.csv</span></code> exists, return the existing result
+without rebuilding the per-system diagrams.</p>
+</section>
+<section id="stable-threshold-ev-per-atom-float-default-1e-8">
+<h3>stable_threshold_eV_per_atom (float, default: 1e-8)<a class="headerlink" href="#stable-threshold-ev-per-atom-float-default-1e-8" title="Link to this heading"></a></h3>
+<p>Non-negative energy-above-hull threshold used for the boolean <code class="docutils literal notranslate"><span class="pre">stable</span></code> field.
+The step writes a combined CSV plus one CSV per exact chemical system under
+<code class="docutils literal notranslate"><span class="pre">phase_diagrams/</span></code>.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="id22">
+<h2>[vacancies]<a class="headerlink" href="#id22" title="Link to this heading"></a></h2>
+<p>The vacancy stage uses one flat <code class="docutils literal notranslate"><span class="pre">[vacancies]</span></code> table. Important controls are:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">host_species</span></code>, <code class="docutils literal notranslate"><span class="pre">host_oxidation_state</span></code>, <code class="docutils literal notranslate"><span class="pre">vacancy_species</span></code> and
+<code class="docutils literal notranslate"><span class="pre">vacancy_compensation_charge</span></code> for the formal-charge search space.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">oxidation_state_elements</span></code> / <code class="docutils literal notranslate"><span class="pre">oxidation_state_values</span></code> for dopants.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">enumeration_mode</span> <span class="pre">=</span> <span class="pre">&quot;auto&quot;</span> <span class="pre">|</span> <span class="pre">&quot;exact&quot;</span> <span class="pre">|</span> <span class="pre">&quot;sample&quot;</span></code> and the exact/sampling
+limits for symmetry-distinct vacancy generation.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">backend</span></code>, <code class="docutils literal notranslate"><span class="pre">model</span></code>, <code class="docutils literal notranslate"><span class="pre">task</span></code> and <code class="docutils literal notranslate"><span class="pre">device</span></code> for ML screening/relaxation.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">topk_per_vacancy_count</span></code>, <code class="docutils literal notranslate"><span class="pre">optimizer</span></code>, <code class="docutils literal notranslate"><span class="pre">fmax</span></code> and <code class="docutils literal notranslate"><span class="pre">max_steps</span></code> for
+relaxation.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">static_thermodynamic_analysis</span> <span class="pre">=</span> <span class="pre">true</span></code> to compare different oxygen contents.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">oxygen_reference_mode</span> <span class="pre">=</span> <span class="pre">&quot;global&quot;</span> <span class="pre">|</span> <span class="pre">&quot;chemistry-specific&quot;</span> <span class="pre">|</span>
+<span class="pre">&quot;reference_file&quot;</span> <span class="pre">|</span> <span class="pre">&quot;same_calculator&quot;</span> <span class="pre">|</span> <span class="pre">&quot;explicit&quot;</span> <span class="pre">|</span> <span class="pre">&quot;none&quot;</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">oxygen_standard_state_mode</span> <span class="pre">=</span> <span class="pre">&quot;nist_shomate&quot;</span> <span class="pre">|</span> <span class="pre">&quot;user_table&quot;</span> <span class="pre">|</span> <span class="pre">&quot;none&quot;</span></code>
+together with <code class="docutils literal notranslate"><span class="pre">temperatures_K</span></code> and the <code class="docutils literal notranslate"><span class="pre">pO2</span></code> grid.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">solid_configurational_entropy</span> <span class="pre">=</span> <span class="pre">&quot;none&quot;</span> <span class="pre">|</span> <span class="pre">&quot;ideal&quot;</span> <span class="pre">|</span> <span class="pre">&quot;configurational&quot;</span></code>.
+The <code class="docutils literal notranslate"><span class="pre">configurational</span></code> option evaluates an explicit canonical partition
+function using exact symmetry-orbit degeneracies; it therefore requires exact
+vacancy enumeration.</p></li>
+</ul>
+<p>Finite-temperature runs write <code class="docutils literal notranslate"><span class="pre">vacancy_formation_free_energy.csv/json</span></code> with
+<span class="math notranslate nohighlight">\(\Delta G_{vac}(T,p_{O_2})\)</span> for every vacancy count. See
+<a class="reference internal" href="methods/vacancies.html"><span class="doc">Oxygen-Vacancy Workflow</span></a> and <a class="reference internal" href="methods/oxygen_calibration.html"><span class="doc">Oxygen Reference Calibration</span></a> for the equations,
+calibration rules and approximations.</p>
+</section>
+<hr class="docutils" />
+<section id="surface">
+<h2>[surface]<a class="headerlink" href="#surface" title="Link to this heading"></a></h2>
+<p>Optional surface generation and surface relaxation.</p>
+<p>This stage constructs slab models from selected relaxed bulk candidates
+and optionally relaxes those slabs using machine-learning interatomic potentials.</p>
+<p>The stage reads candidate data from a database file:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">results_database</span><span class="o">.</span><span class="n">csv</span>
+</pre></div>
+</div>
+<p>For each selected candidate, the workflow loads the relaxed bulk structure from:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">candidate_</span><span class="o">*/</span><span class="mi">02</span><span class="n">_relax</span><span class="o">/</span><span class="n">POSCAR</span>
+</pre></div>
+</div>
+<p>and generates surface slabs for the requested orientations and terminations.</p>
+<p>Generated slabs are written to:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">surface</span><span class="p">]</span><span class="o">.</span><span class="n">outdir</span> <span class="o">/</span> <span class="n">composition_tag</span> <span class="o">/</span> <span class="n">candidate_</span><span class="c1">### / hkl_* / term_*/</span>
+</pre></div>
+</div>
+<p>If enabled, slab relaxation is performed using the same backend abstraction
+as in Step 03.</p>
+<section id="candidate-selection">
+<h3>Candidate Selection<a class="headerlink" href="#candidate-selection" title="Link to this heading"></a></h3>
+<p>Selection is performed in two stages:</p>
+<ol class="arabic simple">
+<li><p>Restrict dataset by composition:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">composition_tag</span></code></p></li>
+<li><p>or <code class="docutils literal notranslate"><span class="pre">composition_tags</span></code></p></li>
+</ul>
+</li>
+<li><p>Apply <code class="docutils literal notranslate"><span class="pre">selection_mode</span></code> inside the selected composition subset.</p></li>
+</ol>
+<p>Available selection modes:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;id&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;ids&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;rank_range&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;top_n&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;filters&quot;</span></code></p></li>
+</ul>
+</section>
+<section id="orientation-modes">
+<h3>Orientation Modes<a class="headerlink" href="#orientation-modes" title="Link to this heading"></a></h3>
+</section>
+<section id="orientation-mode-string">
+<h3>orientation_mode (string)<a class="headerlink" href="#orientation-mode-string" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;explicit&quot;</span></code> — use Miller indices from <code class="docutils literal notranslate"><span class="pre">miller_list</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;automatic&quot;</span></code> — generate indices up to <code class="docutils literal notranslate"><span class="pre">max_miller</span></code></p></li>
+</ul>
+</section>
+<section id="miller-list-list">
+<h3>miller_list (list)<a class="headerlink" href="#miller-list-list" title="Link to this heading"></a></h3>
+<p>List of Miller indices when using explicit mode.</p>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]]</span>
+</pre></div>
+</div>
+</section>
+<section id="max-miller-integer">
+<h3>max_miller (integer)<a class="headerlink" href="#max-miller-integer" title="Link to this heading"></a></h3>
+<p>Maximum Miller index used in automatic mode.</p>
+</section>
+<section id="max-orientations-integer">
+<h3>max_orientations (integer)<a class="headerlink" href="#max-orientations-integer" title="Link to this heading"></a></h3>
+<p>Maximum number of orientations kept in automatic mode.</p>
+</section>
+<section id="slab-construction">
+<h3>Slab Construction<a class="headerlink" href="#slab-construction" title="Link to this heading"></a></h3>
+</section>
+<section id="min-slab-size-float">
+<h3>min_slab_size (float)<a class="headerlink" href="#min-slab-size-float" title="Link to this heading"></a></h3>
+<p>Minimum slab thickness.</p>
+</section>
+<section id="min-vacuum-size-float">
+<h3>min_vacuum_size (float)<a class="headerlink" href="#min-vacuum-size-float" title="Link to this heading"></a></h3>
+<p>Minimum vacuum thickness.</p>
+</section>
+<section id="center-slab-boolean">
+<h3>center_slab (boolean)<a class="headerlink" href="#center-slab-boolean" title="Link to this heading"></a></h3>
+<p>If true, centers the slab in the simulation cell.</p>
+</section>
+<section id="in-unit-planes-boolean">
+<h3>in_unit_planes (boolean)<a class="headerlink" href="#in-unit-planes-boolean" title="Link to this heading"></a></h3>
+<p>Controls units of slab and vacuum thickness:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">true</span></code> → values interpreted in crystallographic planes</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">false</span></code> → values interpreted in Å (recommended)</p></li>
+</ul>
+</section>
+<section id="lll-reduce-boolean">
+<h3>lll_reduce (boolean)<a class="headerlink" href="#lll-reduce-boolean" title="Link to this heading"></a></h3>
+<p>Apply LLL lattice reduction.</p>
+</section>
+<section id="primitive-boolean">
+<h3>primitive (boolean)<a class="headerlink" href="#primitive-boolean" title="Link to this heading"></a></h3>
+<p>Build primitive slab if possible.</p>
+</section>
+<section id="reorient-lattice-boolean">
+<h3>reorient_lattice (boolean)<a class="headerlink" href="#reorient-lattice-boolean" title="Link to this heading"></a></h3>
+<p>Align slab normal with the out-of-plane axis.</p>
+</section>
+<section id="orthogonal-c-boolean">
+<h3>orthogonal_c (boolean)<a class="headerlink" href="#orthogonal-c-boolean" title="Link to this heading"></a></h3>
+<p>If true, enforces:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">c</span> <span class="pre">perpendicular</span> <span class="pre">to</span> <span class="pre">(a,</span> <span class="pre">b)</span></code></p></li>
+</ul>
+<p>This is strongly recommended for:</p>
+<ul class="simple">
+<li><p>clean POSCAR output</p></li>
+<li><p>stable relaxation</p></li>
+<li><p>correct slab thickness interpretation</p></li>
+</ul>
+</section>
+<section id="surface-terminations">
+<h3>Surface Terminations<a class="headerlink" href="#surface-terminations" title="Link to this heading"></a></h3>
+</section>
+<section id="termination-mode-string">
+<h3>termination_mode (string)<a class="headerlink" href="#termination-mode-string" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;all&quot;</span></code> — keep all generated terminations</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;first&quot;</span></code> — keep only the first termination</p></li>
+</ul>
+</section>
+<section id="max-terminations-per-orientation-integer">
+<h3>max_terminations_per_orientation (integer)<a class="headerlink" href="#max-terminations-per-orientation-integer" title="Link to this heading"></a></h3>
+<p>Maximum number of terminations retained per orientation.</p>
+</section>
+<section id="fixed-atoms">
+<h3>Fixed Atoms<a class="headerlink" href="#fixed-atoms" title="Link to this heading"></a></h3>
+<p>The surface stage can optionally fix atoms in the slab.</p>
+<p>Fixed atoms are written in the same <code class="docutils literal notranslate"><span class="pre">POSCAR</span></code> file using selective dynamics:</p>
+<ul class="simple">
+<li><p>fixed → <code class="docutils literal notranslate"><span class="pre">F</span> <span class="pre">F</span> <span class="pre">F</span></code></p></li>
+<li><p>free → <code class="docutils literal notranslate"><span class="pre">T</span> <span class="pre">T</span> <span class="pre">T</span></code></p></li>
+</ul>
+</section>
+<section id="fix-atoms-boolean">
+<h3>fix_atoms (boolean)<a class="headerlink" href="#fix-atoms-boolean" title="Link to this heading"></a></h3>
+<p>Enable or disable fixed atoms.</p>
+</section>
+<section id="fix-region-string">
+<h3>fix_region (string)<a class="headerlink" href="#fix-region-string" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;bottom&quot;</span></code> — fix bottom part of slab</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;middle&quot;</span></code> — fix central region</p></li>
+</ul>
+</section>
+<section id="fix-method-string">
+<h3>fix_method (string)<a class="headerlink" href="#fix-method-string" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;layers&quot;</span></code> — fix a number of atomic layers</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;thickness&quot;</span></code> — fix a region of given thickness (Å)</p></li>
+</ul>
+</section>
+<section id="fix-n-layers-integer">
+<h3>fix_n_layers (integer)<a class="headerlink" href="#fix-n-layers-integer" title="Link to this heading"></a></h3>
+<p>Number of layers to fix when using <code class="docutils literal notranslate"><span class="pre">layers</span></code> mode.</p>
+</section>
+<section id="fix-thickness-a-float">
+<h3>fix_thickness_A (float)<a class="headerlink" href="#fix-thickness-a-float" title="Link to this heading"></a></h3>
+<p>Thickness of fixed region (Å) when using <code class="docutils literal notranslate"><span class="pre">thickness</span></code> mode.</p>
+</section>
+<section id="fix-layer-tolerance-a-float">
+<h3>fix_layer_tolerance_A (float)<a class="headerlink" href="#fix-layer-tolerance-a-float" title="Link to this heading"></a></h3>
+<p>Tolerance used to group atoms into layers along the z-direction.</p>
+</section>
+<section id="id23">
+<h3>Notes<a class="headerlink" href="#id23" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Layer grouping is based on Cartesian z-coordinates.</p></li>
+<li><p>Fixed atoms are enforced during relaxation using ASE constraints,
+not only written to the POSCAR.</p></li>
+</ul>
+</section>
+<section id="surface-relaxation">
+<h3>Surface Relaxation<a class="headerlink" href="#surface-relaxation" title="Link to this heading"></a></h3>
+</section>
+<section id="relax-surface-boolean">
+<h3>relax_surface (boolean)<a class="headerlink" href="#relax-surface-boolean" title="Link to this heading"></a></h3>
+<p>Enable or disable slab relaxation.</p>
+<p>Relaxation is performed using the same backend system as in Step 03.</p>
+</section>
+<section id="surface-backend-string-default-m3gnet">
+<h3>surface_backend (string, default: “m3gnet”)<a class="headerlink" href="#surface-backend-string-default-m3gnet" title="Link to this heading"></a></h3>
+<p>Available options:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;m3gnet&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;uma&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;mace&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;grace&quot;</span></code></p></li>
+</ul>
+</section>
+<section id="surface-model-string-default-default">
+<h3>surface_model (string, default: “default”)<a class="headerlink" href="#surface-model-string-default-default" title="Link to this heading"></a></h3>
+<p>Model selection depends on backend (same behavior as Step 03).</p>
+</section>
+<section id="surface-task-string-default">
+<h3>surface_task (string, default: “”)<a class="headerlink" href="#surface-task-string-default" title="Link to this heading"></a></h3>
+<p>Task/domain for UMA, or an optional MACE model <code class="docutils literal notranslate"><span class="pre">head</span></code>. An omitted or empty
+value uses a compatible dopingflow default (MACE-MH-1 resolves to
+<code class="docutils literal notranslate"><span class="pre">omat_pbe</span></code>).</p>
+</section>
+<section id="surface-optimizer-string-default-bfgs">
+<h3>surface_optimizer (string, default: “bfgs”)<a class="headerlink" href="#surface-optimizer-string-default-bfgs" title="Link to this heading"></a></h3>
+<p>ASE optimizer:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;bfgs&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;lbfgs&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;fire&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;mdmin&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;quasinewton&quot;</span></code></p></li>
+</ul>
+</section>
+<section id="surface-fmax-float">
+<h3>surface_fmax (float)<a class="headerlink" href="#surface-fmax-float" title="Link to this heading"></a></h3>
+<p>Maximum force convergence criterion (eV/Å).</p>
+</section>
+<section id="surface-max-steps-integer-default-300">
+<h3>surface_max_steps (integer, default: 300)<a class="headerlink" href="#surface-max-steps-integer-default-300" title="Link to this heading"></a></h3>
+<p>Maximum number of optimizer steps.</p>
+</section>
+<section id="surface-device-string-default-cpu">
+<h3>surface_device (string, default: “cpu”)<a class="headerlink" href="#surface-device-string-default-cpu" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;cpu&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;cuda&quot;</span></code></p></li>
+</ul>
+</section>
+<section id="surface-gpu-id-integer-default-0">
+<h3>surface_gpu_id (integer, default: 0)<a class="headerlink" href="#surface-gpu-id-integer-default-0" title="Link to this heading"></a></h3>
+<p>GPU index used when <code class="docutils literal notranslate"><span class="pre">device</span> <span class="pre">=</span> <span class="pre">&quot;cuda&quot;</span></code>.</p>
+</section>
+<section id="surface-tf-threads-integer">
+<h3>surface_tf_threads (integer)<a class="headerlink" href="#surface-tf-threads-integer" title="Link to this heading"></a></h3>
+<p>TensorFlow thread count (for <code class="docutils literal notranslate"><span class="pre">m3gnet</span></code>).</p>
+</section>
+<section id="surface-omp-threads-integer">
+<h3>surface_omp_threads (integer)<a class="headerlink" href="#surface-omp-threads-integer" title="Link to this heading"></a></h3>
+<p>OpenMP thread count.</p>
+</section>
+<section id="id24">
+<h3>Notes<a class="headerlink" href="#id24" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>GPU mode uses a single effective worker.</p></li>
+<li><p>CPU mode runs sequentially per slab (no multiprocessing currently).</p></li>
+<li><p>Fixed atoms are enforced via ASE <code class="docutils literal notranslate"><span class="pre">FixAtoms</span></code>.</p></li>
+</ul>
+</section>
+<section id="surface-energy">
+<h3>Surface energy<a class="headerlink" href="#surface-energy" title="Link to this heading"></a></h3>
+<p>When enabled, the surface stage also evaluates the surface energy of each generated slab.</p>
+<p>The surface energy is computed using the standard symmetric slab expression:</p>
+<div class="math notranslate nohighlight">
+\[\gamma = \frac{E_{\mathrm{slab}} - n \, E_{\mathrm{bulk}}}{2A}\]</div>
+<p>where:</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(E_{\mathrm{slab}}\)</span> is the total energy of the slab (typically from surface relaxation)</p></li>
+<li><p><span class="math notranslate nohighlight">\(E_{\mathrm{bulk}}\)</span> is the relaxed bulk energy of the parent candidate</p></li>
+<li><p><span class="math notranslate nohighlight">\(n\)</span> is the number of bulk-equivalent units contained in the slab</p></li>
+<li><p><span class="math notranslate nohighlight">\(A\)</span> is the surface area</p></li>
+<li><p>the factor of 2 accounts for the two surfaces of the slab</p></li>
+</ul>
+<section id="requirements">
+<h4>Requirements<a class="headerlink" href="#requirements" title="Link to this heading"></a></h4>
+<p>Surface energy is computed only when all of the following conditions are satisfied:</p>
+<ul class="simple">
+<li><p>A slab energy is available (typically when <code class="docutils literal notranslate"><span class="pre">relax_surface</span> <span class="pre">=</span> <span class="pre">true</span></code>)</p></li>
+<li><p>A bulk reference energy is available from the workflow database</p></li>
+<li><p>The slab composition is proportional to the parent bulk composition</p></li>
+</ul>
+<p>If any of these conditions are not met, the surface energy is not computed and a status flag is recorded instead.</p>
+</section>
+<section id="output-fields">
+<h4>Output fields<a class="headerlink" href="#output-fields" title="Link to this heading"></a></h4>
+<p>The following fields are written to:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">meta.json</span></code> (per surface)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">surface_summary.csv</span></code> (global summary)</p></li>
+</ul>
+</section>
+</section>
+<section id="surface-energy-status-string">
+<h3>surface_energy_status (string)<a class="headerlink" href="#surface-energy-status-string" title="Link to this heading"></a></h3>
+<p>Indicates whether surface energy was successfully computed.</p>
+<p>Possible values include:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;ok&quot;</span></code> — surface energy successfully computed</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;missing_slab_energy&quot;</span></code> — slab energy not available</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;missing_bulk_energy&quot;</span></code> — bulk reference energy missing</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;not_computable_not_proportional&quot;</span></code> — slab composition not proportional to bulk</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;not_computable_missing_species&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;not_computable_extra_species&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;failed:</span> <span class="pre">&lt;error&gt;&quot;</span></code> — unexpected numerical or runtime failure</p></li>
+</ul>
+</section>
+<section id="surface-energy-ev-a2-float">
+<h3>surface_energy_eV_A2 (float)<a class="headerlink" href="#surface-energy-ev-a2-float" title="Link to this heading"></a></h3>
+<p>Surface energy expressed in eV/Å².</p>
+</section>
+<section id="surface-energy-j-m2-float">
+<h3>surface_energy_J_m2 (float)<a class="headerlink" href="#surface-energy-j-m2-float" title="Link to this heading"></a></h3>
+<p>Surface energy expressed in J/m².</p>
+<p>Conversion used:</p>
+<div class="math notranslate nohighlight">
+\[1 \, \mathrm{eV/Å^2} = 16.02176634 \, \mathrm{J/m^2}\]</div>
+</section>
+<section id="surface-energy-reference-bulk-ev-float">
+<h3>surface_energy_reference_bulk_eV (float)<a class="headerlink" href="#surface-energy-reference-bulk-ev-float" title="Link to this heading"></a></h3>
+<p>Bulk reference energy used in the calculation.</p>
+</section>
+<section id="surface-energy-n-bulk-equiv-float">
+<h3>surface_energy_n_bulk_equiv (float)<a class="headerlink" href="#surface-energy-n-bulk-equiv-float" title="Link to this heading"></a></h3>
+<p>Number of bulk-equivalent units contained in the slab.</p>
+<p>This value is determined automatically from the ratio of slab and bulk compositions.</p>
+<section id="id25">
+<h4>Notes<a class="headerlink" href="#id25" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p>Surface energies are only well-defined for slabs whose composition is proportional to the parent bulk.</p></li>
+<li><p>Non-stoichiometric terminations are not assigned a surface energy in the current implementation.</p></li>
+<li><p>Future extensions may include chemical-potential-based surface energies for non-stoichiometric slabs.</p></li>
+</ul>
+</section>
+</section>
+<section id="id26">
+<h3>Output<a class="headerlink" href="#id26" title="Link to this heading"></a></h3>
+<p>For each generated slab:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">composition_tag</span><span class="o">/</span>
+    <span class="n">candidate_</span><span class="c1">###/</span>
+        <span class="n">hkl_h_k_l</span><span class="o">/</span>
+            <span class="n">term_</span><span class="c1">###/</span>
+                <span class="n">POSCAR</span>
+                <span class="n">CONTCAR</span>
+                <span class="n">meta</span><span class="o">.</span><span class="n">json</span>
+                <span class="n">surface_relax</span><span class="o">.</span><span class="n">log</span>
+                <span class="n">surface_relax</span><span class="o">.</span><span class="n">traj</span>
+                <span class="n">surface_relax</span><span class="o">.</span><span class="n">json</span>
+</pre></div>
+</div>
+<p>Files:</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">POSCAR</span></code></dt><dd><p>Generated slab structure (with optional selective dynamics)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">CONTCAR</span></code></dt><dd><p>Relaxed slab structure (if relaxation is enabled)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">meta.json</span></code></dt><dd><p>Slab metadata</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">surface_relax.log</span></code></dt><dd><p>Relaxation log</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">surface_relax.traj</span></code></dt><dd><p>ASE trajectory</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">surface_relax.json</span></code></dt><dd><p>Relaxation metadata</p>
+</dd>
+</dl>
+<p>Global output:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">surface_summary</span><span class="o">.</span><span class="n">csv</span>
+</pre></div>
+</div>
+</section>
+<section id="id27">
+<h3>Notes<a class="headerlink" href="#id27" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">min_slab_size</span></code> and <code class="docutils literal notranslate"><span class="pre">min_vacuum_size</span></code> should be interpreted in Å
+when <code class="docutils literal notranslate"><span class="pre">in_unit_planes</span> <span class="pre">=</span> <span class="pre">false</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">orthogonal_c</span> <span class="pre">=</span> <span class="pre">true</span></code> is recommended for correct slab geometry.</p></li>
+<li><p>Relaxed structures are saved separately and do not overwrite the initial slab.</p></li>
+</ul>
+</section>
+</section>
+<section id="design-principles">
+<h2>Design Principles<a class="headerlink" href="#design-principles" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>All stages are deterministic given fixed input.</p></li>
+<li><p>All randomness is seed-controlled.</p></li>
+<li><p>Each stage can be skipped independently.</p></li>
+<li><p>Each stage writes metadata for full reproducibility.</p></li>
+<li><p>The relaxed host supercell is constructed once and reused.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="required_inputs.html" class="btn btn-neutral float-left" title="Required Input Files" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="input_file_phase_diagram.html" class="btn btn-neutral float-right" title="Phase-Diagram Input Options" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

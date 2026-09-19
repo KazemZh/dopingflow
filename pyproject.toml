@@ -58,6 +58,29 @@ alignn = [
   "pyparsing==2.4.7",
 ]
 
+oxidation-toss = [
+  "torch>=2.0",
+  "torch-geometric>=2.3",
+  "pandas>=2.0",
+  "openpyxl>=3.1",
+  "scipy>=1.10",
+]
+
+oxidation-chgnet = [
+  "chgnet>=0.3.0",
+]
+
+oxidation-bertos = [
+  "torch>=2.0",
+  "transformers>=4.30",
+]
+
+# GPAW is intentionally not declared as a pip optional dependency. On Linux,
+# pip commonly builds GPAW from source and therefore requires MPI/compiler
+# development headers. Use a dedicated Conda environment and install the
+# compiled GPAW package + PAW data from conda-forge, then install the GUI
+# with `pip install -e ".[gui]"`; see README.md for the exact sequence.
+
 dev = [
   "pytest>=8",
   "ruff>=0.5",

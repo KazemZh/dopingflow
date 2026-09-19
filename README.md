@@ -7,9 +7,10 @@
 **High-throughput ML-driven doping workflow for materials screening.**
 
 `dopingflow` is a modular CLI pipeline for automated generation, screening,
-relaxation, formation-energy analysis, phase stability, and oxygen-vacancy
-studies of doped crystal structures using machine-learning interatomic
-potentials and graph neural networks.
+relaxation, formation-energy analysis, phase stability, oxygen-vacancy studies,
+and configurable oxidation-state analysis of doped crystal structures using
+machine-learning interatomic potentials, graph neural networks, structural
+chemistry, and optional DFT post-processing.
 
 Designed for **reproducible, scalable materials-discovery workflows**.
 
@@ -19,6 +20,7 @@ Designed for **reproducible, scalable materials-discovery workflows**.
 
 - **Online HTML:** https://kazemzh.github.io/dopingflow/
 - **Checked-in PDF user guide:** [dopingflow-user-guide.pdf](dopingflow-user-guide.pdf)
+- **Oxidation-state guide:** [`docs/source/methods/oxidation_states.rst`](docs/source/methods/oxidation_states.rst)
 - **Vacancy example:** [`examples/vacancies`](examples/vacancies)
 
 ---
@@ -52,6 +54,11 @@ pip install -e ".[uma]"
 # ALIGNN bandgap support
 pip install -e ".[alignn]"
 
+# Oxidation-state optional Python dependencies
+pip install -e ".[oxidation-toss]"    # TOSS-GNN Python deps
+pip install -e ".[oxidation-chgnet]"  # CHGNet magnetic-moment analysis
+pip install -e ".[oxidation-bertos]"  # BERTOS composition-token model
+
 # GUI
 pip install -e ".[gui]"
 
@@ -64,6 +71,33 @@ pip install -e ".[corrections]"
 # Development and tests
 pip install -e ".[dev]"
 ```
+
+### Recommended GPAW + oxidation GUI environment
+
+GPAW is intentionally **not** declared as a pip optional dependency. On Linux,
+`pip install gpaw` can fall back to a local source build and then require MPI
+and compiler development headers. For the GPAW oxidation backend, use a
+dedicated Conda environment and the precompiled conda-forge packages.
+
+From the repository root, the recommended setup is:
+
+```bash
+conda create -n dopingflow_gpaw python=3.11 pip -y
+conda activate dopingflow_gpaw
+conda install -c conda-forge gpaw gpaw-data wannier90
+pip install -e ".[gui]"
+gpaw info
+command -v wannier90.x
+python -m streamlit run gui/app.py
+```
+
+`gpaw info` should complete successfully before starting a production GPAW
+oxidation calculation. `wannier90` is installed in the same environment for the optional Wannier analysis route; `command -v wannier90.x` should resolve its executable. The same `dopingflow_gpaw` environment can then be
+reused whenever the GPAW-backed oxidation page is needed.
+
+The TOSS-GNN and BERTOS adapters also require local upstream repositories/model
+files as documented in the oxidation-state guide; dopingflow does not silently
+download or invent those external assets.
 
 M3GNet and UMA have historically required incompatible dependency stacks; keep
 backend environments isolated when their dependency requirements conflict.
@@ -120,6 +154,7 @@ dopingflow phase-diagram -c input.toml
 dopingflow vacancies -c input.toml
 dopingflow vacancies-mc-search -c input.toml
 dopingflow vacancies-finalize -c input.toml
+dopingflow oxidation -c input.toml
 dopingflow surface -c input.toml
 ```
 
@@ -431,6 +466,142 @@ use experimental formation-enthalpy information for oxygen-related calibration.
 
 ---
 
+## Oxidation-state analysis
+
+The oxidation stage is independent of the ML potential used for structural
+relaxation. The same MACE-, UMA-, GRACE-, or M3GNet-relaxed structures can be
+analyzed with structural, ML, DFT, or explicitly combined strategies.
+
+Available methods are:
+
+- **Structural:** pymatgen bond valence.
+- **ML:** pretrained TOSS-GNN, CHGNet magnetic-moment analysis, and BERTOS.
+- **DFT:** `dft-auto` for an automated per-atom formal oxidation-state suggestion backed by GPAW, Bader, band-edge localization, and conditional Wannier analysis; the lower-level GPAW electronic, Bader, Wannier, and validated EOS routes remain available separately.
+- **Combined:** an explicit set of methods from multiple groups. Every method is
+  retained separately; labels are not averaged and no majority vote is used.
+
+A small structural smoke test can start with:
+
+```toml
+[oxidation]
+enabled = true
+strategy = "structural"
+methods = ["bond-valence"]
+include_vacancy_free = true
+include_oxygen_vacancies = true
+# Optional: restrict expensive analysis to exact target IDs / safe IDs / glob patterns.
+# target_include = ["Sb5_Ti2p5/candidate_014"]
+output_dir = "06_oxidation"
+mapping_tolerance = 1.2
+fail_fast = false
+```
+
+Run it with:
+
+```bash
+dopingflow oxidation -c input.toml --strategy structural --methods bond-valence
+```
+
+For open-source DFT electronic descriptors, use the dedicated GPAW environment
+described in the Installation section. In short:
+
+```bash
+conda create -n dopingflow_gpaw python=3.11 pip -y
+conda activate dopingflow_gpaw
+conda install -c conda-forge gpaw gpaw-data wannier90
+pip install -e ".[gui]"
+gpaw info
+command -v wannier90.x
+python -m streamlit run gui/app.py
+```
+
+For the automated route, the user can select only `dft-auto` and provide the
+structure/target. Existing compatible DFT outputs are reused automatically; missing
+steps are launched only when the explicit execution gate is enabled:
+
+```toml
+[oxidation]
+enabled = true
+strategy = "dft"
+methods = ["dft-auto"]
+
+[oxidation.dft_auto]
+output_root = "dft_oxidation"
+execute = false              # true runs missing GPAW/Bader/Wannier steps
+reuse_existing = true
+xc = "PBE"
+ecut_eV = 500.0
+kpts = [1, 1, 1]
+gamma = true
+smearing_eV = 0.05
+spinpol = "auto"
+band_edge_analysis = true
+wannier_mode = "auto"        # only when electronic compensation needs clarification
+```
+
+The automated result contains one suggested integer oxidation state per atom,
+a confidence value, the Bader descriptor, and any residual electronic
+compensation (electrons or holes). It deliberately does not force charge
+neutrality by inventing localized mixed-valence atoms when DFT descriptors show
+no such site separation. Optional same-method Bader reference fingerprints can
+further strengthen absolute oxidation-state discrimination.
+
+The lower-level GPAW electronic route can still be configured directly:
+
+```toml
+[oxidation.dft_electronic]
+code = "gpaw"
+output_root = "dft_oxidation"
+execute = false
+mode = "pw"
+ecut_eV = 500.0
+xc = "PBE"
+kpts = [1, 1, 1]
+gamma = true
+smearing_eV = 0.05
+convergence_density = 1e-5
+spinpol = "auto"
+```
+
+The generated per-target GPAW directory can contain `oxidation.gpw`, `gpaw.txt`, `dos.csv`, `pdos_integrals.json`, `magnetic_moments.csv`, `electronic_summary.json`, `band_edge_analysis.json`, `band_edge_site_weights.csv`, `oxidation_state_suggestions.json`, and `oxidation_state_suggestions.csv`. Cutoff, k-point, spin, smearing, and convergence settings must be converged for the target chemistry.
+
+The stage can analyze both selected vacancy-free parents and relaxed oxygen
+vacancy structures. `[oxidation].target_include` can restrict a run to one or more
+exact target IDs, safe IDs (`/` represented as `__`), or shell-style glob patterns.
+This is especially useful before enabling expensive GPAW, Bader, Wannier, or EOS
+execution. When valid same-element parent mapping is available it also reports
+parent-relative changes.
+
+Important interpretation rules are enforced in the implementation:
+
+- Bader charges remain continuous descriptors and are never rounded directly into oxidation states. In `dft-auto`, they are used as supporting evidence together with local chemistry, band-edge localization, magnetic information when available, optional same-method reference fingerprints, and conditional Wannier descriptors.
+- CHGNet magnetic moments are stored separately from inferred oxidation labels;
+  unsupported or ambiguous sites remain unresolved.
+- BERTOS is composition-token level and is never fabricated into site-resolved
+  assignments.
+- Static Wannier centers are descriptors. With ``execute = true``, the native
+  GPAW/Wannier90 route can generate them automatically for an isolated,
+  non-spin-polarized Gamma-only occupied manifold from an ``oxidation.gpw``
+  that contains wavefunctions. It detects the occupied bands, uses Bloch phases
+  as the initial gauge (no arbitrary atomic projection choice), writes the GPAW
+  eigenvalue/overlap files, runs ``wannier90.x``, and parses ``*_centres.xyz``.
+  Metallic, spin-polarized, multi-k, or entangled cases still require an explicit
+  projection/disentanglement workflow. Formal DFT labels are accepted only from
+  an explicitly validated EOS/charge-pumping result with a documented assignment
+  procedure.
+- New GPAW single-point calculations are opt-in: `execute = false` is the safe default.
+  When enabled, dopingflow runs GPAW directly from the relaxed structure; Bader execution
+  separately requires the free `bader` executable.
+
+Outputs are written under `[oxidation].output_dir` and include
+`oxidation_results.json`, `oxidation_sites.csv`, `oxidation_comparison.json`,
+`dft_followup_candidates.json`, and `meta.json`.
+
+See the complete seven configuration examples and method-specific caveats in
+[`docs/source/methods/oxidation_states.rst`](docs/source/methods/oxidation_states.rst).
+
+---
+
 ## Recommended smoke test before a production campaign
 
 For the first run on a new machine/backend combination, temporarily reduce the
@@ -464,6 +635,12 @@ streamlit run gui/app.py
 In addition to the main Input Builder/Run/Results pages, Streamlit discovers
 dedicated pages under `gui/pages/`, including:
 
+- **Oxidation States** — configures structural/ML/DFT/combined strategies,
+  individual methods, parent and oxygen-vacancy targets, TOSS-GNN/CHGNet/BERTOS
+  settings, GPAW/Bader/Wannier/EOS analysis, and optional candidate-limited
+  DFT follow-up. It can save `[oxidation]`, run `dopingflow oxidation`, and inspect
+  the generated CSV/JSON results. GPAW and Bader execution remain behind explicit
+  method-level and follow-up `execute` gates plus a GUI confirmation.
 - **Staged Vacancy MC** — edits `parent_include`, `parent_pick`,
   `output_directory`, `vacancy_counts`, `supercell`, GRACE `mc_*` settings,
   production MC controls, and MACE finalization settings. Its defaults reflect
@@ -474,6 +651,10 @@ dedicated pages under `gui/pages/`, including:
   fitted correction to vacancy thermodynamics.
 - **Phase Diagram** — explores raw/corrected hull results and vacancy-resolved
   energy above hull.
+- **Oxidation States** — configures structural/ML/DFT oxidation analysis and provides a
+  structure browser: select an analyzed parent or vacancy structure, choose a method,
+  and inspect atom-by-atom oxidation states/descriptors. Results are also written per
+  structure under ``06_oxidation/structures/<target_id>/``.
 
 The staged GUI page explicitly warns that current top-k selection is performed
 with GRACE before MACE finalization.
@@ -512,10 +693,15 @@ gui/
   app.py
   vacancy_staged.py
   pages/
+    Oxidation_States.py
     Vacancy_MC_Staged.py
     Vacancy_Energy_Correction.py
     Phase_Diagram.py
 src/dopingflow/
+  oxidation.py
+  oxidation_structural.py
+  oxidation_ml.py
+  oxidation_dft.py
   vacancies.py
   vacancy_monte_carlo.py
   vacancy_mc_extensions.py
@@ -527,6 +713,23 @@ tests/
 
 ---
 
+
+### Wannier-center descriptor analysis
+
+The GPAW/Wannier90 oxidation route can post-process an already completed
+Wannier calculation with `execute = false`; it does not require Wannier90 to be
+rerun.  It parses final Wannier spreads, associates centers with atoms using
+periodic minimum-image distances, classifies atom-/bond-/multicenter geometry,
+and flags configurable spread outliers.  It writes
+`wannier_centres_analysis.csv`, `wannier_site_summary.csv`, and
+`wannier_analysis.json`.  These outputs are electronic-structure descriptors,
+not automatic formal oxidation-state assignments.
+
+A vacancy-free structure is a complete standalone analysis target.  If matched
+oxygen-vacancy structures are added later and both parent and vacancy are
+analyzed with Wannier, parent-relative per-site descriptor changes are generated
+then; vacancy data is not required up front.
+
 ## License
 
 Proprietary and confidential.
@@ -534,3 +737,5 @@ Proprietary and confidential.
 © 2026 Kazem Zhour, RWTH Aachen University.
 
 Unauthorized use, modification, or distribution is prohibited.
+
+The native GPAW/Wannier90 adapter supports both the GPAW 25.7 `gpaw.wannier90` interface and the newer `gpaw.wannier.wannier90` interface.

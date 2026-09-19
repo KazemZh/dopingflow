@@ -1,0 +1,611 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Oxidation-state analysis &mdash; dopingflow documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=42d1b3bd"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Surface Generation and Relaxation" href="surfaces.html" />
+    <link rel="prev" title="Oxygen-Vacancy Workflow" href="vacancies.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html">
+            
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../workflow_overview.html">Workflow Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation_and_usage.html">Installation, Usage, and Outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../required_inputs.html">Required Input Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file.html">Input File Specification (input.toml)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file_phase_diagram.html">Phase-Diagram Input Options</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file_vacancy_correction.html">Vacancy M0/M1 Input Options</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file_vacancy_mc.html">Staged Vacancy Monte Carlo Configuration</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="references.html">0. Reference Energy Construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="oxygen_thermodynamics.html">Oxygen Energy Convention and Chemical Potential</a></li>
+<li class="toctree-l1"><a class="reference internal" href="oxygen_calibration.html">Oxygen Reference Calibration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generation.html">1. Structure Generation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sequential.html">Sequential Doping Workflow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scanning.html">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="filtering.html">4. Relaxed-Candidate Filtering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bandgap.html">5. Bandgap Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="energy_corrections.html">Backend-Specific Energy Corrections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="formation_energy.html">6. Formation Energy Evaluation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="database.html">7. Database Collection</a></li>
+<li class="toctree-l1"><a class="reference internal" href="alloy_hull.html">Restricted One-Dimensional Alloy Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="phase_diagram.html">Phase Diagram and Energy Above Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="vacancy_energy_above_hull.html">Vacancy Energy Above Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="vacancy_energy_correction.html">M0/M1 Correction for Vacancy Thermodynamics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="vacancies.html">Oxygen-Vacancy Workflow</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Oxidation-state analysis</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#strategy-and-method-selection">Strategy and method selection</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#toss-gnn">TOSS-GNN</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#chgnet-magnetic-moment-evidence">CHGNet magnetic-moment evidence</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#bertos">BERTOS</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#dft-interpretation">DFT interpretation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#combined-comparison-and-optional-dft-follow-up">Combined comparison and optional DFT follow-up</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#outputs">Outputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#complete-configuration-examples">Complete configuration examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#toss-gnn-only">1. TOSS-GNN only</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#bond-valence-plus-toss-gnn">2. Bond valence plus TOSS-GNN</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#chgnet-analysis-for-compatible-transition-metal-dopants">3. CHGNet analysis for compatible transition-metal dopants</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#bertos-composition-screening">4. BERTOS composition screening</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gpaw-plus-bader-and-orbital-analysis">5. GPAW plus Bader and orbital analysis</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#dft-plus-wannier-eos-where-supported">6. DFT plus Wannier/EOS where supported</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#combined-comparison-on-matched-vacancy-free-and-vacancy-structures">7. Combined comparison on matched vacancy-free and vacancy structures</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="surfaces.html">Surface Generation and Relaxation</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_single_oxides.html">Explicit Example — Single Target Composition using Oxide References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/multi_reference_oxide.html">Multiple Oxide References and Relative Energies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/sequential_workflow.html">Sequential Example — Gradual Sb Doping</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/vacancies.html">Staged vacancy Monte Carlo example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../api/modules.html">dopingflow</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Oxidation-state analysis</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/methods/oxidation_states.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="oxidation-state-analysis">
+<h1>Oxidation-state analysis<a class="headerlink" href="#oxidation-state-analysis" title="Link to this heading"></a></h1>
+<p>The <code class="docutils literal notranslate"><span class="pre">oxidation</span></code> stage analyzes the <em>relaxed structures already produced by
+dopingflow</em>.  It is deliberately independent of the ML force field used for
+relaxation.  A structure relaxed with MACE, UMA, GRACE, or M3GNet can therefore
+be analyzed with TOSS-GNN, bond valence, CHGNet, BERTOS, DFT post-processing,
+or any explicitly selected combination without replacing the relaxation
+calculator.</p>
+<p>By default the stage discovers both:</p>
+<ul class="simple">
+<li><p>vacancy-free selected relaxed parents; and</p></li>
+<li><p>relaxed oxygen-vacancy candidates from <code class="docutils literal notranslate"><span class="pre">vacancies_database.json</span></code>.</p></li>
+</ul>
+<p>This discovery is composition agnostic, so it applies to singly doped and
+co-doped structures.  Every requested compatible method is run independently
+on every discovered target.  Failure or unavailability of one optional method
+does not invalidate the results from other requested methods.</p>
+<section id="strategy-and-method-selection">
+<h2>Strategy and method selection<a class="headerlink" href="#strategy-and-method-selection" title="Link to this heading"></a></h2>
+<p>Four strategy groups are exposed:</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">structural</span></code></dt><dd><p><code class="docutils literal notranslate"><span class="pre">bond-valence</span></code> (pymatgen <code class="docutils literal notranslate"><span class="pre">BVAnalyzer</span></code>).</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">ml</span></code></dt><dd><p><code class="docutils literal notranslate"><span class="pre">toss-gnn</span></code>, <code class="docutils literal notranslate"><span class="pre">chgnet</span></code>, and <code class="docutils literal notranslate"><span class="pre">bertos</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">dft</span></code></dt><dd><p><code class="docutils literal notranslate"><span class="pre">dft-electronic</span></code>, <code class="docutils literal notranslate"><span class="pre">bader</span></code>, <code class="docutils literal notranslate"><span class="pre">wannier</span></code>, and <code class="docutils literal notranslate"><span class="pre">eos</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">combined</span></code></dt><dd><p>An explicitly selected mixture of methods from any groups.</p>
+</dd>
+</dl>
+<p>Individual methods can always be selected.  For a single strategy group the
+selected methods must belong to that group.  Use <code class="docutils literal notranslate"><span class="pre">combined</span></code> to mix groups.
+For example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">oxidation</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span> <span class="o">--</span><span class="n">strategy</span> <span class="n">ml</span> <span class="o">--</span><span class="n">methods</span> <span class="n">toss</span><span class="o">-</span><span class="n">gnn</span>
+<span class="n">dopingflow</span> <span class="n">oxidation</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span> <span class="o">--</span><span class="n">strategy</span> <span class="n">combined</span> <span class="o">--</span><span class="n">methods</span> <span class="n">bond</span><span class="o">-</span><span class="n">valence</span><span class="p">,</span><span class="n">toss</span><span class="o">-</span><span class="n">gnn</span>
+</pre></div>
+</div>
+<p>The configuration entry point is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">oxidation</span><span class="p">]</span>
+<span class="n">enabled</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">strategy</span> <span class="o">=</span> <span class="s2">"combined"</span>
+<span class="n">methods</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"bond-valence"</span><span class="p">,</span> <span class="s2">"toss-gnn"</span><span class="p">]</span>
+<span class="n">include_vacancy_free</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">include_oxygen_vacancies</span> <span class="o">=</span> <span class="n">true</span>
+<span class="c1"># Optional exact IDs, safe IDs, or shell-style glob patterns:</span>
+<span class="c1"># target_include = ["Sb5_Ti2p5/candidate_014"]</span>
+<span class="n">output_dir</span> <span class="o">=</span> <span class="s2">"06_oxidation"</span>
+<span class="n">mapping_tolerance</span> <span class="o">=</span> <span class="mf">1.2</span>
+<span class="n">fail_fast</span> <span class="o">=</span> <span class="n">false</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">include_vacancy_free</span></code> and <code class="docutils literal notranslate"><span class="pre">include_oxygen_vacancies</span></code> default to <code class="docutils literal notranslate"><span class="pre">true</span></code>.
+The normal use for vacancy chemistry is to leave both enabled so parent-relative
+changes can be reported when atom mapping is valid.  <code class="docutils literal notranslate"><span class="pre">target_include</span></code> is optional;
+when provided, only matching discovered targets are analyzed.  A selector can be an
+exact target ID (for example <code class="docutils literal notranslate"><span class="pre">Sb5_Ti2p5/candidate_014</span></code>), its safe-ID form
+(<code class="docutils literal notranslate"><span class="pre">Sb5_Ti2p5__candidate_014</span></code>), or a shell-style glob such as
+<code class="docutils literal notranslate"><span class="pre">Sb5_Ti2p5/*</span></code>.  This is the recommended way to constrain expensive DFT smoke
+tests to one structure before scaling up.</p>
+</section>
+<section id="toss-gnn">
+<h2>TOSS-GNN<a class="headerlink" href="#toss-gnn" title="Link to this heading"></a></h2>
+<p>The adapter is tied to the verified upstream TOSS inference interface at
+commit <code class="docutils literal notranslate"><span class="pre">c45582a3cd3088480b5d83b1440d360bd4577b80</span></code>.  The upstream pretrained
+path uses:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">toss_GNN.Predict.Get_OS_by_models</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">pyg_Hetero_GCNPredictor</span></code> for link prediction;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">pyg_GCNPredictor</span></code> for node classification;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">models/pyg_Hetero_GCN_s_0608.pth</span></code> and
+<code class="docutils literal notranslate"><span class="pre">models/pyg_GCN_s_0609.pth</span></code> by default.</p></li>
+</ul>
+<p>The result is site-resolved oxidation state plus coordination number.  Site
+order is checked against the original relaxed structure.  The verified
+upstream <code class="docutils literal notranslate"><span class="pre">NC_predict</span></code> interface does not expose calibrated probabilities, so
+dopingflow does not invent confidence values.</p>
+<p>Install the optional Python requirements with:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="o">-</span><span class="n">e</span> <span class="s2">".[oxidation-toss]"</span>
+</pre></div>
+</div>
+<p>and provide a local checkout of <code class="docutils literal notranslate"><span class="pre">https://github.com/yueyin19960520/TOSS</span></code>.
+The upstream TOSS repository itself is not installed silently by dopingflow.
+Model objects are cached once per Python process for reuse.</p>
+<p>The verified upstream predictor builds CPU graph tensors and converts outputs
+with <code class="docutils literal notranslate"><span class="pre">.detach().numpy()</span></code>.  Consequently the adapter currently accepts
+<code class="docutils literal notranslate"><span class="pre">device</span> <span class="pre">=</span> <span class="pre">&quot;cpu&quot;</span></code> for the verified interface; requesting CUDA returns an
+explicit unavailable status rather than pretending CUDA was used.</p>
+</section>
+<section id="chgnet-magnetic-moment-evidence">
+<h2>CHGNet magnetic-moment evidence<a class="headerlink" href="#chgnet-magnetic-moment-evidence" title="Link to this heading"></a></h2>
+<p>CHGNet is used first as a predictor of <em>local magnetic moments</em>.  These moments
+are reported independently of any oxidation-state inference.  The upstream
+CHGNet atom embedding is defined for up to 94 elements (atomic-number based),
+and actual model inference may impose additional applicability limitations.</p>
+<p>Oxidation-state inference is performed only where an explicit magnetic-moment
+mapping exists.  By default dopingflow reproduces only the Mn mapping from
+CHGNet’s upstream <code class="docutils literal notranslate"><span class="pre">solve_charge_by_mag</span></code> helper, including its use of the raw
+magnetic moment.  Other elements can be added through <code class="docutils literal notranslate"><span class="pre">moment_oxidation_ranges</span></code>.
+No universal mapping is assumed.  In particular, near-zero moments are not used
+to distinguish Sn2+/Sn4+ or Sb3+/Sb5+.  An explicit
+<code class="docutils literal notranslate"><span class="pre">use_absolute_moment</span> <span class="pre">=</span> <span class="pre">true</span></code> option is available for user-defined workflows,
+but it is recorded as a departure from the upstream helper semantics.</p>
+</section>
+<section id="bertos">
+<h2>BERTOS<a class="headerlink" href="#bertos" title="Link to this heading"></a></h2>
+<p>BERTOS is retained at its actual composition-token granularity.  The upstream
+<code class="docutils literal notranslate"><span class="pre">getOS.py</span></code> expands a reduced composition into repeated element tokens and
+runs a pretrained token-classification model.  Those tokens are <em>not</em>
+crystallographic site identifiers, so dopingflow labels the result
+<code class="docutils literal notranslate"><span class="pre">composition-level</span></code> and never maps it onto atom indices.</p>
+<p>As a consequence, two structures with the same composition but different
+vacancy arrangements are indistinguishable to BERTOS, and BERTOS cannot say
+which specific atom was reduced near a vacancy.  The upstream softmax maximum
+is recorded as a method-provided, uncalibrated score rather than validated
+physical confidence.</p>
+<p>The repository currently distributes pretrained model ZIP archives.  Extract
+the selected archive (for example <code class="docutils literal notranslate"><span class="pre">trained_models/ICSD_CN.zip</span></code>) and point the
+configuration to the extracted model directory.</p>
+</section>
+<section id="dft-interpretation">
+<h2>DFT interpretation<a class="headerlink" href="#dft-interpretation" title="Link to this heading"></a></h2>
+<p>The DFT strategy uses <strong>GPAW</strong> as its electronic-structure backend.  GPAW is
+open source and is driven directly from Python/ASE, so dopingflow does not
+require per-structure <code class="docutils literal notranslate"><span class="pre">INCAR</span></code>, <code class="docutils literal notranslate"><span class="pre">KPOINTS</span></code>, <code class="docutils literal notranslate"><span class="pre">POTCAR</span></code>, or equivalent input
+files.</p>
+<p>GPAW is intentionally not a <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> pip extra.  A pip installation
+can build GPAW locally and therefore require MPI/compiler development headers.
+The recommended GPAW + oxidation-GUI setup is a dedicated Conda environment:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">conda</span> <span class="n">create</span> <span class="o">-</span><span class="n">n</span> <span class="n">dopingflow_gpaw</span> <span class="n">python</span><span class="o">=</span><span class="mf">3.11</span> <span class="n">pip</span> <span class="o">-</span><span class="n">y</span>
+<span class="n">conda</span> <span class="n">activate</span> <span class="n">dopingflow_gpaw</span>
+<span class="n">conda</span> <span class="n">install</span> <span class="o">-</span><span class="n">c</span> <span class="n">conda</span><span class="o">-</span><span class="n">forge</span> <span class="n">gpaw</span> <span class="n">gpaw</span><span class="o">-</span><span class="n">data</span> <span class="n">wannier90</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="o">-</span><span class="n">e</span> <span class="s2">".[gui]"</span>
+<span class="n">gpaw</span> <span class="n">info</span>
+<span class="n">command</span> <span class="o">-</span><span class="n">v</span> <span class="n">wannier90</span><span class="o">.</span><span class="n">x</span>
+<span class="n">python</span> <span class="o">-</span><span class="n">m</span> <span class="n">streamlit</span> <span class="n">run</span> <span class="n">gui</span><span class="o">/</span><span class="n">app</span><span class="o">.</span><span class="n">py</span>
+</pre></div>
+</div>
+<p>Run these commands from the dopingflow repository root for the editable
+<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span></code> and GUI launch.  <code class="docutils literal notranslate"><span class="pre">gpaw</span> <span class="pre">info</span></code> should complete successfully
+before production GPAW calculations are attempted.  Wannier90 is installed in the same environment for the optional Wannier route; <code class="docutils literal notranslate"><span class="pre">command</span> <span class="pre">-v</span> <span class="pre">wannier90.x</span></code> should resolve the executable.  Reuse the same
+<code class="docutils literal notranslate"><span class="pre">dopingflow_gpaw</span></code> environment for subsequent GPAW-backed oxidation runs.</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">dft-electronic</span></code></dt><dd><p>Runs or reopens a GPAW <code class="docutils literal notranslate"><span class="pre">.gpw</span></code> ground-state calculation.  The current
+direct-execution path uses periodic plane-wave mode and records total energy,
+Fermi level, site magnetic moments, total DOS, and atom/angular-momentum
+projected DOS integrals.  <code class="docutils literal notranslate"><span class="pre">dos.csv</span></code>, <code class="docutils literal notranslate"><span class="pre">pdos_integrals.json</span></code>,
+<code class="docutils literal notranslate"><span class="pre">magnetic_moments.csv</span></code>, and <code class="docutils literal notranslate"><span class="pre">electronic_summary.json</span></code> are written beside
+the <code class="docutils literal notranslate"><span class="pre">oxidation.gpw</span></code> restart file.  These quantities are descriptors only.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">bader</span></code></dt><dd><p>When <code class="docutils literal notranslate"><span class="pre">execute=true</span></code>, dopingflow reopens the GPAW restart, reconstructs the
+all-electron density with <code class="docutils literal notranslate"><span class="pre">get_all_electron_density()</span></code>, writes a cube file
+in the units expected by the Bader program, and invokes the free external
+<code class="docutils literal notranslate"><span class="pre">bader</span></code> executable.  Because the density contains all electrons, the
+reported continuous partial charge is <code class="docutils literal notranslate"><span class="pre">Z</span> <span class="pre">-</span> <span class="pre">N_Bader</span></code>; no POTCAR or
+user-supplied valence-electron table is required.  Bader never emits an
+integer formal oxidation state by itself.  The GPAW all-electron-density
+grid refinement defaults to <code class="docutils literal notranslate"><span class="pre">2</span></code> to limit memory use; <code class="docutils literal notranslate"><span class="pre">1</span></code> and <code class="docutils literal notranslate"><span class="pre">4</span></code> remain
+available for convergence testing.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">wannier</span></code></dt><dd><p>Parses Wannier-center information and can generate it natively from an
+existing GPAW restart when <code class="docutils literal notranslate"><span class="pre">execute=true</span></code>.  The first native mode is
+deliberately conservative: it supports an isolated, non-spin-polarized,
+Gamma-only occupied manifold, requires wavefunctions stored in
+<code class="docutils literal notranslate"><span class="pre">oxidation.gpw</span></code>, detects the fully occupied bands and finite HOMO-LUMO gap,
+writes a Wannier90 input using Bloch phases as the initial gauge and
+<code class="docutils literal notranslate"><span class="pre">write_xyz=true</span></code>, lets GPAW write <code class="docutils literal notranslate"><span class="pre">.eig</span></code>/<code class="docutils literal notranslate"><span class="pre">.mmn</span></code>, and runs
+<code class="docutils literal notranslate"><span class="pre">wannier90.x</span></code>.  Because the occupied manifold is isolated, no
+disentanglement is used and no arbitrary atomic projector set is invented.
+Metallic, spin-polarized, multi-k, or entangled cases are rejected by this
+native mode and should use an explicit projection/disentanglement workflow.
+Static centers remain supporting descriptors and are not converted into
+formal oxidation states automatically.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">eos</span></code></dt><dd><p>The formal DFT-based assignment adapter.  It accepts assignments only from
+an explicitly documented external EOS/charge-pumping workflow result marked
+<code class="docutils literal notranslate"><span class="pre">validated=true</span></code>.  It does not infer EOS labels from Bader charge, DOS, or
+static Wannier centers.</p>
+</dd>
+</dl>
+<p>The GPAW single-point path is opt-in.  <code class="docutils literal notranslate"><span class="pre">execute=false</span></code> only post-processes an
+existing <code class="docutils literal notranslate"><span class="pre">oxidation.gpw</span></code>.  <code class="docutils literal notranslate"><span class="pre">execute=true</span></code> runs GPAW directly with the shared
+settings in <code class="docutils literal notranslate"><span class="pre">[oxidation.dft_electronic]</span></code>.  Energy cutoff, k-point sampling,
+spin initialization, smearing, and SCF convergence remain scientific convergence
+parameters and must be validated for the target chemistry.  Bader has its own
+<code class="docutils literal notranslate"><span class="pre">execute</span></code> gate because running the external Bader executable is a separate
+post-processing action.</p>
+<p>The EOS exchange file is intentionally simple and auditable:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+  <span class="s2">"validated"</span><span class="p">:</span> <span class="n">true</span><span class="p">,</span>
+  <span class="s2">"assignment_procedure"</span><span class="p">:</span> <span class="s2">"document the EOS / charge-pumping procedure here"</span><span class="p">,</span>
+  <span class="s2">"sites"</span><span class="p">:</span> <span class="p">[</span>
+    <span class="p">{</span><span class="s2">"site_index"</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">"element"</span><span class="p">:</span> <span class="s2">"Sn"</span><span class="p">,</span> <span class="s2">"formal_oxidation_state"</span><span class="p">:</span> <span class="mi">4</span><span class="p">},</span>
+    <span class="p">{</span><span class="s2">"site_index"</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"element"</span><span class="p">:</span> <span class="s2">"Sb"</span><span class="p">,</span> <span class="s2">"formal_oxidation_state"</span><span class="p">:</span> <span class="mi">5</span><span class="p">}</span>
+  <span class="p">],</span>
+  <span class="s2">"provenance"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"code"</span><span class="p">:</span> <span class="s2">"..."</span><span class="p">,</span> <span class="s2">"calculation_id"</span><span class="p">:</span> <span class="s2">"..."</span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="combined-comparison-and-optional-dft-follow-up">
+<h2>Combined comparison and optional DFT follow-up<a class="headerlink" href="#combined-comparison-and-optional-dft-follow-up" title="Link to this heading"></a></h2>
+<p>Combined mode preserves each method result separately.  It reports sitewise
+agreement, disagreement, missing assignments, and unavailable/failed methods.
+Oxidation labels are never averaged and majority voting is never treated as
+physical truth.</p>
+<p>Conflicting or unresolved cases can be listed for DFT follow-up:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">oxidation</span><span class="o">.</span><span class="n">dft_followup</span><span class="p">]</span>
+<span class="n">enabled</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">candidate_limit</span> <span class="o">=</span> <span class="mi">8</span>
+<span class="n">execute</span> <span class="o">=</span> <span class="n">false</span>
+<span class="n">methods</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"dft-electronic"</span><span class="p">,</span> <span class="s2">"bader"</span><span class="p">,</span> <span class="s2">"eos"</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>With <code class="docutils literal notranslate"><span class="pre">execute=false</span></code> this only writes candidates.  Set <code class="docutils literal notranslate"><span class="pre">execute=true</span></code> only
+when the selected method tables contain the GPAW/post-processing settings and work directories
+needed for those calculations.</p>
+</section>
+<section id="outputs">
+<h2>Outputs<a class="headerlink" href="#outputs" title="Link to this heading"></a></h2>
+<p>The stage writes aggregate files under <code class="docutils literal notranslate"><span class="pre">[oxidation].output_dir</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">oxidation_results.json</span></code>: complete per-method records;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">oxidation_sites.csv</span></code>: flattened site/composition-token records;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">oxidation_structure_index.csv</span></code> / <code class="docutils literal notranslate"><span class="pre">.json</span></code>: one row/object per analyzed structure;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">oxidation_comparison.json</span></code>: descriptive method comparison;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dft_followup_candidates.json</span></code>: optional follow-up selection;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">meta.json</span></code>: resolved settings, target list, and provenance.</p></li>
+</ul>
+<p>In addition, every structure gets a dedicated hierarchical result package under
+<code class="docutils literal notranslate"><span class="pre">structures/&lt;target_id&gt;/</span></code>. For example, <code class="docutils literal notranslate"><span class="pre">Sb5_In10/candidate_001</span></code> is written
+to <code class="docutils literal notranslate"><span class="pre">structures/Sb5_In10/candidate_001/</span></code>. Each package contains
+<code class="docutils literal notranslate"><span class="pre">summary.json</span></code>, <code class="docutils literal notranslate"><span class="pre">oxidation_sites.csv</span></code>, <code class="docutils literal notranslate"><span class="pre">oxidation_results.json</span></code>, and one
+JSON file per requested method below <code class="docutils literal notranslate"><span class="pre">methods/</span></code>. This layout is intended for
+structure-by-structure inspection while the aggregate tables remain available
+for screening and statistics.</p>
+<p>A method that cannot assign a particular structure is recorded as
+<code class="docutils literal notranslate"><span class="pre">unsupported</span></code>, <code class="docutils literal notranslate"><span class="pre">unavailable</span></code>, or <code class="docutils literal notranslate"><span class="pre">failed</span></code> without interrupting other
+structures. These cases are summarized once at the end of the run instead of
+emitting a traceback for every ordinary non-assignment.</p>
+<p>Results keep separate fields for method/strategy, prediction scope, formal
+oxidation state, Bader partial charge, orbital populations, magnetic moments,
+coordination, method-provided scores, provenance, limitations, and
+parent-relative changes.  DFT DOS and Wannier descriptors are also retained in
+the method JSON record.</p>
+</section>
+<section id="complete-configuration-examples">
+<h2>Complete configuration examples<a class="headerlink" href="#complete-configuration-examples" title="Link to this heading"></a></h2>
+<section id="toss-gnn-only">
+<h3>1. TOSS-GNN only<a class="headerlink" href="#toss-gnn-only" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">oxidation</span><span class="p">]</span>
+<span class="n">enabled</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">strategy</span> <span class="o">=</span> <span class="s2">"ml"</span>
+<span class="n">methods</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"toss-gnn"</span><span class="p">]</span>
+<span class="n">include_vacancy_free</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">include_oxygen_vacancies</span> <span class="o">=</span> <span class="n">true</span>
+
+<span class="p">[</span><span class="n">oxidation</span><span class="o">.</span><span class="n">toss_gnn</span><span class="p">]</span>
+<span class="n">repo_path</span> <span class="o">=</span> <span class="s2">"/path/to/TOSS"</span>
+<span class="n">lp_checkpoint</span> <span class="o">=</span> <span class="s2">"models/pyg_Hetero_GCN_s_0608.pth"</span>
+<span class="n">nc_checkpoint</span> <span class="o">=</span> <span class="s2">"models/pyg_GCN_s_0609.pth"</span>
+<span class="n">device</span> <span class="o">=</span> <span class="s2">"cpu"</span>
+</pre></div>
+</div>
+<p>CLI:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">oxidation</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span> <span class="o">--</span><span class="n">strategy</span> <span class="n">ml</span> <span class="o">--</span><span class="n">methods</span> <span class="n">toss</span><span class="o">-</span><span class="n">gnn</span>
+</pre></div>
+</div>
+</section>
+<section id="bond-valence-plus-toss-gnn">
+<h3>2. Bond valence plus TOSS-GNN<a class="headerlink" href="#bond-valence-plus-toss-gnn" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">oxidation</span><span class="p">]</span>
+<span class="n">enabled</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">strategy</span> <span class="o">=</span> <span class="s2">"combined"</span>
+<span class="n">methods</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"bond-valence"</span><span class="p">,</span> <span class="s2">"toss-gnn"</span><span class="p">]</span>
+
+<span class="p">[</span><span class="n">oxidation</span><span class="o">.</span><span class="n">bond_valence</span><span class="p">]</span>
+<span class="n">symm_tol</span> <span class="o">=</span> <span class="mf">0.1</span>
+<span class="n">max_radius</span> <span class="o">=</span> <span class="mf">4.0</span>
+
+<span class="p">[</span><span class="n">oxidation</span><span class="o">.</span><span class="n">toss_gnn</span><span class="p">]</span>
+<span class="n">repo_path</span> <span class="o">=</span> <span class="s2">"/path/to/TOSS"</span>
+<span class="n">device</span> <span class="o">=</span> <span class="s2">"cpu"</span>
+</pre></div>
+</div>
+<p>CLI:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">oxidation</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span> <span class="o">--</span><span class="n">strategy</span> <span class="n">combined</span> <span class="o">--</span><span class="n">methods</span> <span class="n">bond</span><span class="o">-</span><span class="n">valence</span><span class="p">,</span><span class="n">toss</span><span class="o">-</span><span class="n">gnn</span>
+</pre></div>
+</div>
+</section>
+<section id="chgnet-analysis-for-compatible-transition-metal-dopants">
+<h3>3. CHGNet analysis for compatible transition-metal dopants<a class="headerlink" href="#chgnet-analysis-for-compatible-transition-metal-dopants" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">oxidation</span><span class="p">]</span>
+<span class="n">enabled</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">strategy</span> <span class="o">=</span> <span class="s2">"ml"</span>
+<span class="n">methods</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"chgnet"</span><span class="p">]</span>
+
+<span class="p">[</span><span class="n">oxidation</span><span class="o">.</span><span class="n">chgnet</span><span class="p">]</span>
+<span class="n">model_name</span> <span class="o">=</span> <span class="s2">"0.3.0"</span>
+<span class="n">device</span> <span class="o">=</span> <span class="s2">"cpu"</span>
+<span class="n">use_upstream_mn_mapping</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">use_absolute_moment</span> <span class="o">=</span> <span class="n">false</span>
+<span class="c1"># Optional additional element-specific ranges may be supplied as</span>
+<span class="c1"># moment_oxidation_ranges = { Element = [[min_moment, max_moment, OS], ...] }</span>
+<span class="c1"># only when a chemically justified mapping is available for that element/model.</span>
+</pre></div>
+</div>
+<p>CLI:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">oxidation</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span> <span class="o">--</span><span class="n">strategy</span> <span class="n">ml</span> <span class="o">--</span><span class="n">methods</span> <span class="n">chgnet</span>
+</pre></div>
+</div>
+</section>
+<section id="bertos-composition-screening">
+<h3>4. BERTOS composition screening<a class="headerlink" href="#bertos-composition-screening" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">oxidation</span><span class="p">]</span>
+<span class="n">enabled</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">strategy</span> <span class="o">=</span> <span class="s2">"ml"</span>
+<span class="n">methods</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"bertos"</span><span class="p">]</span>
+
+<span class="p">[</span><span class="n">oxidation</span><span class="o">.</span><span class="n">bertos</span><span class="p">]</span>
+<span class="n">repo_path</span> <span class="o">=</span> <span class="s2">"/path/to/BERTOS"</span>
+<span class="n">model_path</span> <span class="o">=</span> <span class="s2">"trained_models/ICSD_CN"</span>  <span class="c1"># extracted directory</span>
+<span class="n">tokenizer_path</span> <span class="o">=</span> <span class="s2">"tokenizer"</span>
+<span class="n">device</span> <span class="o">=</span> <span class="s2">"cpu"</span>
+</pre></div>
+</div>
+<p>CLI:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">oxidation</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span> <span class="o">--</span><span class="n">strategy</span> <span class="n">ml</span> <span class="o">--</span><span class="n">methods</span> <span class="n">bertos</span>
+</pre></div>
+</div>
+</section>
+<section id="gpaw-plus-bader-and-orbital-analysis">
+<h3>5. GPAW plus Bader and orbital analysis<a class="headerlink" href="#gpaw-plus-bader-and-orbital-analysis" title="Link to this heading"></a></h3>
+<p>The two methods intentionally share the same per-target output root.  GPAW can
+run the single point directly from the relaxed structure.  Bader can then
+reconstruct GPAW’s all-electron density and run the free <code class="docutils literal notranslate"><span class="pre">bader</span></code> executable.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">oxidation</span><span class="p">]</span>
+<span class="n">enabled</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">strategy</span> <span class="o">=</span> <span class="s2">"dft"</span>
+<span class="n">methods</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"dft-electronic"</span><span class="p">,</span> <span class="s2">"bader"</span><span class="p">]</span>
+
+<span class="p">[</span><span class="n">oxidation</span><span class="o">.</span><span class="n">dft_electronic</span><span class="p">]</span>
+<span class="n">code</span> <span class="o">=</span> <span class="s2">"gpaw"</span>
+<span class="n">output_root</span> <span class="o">=</span> <span class="s2">"dft_oxidation"</span>
+<span class="n">execute</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">mode</span> <span class="o">=</span> <span class="s2">"pw"</span>
+<span class="n">ecut_eV</span> <span class="o">=</span> <span class="mf">500.0</span>
+<span class="n">xc</span> <span class="o">=</span> <span class="s2">"PBE"</span>
+<span class="n">kpts</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+<span class="n">gamma</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">smearing_eV</span> <span class="o">=</span> <span class="mf">0.05</span>
+<span class="n">convergence_density</span> <span class="o">=</span> <span class="mf">1e-5</span>
+<span class="n">maxiter</span> <span class="o">=</span> <span class="mi">333</span>
+<span class="n">spinpol</span> <span class="o">=</span> <span class="s2">"auto"</span>
+<span class="n">initial_magmoms</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="n">gpw_file</span> <span class="o">=</span> <span class="s2">"oxidation.gpw"</span>
+
+<span class="p">[</span><span class="n">oxidation</span><span class="o">.</span><span class="n">bader</span><span class="p">]</span>
+<span class="n">output_root</span> <span class="o">=</span> <span class="s2">"dft_oxidation"</span>
+<span class="n">gpw_file</span> <span class="o">=</span> <span class="s2">"oxidation.gpw"</span>
+<span class="n">execute</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">gridrefinement</span> <span class="o">=</span> <span class="mi">4</span>
+<span class="n">density_file</span> <span class="o">=</span> <span class="s2">"density.cube"</span>
+<span class="n">acf_file</span> <span class="o">=</span> <span class="s2">"ACF.dat"</span>
+<span class="n">command</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"bader"</span><span class="p">,</span> <span class="s2">"density.cube"</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>CLI:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">oxidation</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span> <span class="o">--</span><span class="n">strategy</span> <span class="n">dft</span> <span class="o">--</span><span class="n">methods</span> <span class="n">dft</span><span class="o">-</span><span class="n">electronic</span><span class="p">,</span><span class="n">bader</span>
+</pre></div>
+</div>
+<p>Selecting only <code class="docutils literal notranslate"><span class="pre">bader</span></code> produces Bader descriptors and <em>no invented integer
+formal oxidation-state assignment</em>.  If <code class="docutils literal notranslate"><span class="pre">execute=true</span></code> for Bader, an existing
+GPAW restart must already be present in the same per-target directory.</p>
+</section>
+<section id="dft-plus-wannier-eos-where-supported">
+<h3>6. DFT plus Wannier/EOS where supported<a class="headerlink" href="#dft-plus-wannier-eos-where-supported" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">oxidation</span><span class="p">]</span>
+<span class="n">enabled</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">strategy</span> <span class="o">=</span> <span class="s2">"dft"</span>
+<span class="n">methods</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"dft-electronic"</span><span class="p">,</span> <span class="s2">"wannier"</span><span class="p">,</span> <span class="s2">"eos"</span><span class="p">]</span>
+
+<span class="p">[</span><span class="n">oxidation</span><span class="o">.</span><span class="n">dft_electronic</span><span class="p">]</span>
+<span class="n">output_root</span> <span class="o">=</span> <span class="s2">"dft_oxidation"</span>
+<span class="n">execute</span> <span class="o">=</span> <span class="n">false</span>
+
+<span class="p">[</span><span class="n">oxidation</span><span class="o">.</span><span class="n">wannier</span><span class="p">]</span>
+<span class="n">output_root</span> <span class="o">=</span> <span class="s2">"dft_oxidation"</span>
+<span class="n">centres_file</span> <span class="o">=</span> <span class="s2">"wannier90_centres.xyz"</span>
+<span class="n">execute</span> <span class="o">=</span> <span class="n">false</span>
+
+<span class="p">[</span><span class="n">oxidation</span><span class="o">.</span><span class="n">eos</span><span class="p">]</span>
+<span class="n">output_root</span> <span class="o">=</span> <span class="s2">"dft_oxidation"</span>
+<span class="n">results_file</span> <span class="o">=</span> <span class="s2">"eos_results.json"</span>
+<span class="n">execute</span> <span class="o">=</span> <span class="n">false</span>
+</pre></div>
+</div>
+<p>CLI:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">oxidation</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span> <span class="o">--</span><span class="n">strategy</span> <span class="n">dft</span> <span class="o">--</span><span class="n">methods</span> <span class="n">dft</span><span class="o">-</span><span class="n">electronic</span><span class="p">,</span><span class="n">wannier</span><span class="p">,</span><span class="n">eos</span>
+</pre></div>
+</div>
+</section>
+<section id="combined-comparison-on-matched-vacancy-free-and-vacancy-structures">
+<h3>7. Combined comparison on matched vacancy-free and vacancy structures<a class="headerlink" href="#combined-comparison-on-matched-vacancy-free-and-vacancy-structures" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">oxidation</span><span class="p">]</span>
+<span class="n">enabled</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">strategy</span> <span class="o">=</span> <span class="s2">"combined"</span>
+<span class="n">methods</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"bond-valence"</span><span class="p">,</span> <span class="s2">"toss-gnn"</span><span class="p">,</span> <span class="s2">"chgnet"</span><span class="p">,</span> <span class="s2">"bader"</span><span class="p">,</span> <span class="s2">"eos"</span><span class="p">]</span>
+<span class="n">include_vacancy_free</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">include_oxygen_vacancies</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">mapping_tolerance</span> <span class="o">=</span> <span class="mf">1.2</span>
+<span class="n">fail_fast</span> <span class="o">=</span> <span class="n">false</span>
+
+<span class="p">[</span><span class="n">oxidation</span><span class="o">.</span><span class="n">toss_gnn</span><span class="p">]</span>
+<span class="n">repo_path</span> <span class="o">=</span> <span class="s2">"/path/to/TOSS"</span>
+<span class="n">device</span> <span class="o">=</span> <span class="s2">"cpu"</span>
+
+<span class="p">[</span><span class="n">oxidation</span><span class="o">.</span><span class="n">chgnet</span><span class="p">]</span>
+<span class="n">model_name</span> <span class="o">=</span> <span class="s2">"0.3.0"</span>
+<span class="n">device</span> <span class="o">=</span> <span class="s2">"cpu"</span>
+<span class="n">use_upstream_mn_mapping</span> <span class="o">=</span> <span class="n">true</span>
+
+<span class="p">[</span><span class="n">oxidation</span><span class="o">.</span><span class="n">bader</span><span class="p">]</span>
+<span class="n">output_root</span> <span class="o">=</span> <span class="s2">"dft_oxidation"</span>
+<span class="n">execute</span> <span class="o">=</span> <span class="n">false</span>
+
+<span class="p">[</span><span class="n">oxidation</span><span class="o">.</span><span class="n">eos</span><span class="p">]</span>
+<span class="n">output_root</span> <span class="o">=</span> <span class="s2">"dft_oxidation"</span>
+<span class="n">execute</span> <span class="o">=</span> <span class="n">false</span>
+<span class="n">results_file</span> <span class="o">=</span> <span class="s2">"eos_results.json"</span>
+
+<span class="p">[</span><span class="n">oxidation</span><span class="o">.</span><span class="n">dft_followup</span><span class="p">]</span>
+<span class="n">enabled</span> <span class="o">=</span> <span class="n">true</span>
+<span class="n">candidate_limit</span> <span class="o">=</span> <span class="mi">5</span>
+<span class="n">execute</span> <span class="o">=</span> <span class="n">false</span>
+<span class="n">methods</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"dft-electronic"</span><span class="p">,</span> <span class="s2">"bader"</span><span class="p">,</span> <span class="s2">"eos"</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>CLI:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dopingflow</span> <span class="n">oxidation</span> <span class="o">-</span><span class="n">c</span> <span class="nb">input</span><span class="o">.</span><span class="n">toml</span> <span class="o">--</span><span class="n">strategy</span> <span class="n">combined</span> <span class="o">--</span><span class="n">methods</span> <span class="n">bond</span><span class="o">-</span><span class="n">valence</span><span class="p">,</span><span class="n">toss</span><span class="o">-</span><span class="n">gnn</span><span class="p">,</span><span class="n">chgnet</span><span class="p">,</span><span class="n">bader</span><span class="p">,</span><span class="n">eos</span>
+</pre></div>
+</div>
+<p>The comparison remains descriptive.  A disagreement is a trigger for inspection
+or an explicitly enabled DFT follow-up, not a vote to select a winner.</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="vacancies.html" class="btn btn-neutral float-left" title="Oxygen-Vacancy Workflow" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="surfaces.html" class="btn btn-neutral float-right" title="Surface Generation and Relaxation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,382 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Oxygen Reference Calibration &mdash; dopingflow documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=42d1b3bd"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="1. Structure Generation" href="generation.html" />
+    <link rel="prev" title="Oxygen Energy Convention and Chemical Potential" href="oxygen_thermodynamics.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html">
+            
+              <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../workflow_overview.html">Workflow Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation_and_usage.html">Installation, Usage, and Outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../required_inputs.html">Required Input Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file.html">Input File Specification (input.toml)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file_phase_diagram.html">Phase-Diagram Input Options</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file_vacancy_correction.html">Vacancy M0/M1 Input Options</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input_file_vacancy_mc.html">Staged Vacancy Monte Carlo Configuration</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="references.html">0. Reference Energy Construction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="oxygen_thermodynamics.html">Oxygen Energy Convention and Chemical Potential</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Oxygen Reference Calibration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#purpose">Purpose</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#theory">Theory</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#calibration-scopes">Calibration scopes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#experimental-data">Experimental data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#reference-eligibility">Reference eligibility</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#finite-temperature-oxygen-chemical-potential">Finite-temperature oxygen chemical potential</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#optional-solid-configurational-entropy">Optional solid configurational entropy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#recommended-configuration">Recommended configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#legacy-raw-reference-modes">Legacy/raw reference modes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#outputs">Outputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#scientific-interpretation">Scientific interpretation</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="generation.html">1. Structure Generation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sequential.html">Sequential Doping Workflow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scanning.html">2. Symmetry-Reduced Energy Pre-screening (Scanning)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="relaxation.html">3. Candidate Relaxation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="filtering.html">4. Relaxed-Candidate Filtering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bandgap.html">5. Bandgap Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="energy_corrections.html">Backend-Specific Energy Corrections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="formation_energy.html">6. Formation Energy Evaluation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="database.html">7. Database Collection</a></li>
+<li class="toctree-l1"><a class="reference internal" href="alloy_hull.html">Restricted One-Dimensional Alloy Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="phase_diagram.html">Phase Diagram and Energy Above Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="vacancy_energy_above_hull.html">Vacancy Energy Above Hull</a></li>
+<li class="toctree-l1"><a class="reference internal" href="vacancy_energy_correction.html">M0/M1 Correction for Vacancy Thermodynamics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="vacancies.html">Oxygen-Vacancy Workflow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="oxidation_states.html">Oxidation-state analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="surfaces.html">Surface Generation and Relaxation</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_single.html">Explicit Example — Single Target Composition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_single_oxides.html">Explicit Example — Single Target Composition using Oxide References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/multi_reference_oxide.html">Multiple Oxide References and Relative Energies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/explicit_batch.html">Explicit Example — Multiple Target Compositions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/enumerate_screening.html">Enumerate Example — Systematic Dopant Screening</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/smoke_test.html">Smoke Test — Minimal Fast Run</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/sequential_workflow.html">Sequential Example — Gradual Sb Doping</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/vacancies.html">Staged vacancy Monte Carlo example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../api/modules.html">dopingflow</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">dopingflow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Oxygen Reference Calibration</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/methods/oxygen_calibration.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="oxygen-reference-calibration">
+<h1>Oxygen Reference Calibration<a class="headerlink" href="#oxygen-reference-calibration" title="Link to this heading"></a></h1>
+<section id="purpose">
+<h2>Purpose<a class="headerlink" href="#purpose" title="Link to this heading"></a></h2>
+<p>Oxygen-vacancy thermodynamics require an oxygen chemical potential on the same
+energy scale as the ML calculator used for the parent and vacancy structures.
+A raw isolated-<code class="docutils literal notranslate"><span class="pre">O2</span></code> energy from a solid-state foundation model can carry a
+large model-dependent error.  <code class="docutils literal notranslate"><span class="pre">dopingflow</span></code> therefore provides optional
+experimental calibration of the oxygen reference without hard-coding a
+universal correction constant.</p>
+<p>The calibration uses only <strong>real ordinary binary oxides that were already
+calculated by ``refs-build``</strong> and have a matching experimental standard
+formation enthalpy at approximately 298 K.  Missing oxide stoichiometries are
+never generated or invented for the purpose of fitting.</p>
+</section>
+<section id="theory">
+<h2>Theory<a class="headerlink" href="#theory" title="Link to this heading"></a></h2>
+<p>For an eligible binary oxide <span class="math notranslate nohighlight">\(M_xO_y\)</span>, the workflow combines the
+same-backend ML energies with the experimental 298 K formation enthalpy:</p>
+<div class="math notranslate nohighlight">
+\[\mu_{O,i}^{0,\mathrm{cal}} =
+\frac{E^{\mathrm{ML}}(M_xO_y)
+- x E^{\mathrm{ML}}(M)
+- \Delta H_{f,i}^{\mathrm{exp}}(298\,\mathrm{K})}{y}.\]</div>
+<p>Every accepted oxide therefore gives one inferred oxygen reference per oxygen
+atom.  The calibrated value is the arithmetic mean of the accepted per-O
+values.  The individual values are retained and reported together with their
+spread and the resulting formation-enthalpy residuals.</p>
+<p>This calibration is specific to the <code class="docutils literal notranslate"><span class="pre">backend</span> <span class="pre">/</span> <span class="pre">model</span> <span class="pre">/</span> <span class="pre">task</span></code> identity stored
+by <code class="docutils literal notranslate"><span class="pre">refs-build</span></code>.  If that identity differs from the vacancy calculator, the
+calibration is rejected rather than reused.</p>
+</section>
+<section id="calibration-scopes">
+<h2>Calibration scopes<a class="headerlink" href="#calibration-scopes" title="Link to this heading"></a></h2>
+<p>Two calibrated <code class="docutils literal notranslate"><span class="pre">oxygen_reference_mode</span></code> values are available.</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">global</span></code></dt><dd><p>Use every eligible ordinary binary oxide in the current reference inventory,
+including the host oxide when requested, provided that the corresponding
+bulk metal reference and experimental 298 K formation enthalpy are available.
+This gives one backend-wide oxygen reference for the current reference set.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">chemistry-specific</span></code></dt><dd><p>Refit the oxygen reference for each vacancy composition.  Only oxides whose
+cation belongs to the actual vacancy chemistry are eligible.  For an
+Sn-Sb-O parent, for example, Sn and Sb oxides may contribute; Ti or Zr oxides
+are excluded even if they are present in <code class="docutils literal notranslate"><span class="pre">oxides_ref</span></code>.  Only oxides that
+actually exist in the reference inventory and experimental dataset are used.</p>
+</dd>
+</dl>
+<p>The chemistry-specific mode is useful when the spread of inferred oxygen
+references shows a significant chemistry dependence in a universal ML model.
+The global mode is useful when one internally consistent backend reference is
+preferred across a broad screening set.</p>
+</section>
+<section id="experimental-data">
+<h2>Experimental data<a class="headerlink" href="#experimental-data" title="Link to this heading"></a></h2>
+<p>The default source is the curated Kingsbury experimental formation-enthalpy
+dataset already used by the optional correction infrastructure.  It is loaded
+through <code class="docutils literal notranslate"><span class="pre">matminer</span></code> and normalized internally to eV per reduced formula unit.
+Install the optional support with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">".[corrections]"</span>
+</pre></div>
+</div>
+<p>The available settings are:</p>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[vacancies]</span>
+<span class="n">oxygen_calibration_experimental_source</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"kingsbury"</span>
+<span class="c1"># alternatives: "custom", "kingsbury+custom"</span>
+
+<span class="n">oxygen_calibration_experimental_data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">""</span>
+<span class="n">oxygen_calibration_dataset_cache_dir</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">""</span>
+</pre></div>
+</div>
+<p>A custom CSV uses the same explicit schema as the existing experimental
+correction loader and must contain at least:</p>
+<p><code class="docutils literal notranslate"><span class="pre">formula,</span> <span class="pre">formation_enthalpy,</span> <span class="pre">uncertainty,</span> <span class="pre">phase,</span> <span class="pre">temperature,</span> <span class="pre">units,</span> <span class="pre">source</span></code>.</p>
+<p>The temperature must represent the standard 298 K value.  Supported energy
+units are the explicit eV/atom or eV/formula-unit forms accepted by the loader.</p>
+</section>
+<section id="reference-eligibility">
+<h2>Reference eligibility<a class="headerlink" href="#reference-eligibility" title="Link to this heading"></a></h2>
+<p>An oxide is included only when all of the following are true:</p>
+<ul class="simple">
+<li><p>it is an ordinary binary M-O oxide rather than a peroxide, superoxide, or a
+multication/polyanion composition;</p></li>
+<li><p>its relaxed structure and energy are present in
+<code class="docutils literal notranslate"><span class="pre">reference_structures/reference_energies.json</span></code> (or it is the calculated
+host oxide when host inclusion is enabled);</p></li>
+<li><p>the matching elemental bulk-metal reference is present;</p></li>
+<li><p>an experimental 298 K formation enthalpy with the same reduced formula is
+available;</p></li>
+<li><p>the reference backend, model and task match the vacancy calculation.</p></li>
+</ul>
+<p>The minimum number of accepted oxides is controlled by:</p>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="n">oxygen_calibration_min_references</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span>
+</pre></div>
+</div>
+<p>The default of two prevents a one-point value from being presented as a fit.
+The user may deliberately lower it to one for a chemistry where only one
+validated oxide is available, but the resulting calibration has no independent
+spread estimate.</p>
+<p>The host oxide is considered by default:</p>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="n">oxygen_calibration_include_host_oxide</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+</pre></div>
+</div>
+<p>If the same reduced formula is also present in <code class="docutils literal notranslate"><span class="pre">oxides_ref</span></code>, it is used only
+once.</p>
+</section>
+<section id="finite-temperature-oxygen-chemical-potential">
+<h2>Finite-temperature oxygen chemical potential<a class="headerlink" href="#finite-temperature-oxygen-chemical-potential" title="Link to this heading"></a></h2>
+<p>For calibrated modes, the fitted reference is combined with gas-phase
+thermochemistry as</p>
+<div class="math notranslate nohighlight">
+\[\mu_O(T,p) =
+\mu_O^{0,\mathrm{cal}}
++ \frac{1}{2}
+  \left[H_{O_2}(T)-H_{O_2}(298)-T S_{O_2}(T)\right]
++ \frac{1}{2}k_B T\ln\left(\frac{p_{O_2}}{p^\circ}\right).\]</div>
+<p>With</p>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="n">oxygen_standard_state_mode</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"nist_shomate"</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">dopingflow</span></code> evaluates the O2 enthalpy and entropy continuously from the NIST
+Shomate representation (100–6000 K) at the 1 bar standard state.  The 298 K
+enthalpy origin is used for calibrated oxygen references because the fit itself
+uses experimental 298 K formation enthalpies.</p>
+<p>This gas-phase temperature/entropy correction is independent of whether the
+zero-temperature oxygen reference is global or chemistry-specific.</p>
+</section>
+<section id="optional-solid-configurational-entropy">
+<h2>Optional solid configurational entropy<a class="headerlink" href="#optional-solid-configurational-entropy" title="Link to this heading"></a></h2>
+<p>The finite-temperature vacancy analysis supports three choices:</p>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="n">solid_configurational_entropy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"none"</span>
+<span class="c1"># or "ideal"</span>
+<span class="c1"># or "configurational"</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">ideal</span></code> uses the occupied/vacant oxygen-site mixing entropy</p>
+<div class="math notranslate nohighlight">
+\[S_{\mathrm{config}} = -k_B N_O
+\left[x_v\ln x_v + (1-x_v)\ln(1-x_v)\right],\]</div>
+<p>with <span class="math notranslate nohighlight">\(x_v=N_v/N_O\)</span>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">configurational</span></code> uses the actual symmetry-distinct vacancy configurations
+generated by the workflow. For exact orbit degeneracy <span class="math notranslate nohighlight">\(g_i\)</span>,</p>
+<div class="math notranslate nohighlight">
+\[Z_n(T) = \sum_i g_i
+\exp\left[- rac{E_i-E_{min}}{k_B T}\]</div>
+<p>ight],</p>
+<div class="math notranslate nohighlight">
+\[\Delta F_{config}(n,T) = -k_B T \ln Z_n(T).\]</div>
+<p>Exact enumeration is required. If all exact configurations were relaxed, their
+relaxed energies are used. Otherwise the full exact single-point spectrum is
+used to obtain the configurational correction relative to its minimum, while
+the static baseline remains the relaxed minimum. Sampled configurations are not
+assigned guessed degeneracies.</p>
+<p>The finite-T output combines this solid term with the calibrated oxygen chemical
+potential and writes <code class="docutils literal notranslate"><span class="pre">vacancy_formation_free_energy.csv/json</span></code> for every vacancy
+count, temperature and oxygen pressure. Direct <code class="docutils literal notranslate"><span class="pre">delta_mu_O</span></code> intervals remain
+static-lattice quantities. Solid vibrational, zero-point, magnetic, thermal-
+electronic, anharmonic, thermal-expansion and solid-pV terms remain neglected.</p>
+</section>
+<section id="recommended-configuration">
+<h2>Recommended configuration<a class="headerlink" href="#recommended-configuration" title="Link to this heading"></a></h2>
+<p>For a backend-calibrated finite-temperature vacancy screen:</p>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[vacancies]</span>
+<span class="n">static_thermodynamic_analysis</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+
+<span class="n">oxygen_reference_mode</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"chemistry-specific"</span>
+<span class="n">oxygen_reference_file</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"reference_structures/reference_energies.json"</span>
+<span class="n">oxygen_calibration_experimental_source</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"kingsbury"</span>
+<span class="n">oxygen_calibration_min_references</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span>
+<span class="n">oxygen_calibration_include_host_oxide</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+
+<span class="n">oxygen_standard_state_mode</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"nist_shomate"</span>
+<span class="n">pressure_mapping</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+<span class="n">temperatures_K</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="mf">300.0</span><span class="p">,</span><span class="w"> </span><span class="mf">600.0</span><span class="p">,</span><span class="w"> </span><span class="mf">900.0</span><span class="p">]</span>
+<span class="n">standard_oxygen_pressure_bar</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1.0</span>
+
+<span class="n">solid_configurational_entropy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"none"</span>
+</pre></div>
+</div>
+<p>Use <code class="docutils literal notranslate"><span class="pre">global</span></code> instead when one common backend reference is desired for all
+compositions.</p>
+</section>
+<section id="legacy-raw-reference-modes">
+<h2>Legacy/raw reference modes<a class="headerlink" href="#legacy-raw-reference-modes" title="Link to this heading"></a></h2>
+<p>The existing modes remain available for diagnostics and backward
+compatibility:</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">reference_file</span></code></dt><dd><p>Read the O2 reference from <code class="docutils literal notranslate"><span class="pre">reference_energies.json</span></code> (including the
+existing <code class="docutils literal notranslate"><span class="pre">muO_shift_ev</span></code> if configured).</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">same_calculator</span></code></dt><dd><p>Evaluate an isolated O2 structure with the vacancy calculator.  This is
+calculator-consistent but can be inaccurate for a solid-trained model.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">explicit</span></code></dt><dd><p>Use a user-supplied per-O reference.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">none</span></code></dt><dd><p>Produce within-count minima but make no cross-vacancy-count stability claim.</p>
+</dd>
+</dl>
+</section>
+<section id="outputs">
+<h2>Outputs<a class="headerlink" href="#outputs" title="Link to this heading"></a></h2>
+<p>Calibrated runs add:</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">oxygen_calibration_report.json</span></code></dt><dd><p>Full calibration audit trail: scope, target elements, individual oxide
+references, experimental values and provenance, fitted per-O reference,
+excluded references, spread and formation-enthalpy residuals.</p>
+</dd>
+</dl>
+<p>The standard vacancy thermodynamic outputs are rewritten with the calibrated
+reference and include calibration metadata.  For chemistry-specific mode the
+per-composition oxygen reference is recorded directly in each output row.</p>
+</section>
+<section id="scientific-interpretation">
+<h2>Scientific interpretation<a class="headerlink" href="#scientific-interpretation" title="Link to this heading"></a></h2>
+<p>The calibrated value is not a universal constant.  It belongs to the selected
+ML backend/model/task and calibration set.  A large spread between the
+individual oxide-derived references is a diagnostic that one scalar oxygen
+reference does not remove all chemistry-dependent errors of the model.  The
+workflow reports that spread explicitly so global and chemistry-specific
+calibrations can be compared rather than silently assuming transferability.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="oxygen_thermodynamics.html" class="btn btn-neutral float-left" title="Oxygen Energy Convention and Chemical Potential" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="generation.html" class="btn btn-neutral float-right" title="1. Structure Generation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Kazem Zhour.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
