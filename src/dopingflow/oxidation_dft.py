@@ -1085,6 +1085,10 @@ def run_dft_method(
     cfg: OxidationConfig,
     settings: dict[str, Any],
 ) -> dict[str, Any]:
+    if method == "dft-auto":
+        from dopingflow.oxidation_dft_auto import run_dft_auto
+
+        return run_dft_auto(target, cfg, settings)
     if method == "dft-electronic":
         return _run_dft_electronic(target, cfg, settings)
     if method == "bader":
