@@ -8,6 +8,7 @@ on:
       - "src/dopingflow/oxidation_structural.py"
       - "src/dopingflow/oxidation_ml.py"
       - "src/dopingflow/oxidation_dft.py"
+      - "src/dopingflow/oxidation_dft_auto.py"
       - "src/dopingflow/cli.py"
       - "tests/test_oxidation.py"
       - "gui/pages/Oxidation_States.py"
@@ -43,6 +44,7 @@ jobs:
             src/dopingflow/oxidation_structural.py \
             src/dopingflow/oxidation_ml.py \
             src/dopingflow/oxidation_dft.py \
+            src/dopingflow/oxidation_dft_auto.py \
             src/dopingflow/cli.py \
             gui/pages/Oxidation_States.py
 
