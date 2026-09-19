@@ -9,6 +9,7 @@ from pymatgen.io.vasp import Poscar
 
 import dopingflow.oxidation as oxidation
 import dopingflow.oxidation_dft as oxidation_dft
+import dopingflow.oxidation_dft_auto as oxidation_dft_auto
 import dopingflow.wannier_analysis as wannier_analysis
 from dopingflow.oxidation import (
     OptionalMethodUnavailable,
@@ -105,6 +106,13 @@ def test_strategy_dispatch_and_individual_methods(tmp_path: Path) -> None:
             {"oxidation": {"strategy": "ml", "methods": ["toss-gnn", "bader"]}},
             tmp_path,
         )
+
+
+    dft_default = parse_oxidation_config(
+        {"oxidation": {"strategy": "dft"}},
+        tmp_path,
+    )
+    assert dft_default.methods == ("dft-auto",)
 
 
 def test_legacy_gpaw_output_root_is_migrated(tmp_path: Path) -> None:
@@ -337,7 +345,7 @@ def test_ml_only_mode_never_dispatches_dft(
     dispatched: list[str] = []
 
     def runner_for(method: str):
-        assert method not in {"dft-electronic", "bader", "wannier", "eos"}
+        assert method not in {"dft-auto", "dft-electronic", "bader", "wannier", "eos"}
 
         def runner(target, cfg, settings):
             del cfg, settings
@@ -363,6 +371,92 @@ def test_ml_only_mode_never_dispatches_dft(
     }
     run_oxidation(raw, tmp_path)
     assert dispatched == ["toss-gnn"]
+
+
+def test_dft_auto_keeps_uniform_sn4_and_reports_two_delocalized_electrons() -> None:
+    species = ["Sn"] * 5 + ["Sb"] * 2 + ["Ti"] + ["O"] * 16
+    coords = [
+        [(i % 4) / 4.0, ((i // 4) % 3) / 3.0, (i // 12) / 2.0]
+        for i in range(len(species))
+    ]
+    structure = Structure(Lattice.cubic(20.0), species, coords)
+
+    # A charge-neutral structural prior may be tempted to label two Sn as 3+.
+    # Nearly identical Bader charges provide no DFT evidence for that site split.
+    prior = [4, 4, 4, 3, 3, 5, 5, 4] + [-2] * 16
+    q_sn = [2.48, 2.47, 2.49, 2.46, 2.45]
+    bader = [
+        {"site_index": i, "element": "Sn", "bader_partial_charge": q}
+        for i, q in enumerate(q_sn)
+    ]
+    bader.extend(
+        [
+            {"site_index": 5, "element": "Sb", "bader_partial_charge": 2.85},
+            {"site_index": 6, "element": "Sb", "bader_partial_charge": 2.83},
+            {"site_index": 7, "element": "Ti", "bader_partial_charge": 2.25},
+        ]
+    )
+    bader.extend(
+        {
+            "site_index": i,
+            "element": "O",
+            "bader_partial_charge": -1.24,
+        }
+        for i in range(8, 24)
+    )
+
+    result = oxidation_dft_auto.synthesize_oxidation_states(
+        structure,
+        prior_states=prior,
+        bader_records=bader,
+        band_edge_analysis={"homo": {"localization": "delocalized"}},
+        wannier_analysis={
+            "n_delocalized_spread_outliers": 1,
+            "electrons_per_wf": 2.0,
+            "n_wannier_centres": 100,
+        },
+    )
+    states = [row["formal_oxidation_state"] for row in result["sites"]]
+    assert states[:5] == [4, 4, 4, 4, 4]
+    assert states[5:8] == [5, 5, 4]
+    assert states[8:] == [-2] * 16
+    assert result["formal_charge_sum_e"] == pytest.approx(2.0)
+    assert result["electronic_compensation"]["charge_e"] == pytest.approx(-2.0)
+    assert result["electronic_compensation"]["type"] == "electrons"
+    assert result["electronic_compensation"]["localization"] == "delocalized"
+    assert result["wannier_compensation_support"]["matches_electronic_compensation"] is True
+
+
+def test_dft_auto_preserves_mixed_valence_when_bader_populations_separate() -> None:
+    structure = Structure(
+        Lattice.cubic(12.0),
+        ["Fe", "Fe", "Fe", "O", "O", "O", "O"],
+        [
+            [0.0, 0.0, 0.0],
+            [0.5, 0.0, 0.0],
+            [0.0, 0.5, 0.0],
+            [0.25, 0.25, 0.25],
+            [0.75, 0.25, 0.25],
+            [0.25, 0.75, 0.25],
+            [0.25, 0.25, 0.75],
+        ],
+    )
+    result = oxidation_dft_auto.synthesize_oxidation_states(
+        structure,
+        prior_states=[2, 3, 3, -2, -2, -2, -2],
+        bader_records=[
+            {"site_index": 0, "element": "Fe", "bader_partial_charge": 1.20},
+            {"site_index": 1, "element": "Fe", "bader_partial_charge": 1.52},
+            {"site_index": 2, "element": "Fe", "bader_partial_charge": 1.50},
+            *[
+                {"site_index": i, "element": "O", "bader_partial_charge": -1.20}
+                for i in range(3, 7)
+            ],
+        ],
+    )
+    assert [row["formal_oxidation_state"] for row in result["sites"][:3]] == [2, 3, 3]
+    assert result["formal_charge_sum_e"] == pytest.approx(0.0)
+    assert result["mixed_valence_diagnostics"]["Fe"]["supported"] is True
 
 
 def test_bader_default_gridrefinement_is_two(
