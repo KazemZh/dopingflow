@@ -13,19 +13,20 @@ import toml
 STRATEGY_METHODS = {
     "structural": ["bond-valence"],
     "ml": ["toss-gnn", "chgnet", "bertos"],
-    "dft": ["dft-electronic", "bader", "wannier", "eos"],
+    "dft": ["dft-auto", "dft-electronic", "bader", "wannier", "eos"],
 }
 ALL_METHODS = [
     "bond-valence",
     "toss-gnn",
     "chgnet",
     "bertos",
+    "dft-auto",
     "dft-electronic",
     "bader",
     "wannier",
     "eos",
 ]
-DFT_METHODS = ["dft-electronic", "bader", "wannier", "eos"]
+DFT_METHODS = ["dft-auto", "dft-electronic", "bader", "wannier", "eos"]
 
 
 st.set_page_config(page_title="Oxidation-state analysis", layout="wide")
@@ -134,7 +135,7 @@ if isinstance(existing_methods, str):
     existing_methods = [item.strip() for item in existing_methods.split(",") if item.strip()]
 existing_methods = [m for m in existing_methods if m in allowed_methods]
 if not existing_methods and strategy != "combined":
-    existing_methods = list(allowed_methods)
+    existing_methods = ["dft-auto"] if strategy == "dft" else list(allowed_methods)
 
 methods = st.multiselect(
     "Methods",
@@ -207,8 +208,9 @@ if target_include:
     )
 
 st.info(
-    "Bader charge, DOS/orbital populations, magnetic moments, and static Wannier centers are "
-    "supporting descriptors. They are not automatically converted into formal integer oxidation states."
+    "Bader charge, DOS/orbital populations, magnetic moments, and static Wannier centers remain "
+    "supporting descriptors when used alone. The dft-auto method combines them with local bond-valence "
+    "chemistry into an automated per-atom oxidation-state suggestion, confidence, and explicit electronic compensation."
 )
 
 
@@ -335,6 +337,114 @@ def dft_method_panel(method: str, table_name: str, *, extra: str = "") -> None:
     if extra:
         st.caption(extra)
     oxidation[table_name] = settings
+
+
+if "dft-auto" in methods:
+    with st.expander("Automatic DFT oxidation-state assignment", expanded=True):
+        auto = _table("dft_auto")
+        inherited = _table("dft_electronic")
+        auto["output_root"] = st.text_input(
+            "Automatic DFT output root",
+            value=str(auto.get("output_root") or inherited.get("output_root") or "dft_oxidation"),
+            key="oxidation_dft_auto_root",
+        )
+        a1, a2 = st.columns(2)
+        auto["execute"] = a1.checkbox(
+            "Run missing DFT/Bader/Wannier steps automatically",
+            value=bool(auto.get("execute", False)),
+            key="oxidation_dft_auto_execute",
+            help="Existing compatible files are reused by default. Turn this on only when new calculations may be launched.",
+        )
+        auto["reuse_existing"] = a2.checkbox(
+            "Reuse existing compatible outputs",
+            value=bool(auto.get("reuse_existing", True)),
+            key="oxidation_dft_auto_reuse",
+        )
+
+        st.markdown("**Core GPAW settings**")
+        g1, g2, g3 = st.columns(3)
+        auto["xc"] = g1.text_input(
+            "XC functional",
+            value=str(auto.get("xc", inherited.get("xc", "PBE"))),
+            key="oxidation_dft_auto_xc",
+        )
+        auto["ecut_eV"] = float(
+            g2.number_input(
+                "Plane-wave cutoff (eV)",
+                min_value=50.0,
+                value=float(auto.get("ecut_eV", inherited.get("ecut_eV", 500.0))),
+                step=25.0,
+                key="oxidation_dft_auto_ecut",
+            )
+        )
+        auto["smearing_eV"] = float(
+            g3.number_input(
+                "Smearing (eV)",
+                min_value=0.0,
+                value=float(auto.get("smearing_eV", inherited.get("smearing_eV", 0.05))),
+                step=0.01,
+                key="oxidation_dft_auto_smearing",
+            )
+        )
+        raw_kpts = auto.get("kpts", inherited.get("kpts", [1, 1, 1]))
+        if not isinstance(raw_kpts, (list, tuple)) or len(raw_kpts) != 3:
+            raw_kpts = [1, 1, 1]
+        k1, k2, k3, kg = st.columns(4)
+        auto["kpts"] = [
+            int(k1.number_input("k₁", min_value=1, value=int(raw_kpts[0]), step=1, key="oxidation_dft_auto_k1")),
+            int(k2.number_input("k₂", min_value=1, value=int(raw_kpts[1]), step=1, key="oxidation_dft_auto_k2")),
+            int(k3.number_input("k₃", min_value=1, value=int(raw_kpts[2]), step=1, key="oxidation_dft_auto_k3")),
+        ]
+        auto["gamma"] = kg.checkbox(
+            "Gamma-centered",
+            value=bool(auto.get("gamma", inherited.get("gamma", True))),
+            key="oxidation_dft_auto_gamma",
+        )
+        spin_options = ["auto", "true", "false"]
+        current_spin = str(auto.get("spinpol", inherited.get("spinpol", "auto"))).lower()
+        if current_spin not in spin_options:
+            current_spin = "auto"
+        auto["spinpol"] = st.selectbox(
+            "Spin polarization",
+            spin_options,
+            index=spin_options.index(current_spin),
+            key="oxidation_dft_auto_spin",
+        )
+
+        q1, q2, q3 = st.columns(3)
+        auto["band_edge_analysis"] = q1.checkbox(
+            "Analyze HOMO/LUMO localization",
+            value=bool(auto.get("band_edge_analysis", True)),
+            key="oxidation_dft_auto_band_edges",
+        )
+        wannier_modes = ["auto", "always", "never"]
+        current_wannier = str(auto.get("wannier_mode", "auto")).lower()
+        if current_wannier not in wannier_modes:
+            current_wannier = "auto"
+        auto["wannier_mode"] = q2.selectbox(
+            "Wannier follow-up",
+            wannier_modes,
+            index=wannier_modes.index(current_wannier),
+            key="oxidation_dft_auto_wannier",
+            help="auto runs/reuses Wannier only when the preliminary integer assignment leaves electronic compensation.",
+        )
+        auto["save_wavefunctions"] = q3.checkbox(
+            "Store wavefunctions",
+            value=bool(auto.get("save_wavefunctions", True)),
+            key="oxidation_dft_auto_wavefunctions",
+            help="Needed for automatic band-edge and Wannier analysis.",
+        )
+        auto["bader_reference_file"] = st.text_input(
+            "Optional same-method Bader reference fingerprint JSON",
+            value=str(auto.get("bader_reference_file", "")),
+            key="oxidation_dft_auto_reference_file",
+            help="Optional calibration strengthens absolute oxidation-state discrimination. The workflow still returns a conservative suggestion without it.",
+        )
+        st.caption(
+            "dft-auto runs/reuses GPAW, Bader, band-edge localization, and—only when useful—Wannier analysis. "
+            "It does not force charge neutrality by inventing localized mixed valence: residual charge can be reported as delocalized electrons or holes."
+        )
+        oxidation["dft_auto"] = auto
 
 
 if "dft-electronic" in methods:
@@ -700,7 +810,7 @@ with st.expander("Preview [oxidation] TOML", expanded=False):
 
 contains_dft_execution = any(
     bool((_table(name) if name in oxidation else {}).get("execute", False))
-    for name in ("dft_electronic", "bader", "wannier", "eos")
+    for name in ("dft_auto", "dft_electronic", "bader", "wannier", "eos")
 ) or bool(followup.get("execute", False))
 
 if contains_dft_execution and not target_include:
@@ -871,6 +981,45 @@ else:
                     )
                 )
 
+            if selected_method == "dft-auto":
+                summary = method_result.get("assignment_summary", {}) or {}
+                compensation = summary.get("electronic_compensation", {}) or {}
+                st.markdown("#### Automated DFT oxidation-state suggestion")
+                am1, am2, am3, am4 = st.columns(4)
+                am1.metric(
+                    "Atomic formal-charge sum",
+                    f"{float(summary.get('formal_charge_sum_e', 0.0)):+.2f} e",
+                )
+                am2.metric(
+                    "Electronic compensation",
+                    f"{float(compensation.get('charge_e', 0.0)):+.2f} e",
+                )
+                am3.metric(
+                    "Compensation type",
+                    str(compensation.get("type", "none")),
+                )
+                am4.metric(
+                    "Localization",
+                    str(compensation.get("localization", "not-evaluated")),
+                )
+                component_status = method_result.get("component_status", {}) or {}
+                if component_status:
+                    st.markdown("##### Automatic diagnostic stages")
+                    st.dataframe(
+                        pd.DataFrame(
+                            [
+                                {"stage": name, **(value if isinstance(value, dict) else {"status": value})}
+                                for name, value in component_status.items()
+                            ]
+                        ),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+                st.caption(
+                    "These are formal oxidation-state suggestions supported by DFT descriptors. "
+                    "Residual electrons/holes are shown explicitly rather than being assigned arbitrarily to atoms."
+                )
+
             if selected_method == "wannier":
                 analysis = method_result.get("wannier_analysis", {}) or {}
                 if analysis:
@@ -956,6 +1105,9 @@ else:
                         "site_index",
                         "element",
                         "formal_oxidation_state",
+                        "confidence",
+                        "confidence_label",
+                        "structural_prior_oxidation_state",
                         "coordination_number",
                         "bader_partial_charge",
                         "magnetic_moment",
