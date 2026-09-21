@@ -14,41 +14,53 @@ from dopingflow.oxidation import OptionalMethodUnavailable, StructureTarget, par
 
 
 def parent(root, name, energy, *, oxygen=2):
-    path = root / "SnO2" / name / "02_relax" / "POSCAR"
-    path.parent.mkdir(parents=True)
-    Structure(
+    structure = Structure(
         Lattice.cubic(5),
         ["Sn"] + ["O"] * oxygen,
         [[0, 0, 0], [0.25, 0.25, 0.25], [0.75, 0.75, 0.75]][: 1 + oxygen],
-    ).to(filename=str(path), fmt="poscar")
+    )
+    candidate = root / "SnO2" / name
+    scan = candidate / "01_scan" / "POSCAR"
+    path = candidate / "02_relax" / "POSCAR"
+    scan.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    structure.to(filename=str(scan), fmt="poscar")
+    structure.to(filename=str(path), fmt="poscar")
     (path.parent / "meta.json").write_text(
         json.dumps({"energy_relaxed_eV": energy, "backend": "mace", "model": "test"})
     )
+    selected = root / "SnO2" / "selected_candidates.txt"
+    names = selected.read_text().splitlines() if selected.exists() else []
+    if name not in names:
+        selected.write_text("\n".join([*names, name]) + "\n")
     return path
 
 
-def test_select_favorable_and_manual(tmp_path):
+def test_selection_matches_oxidation_source_and_target_semantics(tmp_path):
     root = tmp_path / "structures"
-    p1 = parent(root, "c1", -20)
+    parent(root, "c1", -20)
     parent(root, "c2", -21)
-    parent(root, "c3", -100, oxygen=1)  # Different composition must not win c1/c2 group.
+    parent(root, "c3", -100, oxygen=1)
     raw = {"structure": {"outdir": str(root)}, "conductivity": {"enabled": True}}
     cfg, settings = c.parse_config(raw, tmp_path)
+
     selected, _ = c.select_targets(cfg, settings)
-    assert {t.target_id for t in selected} == {"SnO2/c2", "SnO2/c3"}
-    settings["target_include"] = ["SnO2/c1"]
-    assert len(c.select_targets(cfg, settings)[0]) == 3
-    settings["selection"] = "manual"
-    assert c.select_targets(cfg, settings)[0][0].structure_path == p1
-    settings["target_include"] = ["missing*"]
-    with pytest.raises(ValueError, match="matched no"):
-        c.select_targets(cfg, settings)
+    assert {t.target_id for t in selected} == {"SnO2/c1", "SnO2/c2", "SnO2/c3"}
+
+    cfg, settings = c.parse_config(
+        {
+            "structure": {"outdir": str(root)},
+            "conductivity": {"enabled": True, "target_include": ["SnO2/c1"]},
+        },
+        tmp_path,
+    )
+    selected, _ = c.select_targets(cfg, settings)
+    assert [t.target_id for t in selected] == ["SnO2/c1"]
 
 
-def test_vacancy_ranking(tmp_path):
+def test_vacancy_selection_matches_oxidation_rules(tmp_path):
     root = tmp_path / "structures"
-    p1 = parent(root, "vac1", -10, oxygen=1)
-    p2 = parent(root, "vac2", -12, oxygen=1)
+    p1 = parent(root, "c1", -10)
     rows = [
         {
             "parent_id": "SnO2/c1",
@@ -60,15 +72,39 @@ def test_vacancy_ranking(tmp_path):
             "backend": "mace",
             "model": "test",
         }
-        for i, p, e in [(1, p1, -10), (2, p2, -12)]
+        for i, p, e in [(1, p1, -10), (2, p1, -12)]
     ]
     (root / "vacancies_database.json").write_text(json.dumps(rows))
+
     cfg, settings = c.parse_config(
-        {"structure": {"outdir": str(root)}, "conductivity": {"include_vacancy_free": False}},
+        {
+            "structure": {"outdir": str(root)},
+            "conductivity": {
+                "include_vacancy_free": False,
+                "include_oxygen_vacancies": True,
+            },
+        },
         tmp_path,
     )
     chosen, _ = c.select_targets(cfg, settings)
-    assert len(chosen) == 1 and chosen[0].target_id.endswith("/v2")
+    assert {t.target_id for t in chosen} == {
+        "SnO2/c1/V_O_01/v1",
+        "SnO2/c1/V_O_01/v2",
+    }
+
+    cfg, settings = c.parse_config(
+        {
+            "structure": {"outdir": str(root)},
+            "conductivity": {
+                "include_vacancy_free": False,
+                "include_oxygen_vacancies": True,
+                "target_include": ["*/V_O_01/v2"],
+            },
+        },
+        tmp_path,
+    )
+    chosen, _ = c.select_targets(cfg, settings)
+    assert [t.target_id for t in chosen] == ["SnO2/c1/V_O_01/v2"]
 
 
 def cache_setup(tmp_path, monkeypatch):
@@ -171,9 +207,9 @@ def test_disabled_and_dry_run_never_execute(tmp_path, monkeypatch):
         {"temperatures_K": [0]},
         {"temperatures_K": [float("nan")]},
         {"relaxation_time_fs": -1},
-        {"selection": "manual"},
         {"dft": {"kpts": [1, 1, 1]}},
-        {"top_k_per_group": 0},
+        {"interpolation_factor": 1},
+        {"dos_points": 99},
     ],
 )
 def test_bad_settings(tmp_path, section):
@@ -270,24 +306,19 @@ def test_derived_results_follow_source_gpw(tmp_path):
     assert not cache.derived_current(acf, gpw)
 
 
-def test_explicit_structure_selection(tmp_path):
-    root = tmp_path / "structures"
-    path = parent(root, "c1", -1)
+def test_custom_source_root_is_shared_with_oxidation_selection(tmp_path):
+    default_root = tmp_path / "default"
+    custom_root = tmp_path / "vacancy-selected"
+    parent(default_root, "default_candidate", -2)
+    parent(custom_root, "chosen_candidate", -1)
+
     cfg, settings = c.parse_config(
         {
-            "structure": {"outdir": str(root)},
-            "conductivity": {"selection": "manual", "structure_paths": [str(path)]},
+            "structure": {"outdir": str(default_root)},
+            "conductivity": {"source_root": str(custom_root)},
         },
         tmp_path,
     )
     chosen, _ = c.select_targets(cfg, settings)
-    assert len(chosen) == 1 and chosen[0].structure_path == path
+    assert [t.target_id for t in chosen] == ["SnO2/chosen_candidate"]
 
-
-def test_manual_path_without_workflow_tree(tmp_path):
-    path = parent(tmp_path / "external", "c1", -1)
-    cfg, settings = c.parse_config(
-        {"conductivity": {"selection": "manual", "structure_paths": [str(path)]}}, tmp_path
-    )
-    chosen, _ = c.select_targets(cfg, settings)
-    assert chosen[0].structure_path == path
