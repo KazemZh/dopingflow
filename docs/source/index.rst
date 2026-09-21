@@ -74,6 +74,7 @@ Each stage can be executed independently and uses its own configuration block.
    methods/vacancy_energy_correction
    methods/vacancies
    methods/oxidation_states
+   methods/conductivity
    methods/surfaces
 
 

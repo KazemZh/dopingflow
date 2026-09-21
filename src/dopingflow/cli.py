@@ -16,6 +16,7 @@ from dopingflow.formation_oxygen_extensions import run_formation_from_toml
 from dopingflow.generate import run_generate_from_toml
 from dopingflow.logging import setup_logging
 from dopingflow.oxidation import run_oxidation_from_toml
+from dopingflow.conductivity import run_conductivity_from_toml
 from dopingflow.phase_diagram_convergence_extensions import run_phase_diagram_from_toml
 from dopingflow.refs_oxygen_extensions import run_refs_build_from_toml
 from dopingflow.relax import run_relax_from_toml
@@ -222,6 +223,28 @@ def oxidation_cmd(
     typer.echo(f"\nWrote oxidation-state results JSON: {out_path}")
 
 
+@app.command("conductivity")
+def conductivity_cmd(
+    config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview selection without DFT or transport"),
+    verbose: bool = typer.Option(False, "--verbose"),
+) -> None:
+    """Step 12: Calculate band conductivity/tau on favorable or manually selected structures."""
+    _init(config, verbose)
+    output = run_conductivity_from_toml(config, dry_run=dry_run)
+    if output is None:
+        typer.echo("Conductivity disabled; set [conductivity].enabled=true")
+        return
+    typer.echo(f"Wrote conductivity results: {output}")
+    if not dry_run:
+        import json
+        results = json.loads(output.read_text())["results"]
+        failed = sum(row["status"] != "calculated" for row in results)
+        if failed:
+            typer.echo(f"{failed}/{len(results)} targets did not complete; see per-target errors")
+            raise typer.Exit(code=1)
+
+
 @app.command("run-all")
 def run_all_cmd(
     config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
@@ -230,7 +253,7 @@ def run_all_cmd(
         "--from",
         help=(
             "Start step key (refs, corrections, generate, scan, relax, filter, "
-            "bandgap, formation, collect, alloy-hull, phase-diagram, vacancies, oxidation)"
+            "bandgap, formation, collect, alloy-hull, phase-diagram, vacancies, oxidation, conductivity)"
         ),
     ),
     stop: str = typer.Option("phase-diagram", "--until", help="Stop step key (inclusive)"),
@@ -251,7 +274,7 @@ def run_all_cmd(
 
     Step keys:
       refs -> corrections -> generate -> scan -> relax -> filter -> bandgap
-      -> formation -> collect -> alloy-hull -> phase-diagram -> vacancies -> oxidation
+      -> formation -> collect -> alloy-hull -> phase-diagram -> vacancies -> oxidation -> conductivity
     """
     _init(config, verbose)
 
@@ -275,6 +298,7 @@ def run_all_cmd(
         ("phase-diagram", "09 phase-diagram", lambda: run_phase_diagram_from_toml(config)),
         ("vacancies", "10 vacancies", lambda: run_vacancies_from_toml(config)),
         ("oxidation", "11 oxidation", lambda: run_oxidation_from_toml(config)),
+        ("conductivity", "12 conductivity", lambda: run_conductivity_from_toml(config)),
     ]
 
     key_to_idx = {k: i for i, (k, _, _) in enumerate(steps)}

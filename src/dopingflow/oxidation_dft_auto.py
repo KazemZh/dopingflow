@@ -683,7 +683,7 @@ def run_dft_auto(
         "xc", "mode", "ecut_eV", "kpts", "gamma", "smearing_eV",
         "convergence_density", "maxiter", "charge", "spinpol",
         "initial_magmoms", "dos_emin_eV", "dos_emax_eV",
-        "dos_npoints", "dos_width_eV", "gpw_file", "txt_file",
+        "dos_npoints", "dos_width_eV", "gpw_file", "txt_file", "nbands", "cache_root",
     ):
         if key in settings:
             electronic_settings[key] = settings[key]
@@ -696,9 +696,8 @@ def run_dft_auto(
     gpw_path = workdir / str(
         electronic_settings.get("gpw_file", "oxidation.gpw")
     )
-    electronic_settings["execute"] = execute and not (
-        reuse and gpw_path.is_file()
-    )
+    electronic_settings["execute"] = execute
+    electronic_settings["reuse_existing"] = reuse
     electronic = dft._run_dft_electronic(
         target, cfg, electronic_settings
     )
@@ -706,11 +705,11 @@ def run_dft_auto(
         "dft-electronic": {
             "status": electronic.get("assignment_status"),
             "reused_existing": bool(
-                reuse and gpw_path.is_file()
-                and not electronic_settings["execute"]
+                electronic.get("provenance", {}).get("reused_existing", False)
             ),
         }
     }
+    from dopingflow.dft_cache import derived_current, record_derived
     limitations: list[str] = []
 
     band_edges: dict[str, Any] = {}
@@ -735,13 +734,18 @@ def run_dft_auto(
         "gpw_file", "oxidation.gpw"
     )
     acf = workdir / str(bader_settings.get("acf_file", "ACF.dat"))
-    bader_settings["execute"] = execute and not (reuse and acf.is_file())
+    bader_reuse = reuse and derived_current(acf, gpw_path)
+    bader_settings["execute"] = execute and not bader_reuse
     try:
+        if acf.exists() and not bader_reuse and not execute:
+            raise OptionalMethodUnavailable("Existing Bader results are not verified against this GPW; enable execute to regenerate")
         bader = dft._run_bader(target, cfg, bader_settings)
+        if acf.exists() and gpw_path.exists():
+            record_derived(acf, gpw_path)
         component_status["bader"] = {
             "status": bader.get("assignment_status"),
             "reused_existing": bool(
-                reuse and acf.is_file() and not bader_settings["execute"]
+                bader_reuse
             ),
         }
     except Exception as exc:
@@ -802,15 +806,18 @@ def run_dft_auto(
         centres = workdir / str(
             wset.get("centres_file", f"{seed}_centres.xyz")
         )
-        wset["execute"] = execute and not (
-            reuse and centres.is_file()
-        )
+        wannier_reuse = reuse and derived_current(centres, gpw_path)
+        wset["execute"] = execute and not wannier_reuse
         try:
+            if centres.exists() and not wannier_reuse and not execute:
+                raise OptionalMethodUnavailable("Existing Wannier results are not verified against this GPW; enable execute to regenerate")
             wannier_result = dft._run_wannier(target, cfg, wset)
+            if centres.exists() and gpw_path.exists():
+                record_derived(centres, gpw_path)
             component_status["wannier"] = {
                 "status": wannier_result.get("assignment_status"),
                 "reused_existing": bool(
-                    reuse and centres.is_file() and not wset["execute"]
+                    wannier_reuse
                 ),
             }
             synthesis = synthesize_oxidation_states(

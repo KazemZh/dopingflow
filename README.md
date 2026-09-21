@@ -739,3 +739,21 @@ Proprietary and confidential.
 Unauthorized use, modification, or distribution is prohibited.
 
 The native GPAW/Wannier90 adapter supports both the GPAW 25.7 `gpaw.wannier90` interface and the newer `gpaw.wannier.wannier90` interface.
+
+
+### Electronic conductivity (optional)
+
+Use `dopingflow conductivity -c input.toml --dry-run` to preview favorable or
+manually selected parent/vacancy structures, then run without `--dry-run`.
+Enable `[conductivity].enabled = true`; see
+[`examples/conductivity/input.toml`](examples/conductivity/input.toml) and the
+[conductivity guide](docs/source/methods/conductivity.rst).
+
+The GPAW + BoltzTraP2 backend reports **sigma/tau**, with optional explicitly
+assumed-tau conductivity. It shares compatible, provenance-checked GPAW results
+with oxidation analysis in either direction. Different structures/settings and
+Gamma-only meshes are not silently reused for transport. The Streamlit
+**Electronic Conductivity** page exposes selection, preview, execution and results.
+Install the transport extra with `pip install -e '.[conductivity]'` in the GPAW
+environment. Band-like transport is assumed; polaron hopping and scattering
+lifetimes are not calculated by this backend.

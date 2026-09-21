@@ -1,0 +1,28 @@
+name: Electronic conductivity tests
+on:
+  pull_request:
+    paths:
+      - 'src/dopingflow/conductivity.py'
+      - 'src/dopingflow/dft_cache.py'
+      - 'src/dopingflow/oxidation_dft*.py'
+      - 'src/dopingflow/cli.py'
+      - 'src/dopingflow/__main__.py'
+      - 'tests/test_conductivity.py'
+      - 'gui/pages/Electronic_Conductivity.py'
+      - 'pyproject.toml'
+      - '.github/workflows/conductivity-tests.yml'
+  workflow_dispatch:
+jobs:
+  conductivity:
+    runs-on: ubuntu-latest
+    env:
+      CC: gcc
+      CXX: g++
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -e '.[dev,conductivity]'
+      - run: python -m compileall -q src/dopingflow gui/pages/Electronic_Conductivity.py
+      - run: pytest -q tests/test_conductivity.py tests/test_oxidation.py tests/test_cli_help.py

@@ -1,0 +1,36 @@
+# Merge these tables into the input.toml of an existing relaxed dopingflow project.
+[structure]
+outdir = "random_structures"
+
+[conductivity]
+enabled = true
+selection = "favorable"     # favorable | manual | all
+# Favorable = lowest relaxed energy within identical atom counts, vacancy count,
+# and recorded ML backend/model/task. No raw-energy ranking across compositions.
+top_k_per_group = 1
+include_vacancy_free = true
+include_oxygen_vacancies = true
+# In favorable mode these are ADDITIONS. In manual mode only these are selected.
+target_include = []         # e.g. ["Sb05/candidate_0002", "Sb05/*/V_O_01/*"]
+structure_paths = []        # explicit POSCAR/CIF paths, relative to input.toml
+output_dir = "07_conductivity"
+temperatures_K = [300.0, 353.0]
+# Additional electrons relative to the explicit DFT structure, per cm^3.
+# 0 = native electron count; positive = electrons; negative = holes.
+excess_electrons_cm3 = [0.0]
+interpolation_factor = 5
+dos_points = 4000
+fail_fast = false
+# relaxation_time_fs = 10.0 # Optional ASSUMPTION, not a calculated lifetime.
+
+[conductivity.dft]
+code = "gpaw"
+execute = false            # true permits a new DFT calculation on cache miss
+kpts = [4, 4, 4]           # Starting mesh only: must be converged for each cell
+save_wavefunctions = true  # Allows reuse for oxidation wavefunction analysis
+reuse_existing = true
+# Other physical DFT settings inherit from oxidation.dft_electronic (and active
+# dft_auto overrides). Set the same settings in both stages for exact reuse.
+# ecut_eV = 500.0
+# xc = "PBE"
+# nbands = 100             # Include sufficient empty bands; system-dependent

@@ -1,0 +1,293 @@
+import json
+from pathlib import Path
+from types import SimpleNamespace
+
+import numpy as np
+import pytest
+from ase import Atoms
+from pymatgen.core import Lattice, Structure
+
+from dopingflow import conductivity as c
+from dopingflow import dft_cache as cache
+from dopingflow import oxidation_dft as dft
+from dopingflow.oxidation import OptionalMethodUnavailable, StructureTarget, parse_oxidation_config
+
+
+def parent(root, name, energy, *, oxygen=2):
+    path = root / "SnO2" / name / "02_relax" / "POSCAR"
+    path.parent.mkdir(parents=True)
+    Structure(
+        Lattice.cubic(5),
+        ["Sn"] + ["O"] * oxygen,
+        [[0, 0, 0], [0.25, 0.25, 0.25], [0.75, 0.75, 0.75]][: 1 + oxygen],
+    ).to(filename=str(path), fmt="poscar")
+    (path.parent / "meta.json").write_text(
+        json.dumps({"energy_relaxed_eV": energy, "backend": "mace", "model": "test"})
+    )
+    return path
+
+
+def test_select_favorable_and_manual(tmp_path):
+    root = tmp_path / "structures"
+    p1 = parent(root, "c1", -20)
+    parent(root, "c2", -21)
+    parent(root, "c3", -100, oxygen=1)  # Different composition must not win c1/c2 group.
+    raw = {"structure": {"outdir": str(root)}, "conductivity": {"enabled": True}}
+    cfg, settings = c.parse_config(raw, tmp_path)
+    selected, _ = c.select_targets(cfg, settings)
+    assert {t.target_id for t in selected} == {"SnO2/c2", "SnO2/c3"}
+    settings["target_include"] = ["SnO2/c1"]
+    assert len(c.select_targets(cfg, settings)[0]) == 3
+    settings["selection"] = "manual"
+    assert c.select_targets(cfg, settings)[0][0].structure_path == p1
+    settings["target_include"] = ["missing*"]
+    with pytest.raises(ValueError, match="matched no"):
+        c.select_targets(cfg, settings)
+
+
+def test_vacancy_ranking(tmp_path):
+    root = tmp_path / "structures"
+    p1 = parent(root, "vac1", -10, oxygen=1)
+    p2 = parent(root, "vac2", -12, oxygen=1)
+    rows = [
+        {
+            "parent_id": "SnO2/c1",
+            "configuration_id": f"v{i}",
+            "n_vacancies": 1,
+            "vacancy_species": "O",
+            "relaxed_poscar_path": str(p),
+            "energy_relaxed_total_eV": e,
+            "backend": "mace",
+            "model": "test",
+        }
+        for i, p, e in [(1, p1, -10), (2, p2, -12)]
+    ]
+    (root / "vacancies_database.json").write_text(json.dumps(rows))
+    cfg, settings = c.parse_config(
+        {"structure": {"outdir": str(root)}, "conductivity": {"include_vacancy_free": False}},
+        tmp_path,
+    )
+    chosen, _ = c.select_targets(cfg, settings)
+    assert len(chosen) == 1 and chosen[0].target_id.endswith("/v2")
+
+
+def cache_setup(tmp_path, monkeypatch):
+    path = parent(tmp_path / "structures", "c1", -20)
+    target = StructureTarget("SnO2/c1", "SnO2/c1", "vacancy-free", path, 0, None)
+    cfg = parse_oxidation_config({"structure": {"outdir": str(tmp_path / "structures")}}, tmp_path)
+    calls = []
+
+    def run(target, cfg, settings):
+        destination = dft._workdir(target, cfg, settings) / "oxidation.gpw"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"validated mock GPAW result")
+        calls.append(settings.copy())
+        return destination
+
+    monkeypatch.setattr(dft, "_run_gpaw_single_point", run)
+    return cfg, target, calls
+
+
+@pytest.mark.parametrize(
+    "first,second", [("dft_oxidation", "dft_conductivity"), ("dft_conductivity", "dft_oxidation")]
+)
+def test_bidirectional_cache(tmp_path, monkeypatch, first, second):
+    cfg, target, calls = cache_setup(tmp_path, monkeypatch)
+    settings = {
+        "execute": True,
+        "kpts": [4, 4, 4],
+        "output_root": first,
+        "save_wavefunctions": True,
+    }
+    _, reused = cache.ensure_gpaw(target, cfg, settings)
+    assert not reused
+    path, reused = cache.ensure_gpaw(
+        target, cfg, {**settings, "output_root": second, "execute": False}
+    )
+    assert reused and path.exists() and len(calls) == 1
+    # A weaker wavefunction requirement can use a stronger result.
+    assert cache.ensure_gpaw(target, cfg, {**settings, "save_wavefunctions": False})[1]
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"kpts": [6, 6, 6]},
+        {"xc": "PBE0"},
+        {"charge": 1},
+        {"ecut_eV": 700},
+        {"spinpol": True},
+        {"nbands": 30},
+    ],
+)
+def test_cache_invalidates_physical_settings(tmp_path, monkeypatch, change):
+    cfg, target, calls = cache_setup(tmp_path, monkeypatch)
+    cache.ensure_gpaw(target, cfg, {"execute": True})
+    with pytest.raises(OptionalMethodUnavailable):
+        cache.ensure_gpaw(target, cfg, {"execute": False, **change})
+    assert len(calls) == 1
+
+
+def test_cache_invalidates_geometry_and_missing_wavefunctions(tmp_path, monkeypatch):
+    cfg, target, calls = cache_setup(tmp_path, monkeypatch)
+    cache.ensure_gpaw(target, cfg, {"execute": True})
+    with pytest.raises(OptionalMethodUnavailable):
+        cache.ensure_gpaw(target, cfg, {"save_wavefunctions": True})
+    structure = Structure.from_file(target.structure_path)
+    structure.translate_sites([0], [0.1, 0, 0])
+    structure.to(filename=str(target.structure_path), fmt="poscar")
+    with pytest.raises(OptionalMethodUnavailable):
+        cache.ensure_gpaw(target, cfg, {})
+    assert len(calls) == 1
+
+
+def test_truncated_cache_not_reused(tmp_path, monkeypatch):
+    cfg, target, _ = cache_setup(tmp_path, monkeypatch)
+    path, _ = cache.ensure_gpaw(target, cfg, {"execute": True})
+    path.write_bytes(b"")
+    # A valid shared copy is still usable; damage it as well.
+    for shared in (cfg.source_root / "dft_cache").glob("*/result.gpw"):
+        shared.write_bytes(b"")
+    with pytest.raises(OptionalMethodUnavailable):
+        cache.ensure_gpaw(target, cfg, {})
+
+
+def test_disabled_and_dry_run_never_execute(tmp_path, monkeypatch):
+    assert c.run_conductivity({}, tmp_path) is None
+    root = tmp_path / "structures"
+    parent(root, "c1", -10)
+    monkeypatch.setattr(cache, "ensure_gpaw", lambda *a: pytest.fail("DFT called in dry run"))
+    output = c.run_conductivity(
+        {"structure": {"outdir": str(root)}, "conductivity": {"enabled": True}},
+        tmp_path,
+        dry_run=True,
+    )
+    assert json.loads(output.read_text())["results"][0]["status"] == "selected"
+
+
+@pytest.mark.parametrize(
+    "section",
+    [
+        {"temperatures_K": [0]},
+        {"temperatures_K": [float("nan")]},
+        {"relaxation_time_fs": -1},
+        {"selection": "manual"},
+        {"dft": {"kpts": [1, 1, 1]}},
+        {"top_k_per_group": 0},
+    ],
+)
+def test_bad_settings(tmp_path, section):
+    with pytest.raises(ValueError):
+        c.parse_config({"conductivity": section}, tmp_path)
+
+
+def test_spin_channels_are_both_loaded(monkeypatch):
+    pytest.importorskip("BoltzTraP2")
+    atoms = Atoms("Fe", cell=np.eye(3) * 3, pbc=True)
+    calc = SimpleNamespace(
+        get_ibz_k_points=lambda: [[0, 0, 0], [0.5, 0, 0]],
+        get_number_of_spins=lambda: 2,
+        get_eigenvalues=lambda kpt, spin: np.array([spin * 10 + kpt, spin * 10 + 2 + kpt]),
+        get_magnetic_moments=lambda: [2.0],
+        get_number_of_electrons=lambda: 8,
+        get_fermi_level=lambda: 1,
+    )
+    monkeypatch.setattr(dft, "_gpaw_restart", lambda p: (atoms, calc))
+    data = c.gpaw_bands(Path("unused.gpw"))
+    assert data.ebands.shape == (4, 2)
+    assert data.dosweight == 1
+    assert not np.array_equal(data.ebands[:2], data.ebands[2:])
+
+
+def test_real_boltztrap_parabolic_band():
+    """Independent Drude limit catches atomic/SI units, volume and spin factors."""
+    pytest.importorskip("BoltzTraP2")
+    from BoltzTraP2.units import Angstrom
+    from scipy.constants import electron_mass, elementary_charge
+
+    ngrid = 15
+    import spglib
+
+    atoms = Atoms("Si", cell=np.eye(3) * 5, pbc=True)
+    mapping, grid = spglib.get_ir_reciprocal_mesh(
+        [ngrid] * 3, (atoms.cell, atoms.get_scaled_positions(), atoms.numbers)
+    )
+    mesh = grid[np.unique(mapping)] / ngrid
+    lattice = np.array(atoms.cell).T * Angstrom
+    kcart = mesh @ (2 * np.pi * np.linalg.inv(lattice))
+    energy = (kcart * kcart).sum(axis=1) / 2
+    data = SimpleNamespace(
+        atoms=atoms,
+        kpoints=mesh,
+        ebands=np.stack([np.full_like(energy, -1.0), energy]),
+        mommat=None,
+        magmom=None,
+        get_lattvec=lambda: lattice,
+        nelect=2.0125,
+        dosweight=2,
+        fermi=0,
+    )
+    settings = {
+        "interpolation_factor": 2,
+        "dos_points": 6000,
+        "temperatures_K": [300.0],
+        "excess_electrons_cm3": [0.0],
+        "relaxation_time_fs": 10.0,
+    }
+    rows = c.integrate_transport(data, settings)
+    tensor = np.array(rows[0]["sigma_over_tau_S_per_m_per_s"])
+    # 0.0125 e / 125 Angstrom^3 = 1e20 cm^-3.
+    expected = 1e26 * elementary_charge**2 / electron_mass
+    assert np.trace(tensor) / 3 == pytest.approx(expected, rel=0.15)
+    assert rows[0]["conditional_sigma_trace_average_S_per_cm"] == pytest.approx(
+        expected * 1e-14 / 100, rel=0.15
+    )
+    assert np.diag(tensor).max() / np.diag(tensor).min() < 1.05
+
+
+def test_stale_legacy_metadata_cannot_override_modern_manifest(tmp_path, monkeypatch):
+    cfg, target, calls = cache_setup(tmp_path, monkeypatch)
+    path, _ = cache.ensure_gpaw(target, cfg, {"execute": True})
+    (path.parent / "gpaw_run_metadata.json").write_text(json.dumps({"settings": {}}))
+    cache.ensure_gpaw(target, cfg, {"execute": True, "xc": "PBE0"})
+    # Remove the old compatible cache, forcing examination of the changed local file.
+    oldkey, _ = cache.calculation_key(target, {})
+    (cfg.source_root / "dft_cache" / oldkey / "result.gpw").unlink()
+    with pytest.raises(OptionalMethodUnavailable):
+        cache.ensure_gpaw(target, cfg, {})
+    assert len(calls) == 2
+
+
+def test_derived_results_follow_source_gpw(tmp_path):
+    gpw = tmp_path / "a.gpw"
+    acf = tmp_path / "ACF.dat"
+    gpw.write_bytes(b"first DFT")
+    acf.write_text("charges")
+    assert not cache.derived_current(acf, gpw)
+    cache.record_derived(acf, gpw)
+    assert cache.derived_current(acf, gpw)
+    gpw.write_bytes(b"different DFT")
+    assert not cache.derived_current(acf, gpw)
+
+
+def test_explicit_structure_selection(tmp_path):
+    root = tmp_path / "structures"
+    path = parent(root, "c1", -1)
+    cfg, settings = c.parse_config(
+        {
+            "structure": {"outdir": str(root)},
+            "conductivity": {"selection": "manual", "structure_paths": [str(path)]},
+        },
+        tmp_path,
+    )
+    chosen, _ = c.select_targets(cfg, settings)
+    assert len(chosen) == 1 and chosen[0].structure_path == path
+
+
+def test_manual_path_without_workflow_tree(tmp_path):
+    path = parent(tmp_path / "external", "c1", -1)
+    cfg, settings = c.parse_config(
+        {"conductivity": {"selection": "manual", "structure_paths": [str(path)]}}, tmp_path
+    )
+    chosen, _ = c.select_targets(cfg, settings)
+    assert chosen[0].structure_path == path
