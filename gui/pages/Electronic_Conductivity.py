@@ -136,6 +136,10 @@ st.caption(
 st.warning(
     "These results assume band-like transport. Check electron localization before interpreting them. Small-polaron hopping, scattering lifetimes and grain boundaries are not modeled."
 )
+validation_error = None
+cfg = None
+validated = None
+updated = {**raw, "conductivity": section}
 try:
     section["temperatures_K"] = [float(x.strip()) for x in temps.split(",")]
     section["excess_electrons_cm3"] = [float(x.strip()) for x in excess.split(",")]
@@ -144,9 +148,43 @@ try:
     updated = {**raw, "conductivity": section}
     cfg, validated = parse_config(updated, root)
 except (OSError, ValueError, TypeError, RuntimeError, KeyError) as exc:
-    st.error(str(exc))
-    st.stop()
-if st.button("Preview selected structures"):
+    validation_error = str(exc)
+    st.error(validation_error)
+
+st.subheader("Actions")
+preview_col, save_col, run_col = st.columns(3)
+
+with preview_col:
+    preview_clicked = st.button(
+        "Preview selected structures",
+        disabled=validation_error is not None,
+        use_container_width=True,
+    )
+with save_col:
+    save_clicked = st.button(
+        "Save settings",
+        disabled=validation_error is not None,
+        use_container_width=True,
+    )
+with run_col:
+    run_clicked = st.button(
+        "Run conductivity",
+        type="primary",
+        disabled=(not section["enabled"]) or validation_error is not None,
+        use_container_width=True,
+        help=(
+            "Enable the conductivity stage above before running."
+            if not section["enabled"]
+            else "Save the current settings and run the conductivity stage."
+        ),
+    )
+
+if not section["enabled"]:
+    st.caption("Enable **conductivity stage** above to activate the Run conductivity button.")
+elif validation_error is not None:
+    st.caption("Fix the validation error above to activate Preview, Save, and Run.")
+
+if preview_clicked and cfg is not None and validated is not None:
     try:
         chosen, warnings = select_targets(cfg, validated)
         st.dataframe(
@@ -157,10 +195,12 @@ if st.button("Preview selected structures"):
             st.warning(warning)
     except (OSError, ValueError, TypeError, RuntimeError, KeyError) as exc:
         st.error(str(exc))
-if st.button("Save settings"):
+
+if save_clicked:
     path.write_text(toml.dumps(updated))
     st.success("Settings saved")
-if st.button("Save and run conductivity", disabled=not section["enabled"]):
+
+if run_clicked:
     path.write_text(toml.dumps(updated))
     with st.spinner("Running conductivity; GPAW may take a long time"):
         result = subprocess.run(
@@ -175,8 +215,9 @@ if st.button("Save and run conductivity", disabled=not section["enabled"]):
         st.error("Some targets did not complete. Inspect the reported errors.")
     else:
         st.success("Conductivity analysis completed")
-output = cfg.output_dir / "conductivity_results.json"
-if output.exists():
+
+output = cfg.output_dir / "conductivity_results.json" if cfg is not None else None
+if output is not None and output.exists():
     payload = json.loads(output.read_text())
     st.subheader("Results")
     st.dataframe(
