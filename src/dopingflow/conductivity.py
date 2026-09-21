@@ -747,11 +747,30 @@ def run_conductivity(raw, root, *, dry_run=False):
             )
             warnings.extend(reference_warnings)
         except Exception as exc:
-            warnings.append(
+            message = (
                 "ATO 5% Sb reference unavailable: "
                 f"{type(exc).__name__}: {exc}"
             )
+            warnings.append(message)
+            reference_record = {
+                "reference_label": section.get("comparison", {}).get(
+                    "reference_label", "ATO 5% Sb"
+                ),
+                "reference_sb_percent": section.get("comparison", {}).get(
+                    "reference_sb_percent", 5.0
+                ),
+                "comparison_basis": section.get("comparison", {}).get(
+                    "basis", "ato-5pct-sb-benchmark"
+                ),
+                "status": "unavailable",
+                "error": message,
+                "persistent_reference_reused": False,
+            }
             if section.get("fail_fast", False) and not dry_run:
+                _json_write(
+                    cfg.output_dir / "conductivity_reference.json",
+                    reference_record,
+                )
                 raise
         if reference_record is not None:
             _json_write(
