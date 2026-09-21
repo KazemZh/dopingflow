@@ -725,7 +725,7 @@ if reference_json.exists():
                 hide_index=True,
             )
 
-if comparison_csv.exists():
+if comparison_csv.exists() and comparison_csv.stat().st_size > 0:
     try:
         comparison_df = pd.read_csv(comparison_csv)
     except Exception as exc:
@@ -742,6 +742,7 @@ if comparison_csv.exists():
                 columns={
                     "target_id": "Structure",
                     "sigma_over_tau_trace_average_S_per_cm_per_fs": "Avg. σ/τ (S cm⁻¹ fs⁻¹)",
+                    "reference_sigma_over_tau_trace_average_S_per_cm_per_fs": "ATO σ/τ (S cm⁻¹ fs⁻¹)",
                     "relative_to_reference": "Relative to ATO",
                     "percent_change_vs_reference": "Change vs ATO (%)",
                     "temperature_K": "T (K)",
@@ -755,6 +756,7 @@ if comparison_csv.exists():
                     "T (K)",
                     "Excess e⁻ (cm⁻³)",
                     "Avg. σ/τ (S cm⁻¹ fs⁻¹)",
+                    "ATO σ/τ (S cm⁻¹ fs⁻¹)",
                     "Relative to ATO",
                     "Change vs ATO (%)",
                 )
@@ -771,6 +773,15 @@ if comparison_csv.exists():
                 f"{first.get('reference_target_id', '')}; comparison basis = "
                 f"{first.get('comparison_basis', '')}."
             )
+
+if comparison_enabled and (
+    not comparison_csv.exists() or comparison_csv.stat().st_size == 0
+):
+    st.info(
+        "No ATO-normalized comparison rows are available yet. The 5% Sb reference "
+        "must first resolve and be calculated/reused with settings compatible with "
+        "the screened structures."
+    )
 
 if not index_csv.exists():
     st.info(
