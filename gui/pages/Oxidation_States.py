@@ -536,6 +536,20 @@ if "dft-auto" in methods:
                 disabled=auto["reference_calibration"] == "off",
                 help="Used only as an SCF initialization; it is not treated as oxidation-state evidence.",
             )
+            reference_spin_options = ["auto", "true", "false"]
+            reference_spin = str(auto.get("reference_spinpol", "auto")).lower()
+            if reference_spin not in reference_spin_options:
+                reference_spin = "auto"
+            auto["reference_spinpol"] = st.selectbox(
+                "Reference spin polarization",
+                reference_spin_options,
+                index=reference_spin_options.index(reference_spin),
+                disabled=auto["reference_calibration"] == "off",
+                help=(
+                    "Independent from the target spin setting. 'auto' lets nonzero reference "
+                    "magnetic seeds activate spin when needed."
+                ),
+            )
 
             with st.expander("Calibration decision thresholds", expanded=False):
                 ct1, ct2, ct3, ct4 = st.columns(4)
