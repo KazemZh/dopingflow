@@ -769,17 +769,23 @@ def _load_refs(cfg: OxidationConfig, settings: dict[str, Any]) -> dict[str, Any]
     return payload
 
 
-def _reference_pick(
+def _reference_match(
     symbol: str,
     q: float,
     refs: dict[str, Any],
     settings: dict[str, Any],
-) -> tuple[int, float] | None:
+) -> dict[str, Any]:
     raw = refs.get(symbol)
     if not isinstance(raw, dict):
-        return None
-    default_sigma = float(settings.get("reference_default_sigma_e", 0.08))
-    scored: list[tuple[float, int]] = []
+        return {
+            "status": "no-reference",
+            "selected_state": None,
+            "confidence": None,
+            "candidates": [],
+        }
+
+    default_sigma = max(1.0e-6, float(settings.get("reference_default_sigma_e", 0.08)))
+    candidates: list[dict[str, Any]] = []
     for state_raw, item in raw.items():
         try:
             state = int(state_raw)
@@ -787,34 +793,106 @@ def _reference_pick(
             continue
         mean = None
         sigma = default_sigma
+        n = None
+        source_refs: list[Any] = []
         if isinstance(item, (int, float)):
             mean = float(item)
         elif isinstance(item, list) and item:
-            vals = [float(value) for value in item]
-            mean = sum(vals) / len(vals)
-            if len(vals) > 1:
-                variance = sum((value - mean) ** 2 for value in vals) / (len(vals) - 1)
-                sigma = max(default_sigma, math.sqrt(max(variance, 0.0)))
+            values = [float(value) for value in item]
+            mean = sum(values) / len(values)
+            n = len(values)
+            if len(values) > 1:
+                sigma = max(default_sigma, _reference_fingerprint_std(values))
         elif isinstance(item, dict):
             if item.get("mean") is not None:
                 mean = float(item["mean"])
             elif item.get("bader_partial_charge") is not None:
                 mean = float(item["bader_partial_charge"])
+            values = item.get("values")
+            if mean is None and isinstance(values, list) and values:
+                numeric = [float(value) for value in values]
+                mean = sum(numeric) / len(numeric)
             if item.get("std") is not None:
                 sigma = max(default_sigma, abs(float(item["std"])))
-        if mean is not None:
-            scored.append((abs(q - mean) / max(default_sigma, sigma), state))
-    if not scored:
+            elif isinstance(values, list) and len(values) > 1:
+                sigma = max(default_sigma, _reference_fingerprint_std([float(v) for v in values]))
+            if item.get("n") is not None:
+                n = int(item["n"])
+            elif isinstance(values, list):
+                n = len(values)
+            if isinstance(item.get("references"), list):
+                source_refs = list(item["references"])
+        if mean is None:
+            continue
+        z = abs(float(q) - mean) / max(default_sigma, sigma)
+        likelihood = math.exp(-0.5 * z * z)
+        candidates.append(
+            {
+                "oxidation_state": state,
+                "mean_bader_charge": mean,
+                "sigma_e": sigma,
+                "z_distance": z,
+                "likelihood": likelihood,
+                "n_reference_sites": n,
+                "references": source_refs,
+            }
+        )
+
+    candidates.sort(key=lambda row: (float(row["z_distance"]), int(row["oxidation_state"])))
+    min_states = max(2, int(settings.get("reference_min_states", 2)))
+    if len(candidates) < min_states:
+        return {
+            "status": "insufficient-reference-states",
+            "selected_state": None,
+            "confidence": None,
+            "candidates": candidates,
+        }
+
+    total = sum(float(row["likelihood"]) for row in candidates)
+    if total <= 0:
+        for row in candidates:
+            row["probability"] = 0.0
+    else:
+        for row in candidates:
+            row["probability"] = float(row["likelihood"]) / total
+
+    ranked = sorted(
+        candidates,
+        key=lambda row: (-float(row.get("probability", 0.0)), float(row["z_distance"])),
+    )
+    best = ranked[0]
+    second = ranked[1]
+    best_probability = float(best.get("probability", 0.0))
+    probability_margin = best_probability - float(second.get("probability", 0.0))
+    z_gap = float(second["z_distance"]) - float(best["z_distance"])
+    decisive = (
+        float(best["z_distance"]) <= float(settings.get("reference_max_z", 2.5))
+        and z_gap >= float(settings.get("reference_min_z_gap", 0.75))
+        and best_probability >= float(settings.get("reference_min_probability", 0.70))
+        and probability_margin >= float(settings.get("reference_min_probability_margin", 0.20))
+    )
+    return {
+        "status": "calibrated" if decisive else "ambiguous",
+        "selected_state": int(best["oxidation_state"]) if decisive else None,
+        "best_candidate_state": int(best["oxidation_state"]),
+        "best_z": float(best["z_distance"]),
+        "confidence": best_probability,
+        "probability_margin": probability_margin,
+        "z_gap": z_gap,
+        "candidates": ranked,
+    }
+
+
+def _reference_pick(
+    symbol: str,
+    q: float,
+    refs: dict[str, Any],
+    settings: dict[str, Any],
+) -> tuple[int, float] | None:
+    match = _reference_match(symbol, q, refs, settings)
+    if match.get("status") != "calibrated":
         return None
-    scored.sort()
-    best_z, state = scored[0]
-    second_z = scored[1][0] if len(scored) > 1 else math.inf
-    if (
-        best_z <= float(settings.get("reference_max_z", 2.5))
-        and second_z - best_z >= float(settings.get("reference_min_z_gap", 1.0))
-    ):
-        return state, best_z
-    return None
+    return int(match["selected_state"]), float(match["best_z"])
 
 
 def _mixed_supported(
