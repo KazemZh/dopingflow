@@ -11,7 +11,11 @@ import pandas as pd
 import streamlit as st
 import toml
 
-from dopingflow.conductivity import parse_config, select_targets
+from dopingflow.conductivity import (
+    discover_reference_candidates,
+    parse_config,
+    select_targets,
+)
 
 
 st.set_page_config(page_title="Electronic conductivity", layout="wide")
@@ -221,48 +225,89 @@ with st.expander("Band transport (BoltzTraP2)", expanded=True):
 with st.expander("ATO reference comparison", expanded=True):
     comparison = dict(conductivity.get("comparison", {}) or {})
     comparison_enabled = st.checkbox(
-        "Compare co-doped structures with an ATO reference",
+        "Compare all screened structures with a persistent 5% Sb ATO reference",
         value=bool(comparison.get("enabled", False)),
         help=(
-            "Normalizes the average σ/τ of calculated co-doped structures to one explicitly "
-            "selected ATO target at the same temperature and carrier condition."
+            "The 5% Sb ATO benchmark is calculated once with the same GPAW/BoltzTraP2 "
+            "settings and then reused in later co-dopant runs while its fingerprint remains compatible."
         ),
-    )
-    r1, r2 = st.columns(2)
-    reference_target = r1.text_input(
-        "ATO reference target",
-        value=str(comparison.get("reference_target", "")),
-        disabled=not comparison_enabled,
-        help=(
-            "Exact target ID, safe ID, or wildcard matching exactly one calculated ATO target, "
-            "for example Sb5/candidate_003. The reference must be included in the same run."
-        ),
-    )
-    reference_label = r2.text_input(
-        "Reference label",
-        value=str(comparison.get("reference_label", "ATO")),
-        disabled=not comparison_enabled,
     )
 
-    basis_options = ["same-total-dopant", "fixed-sb", "custom"]
-    current_basis = str(comparison.get("basis", "same-total-dopant")).lower()
+    r1, r2 = st.columns(2)
+    reference_label = r1.text_input(
+        "Reference label",
+        value=str(comparison.get("reference_label", "ATO 5% Sb")),
+        disabled=not comparison_enabled,
+    )
+    reference_sb_percent = float(
+        r2.number_input(
+            "Sb content in ATO reference (%)",
+            min_value=0.1,
+            value=float(comparison.get("reference_sb_percent", 5.0)),
+            step=0.5,
+            disabled=not comparison_enabled,
+        )
+    )
+
+    reference_source_root = st.text_input(
+        "ATO reference source root",
+        value=str(comparison.get("reference_source_root", "")),
+        disabled=not comparison_enabled,
+        help=(
+            "Directory containing the pure ATO reference candidates. Leave empty to use "
+            "the conductivity source root. This can point to another structure tree if the "
+            "5% Sb ATO reference is not present in vacancy-selected."
+        ),
+    )
+    reference_target = st.text_input(
+        "ATO reference target selector",
+        value=str(comparison.get("reference_target", "Sb5/*")),
+        disabled=not comparison_enabled,
+        help=(
+            "Exact target ID, safe ID, or wildcard. It must resolve to exactly one vacancy-free "
+            "5% Sb ATO structure. For production, prefer an exact ID such as Sb5/candidate_003."
+        ),
+    )
+    reference_structure_path = st.text_input(
+        "Explicit ATO reference structure path (optional)",
+        value=str(comparison.get("reference_structure_path", "")),
+        disabled=not comparison_enabled,
+        help=(
+            "Optional direct POSCAR/CIF path. When supplied, this bypasses reference-target "
+            "discovery and is useful when the ATO structure lives outside a DopingFlow structure tree."
+        ),
+    )
+
+    basis_options = [
+        "ato-5pct-sb-benchmark",
+        "same-total-dopant",
+        "fixed-sb",
+        "custom",
+    ]
+    current_basis = str(
+        comparison.get("basis", "ato-5pct-sb-benchmark")
+    ).lower()
     if current_basis not in basis_options:
-        current_basis = "same-total-dopant"
+        current_basis = "ato-5pct-sb-benchmark"
     basis = st.selectbox(
         "Comparison basis",
         basis_options,
         index=basis_options.index(current_basis),
         disabled=not comparison_enabled,
         help=(
-            "same-total-dopant: compare at the same total substitution level (for example "
-            "5% Sb ATO vs 2.5% Sb + 2.5% X). fixed-sb: keep the Sb level fixed while adding "
-            "a co-dopant. custom: another explicitly documented comparison."
+            "ato-5pct-sb-benchmark uses 5% Sb ATO as the common benchmark for every screened "
+            "co-dopant/vacancy structure. The other labels remain available for specialized studies."
         ),
     )
+
+    st.info(
+        "The reference does not need to be part of the current target selection. DopingFlow stores "
+        "its transport result persistently and reuses it in later runs when the reference geometry, "
+        "GPAW settings, temperatures/carrier conditions, interpolation factor, and DOS grid match."
+    )
     st.caption(
-        "The comparison is only made for the same temperature, excess-electron concentration, "
-        "structure kind, and oxygen-vacancy count. Choosing a compositionally fair ATO reference "
-        "remains the user's scientific decision."
+        "If the compatible ATO reference has never been calculated, enable the GPAW execution gate "
+        "below for the first run. Later runs can keep execution off and reuse the saved benchmark."
     )
 
 
@@ -460,7 +505,10 @@ try:
             "comparison": {
                 "enabled": bool(comparison_enabled),
                 "reference_target": reference_target.strip(),
-                "reference_label": reference_label.strip() or "ATO",
+                "reference_structure_path": reference_structure_path.strip(),
+                "reference_source_root": reference_source_root.strip(),
+                "reference_label": reference_label.strip() or "ATO 5% Sb",
+                "reference_sb_percent": reference_sb_percent,
                 "basis": basis,
             },
             "dft": dft,
@@ -517,14 +565,30 @@ if parsed_cfg is not None and validated is not None:
             )
             for warning in preview_warnings:
                 st.warning(warning)
-            if comparison_enabled:
-                preview_ids = [target.target_id for target in preview_targets]
-                normalized_reference = reference_target.strip().replace("\\", "/")
-                if normalized_reference and normalized_reference not in preview_ids:
-                    st.info(
-                        "ATO comparison is enabled. Make sure the reference target is also selected "
-                        "in this run; wildcard/safe-ID matching is resolved by the backend."
+            if comparison_enabled and parsed_cfg is not None:
+                try:
+                    _, reference_candidates = discover_reference_candidates(
+                        resolved_cfg,
+                        project_root,
+                        parsed_cfg,
+                        validated.get("comparison", {}),
                     )
+                except Exception as exc:
+                    st.warning(f"ATO reference preview: {exc}")
+                else:
+                    if len(reference_candidates) == 1:
+                        ref = reference_candidates[0]
+                        st.success(
+                            "ATO reference resolved independently of the current target selection: "
+                            f"{ref.target_id} → {ref.structure_path}"
+                        )
+                    elif reference_candidates:
+                        st.warning(
+                            "ATO reference selector currently matches multiple vacancy-free structures: "
+                            + ", ".join(t.target_id for t in reference_candidates[:8])
+                        )
+                    else:
+                        st.warning("ATO reference selector currently matches no vacancy-free structure.")
 
 contains_dft_execution = bool(dft.get("execute", False))
 if contains_dft_execution and not target_include:
@@ -537,7 +601,8 @@ confirm_dft = True
 if contains_dft_execution:
     st.warning(
         "The GPAW execution gate is ON. Running this page may launch DFT calculations for "
-        "selected targets. Compatible existing calculations are reused when permitted."
+        "selected targets and, when needed, the persistent 5% Sb ATO reference. Compatible "
+        "existing calculations are reused when permitted."
     )
     confirm_dft = st.checkbox(
         "I confirm that I want the configured GPAW calculations to be allowed to run",
@@ -614,8 +679,51 @@ results_json = results_root / "conductivity_results.json"
 transport_csv = results_root / "conductivity.csv"
 comparison_csv = results_root / "conductivity_comparison.csv"
 comparison_json = results_root / "conductivity_comparison.json"
+reference_json = results_root / "conductivity_reference.json"
 
 st.caption(f"Resolved output: `{results_root}`")
+
+if reference_json.exists():
+    try:
+        reference_record = json.loads(reference_json.read_text(encoding="utf-8"))
+    except Exception as exc:
+        st.warning(f"Could not read {reference_json.name}: {exc}")
+    else:
+        st.markdown("#### Persistent ATO reference")
+        rr1, rr2, rr3, rr4 = st.columns(4)
+        rr1.metric("Reference", str(reference_record.get("reference_label", "ATO 5% Sb")))
+        rr2.metric(
+            "Sb content",
+            f"{float(reference_record.get('reference_sb_percent', 5.0)):g}%",
+        )
+        rr3.metric("Status", str(reference_record.get("status", "unknown")))
+        rr4.metric(
+            "Reference reused",
+            "yes" if reference_record.get("persistent_reference_reused") else "no",
+        )
+        st.caption(f"Target: `{reference_record.get('target_id', '')}`")
+        st.caption(f"Structure: `{reference_record.get('structure_path', '')}`")
+        st.caption(f"Persistent store: `{reference_record.get('reference_store', '')}`")
+        reference_rows = [
+            _readable_transport_row(row)
+            for row in (reference_record.get("rows", []) or [])
+        ]
+        if reference_rows:
+            ref_df = pd.DataFrame(reference_rows)
+            ref_columns = [
+                column
+                for column in (
+                    "temperature_K",
+                    "excess_electrons_cm3",
+                    "sigma_over_tau_trace_average_S_per_cm_per_fs",
+                )
+                if column in ref_df.columns
+            ]
+            st.dataframe(
+                ref_df[ref_columns],
+                use_container_width=True,
+                hide_index=True,
+            )
 
 if comparison_csv.exists():
     try:
