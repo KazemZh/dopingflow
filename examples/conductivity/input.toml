@@ -4,15 +4,14 @@ outdir = "random_structures"
 
 [conductivity]
 enabled = true
-selection = "favorable"     # favorable | manual | all
-# Favorable = lowest relaxed energy within identical atom counts, vacancy count,
-# and recorded ML backend/model/task. No raw-energy ranking across compositions.
-top_k_per_group = 1
+# Structure selection intentionally mirrors [oxidation].
+# Omit source_root to inherit [structure].outdir.
+source_root = "random_structures"
 include_vacancy_free = true
 include_oxygen_vacancies = true
-# In favorable mode these are ADDITIONS. In manual mode only these are selected.
+# Optional exact target IDs, safe IDs, or shell-style wildcard patterns.
+# Leave empty to analyze every discovered target under source_root.
 target_include = []         # e.g. ["Sb05/candidate_0002", "Sb05/*/V_O_01/*"]
-structure_paths = []        # explicit POSCAR/CIF paths, relative to input.toml
 output_dir = "07_conductivity"
 temperatures_K = [300.0, 353.0]
 # Additional electrons relative to the explicit DFT structure, per cm^3.
