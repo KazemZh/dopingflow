@@ -311,8 +311,10 @@ def _resolved_path(value, root):
     return (path if path.is_absolute() else Path(root) / path).resolve()
 
 
-def _reference_cfg(raw, root, cfg, comparison):
-    source_value = comparison.get("reference_source_root") or str(cfg.source_root)
+def _reference_cfg(raw, root, cfg, comparison, *, source_root=None):
+    source_value = source_root
+    if source_value is None:
+        source_value = comparison.get("reference_source_root") or str(cfg.source_root)
     source_root = _resolved_path(source_value, root)
     selector = str(comparison.get("reference_target", "")).strip()
     selection = {
@@ -330,8 +332,37 @@ def _reference_cfg(raw, root, cfg, comparison):
     )
 
 
+def _automatic_reference_roots(raw, root, cfg, comparison):
+    """Roots searched when the user does not explicitly set reference_source_root."""
+    explicit_root = str(comparison.get("reference_source_root", "")).strip()
+    if explicit_root:
+        return [_resolved_path(explicit_root, root)]
+
+    values = []
+    structure = raw.get("structure", {}) or {}
+    if structure.get("outdir"):
+        values.append(_resolved_path(structure["outdir"], root))
+    values.append(cfg.source_root)
+
+    roots = []
+    seen = set()
+    for value in values:
+        resolved = Path(value).resolve()
+        key = str(resolved)
+        if key not in seen:
+            roots.append(resolved)
+            seen.add(key)
+    return roots
+
+
 def discover_reference_candidates(raw, root, cfg, comparison):
-    """Return vacancy-free candidates for the persistent ATO reference."""
+    """Return vacancy-free candidates for the persistent ATO reference.
+
+    When no explicit reference root is supplied, search the project's normal
+    structure output first and the conductivity source root second. This makes
+    a pure 5% Sb ATO parent discoverable even when conductivity targets come
+    from a derived tree such as vacancy-selected.
+    """
     explicit = str(comparison.get("reference_structure_path", "")).strip()
     if explicit:
         structure_path = _resolved_path(explicit, root)
@@ -358,14 +389,55 @@ def discover_reference_candidates(raw, root, cfg, comparison):
             )
         ]
 
-    ref_cfg = _reference_cfg(raw, root, cfg, comparison)
-    candidates, _ = discover_oxidation_targets(ref_cfg)
-    candidates = [
-        target
-        for target in candidates
-        if target.kind == "vacancy-free" and int(target.n_vacancies or 0) == 0
-    ]
-    return ref_cfg, candidates
+    searched = []
+    matches = []
+    first_cfg = None
+    errors = []
+    for candidate_root in _automatic_reference_roots(raw, root, cfg, comparison):
+        searched.append(str(candidate_root))
+        try:
+            ref_cfg = _reference_cfg(
+                raw, root, cfg, comparison, source_root=candidate_root
+            )
+            if first_cfg is None:
+                first_cfg = ref_cfg
+            candidates, _ = discover_oxidation_targets(ref_cfg)
+        except (FileNotFoundError, RuntimeError) as exc:
+            errors.append(f"{candidate_root}: {exc}")
+            continue
+        for target in candidates:
+            if target.kind != "vacancy-free" or int(target.n_vacancies or 0) != 0:
+                continue
+            key = (target.target_id, str(target.structure_path.resolve()))
+            if key not in {(t.target_id, str(t.structure_path.resolve())) for _, t in matches}:
+                matches.append((ref_cfg, target))
+
+    if not matches:
+        details = "; ".join(errors)
+        message = (
+            "ATO 5% Sb reference matched no vacancy-free structure. "
+            f"Searched reference roots: {', '.join(searched) or '(none)'}. "
+            "Set an exact reference_source_root/reference_target or provide "
+            "reference_structure_path."
+        )
+        if details:
+            message += f" Discovery details: {details}"
+        raise OptionalMethodUnavailable(message)
+
+    # One unique target is required. If the same target exists in more than one
+    # structure tree, the resolved structure path keeps those alternatives distinct.
+    if len(matches) != 1:
+        names = ", ".join(
+            f"{target.target_id} @ {ref_cfg.source_root}"
+            for ref_cfg, target in matches[:8]
+        )
+        suffix = "" if len(matches) <= 8 else ", ..."
+        raise ValueError(
+            "ATO 5% Sb reference selector must resolve to exactly one vacancy-free "
+            f"structure across the searched roots; matched {len(matches)}: {names}{suffix}"
+        )
+    ref_cfg, target = matches[0]
+    return ref_cfg, [target]
 
 
 def _reference_store_path(cfg, comparison):
@@ -451,9 +523,7 @@ def prepare_persistent_reference(raw, root, cfg, section, *, dry_run=False):
     )
     if not candidates:
         raise OptionalMethodUnavailable(
-            "ATO 5% Sb reference matched no vacancy-free structure. "
-            "Set conductivity.comparison.reference_source_root/reference_target "
-            "or provide reference_structure_path."
+            "ATO 5% Sb reference matched no vacancy-free structure."
         )
     if len(candidates) != 1:
         names = ", ".join(target.target_id for target in candidates[:8])
