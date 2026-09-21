@@ -541,6 +541,7 @@ wannier_mode = "auto"        # only when electronic compensation needs clarifica
 # Automatic same-method Bader calibration
 reference_calibration = "auto"   # off | auto | require
 reference_roots = [
+  "reference_structures/relaxed/refs",
   "reference_structures/oxidation_states",
   "reference_structures/oxides",
 ]
@@ -556,7 +557,10 @@ neutrality by inventing localized mixed-valence atoms when DFT descriptors show
 no such site separation.
 
 With `reference_calibration = "auto"`, dopingflow automatically scans the
-configured reference roots for simple binary oxides, infers the nominal cation
+configured reference roots for simple binary oxides. Existing projects also
+include `reference_structures/relaxed/refs` automatically, and missing
+element/oxidation-state pairs can be supplemented from existing
+`reference_structures/corrections/*/relaxed_calibration` structures, infers the nominal cation
 oxidation state from stoichiometry under O2-, rejects short-O--O peroxide-like
 references, and runs/reuses the same GPAW+Bader workflow. At least two reference
 oxidation states for an element are required before the Bader calibration is
