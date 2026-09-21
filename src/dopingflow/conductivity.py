@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,6 +12,7 @@ from dopingflow.oxidation import (
     OptionalMethodUnavailable,
     _csv_write,
     _json_write,
+    _target_output_dir,
     discover_oxidation_targets,
     parse_oxidation_config,
 )
@@ -238,17 +238,23 @@ def run_conductivity(raw, root, *, dry_run=False):
             "target_id": t.target_id,
             "structure_path": str(t.structure_path),
             "kind": t.kind,
+            "n_oxygen_vacancies": t.n_vacancies if t.vacancy_species == "O" else 0,
             **t.metadata,
         }
         for t in targets
     ]
     _json_write(cfg.output_dir / "selected_structures.json", selection)
-    results, csv_rows = [], []
+    results, csv_rows, structure_index = [], [], []
     for target in targets:
+        target_dir = _target_output_dir(cfg, target)
         record = {
             "target_id": target.target_id,
             "kind": target.kind,
+            "n_oxygen_vacancies": (
+                target.n_vacancies if target.vacancy_species == "O" else 0
+            ),
             "structure_path": str(target.structure_path),
+            "output_directory": str(target_dir),
             "status": "selected",
         }
         if not dry_run:
@@ -307,11 +313,23 @@ def run_conductivity(raw, root, *, dry_run=False):
                     )
                     raise
         results.append(record)
-        # Hash target IDs to avoid safe_id collisions across discovered targets.
-        key = (
-            target.safe_id[:100] + "-" + hashlib.sha256(target.target_id.encode()).hexdigest()[:12]
-        )
-        _json_write(cfg.output_dir / "structures" / key / "conductivity.json", record)
+        _json_write(target_dir / "conductivity.json", record)
+        summary = {
+            "target_id": target.target_id,
+            "structure_kind": target.kind,
+            "n_oxygen_vacancies": record["n_oxygen_vacancies"],
+            "structure_path": str(target.structure_path),
+            "status": record["status"],
+            "dft_reused": record.get("dft_reused"),
+            "gpw_file": record.get("gpw_file"),
+            "error": record.get("error"),
+            "output_directory": str(target_dir),
+        }
+        _json_write(target_dir / "summary.json", summary)
+        structure_index.append(summary)
+
+    _csv_write(cfg.output_dir / "conductivity_structure_index.csv", structure_index)
+    _json_write(cfg.output_dir / "conductivity_structure_index.json", structure_index)
     output = cfg.output_dir / "conductivity_results.json"
     _json_write(
         output,
