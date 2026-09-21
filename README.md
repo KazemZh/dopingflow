@@ -815,10 +815,18 @@ calculated by this backend.
 
 For screening, the primary GUI/reporting unit is **S cm⁻¹ fs⁻¹** for
 `sigma/tau`; raw SI `S m⁻¹ s⁻¹` values remain in the JSON for reproducibility.
-The optional `[conductivity.comparison]` table can designate one calculated ATO
-target as a reference and reports each co-doped structure's ratio and percentage
-change at matching temperature/carrier conditions. Use
-`basis = "same-total-dopant"` when, for example, comparing 5% Sb ATO with
-2.5% Sb + 2.5% X, or `basis = "fixed-sb"` when keeping the Sb level fixed
-while adding a co-dopant. The reference normalization compares `sigma/tau`,
-not a separately calculated scattering lifetime.
+
+The default project benchmark is **ATO with 5% Sb**. The optional
+`[conductivity.comparison]` section points to one vacancy-free 5% Sb ATO
+structure, which may live in a different source tree or be supplied by an
+explicit POSCAR/CIF path. DopingFlow calculates this benchmark once with the same
+GPAW/BoltzTraP2 settings, stores a fingerprinted
+`references/.../reference.json`, and reuses it in later co-dopant runs while
+the geometry and DFT/transport settings remain compatible. The reference does
+not have to be part of the current target selection.
+
+Each screened parent or oxygen-vacancy structure then gets a
+`sigma/tau` ratio and percentage change relative to the common 5% Sb ATO
+benchmark at matching temperature/carrier conditions. This comparison measures
+the band-structure contribution to transport; it does not assume that different
+dopants or vacancies share the same scattering lifetime.
