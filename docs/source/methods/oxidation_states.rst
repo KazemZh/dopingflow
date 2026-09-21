@@ -176,9 +176,33 @@ before production GPAW calculations are attempted.  Wannier90 is installed in th
    analysis is attempted only when residual electronic compensation needs
    additional evidence.
 
-   Same-method Bader reference fingerprints are optional. When supplied they
-   strengthen absolute discrimination between oxidation states of the same
-   element; Bader values are never rounded directly to integer oxidation states.
+   Automatic same-method Bader calibration is available through
+   ``reference_calibration = "auto"``.  The workflow scans configured reference
+   roots for simple binary oxides, infers the nominal cation oxidation state
+   from stoichiometry under O2-, rejects short-O--O peroxide-like references,
+   and runs/reuses the same GPAW+Bader machinery.  The reference calculation
+   uses the same XC/cutoff/smearing setup and, by default, scales the reference
+   k-point mesh to approximately match the target reciprocal-space sampling
+   density.  Reference calculations and Bader fingerprints are cached.
+
+   At least two reference oxidation states for an element are required before
+   automatic calibration is allowed to override the local structural prior.
+   Each target-site Bader value is compared with the reference distributions
+   using a standardized distance and normalized Gaussian relative likelihood.
+   A calibrated assignment must pass configurable absolute-distance, separation,
+   likelihood, and likelihood-margin thresholds.  Otherwise the site is reported
+   as ``suggested-ambiguous-calibration`` or
+   ``suggested-insufficient-calibration`` rather than being promoted to a
+   calibrated oxidation state.
+
+   References are discovered by default from
+   ``reference_structures/oxidation_states`` and
+   ``reference_structures/oxides``.  Difficult/non-binary references can be
+   listed explicitly in
+   ``reference_structures/oxidation_states/manifest.json``.  Manifest entries
+   can specify the structure path, element, integer oxidation state, k-point
+   grid, and initial magnetic moments.  Manual ``bader_reference_file``
+   fingerprints remain supported and override matching automatic entries.
 
    A compact configuration is::
 
@@ -198,6 +222,26 @@ before production GPAW calculations are attempted.  Wannier90 is installed in th
       spinpol = "auto"
       band_edge_analysis = true
       wannier_mode = "auto"
+
+      reference_calibration = "auto"   # off | auto | require
+      reference_roots = [
+        "reference_structures/oxidation_states",
+        "reference_structures/oxides",
+      ]
+      run_missing_references = true
+      reference_kpoint_mode = "match-density"
+      reference_min_states = 2
+
+   ``execute = false`` never launches missing reference calculations; cached
+   compatible reference fingerprints can still be reused.  With
+   ``execute = true`` and ``run_missing_references = true``, missing reference
+   GPAW+Bader calculations are launched behind the same explicit DFT execution
+   confirmation used for the target structures.
+
+   The reference cache contains per-reference
+   ``oxidation_reference_fingerprint.json`` files and an aggregate
+   ``bader_reference_fingerprints.json`` library under
+   ``<output_root>/reference_calibration``.
 
    The per-target DFT directory additionally contains
    ``band_edge_analysis.json``, ``band_edge_site_weights.csv``,
