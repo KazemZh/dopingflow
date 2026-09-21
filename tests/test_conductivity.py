@@ -198,7 +198,17 @@ def test_disabled_and_dry_run_never_execute(tmp_path, monkeypatch):
         tmp_path,
         dry_run=True,
     )
-    assert json.loads(output.read_text())["results"][0]["status"] == "selected"
+    payload = json.loads(output.read_text())
+    assert payload["results"][0]["status"] == "selected"
+
+    result_root = root / "07_conductivity"
+    index = json.loads((result_root / "conductivity_structure_index.json").read_text())
+    assert index[0]["target_id"] == "SnO2/c1"
+    assert index[0]["status"] == "selected"
+
+    per_target = result_root / "structures" / "SnO2" / "c1"
+    assert (per_target / "conductivity.json").exists()
+    assert (per_target / "summary.json").exists()
 
 
 @pytest.mark.parametrize(
