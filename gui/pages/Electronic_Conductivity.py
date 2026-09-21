@@ -254,9 +254,9 @@ with st.expander("ATO reference comparison", expanded=True):
         value=str(comparison.get("reference_source_root", "")),
         disabled=not comparison_enabled,
         help=(
-            "Directory containing the pure ATO reference candidates. Leave empty to use "
-            "the conductivity source root. This can point to another structure tree if the "
-            "5% Sb ATO reference is not present in vacancy-selected."
+            "Directory containing the pure ATO reference candidates. Leave empty to search "
+            "[structure].outdir first and then the conductivity source root. Set it explicitly "
+            "when the 5% Sb ATO reference lives in another structure tree."
         ),
     )
     reference_target = st.text_input(
@@ -683,6 +683,18 @@ reference_json = results_root / "conductivity_reference.json"
 
 st.caption(f"Resolved output: `{results_root}`")
 
+if results_json.exists():
+    try:
+        run_payload = json.loads(results_json.read_text(encoding="utf-8"))
+    except Exception as exc:
+        st.warning(f"Could not read {results_json.name}: {exc}")
+    else:
+        run_warnings = run_payload.get("warnings", []) or []
+        if run_warnings:
+            with st.expander("Run warnings / diagnostics", expanded=True):
+                for warning in run_warnings:
+                    st.warning(str(warning))
+
 if reference_json.exists():
     try:
         reference_record = json.loads(reference_json.read_text(encoding="utf-8"))
@@ -704,6 +716,8 @@ if reference_json.exists():
         st.caption(f"Target: `{reference_record.get('target_id', '')}`")
         st.caption(f"Structure: `{reference_record.get('structure_path', '')}`")
         st.caption(f"Persistent store: `{reference_record.get('reference_store', '')}`")
+        if reference_record.get("error"):
+            st.warning(str(reference_record["error"]))
         reference_rows = [
             _readable_transport_row(row)
             for row in (reference_record.get("rows", []) or [])
