@@ -11,7 +11,6 @@ import numpy as np
 
 from dopingflow.oxidation import (
     OptionalMethodUnavailable,
-    StructureTarget,
     _csv_write,
     _json_write,
     discover_oxidation_targets,
@@ -61,6 +60,9 @@ def parse_config(raw, root):
         )
         if key in section
     }
+    oxidation_section = raw.get("oxidation", {}) or {}
+    if "source_root" not in selection and oxidation_section.get("source_root"):
+        selection["source_root"] = oxidation_section["source_root"]
     selection.update(
         {"strategy": "structural", "output_dir": section.get("output_dir", "07_conductivity")}
     )
@@ -70,7 +72,7 @@ def parse_config(raw, root):
     # Inherit physical settings to maximize bidirectional reuse; transport mesh is an
     # explicit override because Gamma-only oxidation data cannot resolve velocities.
     dft = dict((raw.get("oxidation", {}) or {}).get("dft_electronic", {}) or {})
-    ox = raw.get("oxidation", {}) or {}
+    ox = oxidation_section
     if "dft-auto" in ox.get("methods", []) or (
         ox.get("strategy") == "dft" and not ox.get("methods")
     ):
@@ -122,6 +124,7 @@ def select_targets(cfg, section=None):
     structure-selection interface.
     """
     return discover_targets(cfg)
+
 
 def gpaw_bands(path):
     """Explicitly preserve both collinear spin channels (upstream reader drops one)."""
