@@ -52,7 +52,8 @@ oxidation-state stage**. The relevant parameters are::
 
 ``source_root`` has the same meaning as ``oxidation.source_root``: it is the root
 containing the selected relaxed parent structures and, when vacancy analysis is
-enabled, ``vacancies_database.json``. If omitted, it inherits
+enabled, ``vacancies_database.json``. If omitted, it first inherits
+``oxidation.source_root`` when that is set; otherwise it falls back to
 ``[structure].outdir``.
 
 ``target_include`` is optional and behaves exactly like the oxidation selector.
