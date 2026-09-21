@@ -25,12 +25,23 @@ fail_fast = false
 
 [conductivity.dft]
 code = "gpaw"
-execute = false            # true permits a new DFT calculation on cache miss
-kpts = [4, 4, 4]           # Starting mesh only: must be converged for each cell
-save_wavefunctions = true  # Allows reuse for oxidation wavefunction analysis
-reuse_existing = true
-# Other physical DFT settings inherit from oxidation.dft_electronic (and active
-# dft_auto overrides). Set the same settings in both stages for exact reuse.
-# ecut_eV = 500.0
-# xc = "PBE"
-# nbands = 100             # Include sufficient empty bands; system-dependent
+execute = false            # Same execution gate concept as oxidation
+reuse_existing = true      # Reuse compatible oxidation/conductivity GPAW outputs
+output_root = "dft_conductivity"
+gpw_file = "oxidation.gpw"
+txt_file = "gpaw.txt"
+
+# Common GPAW parameter names intentionally match oxidation.dft_electronic.
+# When omitted, compatible physical values inherit from oxidation where possible.
+xc = "PBE"
+ecut_eV = 500.0
+smearing_eV = 0.05
+kpts = [4, 4, 4]           # Starting mesh only: converge for the target cell
+gamma = true
+convergence_density = 1.0e-5
+maxiter = 333
+charge = 0.0
+spinpol = "auto"
+initial_magmoms = {}
+# nbands = 100             # Optional; include enough empty bands for transport
+save_wavefunctions = true  # Supports later oxidation wavefunction analysis
