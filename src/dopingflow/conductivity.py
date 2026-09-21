@@ -307,7 +307,7 @@ def run_conductivity(raw, root, *, dry_run=False):
                     )
                     raise
         results.append(record)
-        # Hash target IDs to avoid safe_id collisions across manually selected paths.
+        # Hash target IDs to avoid safe_id collisions across discovered targets.
         key = (
             target.safe_id[:100] + "-" + hashlib.sha256(target.target_id.encode()).hexdigest()[:12]
         )
