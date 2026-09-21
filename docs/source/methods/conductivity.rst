@@ -177,18 +177,50 @@ conditional: the present backend does not calculate the scattering lifetime.
 ATO-normalized co-dopant comparison
 -----------------------------------
 
-The conductivity stage can normalize co-doped structures to one explicitly
-selected ATO reference target::
+For this project, the default benchmark is vacancy-free **ATO with 5% Sb**.
+The reference is independent of the current co-dopant target selection: it can
+live in another DopingFlow structure tree or be supplied as an explicit
+POSCAR/CIF path.
+
+A typical configuration is::
 
     [conductivity.comparison]
     enabled = true
+    reference_label = "ATO 5% Sb"
+    reference_sb_percent = 5.0
+    reference_source_root = "../random_structures"
     reference_target = "Sb5/candidate_001"
-    reference_label = "ATO"
-    basis = "same-total-dopant"
+    reference_structure_path = ""
+    basis = "ato-5pct-sb-benchmark"
 
-The reference target must be included in the same conductivity run and the
-selector must match exactly one successfully calculated target. Exact IDs,
-safe IDs, and shell-style wildcards are accepted.
+``reference_source_root`` defaults to the conductivity source root when left
+empty. ``reference_target`` accepts the same exact/safe/wildcard syntax as the
+normal target selector, but it must resolve to **exactly one vacancy-free
+structure**. For production use an exact target ID rather than a broad wildcard.
+If the ATO structure is outside a DopingFlow tree,
+``reference_structure_path`` can point directly to a POSCAR or CIF and bypasses
+reference discovery.
+
+The first time a compatible ATO benchmark is needed, DopingFlow runs or reuses
+the GPAW single point using the same ``conductivity.dft`` settings and then runs
+BoltzTraP2. A successful reference is stored below the conductivity output
+directory under ``references/<reference-label>/reference.json`` and summarized
+in ``conductivity_reference.json``.
+
+On later co-dopant runs, the stored ATO transport result is reused without
+recalculating GPAW or BoltzTraP2 when its fingerprint still matches. The
+fingerprint includes the reference geometry, GPAW electronic settings, GPAW
+version/setup identity, temperatures, excess-carrier conditions, interpolation
+factor, DOS grid, and transport regime. If only a transport setting changes,
+the existing compatible GPAW cache can still be reused while BoltzTraP2 is
+recomputed. If a DFT-defining setting changes, a compatible GPAW result is
+required or ``conductivity.dft.execute = true`` must be enabled.
+
+The benchmark is intentionally applied to **all screened structures**, including
+oxygen-vacancy structures, because it answers the project-level question:
+does a candidate preserve or improve the band-transport descriptor relative to
+the 5% Sb ATO baseline? The output records both the candidate and reference
+vacancy counts so this provenance remains explicit.
 
 For each target and transport condition, DopingFlow reports::
 
@@ -200,22 +232,14 @@ and::
 
 Thus a value of 1.0 (0%) preserves the ATO band-transport descriptor, values
 above 1.0 indicate larger ``sigma/tau``, and values below 1.0 indicate a
-smaller value. These are comparisons of the **band-structure contribution**
-only; different dopants or vacancies may also change the real scattering time.
-
-To avoid silently comparing unlike systems, reference normalization is only
-performed at the same temperature, excess-electron concentration, structure
-kind, and oxygen-vacancy count. The user must still choose a scientifically fair
-composition basis. Supported provenance labels are:
-
-* ``same-total-dopant``: for example 5% Sb ATO versus 2.5% Sb + 2.5% X;
-* ``fixed-sb``: keep the Sb concentration fixed while adding X;
-* ``custom``: another explicitly documented comparison basis.
+smaller value. Comparisons require the same temperature and rigid-band
+excess-electron concentration as the stored reference. They remain comparisons
+of the **band-structure contribution** only; different dopants or vacancies may
+also change the real scattering time.
 
 The comparison table is written to
-``conductivity_comparison.csv`` and ``conductivity_comparison.json``.
-The Streamlit page displays this table prominently above the per-structure
-browser.
+``conductivity_comparison.csv`` and ``conductivity_comparison.json`` and is
+displayed prominently in the Streamlit page above the per-structure browser.
 
 Converge k sampling, interpolation factor, integration grid, cutoff and empty
 bands. Chemical potentials within 10 kBT of the sampled energy limits and
