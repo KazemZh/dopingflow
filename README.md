@@ -827,6 +827,9 @@ not have to be part of the current target selection.
 
 Each screened parent or oxygen-vacancy structure then gets a
 `sigma/tau` ratio and percentage change relative to the common 5% Sb ATO
-benchmark at matching temperature/carrier conditions. This comparison measures
-the band-structure contribution to transport; it does not assume that different
-dopants or vacancies share the same scattering lifetime.
+benchmark at matching temperature/carrier conditions. The comparison table
+accumulates compatible per-structure results across separate runs, so co-dopants
+can be screened one at a time without recalculating ATO. Saved results with
+different fingerprinted DFT/transport settings are excluded rather than mixed.
+This comparison measures the band-structure contribution to transport; it does
+not assume that different dopants or vacancies share the same scattering lifetime.
