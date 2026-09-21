@@ -241,6 +241,16 @@ The comparison table is written to
 ``conductivity_comparison.csv`` and ``conductivity_comparison.json`` and is
 displayed prominently in the Streamlit page above the per-structure browser.
 
+The table is **cumulative across separate conductivity runs**. DopingFlow scans
+the per-structure ``conductivity.json`` files already present under the current
+conductivity output directory and includes prior targets only when their saved
+transport-settings fingerprint matches the current GPAW/BoltzTraP2 settings.
+This makes it possible to run Ce, Ti, Mn, Nb, and other co-dopants one at a time
+while maintaining one growing comparison against the same 5% Sb ATO benchmark.
+Results calculated with a different k mesh, XC functional, cutoff, smearing,
+spin setup, temperature/carrier grid, interpolation factor, DOS grid, or other
+fingerprinted settings are not silently mixed into the table.
+
 Converge k sampling, interpolation factor, integration grid, cutoff and empty
 bands. Chemical potentials within 10 kBT of the sampled energy limits and
 unconverged electron-count integration are rejected. Periodically repeated
