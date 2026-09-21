@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,6 +12,7 @@ import numpy as np
 
 from dopingflow.oxidation import (
     OptionalMethodUnavailable,
+    StructureTarget,
     _csv_write,
     _json_write,
     _target_output_dir,
@@ -115,21 +117,47 @@ def parse_config(raw, root):
     comparison = dict(comparison)
     comparison["enabled"] = bool(comparison.get("enabled", False))
     comparison["reference_target"] = str(
-        comparison.get("reference_target", "")
+        comparison.get("reference_target", "Sb5/*")
+    ).strip()
+    comparison["reference_structure_path"] = str(
+        comparison.get("reference_structure_path", "")
+    ).strip()
+    comparison["reference_source_root"] = str(
+        comparison.get("reference_source_root", "")
     ).strip()
     comparison["reference_label"] = str(
-        comparison.get("reference_label", "ATO")
-    ).strip() or "ATO"
-    comparison["basis"] = str(
-        comparison.get("basis", "same-total-dopant")
-    ).strip().lower()
-    if comparison["basis"] not in {"same-total-dopant", "fixed-sb", "custom"}:
+        comparison.get("reference_label", "ATO 5% Sb")
+    ).strip() or "ATO 5% Sb"
+    comparison["reference_sb_percent"] = float(
+        comparison.get("reference_sb_percent", 5.0)
+    )
+    if (
+        not np.isfinite(comparison["reference_sb_percent"])
+        or comparison["reference_sb_percent"] <= 0
+    ):
         raise ValueError(
-            "[conductivity.comparison].basis must be same-total-dopant, fixed-sb, or custom"
+            "[conductivity.comparison].reference_sb_percent must be finite and positive"
         )
-    if comparison["enabled"] and not comparison["reference_target"]:
+    comparison["basis"] = str(
+        comparison.get("basis", "ato-5pct-sb-benchmark")
+    ).strip().lower()
+    allowed_bases = {
+        "ato-5pct-sb-benchmark",
+        "same-total-dopant",
+        "fixed-sb",
+        "custom",
+    }
+    if comparison["basis"] not in allowed_bases:
         raise ValueError(
-            "[conductivity.comparison].reference_target is required when comparison is enabled"
+            "[conductivity.comparison].basis must be ato-5pct-sb-benchmark, "
+            "same-total-dopant, fixed-sb, or custom"
+        )
+    if comparison["enabled"] and not (
+        comparison["reference_target"] or comparison["reference_structure_path"]
+    ):
+        raise ValueError(
+            "[conductivity.comparison] needs reference_target or reference_structure_path "
+            "when comparison is enabled"
         )
     section["comparison"] = comparison
     section["dft"] = dft
@@ -261,6 +289,7 @@ def integrate_transport(data, section):
 
 
 
+
 def _reference_matches(target_id, selector):
     """Match an exact/safe target ID or shell-style wildcard selector."""
     target_id = str(target_id).replace("\\", "/")
@@ -275,39 +304,217 @@ def _reference_matches(target_id, selector):
     )
 
 
-def build_reference_comparison(results, comparison):
-    """Build condition-matched sigma/tau ratios relative to one explicit reference.
+def _resolved_path(value, root):
+    path = Path(str(value)).expanduser()
+    return (path if path.is_absolute() else Path(root) / path).resolve()
 
-    Comparisons are intentionally restricted to the same structure kind and oxygen
-    vacancy count as the reference. Temperature and rigid-band excess-electron
-    concentration must also match exactly. This avoids silently mixing physically
-    different comparison bases.
+
+def _reference_cfg(raw, root, cfg, comparison):
+    source_value = comparison.get("reference_source_root") or str(cfg.source_root)
+    source_root = _resolved_path(source_value, root)
+    selector = str(comparison.get("reference_target", "")).strip()
+    selection = {
+        "source_root": str(source_root),
+        "strategy": "structural",
+        "include_vacancy_free": True,
+        "include_oxygen_vacancies": False,
+        "target_include": [selector] if selector else [],
+        # DFT work directories remain controlled by conductivity.dft.output_root.
+        "output_dir": str(cfg.output_dir),
+    }
+    return parse_oxidation_config(
+        {"structure": raw.get("structure", {}), "oxidation": selection},
+        Path(root),
+    )
+
+
+def discover_reference_candidates(raw, root, cfg, comparison):
+    """Return vacancy-free candidates for the persistent ATO reference."""
+    explicit = str(comparison.get("reference_structure_path", "")).strip()
+    if explicit:
+        structure_path = _resolved_path(explicit, root)
+        if not structure_path.is_file():
+            raise FileNotFoundError(
+                f"ATO reference structure does not exist: {structure_path}"
+            )
+        target_id = str(comparison.get("reference_target", "")).strip()
+        if not target_id or any(char in target_id for char in "*?[]"):
+            target_id = "ATO5/reference"
+        return _reference_cfg(raw, root, cfg, comparison), [
+            StructureTarget(
+                target_id=target_id,
+                parent_id=target_id,
+                kind="vacancy-free",
+                structure_path=structure_path,
+                n_vacancies=0,
+                vacancy_species=None,
+                metadata={
+                    "reference_label": comparison.get("reference_label", "ATO 5% Sb"),
+                    "reference_sb_percent": comparison.get("reference_sb_percent", 5.0),
+                    "explicit_reference_structure": True,
+                },
+            )
+        ]
+
+    ref_cfg = _reference_cfg(raw, root, cfg, comparison)
+    candidates, _ = discover_oxidation_targets(ref_cfg)
+    candidates = [
+        target
+        for target in candidates
+        if target.kind == "vacancy-free" and int(target.n_vacancies or 0) == 0
+    ]
+    return ref_cfg, candidates
+
+
+def _reference_store_path(cfg, comparison):
+    label = str(comparison.get("reference_label", "ATO 5% Sb"))
+    slug = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in label).strip("_")
+    return cfg.output_dir / "references" / (slug or "ATO_5pct_Sb") / "reference.json"
+
+
+def _reference_transport_fingerprint(target, section):
+    """Fingerprint everything that changes the reusable sigma/tau reference."""
+    from dopingflow.dft_cache import calculation_key
+
+    dft_key, dft_identity = calculation_key(target, section["dft"])
+    payload = {
+        "schema": 2,
+        "target_id": target.target_id,
+        "structure_path": str(target.structure_path.resolve()),
+        "dft_key": dft_key,
+        "dft_identity": dft_identity,
+        "temperatures_K": [float(v) for v in section["temperatures_K"]],
+        "excess_electrons_cm3": [
+            float(v) for v in section["excess_electrons_cm3"]
+        ],
+        "interpolation_factor": int(section["interpolation_factor"]),
+        "dos_points": int(section["dos_points"]),
+        "transport_regime": section.get("transport_regime", "band"),
+    }
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    return digest, payload
+
+
+def _load_persistent_reference(path, fingerprint):
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return None
+    if (
+        payload.get("schema_version") == 2
+        and payload.get("fingerprint") == fingerprint
+        and payload.get("record", {}).get("status") == "calculated"
+    ):
+        return payload
+    return None
+
+
+def prepare_persistent_reference(raw, root, cfg, section, *, dry_run=False):
+    """Load or calculate the reusable 5% Sb ATO conductivity benchmark."""
+    comparison = section.get("comparison", {})
+    if not comparison.get("enabled", False):
+        return None, []
+
+    warnings = []
+    ref_cfg, candidates = discover_reference_candidates(
+        raw, root, cfg, comparison
+    )
+    if not candidates:
+        raise OptionalMethodUnavailable(
+            "ATO 5% Sb reference matched no vacancy-free structure. "
+            "Set conductivity.comparison.reference_source_root/reference_target "
+            "or provide reference_structure_path."
+        )
+    if len(candidates) != 1:
+        names = ", ".join(target.target_id for target in candidates[:8])
+        suffix = "" if len(candidates) <= 8 else ", ..."
+        raise ValueError(
+            "ATO 5% Sb reference selector must resolve to exactly one vacancy-free "
+            f"structure; matched {len(candidates)}: {names}{suffix}"
+        )
+    target = candidates[0]
+    fingerprint, fingerprint_payload = _reference_transport_fingerprint(
+        target, section
+    )
+    store = _reference_store_path(cfg, comparison)
+    cached = _load_persistent_reference(store, fingerprint)
+    if cached is not None:
+        record = dict(cached["record"])
+        record["persistent_reference_reused"] = True
+        record["reference_store"] = str(store)
+        return record, warnings
+
+    record = {
+        "target_id": target.target_id,
+        "kind": target.kind,
+        "n_oxygen_vacancies": 0,
+        "structure_path": str(target.structure_path),
+        "reference_label": comparison.get("reference_label", "ATO 5% Sb"),
+        "reference_sb_percent": comparison.get("reference_sb_percent", 5.0),
+        "comparison_basis": comparison.get("basis", "ato-5pct-sb-benchmark"),
+        "status": "selected" if dry_run else "pending",
+        "persistent_reference_reused": False,
+        "reference_store": str(store),
+    }
+    if dry_run:
+        return record, warnings
+
+    try:
+        import BoltzTraP2  # noqa: F401
+    except ImportError as exc:
+        raise OptionalMethodUnavailable(
+            "Install dopingflow[conductivity] and GPAW to calculate the ATO reference"
+        ) from exc
+
+    from dopingflow.dft_cache import ensure_gpaw
+    from dopingflow.oxidation_dft import _workdir
+
+    settings = dict(section["dft"])
+    oxidation = (raw.get("oxidation", {}) or {}).get("dft_electronic", {}) or {}
+    ox = raw.get("oxidation", {}) or {}
+    if "dft-auto" in ox.get("methods", []) or (
+        ox.get("strategy") == "dft" and not ox.get("methods")
+    ):
+        oxidation = {**oxidation, **(ox.get("dft_auto", {}) or {})}
+    if oxidation.get("output_root") == "gpaw_oxidation":
+        oxidation = {**oxidation, "output_root": "dft_oxidation"}
+    settings["reuse_workdirs"] = [str(_workdir(target, ref_cfg, oxidation))]
+
+    gpw, reused = ensure_gpaw(target, ref_cfg, settings)
+    rows = integrate_transport(gpaw_bands(gpw), section)
+    record.update(
+        {
+            "status": "calculated",
+            "gpw_file": str(gpw),
+            "dft_reused": reused,
+            "transport_assumption": "band-like, constant relaxation time",
+            "rows": rows,
+        }
+    )
+    payload = {
+        "schema_version": 2,
+        "fingerprint": fingerprint,
+        "fingerprint_payload": fingerprint_payload,
+        "record": record,
+    }
+    _json_write(store, payload)
+    return record, warnings
+
+
+def build_reference_comparison(results, comparison, reference=None):
+    """Compare every calculated target with one persistent ATO benchmark.
+
+    The 5% Sb ATO benchmark is deliberately universal across the screened
+    co-dopant set, including vacancy-containing structures. Temperature and
+    rigid-band excess-electron concentration must match the reference.
     """
     if not comparison.get("enabled", False):
         return [], []
+    if not reference or reference.get("status") != "calculated":
+        return [], ["ATO 5% Sb reference conductivity is not available yet."]
 
-    selector = str(comparison.get("reference_target", "")).strip()
-    matches = [
-        result
-        for result in results
-        if result.get("status") == "calculated"
-        and _reference_matches(result.get("target_id", ""), selector)
-    ]
-    warnings = []
-    if not matches:
-        warnings.append(
-            "Conductivity comparison reference matched no calculated target in this run: "
-            + selector
-        )
-        return [], warnings
-    if len(matches) > 1:
-        warnings.append(
-            "Conductivity comparison reference must match exactly one calculated target; "
-            f"{selector!r} matched {len(matches)} targets."
-        )
-        return [], warnings
-
-    reference = matches[0]
     reference_rows = {
         (
             float(row["temperature_K"]),
@@ -316,19 +523,16 @@ def build_reference_comparison(results, comparison):
         for row in reference.get("rows", [])
         if row.get("sigma_over_tau_trace_average_S_per_cm_per_fs") is not None
     }
-    reference_kind = reference.get("kind")
+    label = str(comparison.get("reference_label", "ATO 5% Sb"))
+    basis = str(
+        comparison.get("basis", "ato-5pct-sb-benchmark")
+    )
     reference_vacancies = int(reference.get("n_oxygen_vacancies", 0) or 0)
-    label = str(comparison.get("reference_label", "ATO"))
-    basis = str(comparison.get("basis", "same-total-dopant"))
 
     rows = []
+    warnings = []
     for result in results:
         if result.get("status") != "calculated":
-            continue
-        if result.get("kind") != reference_kind:
-            continue
-        vacancies = int(result.get("n_oxygen_vacancies", 0) or 0)
-        if vacancies != reference_vacancies:
             continue
         for row in result.get("rows", []):
             key = (
@@ -355,9 +559,15 @@ def build_reference_comparison(results, comparison):
                     "target_id": result["target_id"],
                     "reference_target_id": reference["target_id"],
                     "reference_label": label,
+                    "reference_sb_percent": comparison.get(
+                        "reference_sb_percent", 5.0
+                    ),
                     "comparison_basis": basis,
                     "structure_kind": result.get("kind"),
-                    "n_oxygen_vacancies": vacancies,
+                    "n_oxygen_vacancies": int(
+                        result.get("n_oxygen_vacancies", 0) or 0
+                    ),
+                    "reference_n_oxygen_vacancies": reference_vacancies,
                     "temperature_K": key[0],
                     "excess_electrons_cm3": key[1],
                     "sigma_over_tau_trace_average_S_per_cm_per_fs": value,
@@ -385,6 +595,27 @@ def run_conductivity(raw, root, *, dry_run=False):
         for t in targets
     ]
     _json_write(cfg.output_dir / "selected_structures.json", selection)
+
+    reference_record = None
+    if section.get("comparison", {}).get("enabled", False):
+        try:
+            reference_record, reference_warnings = prepare_persistent_reference(
+                raw, root, cfg, section, dry_run=dry_run
+            )
+            warnings.extend(reference_warnings)
+        except Exception as exc:
+            warnings.append(
+                "ATO 5% Sb reference unavailable: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            if section.get("fail_fast", False) and not dry_run:
+                raise
+        if reference_record is not None:
+            _json_write(
+                cfg.output_dir / "conductivity_reference.json",
+                reference_record,
+            )
+
     results, csv_rows, structure_index = [], [], []
     for target in targets:
         target_dir = _target_output_dir(cfg, target)
@@ -470,7 +701,7 @@ def run_conductivity(raw, root, *, dry_run=False):
         structure_index.append(summary)
 
     comparison_rows, comparison_warnings = build_reference_comparison(
-        results, section.get("comparison", {})
+        results, section.get("comparison", {}), reference_record
     )
     warnings.extend(comparison_warnings)
     _csv_write(cfg.output_dir / "conductivity_comparison.csv", comparison_rows)
@@ -488,12 +719,13 @@ def run_conductivity(raw, root, *, dry_run=False):
             "warnings": warnings,
             "results": results,
             "comparison": comparison_rows,
+            "reference": reference_record,
             "settings": section,
             "limitations": [
                 "Target discovery uses the same source_root, vacancy toggles, and target_include rules as oxidation-state analysis.",
                 "Band-like transport is a hypothesis requiring localization checks; polaron hopping and AMSET scattering are not calculated by this stage.",
                 "sigma/tau is not absolute conductivity. The primary human-readable unit is S cm^-1 fs^-1; raw SI S m^-1 s^-1 is retained. Any sigma uses the explicitly assumed relaxation time.",
-                "Reference-normalized comparisons require the same temperature, excess-electron concentration, structure kind, and oxygen-vacancy count. The user remains responsible for choosing a scientifically fair ATO reference composition.",
+                "Reference-normalized comparisons use the persistent vacancy-free 5% Sb ATO benchmark at the same temperature and excess-electron concentration. The benchmark is intentionally shared across all screened co-dopants and vacancy counts.",
                 "Positive excess_electrons_cm3 adds electrons to the explicit structure; negative removes them. Zero preserves its DFT electron count. This is not a defect-ionization or mobile-carrier prediction.",
                 "Converge k mesh, interpolation, empty bands and DOS grid. Periodic vacancies do not model random-defect scattering or grain boundaries.",
             ],
