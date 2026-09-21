@@ -220,8 +220,8 @@ def test_disabled_and_dry_run_never_execute(tmp_path, monkeypatch):
         {"dft": {"kpts": [1, 1, 1]}},
         {"interpolation_factor": 1},
         {"dos_points": 99},
-        {"comparison": {"enabled": True}},
         {"comparison": {"basis": "unknown"}},
+        {"comparison": {"reference_sb_percent": 0}},
     ],
 )
 def test_bad_settings(tmp_path, section):
@@ -299,26 +299,31 @@ def test_real_boltztrap_parabolic_band():
     assert np.diag(tensor).max() / np.diag(tensor).min() < 1.05
 
 
-def test_reference_comparison_uses_human_units_and_matching_conditions():
+def _ato_reference(value=250.0):
+    return {
+        "target_id": "Sb5/candidate_001",
+        "kind": "vacancy-free",
+        "n_oxygen_vacancies": 0,
+        "status": "calculated",
+        "reference_label": "ATO 5% Sb",
+        "reference_sb_percent": 5.0,
+        "rows": [
+            {
+                "temperature_K": 300.0,
+                "excess_electrons_cm3": 0.0,
+                "sigma_over_tau_trace_average_S_per_cm_per_fs": value,
+            },
+            {
+                "temperature_K": 353.0,
+                "excess_electrons_cm3": 0.0,
+                "sigma_over_tau_trace_average_S_per_cm_per_fs": value * 0.8,
+            },
+        ],
+    }
+
+
+def test_reference_comparison_uses_persistent_ato_reference():
     results = [
-        {
-            "target_id": "Sb5/candidate_001",
-            "kind": "vacancy-free",
-            "n_oxygen_vacancies": 0,
-            "status": "calculated",
-            "rows": [
-                {
-                    "temperature_K": 300.0,
-                    "excess_electrons_cm3": 0.0,
-                    "sigma_over_tau_trace_average_S_per_cm_per_fs": 250.0,
-                },
-                {
-                    "temperature_K": 353.0,
-                    "excess_electrons_cm3": 0.0,
-                    "sigma_over_tau_trace_average_S_per_cm_per_fs": 200.0,
-                },
-            ],
-        },
         {
             "target_id": "Ce2p5_Sb2p5/candidate_013",
             "kind": "vacancy-free",
@@ -336,75 +341,30 @@ def test_reference_comparison_uses_human_units_and_matching_conditions():
                     "sigma_over_tau_trace_average_S_per_cm_per_fs": 190.0,
                 },
             ],
-        },
+        }
     ]
     rows, warnings = c.build_reference_comparison(
         results,
         {
             "enabled": True,
-            "reference_target": "Sb5/candidate_001",
-            "reference_label": "ATO",
-            "basis": "same-total-dopant",
+            "reference_label": "ATO 5% Sb",
+            "reference_sb_percent": 5.0,
+            "basis": "ato-5pct-sb-benchmark",
         },
+        _ato_reference(),
     )
     assert not warnings
-    by_target_temp = {
-        (row["target_id"], row["temperature_K"]): row for row in rows
-    }
-    ce_300 = by_target_temp[("Ce2p5_Sb2p5/candidate_013", 300.0)]
+    by_temp = {row["temperature_K"]: row for row in rows}
+    ce_300 = by_temp[300.0]
+    assert ce_300["reference_target_id"] == "Sb5/candidate_001"
     assert ce_300["relative_to_reference"] == pytest.approx(282.0 / 250.0)
     assert ce_300["percent_change_vs_reference"] == pytest.approx(12.8)
-    assert ce_300["comparison_basis"] == "same-total-dopant"
-    ato_300 = by_target_temp[("Sb5/candidate_001", 300.0)]
-    assert ato_300["relative_to_reference"] == pytest.approx(1.0)
-    assert ato_300["percent_change_vs_reference"] == pytest.approx(0.0)
+    assert ce_300["comparison_basis"] == "ato-5pct-sb-benchmark"
+    assert ce_300["reference_sb_percent"] == pytest.approx(5.0)
 
 
-def test_reference_comparison_requires_unique_current_run_reference():
-    base = {
-        "kind": "vacancy-free",
-        "n_oxygen_vacancies": 0,
-        "status": "calculated",
-        "rows": [
-            {
-                "temperature_K": 300.0,
-                "excess_electrons_cm3": 0.0,
-                "sigma_over_tau_trace_average_S_per_cm_per_fs": 1.0,
-            }
-        ],
-    }
+def test_reference_comparison_applies_same_ato_to_vacancy_structures():
     results = [
-        {"target_id": "Sb5/candidate_001", **base},
-        {"target_id": "Sb5/candidate_002", **base},
-    ]
-    rows, warnings = c.build_reference_comparison(
-        results,
-        {
-            "enabled": True,
-            "reference_target": "Sb5/*",
-            "reference_label": "ATO",
-            "basis": "same-total-dopant",
-        },
-    )
-    assert rows == []
-    assert warnings and "exactly one" in warnings[0]
-
-
-def test_reference_comparison_does_not_mix_vacancy_counts():
-    results = [
-        {
-            "target_id": "Sb5/candidate_001",
-            "kind": "vacancy-free",
-            "n_oxygen_vacancies": 0,
-            "status": "calculated",
-            "rows": [
-                {
-                    "temperature_K": 300.0,
-                    "excess_electrons_cm3": 0.0,
-                    "sigma_over_tau_trace_average_S_per_cm_per_fs": 250.0,
-                }
-            ],
-        },
         {
             "target_id": "Ce2p5_Sb2p5/candidate_013/V_O_01/v1",
             "kind": "oxygen-vacancy",
@@ -417,19 +377,75 @@ def test_reference_comparison_does_not_mix_vacancy_counts():
                     "sigma_over_tau_trace_average_S_per_cm_per_fs": 300.0,
                 }
             ],
-        },
+        }
     ]
     rows, warnings = c.build_reference_comparison(
         results,
         {
             "enabled": True,
-            "reference_target": "Sb5/candidate_001",
-            "reference_label": "ATO",
-            "basis": "same-total-dopant",
+            "reference_label": "ATO 5% Sb",
+            "reference_sb_percent": 5.0,
+            "basis": "ato-5pct-sb-benchmark",
         },
+        _ato_reference(),
     )
     assert not warnings
-    assert [row["target_id"] for row in rows] == ["Sb5/candidate_001"]
+    assert len(rows) == 1
+    assert rows[0]["n_oxygen_vacancies"] == 1
+    assert rows[0]["reference_n_oxygen_vacancies"] == 0
+    assert rows[0]["relative_to_reference"] == pytest.approx(1.2)
+
+
+def test_reference_comparison_requires_available_persistent_reference():
+    rows, warnings = c.build_reference_comparison(
+        [],
+        {"enabled": True},
+        None,
+    )
+    assert rows == []
+    assert warnings and "not available" in warnings[0]
+
+
+def test_explicit_reference_structure_can_live_outside_target_source(tmp_path):
+    target_root = tmp_path / "vacancy-selected"
+    parent(target_root, "codoped", -10)
+
+    reference_root = tmp_path / "references"
+    reference_path = parent(reference_root, "ato", -20)
+    raw = {
+        "structure": {"outdir": str(target_root)},
+        "conductivity": {
+            "enabled": True,
+            "comparison": {
+                "enabled": True,
+                "reference_target": "Sb5/reference",
+                "reference_structure_path": str(reference_path),
+                "reference_label": "ATO 5% Sb",
+                "reference_sb_percent": 5.0,
+            },
+        },
+    }
+    cfg, settings = c.parse_config(raw, tmp_path)
+    _, candidates = c.discover_reference_candidates(
+        raw, tmp_path, cfg, settings["comparison"]
+    )
+    assert len(candidates) == 1
+    assert candidates[0].target_id == "Sb5/reference"
+    assert candidates[0].structure_path == reference_path.resolve()
+
+
+def test_default_comparison_is_5pct_sb_benchmark(tmp_path):
+    raw = {
+        "conductivity": {
+            "comparison": {"enabled": True},
+        }
+    }
+    _, settings = c.parse_config(raw, tmp_path)
+    comparison = settings["comparison"]
+    assert comparison["reference_target"] == "Sb5/*"
+    assert comparison["reference_label"] == "ATO 5% Sb"
+    assert comparison["reference_sb_percent"] == pytest.approx(5.0)
+    assert comparison["basis"] == "ato-5pct-sb-benchmark"
 
 
 def test_stale_legacy_metadata_cannot_override_modern_manifest(tmp_path, monkeypatch):
