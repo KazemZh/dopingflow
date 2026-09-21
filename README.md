@@ -527,7 +527,7 @@ methods = ["dft-auto"]
 
 [oxidation.dft_auto]
 output_root = "dft_oxidation"
-execute = false              # true runs missing GPAW/Bader/Wannier steps
+execute = false              # true runs missing GPAW/Bader/Wannier/reference steps
 reuse_existing = true
 xc = "PBE"
 ecut_eV = 500.0
@@ -537,14 +537,39 @@ smearing_eV = 0.05
 spinpol = "auto"
 band_edge_analysis = true
 wannier_mode = "auto"        # only when electronic compensation needs clarification
+
+# Automatic same-method Bader calibration
+reference_calibration = "auto"   # off | auto | require
+reference_roots = [
+  "reference_structures/oxidation_states",
+  "reference_structures/oxides",
+]
+run_missing_references = true
+reference_kpoint_mode = "match-density"
+reference_min_states = 2
 ```
 
 The automated result contains one suggested integer oxidation state per atom,
 a confidence value, the Bader descriptor, and any residual electronic
 compensation (electrons or holes). It deliberately does not force charge
 neutrality by inventing localized mixed-valence atoms when DFT descriptors show
-no such site separation. Optional same-method Bader reference fingerprints can
-further strengthen absolute oxidation-state discrimination.
+no such site separation.
+
+With `reference_calibration = "auto"`, dopingflow automatically scans the
+configured reference roots for simple binary oxides, infers the nominal cation
+oxidation state from stoichiometry under O2-, rejects short-O--O peroxide-like
+references, and runs/reuses the same GPAW+Bader workflow. At least two reference
+oxidation states for an element are required before the Bader calibration is
+allowed to override the structural prior. The resulting fingerprints are cached
+under `dft_oxidation/reference_calibration/` and reused across target
+structures. Ambiguous matches remain explicitly marked as ambiguous rather than
+being promoted to a calibrated state.
+
+An optional
+`reference_structures/oxidation_states/manifest.json` can provide explicit
+references, oxidation states, k-point grids, and initial magnetic moments for
+difficult/non-binary cases. Manual `bader_reference_file` entries remain
+supported and override matching automatically generated fingerprints.
 
 The lower-level GPAW electronic route can still be configured directly:
 
