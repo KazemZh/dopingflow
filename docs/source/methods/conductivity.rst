@@ -17,14 +17,46 @@ Installation and execution
 --------------------------
 
 Install GPAW and its datasets in the scientific environment described in the
-oxidation documentation. Then install the optional transport package::
+oxidation documentation.
 
-    pip install -e '.[conductivity]'
+For Linux/Conda environments, the recommended installation order is to install
+the compiled BoltzTraP2 package from conda-forge first, and only then install the
+DopingFlow conductivity extra::
 
-BoltzTraP2 may need a C++ compiler and CMake when built from source. The adapter
-uses its Python interpolation/integration APIs and explicitly loads both GPAW
-spin channels, with occupation weights 2 for unpolarized bands and 1 for each
-collinear-spin band. Noncollinear/SOC transport is not supported.
+    conda activate dopingflow_gpaw
+    conda install -c conda-forge boltztrap2=26.3.1
+    pip install -e ".[conductivity]"
+
+If the Streamlit GUI is also required in the same environment::
+
+    pip install -e ".[gui,conductivity]"
+
+This order is intentional. When no compatible wheel is available, pip may try to
+build BoltzTraP2 from source. That build compiles native extensions and its spglib
+backend, so it may fail when development tools such as CMake are not installed.
+A typical failure ends with::
+
+    error: [Errno 2] No such file or directory: 'cmake'
+
+Rather than adding build tools only to satisfy this source build, the recommended
+DopingFlow setup is to use the precompiled conda-forge BoltzTraP2 package. The
+subsequent `pip install -e ".[conductivity]"` recognizes the already installed
+compatible package and installs DopingFlow's remaining optional dependencies.
+
+GPAW is likewise intentionally not installed by the conductivity pip extra.
+Install GPAW and its PAW datasets from conda-forge in the dedicated GPAW
+environment.
+
+Useful verification commands are::
+
+    python -c "import gpaw; print('GPAW:', gpaw.__version__)"
+    python -c "import BoltzTraP2; print('BoltzTraP2 OK')"
+    python -c "import ase; print('ASE:', ase.__version__)"
+    python -c "from dopingflow.conductivity import integrate_transport; print('DopingFlow conductivity OK')"
+
+The adapter uses BoltzTraP2's Python interpolation/integration APIs and explicitly
+loads both GPAW spin channels, with occupation weights 2 for unpolarized bands and
+1 for each collinear-spin band. Noncollinear/SOC transport is not supported.
 
 Copy the conductivity tables from ``examples/conductivity/input.toml`` into your
 project input. Preview the structures without DFT execution::
