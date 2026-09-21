@@ -46,7 +46,10 @@ with c2:
         value=bool(section.get("include_oxygen_vacancies", True)),
     )
 
-source_default = str((raw.get("structure", {}) or {}).get("outdir", "random_structures"))
+oxidation_source = str((raw.get("oxidation", {}) or {}).get("source_root", "")).strip()
+source_default = oxidation_source or str(
+    (raw.get("structure", {}) or {}).get("outdir", "random_structures")
+)
 section["source_root"] = st.text_input(
     "Source root",
     value=str(section.get("source_root", source_default)),
