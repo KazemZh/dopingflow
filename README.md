@@ -783,3 +783,13 @@ Quick checks::
 
 Band-like transport is assumed; polaron hopping and scattering lifetimes are not
 calculated by this backend.
+
+For screening, the primary GUI/reporting unit is **S cm⁻¹ fs⁻¹** for
+`sigma/tau`; raw SI `S m⁻¹ s⁻¹` values remain in the JSON for reproducibility.
+The optional `[conductivity.comparison]` table can designate one calculated ATO
+target as a reference and reports each co-doped structure's ratio and percentage
+change at matching temperature/carrier conditions. Use
+`basis = "same-total-dopant"` when, for example, comparing 5% Sb ATO with
+2.5% Sb + 2.5% X, or `basis = "fixed-sb"` when keeping the Sb level fixed
+while adding a co-dopant. The reference normalization compares `sigma/tau`,
+not a separately calculated scattering lifetime.
