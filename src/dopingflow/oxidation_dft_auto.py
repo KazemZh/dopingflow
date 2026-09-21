@@ -765,6 +765,8 @@ def _load_refs(cfg: OxidationConfig, settings: dict[str, Any]) -> dict[str, Any]
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("Bader reference fingerprint file must contain a JSON object")
+    if isinstance(payload.get("library"), dict):
+        payload = dict(payload["library"])
     payload.update(refs)
     return payload
 
@@ -1402,6 +1404,11 @@ def _write_outputs(workdir: Path, synthesis: dict[str, Any]) -> dict[str, str]:
         "magnetic_moment",
         "confidence",
         "confidence_label",
+        "oxidation_state_status",
+        "reference_calibration_status",
+        "calibrated_oxidation_state",
+        "calibration_confidence",
+        "calibration_candidates",
         "assignment_status",
         "evidence",
     ]
@@ -1411,6 +1418,9 @@ def _write_outputs(workdir: Path, synthesis: dict[str, Any]) -> dict[str, str]:
         for row in synthesis["sites"]:
             out = {key: row.get(key) for key in fields}
             out["evidence"] = json.dumps(out.get("evidence") or [])
+            out["calibration_candidates"] = json.dumps(
+                out.get("calibration_candidates") or []
+            )
             writer.writerow(out)
     return {"json": str(json_path), "csv": str(csv_path)}
 
@@ -1522,7 +1532,48 @@ def run_dft_auto(
         )
         prior_meta = {**prior_meta, "fallback": fallback}
 
-    refs = _load_refs(cfg, settings)
+    explicit_refs = _load_refs(cfg, settings)
+    automatic_refs: dict[str, Any] = {}
+    reference_calibration_meta: dict[str, Any] = {
+        "mode": str(settings.get("reference_calibration", "auto")),
+        "status": "not-run",
+    }
+    try:
+        automatic_refs, reference_calibration_meta = _build_automatic_reference_library(
+            cfg,
+            settings,
+            electronic_settings,
+            structure=structure,
+            output_root=output_root,
+            execute=execute,
+            reuse=reuse,
+        )
+        component_status["reference-calibration"] = {
+            "status": reference_calibration_meta.get("status"),
+            "states_available": reference_calibration_meta.get("states_available", {}),
+            "elements_missing_minimum_states": reference_calibration_meta.get(
+                "elements_missing_minimum_states", []
+            ),
+            "library_file": reference_calibration_meta.get("library_file"),
+        }
+        if reference_calibration_meta.get("elements_missing_minimum_states"):
+            limitations.append(
+                "Automatic reference calibration has fewer than the requested number "
+                "of oxidation-state references for: "
+                + ", ".join(reference_calibration_meta["elements_missing_minimum_states"])
+            )
+    except OptionalMethodUnavailable:
+        raise
+    except Exception as exc:
+        component_status["reference-calibration"] = {
+            "status": "unavailable",
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+        limitations.append(
+            f"Automatic reference calibration unavailable: {type(exc).__name__}: {exc}"
+        )
+
+    refs = _merge_reference_libraries(automatic_refs, explicit_refs)
     cell_charge = float(electronic_settings.get("charge", 0.0))
     synthesis = synthesize_oxidation_states(
         structure,
@@ -1618,6 +1669,7 @@ def run_dft_auto(
             "component_status": component_status,
             "structural_prior": prior_meta,
             "bader_reference_calibration_used": bool(refs),
+            "automatic_reference_calibration": reference_calibration_meta,
             "output_files": files,
         },
         limitations=[
@@ -1633,6 +1685,7 @@ def run_dft_auto(
     ]
     result["band_edge_analysis"] = band_edges
     result["component_status"] = component_status
+    result["reference_calibration"] = reference_calibration_meta
     if wannier_result:
         result["wannier_analysis"] = wannier_result.get(
             "wannier_analysis", {}
