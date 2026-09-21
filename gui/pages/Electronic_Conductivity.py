@@ -9,7 +9,7 @@ import pandas as pd
 import streamlit as st
 import toml
 
-from dopingflow.conductivity import discover_targets, parse_config, select_targets
+from dopingflow.conductivity import parse_config, select_targets
 
 st.set_page_config(page_title="Electronic conductivity", layout="wide")
 st.title("Electronic conductivity")
@@ -27,59 +27,64 @@ if not path.exists():
     st.stop()
 raw = toml.load(path)
 section = dict(raw.get("conductivity", {}) or {})
-section["enabled"] = st.checkbox("Enable conductivity stage", value=section.get("enabled", False))
-options = ["favorable", "manual", "all"]
-section["selection"] = st.selectbox(
-    "Structure selection", options, index=options.index(section.get("selection", "favorable"))
+section["enabled"] = st.checkbox(
+    "Enable conductivity stage",
+    value=bool(section.get("enabled", False)),
 )
-section["top_k_per_group"] = int(
-    st.number_input(
-        "Lowest-energy structures per composition and vacancy count",
-        min_value=1,
-        value=int(section.get("top_k_per_group", 1)),
+
+st.subheader("Structure selection")
+
+c1, c2 = st.columns(2)
+with c1:
+    section["include_vacancy_free"] = st.checkbox(
+        "Vacancy-free parents",
+        value=bool(section.get("include_vacancy_free", True)),
+    )
+with c2:
+    section["include_oxygen_vacancies"] = st.checkbox(
+        "O-vacancy structures",
+        value=bool(section.get("include_oxygen_vacancies", True)),
+    )
+
+source_default = str((raw.get("structure", {}) or {}).get("outdir", "random_structures"))
+section["source_root"] = st.text_input(
+    "Source root",
+    value=str(section.get("source_root", source_default)),
+    help="Root containing selected relaxed parents and, when enabled, vacancies_database.json.",
+)
+
+saved_target_include = section.get("target_include", [])
+if isinstance(saved_target_include, str):
+    saved_target_include = [
+        item.strip() for item in saved_target_include.split(",") if item.strip()
+    ]
+elif not isinstance(saved_target_include, (list, tuple)):
+    saved_target_include = []
+
+target_include_text = st.text_input(
+    "Target selector(s) (optional)",
+    value=", ".join(str(item) for item in saved_target_include),
+    help=(
+        "Leave empty to analyze every discovered target. Use exact target IDs such as "
+        "Sb5_Ti2p5/candidate_014, safe IDs such as Sb5_Ti2p5__candidate_014, or shell-style "
+        "wildcards such as Sb5_Ti2p5/*. Multiple selectors can be comma-separated."
+    ),
+)
+section["target_include"] = list(
+    dict.fromkeys(
+        item.strip() for item in target_include_text.split(",") if item.strip()
     )
 )
-st.caption(
-    "Favorable selection compares identical atom counts and recorded energy models. Manual selections are added even when they are not lowest in energy."
-)
-section["include_vacancy_free"] = st.checkbox(
-    "Include vacancy-free structures", section.get("include_vacancy_free", True)
-)
-section["include_oxygen_vacancies"] = st.checkbox(
-    "Include oxygen-vacancy structures", section.get("include_oxygen_vacancies", True)
-)
-selectors = st.text_area(
-    "Additional target IDs or wildcard patterns (one per line)",
-    "\n".join(section.get("target_include", [])),
-)
-paths = st.text_area(
-    "Additional structure paths (one per line, relative to project root or absolute)",
-    "\n".join(section.get("structure_paths", [])),
-)
-section["target_include"] = [s.strip() for s in selectors.splitlines() if s.strip()]
-section["structure_paths"] = [s.strip() for s in paths.splitlines() if s.strip()]
-with st.expander("Available structure IDs"):
-    try:
-        preview = {**section, "selection": "all"}
-        cfg, _ = parse_config(
-            {
-                **raw,
-                "conductivity": {**preview, "dft": {**section.get("dft", {}), "kpts": [4, 4, 4]}},
-            },
-            root,
-        )
-        targets, _ = discover_targets(cfg)
-        st.dataframe(
-            pd.DataFrame(
-                [
-                    {"target_id": t.target_id, "kind": t.kind, "path": str(t.structure_path)}
-                    for t in targets
-                ]
-            ),
-            hide_index=True,
-        )
-    except (OSError, ValueError, TypeError, RuntimeError, KeyError) as exc:
-        st.info(str(exc))
+if section["target_include"]:
+    st.info(
+        f"Target filtering is active: only structures matching {section['target_include']} will be analyzed."
+    )
+
+# Remove legacy conductivity-only selectors when this page saves the project.
+# Structure selection now intentionally mirrors the oxidation-state stage.
+for legacy_key in ("selection", "top_k_per_group", "structure_paths"):
+    section.pop(legacy_key, None)
+
 st.subheader("Transport settings")
 temps = st.text_input(
     "Temperatures (K, comma separated)", ", ".join(map(str, section.get("temperatures_K", [300])))
