@@ -198,6 +198,54 @@ with st.expander("Band transport (BoltzTraP2)", expanded=True):
     )
 
 
+with st.expander("ATO reference comparison", expanded=True):
+    comparison = dict(conductivity.get("comparison", {}) or {})
+    comparison_enabled = st.checkbox(
+        "Compare co-doped structures with an ATO reference",
+        value=bool(comparison.get("enabled", False)),
+        help=(
+            "Normalizes the average σ/τ of calculated co-doped structures to one explicitly "
+            "selected ATO target at the same temperature and carrier condition."
+        ),
+    )
+    r1, r2 = st.columns(2)
+    reference_target = r1.text_input(
+        "ATO reference target",
+        value=str(comparison.get("reference_target", "")),
+        disabled=not comparison_enabled,
+        help=(
+            "Exact target ID, safe ID, or wildcard matching exactly one calculated ATO target, "
+            "for example Sb5/candidate_003. The reference must be included in the same run."
+        ),
+    )
+    reference_label = r2.text_input(
+        "Reference label",
+        value=str(comparison.get("reference_label", "ATO")),
+        disabled=not comparison_enabled,
+    )
+
+    basis_options = ["same-total-dopant", "fixed-sb", "custom"]
+    current_basis = str(comparison.get("basis", "same-total-dopant")).lower()
+    if current_basis not in basis_options:
+        current_basis = "same-total-dopant"
+    basis = st.selectbox(
+        "Comparison basis",
+        basis_options,
+        index=basis_options.index(current_basis),
+        disabled=not comparison_enabled,
+        help=(
+            "same-total-dopant: compare at the same total substitution level (for example "
+            "5% Sb ATO vs 2.5% Sb + 2.5% X). fixed-sb: keep the Sb level fixed while adding "
+            "a co-dopant. custom: another explicitly documented comparison."
+        ),
+    )
+    st.caption(
+        "The comparison is only made for the same temperature, excess-electron concentration, "
+        "structure kind, and oxygen-vacancy count. Choosing a compositionally fair ATO reference "
+        "remains the user's scientific decision."
+    )
+
+
 st.divider()
 with st.expander("GPAW electronic structure for transport", expanded=True):
     dft = dict(conductivity.get("dft", {}) or {})
@@ -389,6 +437,12 @@ try:
             "excess_electrons_cm3": excess_electrons_cm3,
             "interpolation_factor": interpolation_factor,
             "dos_points": dos_points,
+            "comparison": {
+                "enabled": bool(comparison_enabled),
+                "reference_target": reference_target.strip(),
+                "reference_label": reference_label.strip() or "ATO",
+                "basis": basis,
+            },
             "dft": dft,
         }
     )
@@ -443,6 +497,14 @@ if parsed_cfg is not None and validated is not None:
             )
             for warning in preview_warnings:
                 st.warning(warning)
+            if comparison_enabled:
+                preview_ids = [target.target_id for target in preview_targets]
+                normalized_reference = reference_target.strip().replace("\\", "/")
+                if normalized_reference and normalized_reference not in preview_ids:
+                    st.info(
+                        "ATO comparison is enabled. Make sure the reference target is also selected "
+                        "in this run; wildcard/safe-ID matching is resolved by the backend."
+                    )
 
 contains_dft_execution = bool(dft.get("execute", False))
 if contains_dft_execution and not target_include:
@@ -530,8 +592,52 @@ if not results_root.is_absolute():
 index_csv = results_root / "conductivity_structure_index.csv"
 results_json = results_root / "conductivity_results.json"
 transport_csv = results_root / "conductivity.csv"
+comparison_csv = results_root / "conductivity_comparison.csv"
+comparison_json = results_root / "conductivity_comparison.json"
 
 st.caption(f"Resolved output: `{results_root}`")
+
+if comparison_csv.exists():
+    try:
+        comparison_df = pd.read_csv(comparison_csv)
+    except Exception as exc:
+        st.warning(f"Could not read {comparison_csv.name}: {exc}")
+    else:
+        if not comparison_df.empty:
+            st.markdown("#### ATO-normalized conductivity comparison")
+            comparison_display = comparison_df.rename(
+                columns={
+                    "target_id": "Structure",
+                    "sigma_over_tau_trace_average_S_per_cm_per_fs": "Avg. σ/τ (S cm⁻¹ fs⁻¹)",
+                    "relative_to_reference": "Relative to ATO",
+                    "percent_change_vs_reference": "Change vs ATO (%)",
+                    "temperature_K": "T (K)",
+                    "excess_electrons_cm3": "Excess e⁻ (cm⁻³)",
+                }
+            )
+            columns = [
+                column
+                for column in (
+                    "Structure",
+                    "T (K)",
+                    "Excess e⁻ (cm⁻³)",
+                    "Avg. σ/τ (S cm⁻¹ fs⁻¹)",
+                    "Relative to ATO",
+                    "Change vs ATO (%)",
+                )
+                if column in comparison_display.columns
+            ]
+            st.dataframe(
+                comparison_display[columns],
+                use_container_width=True,
+                hide_index=True,
+            )
+            first = comparison_df.iloc[0]
+            st.caption(
+                f"Reference: {first.get('reference_label', 'ATO')} = "
+                f"{first.get('reference_target_id', '')}; comparison basis = "
+                f"{first.get('comparison_basis', '')}."
+            )
 
 if not index_csv.exists():
     st.info(
@@ -625,7 +731,7 @@ else:
                         "temperature_K",
                         "excess_electrons_cm3",
                         "chemical_potential_relative_to_dft_fermi_eV",
-                        "sigma_over_tau_trace_average_S_per_m_per_s",
+                        "sigma_over_tau_trace_average_S_per_cm_per_fs",
                         "assumed_relaxation_time_fs",
                         "conditional_sigma_trace_average_S_per_cm",
                     )
@@ -664,12 +770,12 @@ else:
                 )
                 r4.metric(
                     "Average σ/τ",
-                    f"{float(row['sigma_over_tau_trace_average_S_per_m_per_s']):.3e}",
+                    f"{float(row['sigma_over_tau_trace_average_S_per_cm_per_fs']):.3f} S cm⁻¹ fs⁻¹",
                 )
 
-                sigma_tau = row.get("sigma_over_tau_S_per_m_per_s")
+                sigma_tau = row.get("sigma_over_tau_S_per_cm_per_fs")
                 if sigma_tau is not None:
-                    st.markdown("##### σ/τ tensor (S m⁻¹ s⁻¹)")
+                    st.markdown("##### σ/τ tensor (S cm⁻¹ fs⁻¹)")
                     st.dataframe(
                         pd.DataFrame(
                             sigma_tau,
@@ -678,6 +784,19 @@ else:
                         ),
                         use_container_width=True,
                     )
+
+                raw_sigma_tau = row.get("sigma_over_tau_S_per_m_per_s")
+                if raw_sigma_tau is not None:
+                    with st.expander("Raw SI σ/τ values", expanded=False):
+                        st.caption("Stored for reproducibility in S m⁻¹ s⁻¹.")
+                        st.dataframe(
+                            pd.DataFrame(
+                                raw_sigma_tau,
+                                index=["x", "y", "z"],
+                                columns=["x", "y", "z"],
+                            ),
+                            use_container_width=True,
+                        )
 
                 conditional_sigma = row.get("conditional_sigma_S_per_m")
                 if conditional_sigma is not None:
@@ -706,4 +825,16 @@ if transport_csv.exists():
         "Download transport CSV",
         transport_csv.read_bytes(),
         file_name=transport_csv.name,
+    )
+if comparison_csv.exists():
+    st.download_button(
+        "Download ATO comparison CSV",
+        comparison_csv.read_bytes(),
+        file_name=comparison_csv.name,
+    )
+if comparison_json.exists():
+    st.download_button(
+        "Download ATO comparison JSON",
+        comparison_json.read_bytes(),
+        file_name=comparison_json.name,
     )
