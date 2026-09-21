@@ -453,6 +453,15 @@ def _calculate_reference_fingerprint(
     ref_settings["save_wavefunctions"] = False
     ref_settings["reuse_existing"] = reuse
     ref_settings["execute"] = execute
+    reference_spin = settings.get("reference_spinpol", "auto")
+    if isinstance(reference_spin, bool):
+        reference_spin = "true" if reference_spin else "false"
+    reference_spin = str(reference_spin).strip().lower()
+    if reference_spin not in {"auto", "true", "false"}:
+        raise ValueError(
+            "[oxidation.dft_auto].reference_spinpol must be auto, true, or false"
+        )
+    ref_settings["spinpol"] = reference_spin
     ref_settings["kpts"] = _reference_kpts(
         target_structure,
         structure,
