@@ -982,17 +982,46 @@ def synthesize_oxidation_states(
     evidence: dict[int, list[str]] = defaultdict(list)
     confidence = [0.55] * len(structure)
     locked: set[int] = set()
+    calibration_matches: dict[int, dict[str, Any]] = {}
 
     for i, site in enumerate(structure):
         if i not in bader:
             continue
-        picked = _reference_pick(site.specie.symbol, bader[i], refs, settings)
-        if picked is not None:
-            states[i], z = picked
+        match = _reference_match(site.specie.symbol, bader[i], refs, settings)
+        calibration_matches[i] = match
+        status = str(match.get("status") or "no-reference")
+        if status == "calibrated":
+            states[i] = int(match["selected_state"])
             locked.add(i)
-            confidence[i] += 0.25
+            probability = float(match.get("confidence") or 0.0)
+            confidence[i] += 0.20 + 0.15 * probability
             evidence[i].append(
-                f"same-method Bader reference favors {states[i]:+d} (z={z:.2f})"
+                "same-method Bader references calibrate "
+                f"{site.specie.symbol} to {states[i]:+d} "
+                f"(z={float(match['best_z']):.2f}, relative likelihood={probability:.2f})"
+            )
+        elif status == "ambiguous":
+            confidence[i] -= 0.15
+            best = match.get("best_candidate_state")
+            probability = match.get("confidence")
+            evidence[i].append(
+                "same-method Bader calibration is ambiguous"
+                + (
+                    f"; closest reference state is {int(best):+d}"
+                    if best is not None
+                    else ""
+                )
+                + (
+                    f" (relative likelihood={float(probability):.2f})"
+                    if probability is not None
+                    else ""
+                )
+            )
+        elif status == "insufficient-reference-states":
+            confidence[i] -= 0.05
+            evidence[i].append(
+                "fewer than two same-method reference oxidation states are available; "
+                "Bader calibration cannot discriminate absolute oxidation state"
             )
 
     groups: dict[str, list[int]] = defaultdict(list)
@@ -1097,9 +1126,42 @@ def synthesize_oxidation_states(
                     )
 
     sites: list[dict[str, Any]] = []
+    calibration_status_counts: Counter[str] = Counter()
     for i, site in enumerate(structure):
         score = max(0.05, min(0.98, confidence[i]))
         label = "high" if score >= 0.80 else ("medium" if score >= 0.60 else "low")
+        match = calibration_matches.get(
+            i,
+            {
+                "status": "no-reference",
+                "selected_state": None,
+                "confidence": None,
+                "candidates": [],
+            },
+        )
+        calibration_status = str(match.get("status") or "no-reference")
+        calibration_status_counts[calibration_status] += 1
+        candidates = [
+            {
+                "oxidation_state": int(row["oxidation_state"]),
+                "probability": (
+                    round(float(row["probability"]), 4)
+                    if row.get("probability") is not None
+                    else None
+                ),
+                "z_distance": round(float(row["z_distance"]), 4),
+                "mean_bader_charge": round(float(row["mean_bader_charge"]), 6),
+            }
+            for row in match.get("candidates", [])
+        ]
+        if calibration_status == "calibrated":
+            oxidation_state_status = "calibrated"
+        elif calibration_status == "ambiguous":
+            oxidation_state_status = "suggested-ambiguous-calibration"
+        elif calibration_status == "insufficient-reference-states":
+            oxidation_state_status = "suggested-insufficient-calibration"
+        else:
+            oxidation_state_status = "suggested-uncalibrated"
         sites.append(
             {
                 "site_index": i,
@@ -1110,6 +1172,15 @@ def synthesize_oxidation_states(
                 "magnetic_moment": magmom.get(i),
                 "confidence": round(score, 3),
                 "confidence_label": label,
+                "oxidation_state_status": oxidation_state_status,
+                "reference_calibration_status": calibration_status,
+                "calibrated_oxidation_state": match.get("selected_state"),
+                "calibration_confidence": (
+                    round(float(match["confidence"]), 4)
+                    if match.get("confidence") is not None
+                    else None
+                ),
+                "calibration_candidates": candidates,
                 "assignment_status": "suggested",
                 "evidence": evidence[i],
             }
@@ -1129,6 +1200,15 @@ def synthesize_oxidation_states(
         "mixed_valence_diagnostics": mixed_diagnostics,
         "wannier_compensation_support": wannier_support,
         "reference_calibration_used": bool(refs),
+        "reference_calibration_summary": {
+            "status_counts": dict(calibration_status_counts),
+            "n_calibrated_sites": int(calibration_status_counts.get("calibrated", 0)),
+            "n_ambiguous_sites": int(calibration_status_counts.get("ambiguous", 0)),
+            "n_insufficient_reference_sites": int(
+                calibration_status_counts.get("insufficient-reference-states", 0)
+            ),
+            "n_uncalibrated_sites": int(calibration_status_counts.get("no-reference", 0)),
+        },
     }
 
 
