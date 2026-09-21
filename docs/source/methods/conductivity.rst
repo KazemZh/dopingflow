@@ -111,13 +111,22 @@ electrons already present due to substitution and vacancies. This rigid-band
 scan does not equate nominal dopants or vacancies with mobile carriers and is
 not a defect-equilibrium calculation.
 
-The results include:
+The output layout intentionally follows the oxidation stage where practical:
 
 * ``selected_structures.json``: exact IDs, paths and shared target-selection provenance.
+* ``conductivity_structure_index.csv`` and
+  ``conductivity_structure_index.json``: one row/record per analyzed structure for
+  the GUI structure browser.
 * ``conductivity_results.json``: settings, warnings, per-target outcomes,
   GPAW paths/reuse and full Cartesian 3x3 conductivity/tau tensors.
 * ``conductivity.csv``: one row per target, temperature and excess density.
-* ``structures/<id>/conductivity.json``: individual target result.
+* ``structures/<target_id>/conductivity.json``: individual target result.
+* ``structures/<target_id>/summary.json``: compact per-structure status/provenance.
+
+The Streamlit page likewise mirrors the oxidation page: stage/target controls,
+method-specific settings, a TOML preview, the same two-column save/run area,
+command preview and last-run output, followed by a per-structure results browser.
+Common GPAW fields use the same labels and configuration keys in both stages.
 
 ``sigma_over_tau_S_per_m_per_s`` has units S m^-1 s^-1. The trace divided by
 three is a directional average, not a prediction for a porous electrode.
