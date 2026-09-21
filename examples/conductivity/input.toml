@@ -31,7 +31,7 @@ fail_fast = false
 enabled = false
 reference_label = "ATO 5% Sb"
 reference_sb_percent = 5.0
-reference_source_root = ""        # empty = conductivity.source_root
+reference_source_root = ""        # empty = search [structure].outdir, then conductivity.source_root
 reference_target = "Sb5/*"       # preferably replace with one exact target ID
 reference_structure_path = ""    # optional POSCAR/CIF path; bypasses discovery
 basis = "ato-5pct-sb-benchmark"
