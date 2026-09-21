@@ -4,19 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
-from pymatgen.core import Structure
 
 from dopingflow.oxidation import (
     OptionalMethodUnavailable,
     StructureTarget,
     _csv_write,
     _json_write,
-    _target_matches_include,
     discover_oxidation_targets,
     parse_oxidation_config,
 )
@@ -40,13 +37,6 @@ def _finite_list(section, name, default, positive=False):
 def parse_config(raw, root):
     section = dict(raw.get("conductivity", {}) or {})
     section.setdefault("enabled", False)  # Never append expensive work to old run-all inputs.
-    section.setdefault("selection", "favorable")
-    if section["selection"] not in {"favorable", "manual", "all"}:
-        raise ValueError("conductivity.selection must be favorable, manual, or all")
-    top = section.get("top_k_per_group", 1)
-    if isinstance(top, bool) or not isinstance(top, int) or top < 1:
-        raise ValueError("top_k_per_group must be a positive integer")
-    section["top_k_per_group"] = top
     section["temperatures_K"] = _finite_list(section, "temperatures_K", [300.0], True)
     section["excess_electrons_cm3"] = _finite_list(section, "excess_electrons_cm3", [0.0])
     if section.get("relaxation_time_fs") is not None:
@@ -59,16 +49,16 @@ def parse_config(raw, root):
         if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
             raise ValueError(f"{key} must be an integer >= {minimum}")
         section[key] = value
-    for key in ("target_include", "structure_paths"):
-        if not isinstance(section.get(key, []), list):
-            raise TypeError(f"{key} must be an array")
-    if section["selection"] == "manual" and not (
-        section.get("target_include") or section.get("structure_paths")
-    ):
-        raise ValueError("manual selection requires target_include or structure_paths")
+    if not isinstance(section.get("target_include", []), list):
+        raise TypeError("target_include must be an array")
     selection = {
         key: section[key]
-        for key in ("source_root", "include_vacancy_free", "include_oxygen_vacancies")
+        for key in (
+            "source_root",
+            "include_vacancy_free",
+            "include_oxygen_vacancies",
+            "target_include",
+        )
         if key in section
     }
     selection.update(
@@ -120,104 +110,18 @@ def parse_config(raw, root):
 
 
 def discover_targets(cfg):
-    warnings = []
-    try:
-        targets, warnings = discover_oxidation_targets(replace(cfg, target_include=()))
-    except (RuntimeError, FileNotFoundError) as exc:
-        targets = []
-        warnings.append(str(exc))
-    # Manual choices also include relaxed parents excluded by upstream filtering.
-    known = {t.structure_path.resolve() for t in targets}
-    if cfg.include_vacancy_free:
-        for path in sorted(cfg.source_root.glob("*/*/02_relax/POSCAR")):
-            if path.resolve() not in known:
-                parent = path.parent.parent
-                identifier = f"{parent.parent.name}/{parent.name}"
-                targets.append(
-                    StructureTarget(identifier, identifier, "vacancy-free", path.resolve(), 0, None)
-                )
-    return targets, warnings
+    """Discover targets with exactly the same rules used by oxidation analysis."""
+    return discover_oxidation_targets(cfg)
 
 
-def select_targets(cfg, section):
-    targets, warnings = discover_targets(cfg)
-    vacancy_rows = {}
-    database = cfg.source_root / "vacancies_database.json"
-    if database.exists():
-        for row in json.loads(database.read_text()):
-            path = Path(row.get("relaxed_poscar_path") or ".").expanduser()
-            if not path.is_absolute():
-                path = cfg.root / path
-            vacancy_rows[str(path.resolve())] = row
-    ranked = []
-    groups = {}
-    for target in targets:
-        structure = Structure.from_file(target.structure_path)
-        meta_path = target.structure_path.parent / "meta.json"
-        meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
-        row = vacancy_rows.get(str(target.structure_path.resolve()), {})
-        energy = row.get("energy_relaxed_total_eV", meta.get("energy_relaxed_eV"))
-        try:
-            energy = float(energy)
-            if not np.isfinite(energy):
-                energy = None
-        except (TypeError, ValueError):
-            energy = None
-        # Exact atom counts and backend provenance prevent unlike-energy comparisons.
-        group = json.dumps(
-            {
-                "composition": structure.composition.get_el_amt_dict(),
-                "vacancies": target.n_vacancies,
-                "backend": row.get("backend", meta.get("backend")),
-                "model": row.get("model", meta.get("model")),
-                "task": row.get("task", meta.get("task")),
-            },
-            sort_keys=True,
-        )
-        target = replace(
-            target,
-            metadata={**target.metadata, "selection_energy_eV": energy, "selection_group": group},
-        )
-        ranked.append(target)
-        if row.get("converged", meta.get("converged")) is False:
-            warnings.append(
-                f"Unconverged relaxation excluded from favorable selection: {target.target_id}"
-            )
-        elif energy is not None:
-            groups.setdefault(group, []).append(target)
-        elif section["selection"] == "favorable":
-            warnings.append(
-                f"No finite relaxed energy for {target.target_id}; select it manually if wanted"
-            )
-    chosen = {}
-    if section["selection"] == "all":
-        chosen = {t.target_id: t for t in ranked}
-    elif section["selection"] == "favorable":
-        for group in groups.values():
-            group.sort(key=lambda t: (t.metadata["selection_energy_eV"], t.target_id))
-            chosen.update({t.target_id: t for t in group[: section["top_k_per_group"]]})
-    for selector in section.get("target_include", []):
-        matches = [t for t in ranked if _target_matches_include(t, [selector])]
-        if not matches:
-            raise ValueError(f"Conductivity selector matched no structure: {selector}")
-        chosen.update({t.target_id: t for t in matches})
-    for item in section.get("structure_paths", []):
-        path = Path(item).expanduser()
-        path = (path if path.is_absolute() else cfg.root / path).resolve()
-        Structure.from_file(path)  # Fail before launching anything if a manual path is invalid.
-        identifier = (
-            "manual/" + path.stem + "-" + hashlib.sha256(str(path).encode()).hexdigest()[:12]
-        )
-        if path not in {t.structure_path for t in chosen.values()}:
-            chosen[identifier] = StructureTarget(
-                identifier, identifier, "user-specified", path, 0, None
-            )
-    if not chosen:
-        raise ValueError(
-            "No conductivity targets selected; check relaxed energies or choose structures manually"
-        )
-    return sorted(chosen.values(), key=lambda t: t.target_id), warnings
+def select_targets(cfg, section=None):
+    """Return the discovered targets.
 
+    Conductivity intentionally shares oxidation's source_root, vacancy toggles,
+    and target_include semantics so users do not need to learn a second
+    structure-selection interface.
+    """
+    return discover_targets(cfg)
 
 def gpaw_bands(path):
     """Explicitly preserve both collinear spin channels (upstream reader drops one)."""
@@ -416,7 +320,7 @@ def run_conductivity(raw, root, *, dry_run=False):
             "results": results,
             "settings": section,
             "limitations": [
-                "Low energy means favorable among sampled configurations of identical composition, vacancy count, and recorded energy model; it is not a convex-hull stability claim.",
+                "Target discovery uses the same source_root, vacancy toggles, and target_include rules as oxidation-state analysis.",
                 "Band-like transport is a hypothesis requiring localization checks; polaron hopping and AMSET scattering are not calculated by this stage.",
                 "sigma/tau is not absolute conductivity. Any sigma uses the explicitly assumed relaxation time.",
                 "Positive excess_electrons_cm3 adds electrons to the explicit structure; negative removes them. Zero preserves its DFT electron count. This is not a defect-ionization or mobile-carrier prediction.",
