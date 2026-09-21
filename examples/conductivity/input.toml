@@ -23,6 +23,16 @@ dos_points = 4000
 fail_fast = false
 # relaxation_time_fs = 10.0 # Optional ASSUMPTION, not a calculated lifetime.
 
+# Optional ATO-normalized comparison. The reference must be included in the same run.
+[conductivity.comparison]
+enabled = false
+reference_target = "Sb5/candidate_001"
+reference_label = "ATO"
+# same-total-dopant: e.g. 5% Sb vs 2.5% Sb + 2.5% X
+# fixed-sb: keep Sb fixed and add X
+# custom: another explicitly documented basis
+basis = "same-total-dopant"
+
 [conductivity.dft]
 code = "gpaw"
 execute = false            # Same execution gate concept as oxidation
