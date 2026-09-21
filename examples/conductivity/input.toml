@@ -5,7 +5,8 @@ outdir = "random_structures"
 [conductivity]
 enabled = true
 # Structure selection intentionally mirrors [oxidation].
-# Omit source_root to inherit [structure].outdir.
+# Omit source_root to inherit [oxidation].source_root when set,
+# otherwise [structure].outdir.
 source_root = "random_structures"
 include_vacancy_free = true
 include_oxygen_vacancies = true
