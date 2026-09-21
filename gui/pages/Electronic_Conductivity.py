@@ -1,8 +1,10 @@
-"""Configure, preview and run the optional electronic transport stage."""
+"""Configure, preview, run, and inspect the optional electronic-conductivity stage."""
+
+from __future__ import annotations
 
 import json
+import shlex
 import subprocess
-import sys
 from pathlib import Path
 
 import pandas as pd
@@ -11,52 +13,107 @@ import toml
 
 from dopingflow.conductivity import parse_config, select_targets
 
+
 st.set_page_config(page_title="Electronic conductivity", layout="wide")
 st.title("Electronic conductivity")
 st.caption(
-    "Band conductivity/tau for relaxed doped and oxygen-vacancy structures. Compatible GPAW results are shared with oxidation analysis."
-)
-root = (
-    Path(st.sidebar.text_input("Project root", str(Path.cwd()), key="conductivity_root"))
-    .expanduser()
-    .resolve()
-)
-path = root / "input.toml"
-if not path.exists():
-    st.error(f"No input.toml at {path}")
-    st.stop()
-raw = toml.load(path)
-section = dict(raw.get("conductivity", {}) or {})
-section["enabled"] = st.checkbox(
-    "Enable conductivity stage",
-    value=bool(section.get("enabled", False)),
+    "Configure band-transport analysis on the same relaxed parent and oxygen-vacancy "
+    "targets used by oxidation-state analysis. Compatible GPAW calculations are shared "
+    "between the two stages."
 )
 
-st.subheader("Structure selection")
+project_root = Path(
+    st.sidebar.text_input(
+        "Project root",
+        value=str(Path.cwd()),
+        key="conductivity_project_root",
+    )
+).expanduser().resolve()
+config_path = project_root / "input.toml"
+
+if not config_path.exists():
+    st.error(f"No input.toml found at {config_path}")
+    st.stop()
+
+cfg = toml.load(str(config_path))
+conductivity = dict(cfg.get("conductivity", {}) or {})
+oxidation = dict(cfg.get("oxidation", {}) or {})
+
+# Remove old conductivity-only selection controls when the updated page saves.
+for legacy_key in ("selection", "top_k_per_group", "structure_paths"):
+    conductivity.pop(legacy_key, None)
+
+
+def _parse_json_mapping(text: str, label: str) -> dict:
+    text = text.strip()
+    if not text:
+        return {}
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError as exc:
+        st.error(f"{label} must be valid JSON: {exc}")
+        return {}
+    if not isinstance(value, dict):
+        st.error(f"{label} must be a JSON object.")
+        return {}
+    return value
+
+
+def _inherited_dft_settings() -> dict:
+    inherited = dict(oxidation.get("dft_electronic", {}) or {})
+    methods = oxidation.get("methods", [])
+    if isinstance(methods, str):
+        methods = [item.strip() for item in methods.split(",") if item.strip()]
+    if "dft-auto" in methods or (
+        str(oxidation.get("strategy", "")).lower() == "dft" and not methods
+    ):
+        inherited.update(dict(oxidation.get("dft_auto", {}) or {}))
+    return inherited
+
+
+st.subheader("Stage and targets")
+left, middle, right = st.columns(3)
+with left:
+    enabled = st.checkbox(
+        "Enable conductivity stage",
+        value=bool(conductivity.get("enabled", False)),
+    )
+with middle:
+    fail_fast = st.checkbox(
+        "Fail fast",
+        value=bool(conductivity.get("fail_fast", False)),
+        help="Normally a failed target is recorded and the remaining targets continue.",
+    )
+with right:
+    output_dir = st.text_input(
+        "Output directory",
+        value=str(conductivity.get("output_dir", "07_conductivity")),
+        help="Relative paths are created under the conductivity source root.",
+    )
 
 c1, c2 = st.columns(2)
 with c1:
-    section["include_vacancy_free"] = st.checkbox(
+    include_vacancy_free = st.checkbox(
         "Vacancy-free parents",
-        value=bool(section.get("include_vacancy_free", True)),
+        value=bool(conductivity.get("include_vacancy_free", True)),
     )
 with c2:
-    section["include_oxygen_vacancies"] = st.checkbox(
+    include_oxygen_vacancies = st.checkbox(
         "O-vacancy structures",
-        value=bool(section.get("include_oxygen_vacancies", True)),
+        value=bool(conductivity.get("include_oxygen_vacancies", True)),
     )
 
-oxidation_source = str((raw.get("oxidation", {}) or {}).get("source_root", "")).strip()
+oxidation_source = str(oxidation.get("source_root", "")).strip()
 source_default = oxidation_source or str(
-    (raw.get("structure", {}) or {}).get("outdir", "random_structures")
+    (cfg.get("structure", {}) or {}).get("outdir", "random_structures")
 )
-section["source_root"] = st.text_input(
+source_root = st.text_input(
     "Source root",
-    value=str(section.get("source_root", source_default)),
+    value=str(conductivity.get("source_root", source_default)),
     help="Root containing selected relaxed parents and, when enabled, vacancies_database.json.",
 )
 
-saved_target_include = section.get("target_include", [])
+saved_target_include = conductivity.get("target_include", [])
 if isinstance(saved_target_include, str):
     saved_target_include = [
         item.strip() for item in saved_target_include.split(",") if item.strip()
@@ -73,172 +130,580 @@ target_include_text = st.text_input(
         "wildcards such as Sb5_Ti2p5/*. Multiple selectors can be comma-separated."
     ),
 )
-section["target_include"] = list(
+target_include = list(
     dict.fromkeys(
         item.strip() for item in target_include_text.split(",") if item.strip()
     )
 )
-if section["target_include"]:
+if target_include:
     st.info(
-        f"Target filtering is active: only structures matching {section['target_include']} will be analyzed."
+        f"Target filtering is active: only structures matching {target_include} will be analyzed."
     )
 
-# Remove legacy conductivity-only selectors when this page saves the project.
-# Structure selection now intentionally mirrors the oxidation-state stage.
-for legacy_key in ("selection", "top_k_per_group", "structure_paths"):
-    section.pop(legacy_key, None)
 
-st.subheader("Transport settings")
-temps = st.text_input(
-    "Temperatures (K, comma separated)", ", ".join(map(str, section.get("temperatures_K", [300])))
-)
-excess = st.text_input(
-    "Excess electrons (cm⁻³, comma separated)",
-    ", ".join(map(str, section.get("excess_electrons_cm3", [0]))),
-)
-st.caption(
-    "Zero keeps the explicit structure's electron count. Positive adds electrons; negative adds holes. This does not predict defect ionization or mobile carrier concentration."
-)
-use_tau = st.checkbox(
-    "Also estimate conductivity using an assumed relaxation time",
-    section.get("relaxation_time_fs") is not None,
-)
-if use_tau:
-    section["relaxation_time_fs"] = st.number_input(
-        "Assumed relaxation time (fs)",
-        min_value=0.001,
-        value=float(section.get("relaxation_time_fs", 10.0)),
+with st.expander("Band transport (BoltzTraP2)", expanded=True):
+    t1, t2 = st.columns(2)
+    temperatures_text = t1.text_input(
+        "Temperatures (K, comma separated)",
+        value=", ".join(map(str, conductivity.get("temperatures_K", [300.0]))),
     )
-else:
-    section.pop("relaxation_time_fs", None)
-section["interpolation_factor"] = int(
-    st.number_input(
-        "Interpolation factor", min_value=2, value=int(section.get("interpolation_factor", 5))
+    excess_text = t2.text_input(
+        "Excess electrons (cm⁻³, comma separated)",
+        value=", ".join(map(str, conductivity.get("excess_electrons_cm3", [0.0]))),
+        help=(
+            "Zero keeps the explicit structure electron count. Positive adds electrons; "
+            "negative removes electrons (holes)."
+        ),
     )
-)
-section["dos_points"] = int(
-    st.number_input(
-        "DOS integration points", min_value=100, value=int(section.get("dos_points", 4000))
+
+    b1, b2 = st.columns(2)
+    interpolation_factor = int(
+        b1.number_input(
+            "Interpolation factor",
+            min_value=2,
+            value=int(conductivity.get("interpolation_factor", 5)),
+            step=1,
+        )
     )
-)
-st.subheader("GPAW and shared results")
-dft = dict(section.get("dft", {}) or {})
-dft["execute"] = st.checkbox(
-    "Run GPAW when compatible results are missing", dft.get("execute", False)
-)
-kpts = st.text_input("Uniform k-point mesh", ", ".join(map(str, dft.get("kpts", [4, 4, 4]))))
-dft["save_wavefunctions"] = st.checkbox(
-    "Save wavefunctions for later oxidation analysis", dft.get("save_wavefunctions", True)
-)
-st.caption(
-    "Other DFT settings inherit from oxidation.dft_electronic; overrides can be supplied in conductivity.dft in input.toml. Exact geometry and electronic settings must match for reuse. A denser mesh requires a different calculation."
-)
-st.warning(
-    "These results assume band-like transport. Check electron localization before interpreting them. Small-polaron hopping, scattering lifetimes and grain boundaries are not modeled."
-)
+    dos_points = int(
+        b2.number_input(
+            "DOS integration points",
+            min_value=100,
+            value=int(conductivity.get("dos_points", 4000)),
+            step=100,
+        )
+    )
+
+    tau1, tau2 = st.columns(2)
+    use_tau = tau1.checkbox(
+        "Use an assumed relaxation time",
+        value=conductivity.get("relaxation_time_fs") is not None,
+        help="Optional. Without this, the primary reported quantity is conductivity divided by relaxation time.",
+    )
+    relaxation_time_fs = None
+    if use_tau:
+        relaxation_time_fs = float(
+            tau2.number_input(
+                "Assumed relaxation time (fs)",
+                min_value=0.001,
+                value=float(conductivity.get("relaxation_time_fs", 10.0)),
+            )
+        )
+    else:
+        tau2.caption("Absolute conductivity is not reported unless an assumed relaxation time is supplied.")
+
+    st.caption(
+        "The current backend assumes band-like transport. It does not calculate scattering "
+        "lifetimes, small-polaron hopping, defect ionization, or grain-boundary resistance."
+    )
+
+
+st.divider()
+with st.expander("GPAW electronic structure for transport", expanded=True):
+    dft = dict(conductivity.get("dft", {}) or {})
+    inherited = _inherited_dft_settings()
+    dft["code"] = "gpaw"
+
+    st.info(
+        "GPAW is the supported DFT backend. Physical settings use the same parameter names "
+        "as oxidation analysis so compatible calculations can be reused when geometry and "
+        "electronic settings match."
+    )
+
+    dft["output_root"] = st.text_input(
+        "Per-target GPAW output root",
+        value=str(dft.get("output_root", "dft_conductivity")),
+        key="conductivity_dft_root",
+    )
+
+    a1, a2 = st.columns(2)
+    dft["execute"] = a1.checkbox(
+        "Run GPAW single-point calculation",
+        value=bool(dft.get("execute", False)),
+        key="conductivity_dft_execute",
+        help="Existing compatible GPAW results are reused first. Turn this on only when missing calculations may be launched.",
+    )
+    dft["reuse_existing"] = a2.checkbox(
+        "Reuse existing compatible outputs",
+        value=bool(dft.get("reuse_existing", True)),
+        key="conductivity_dft_reuse",
+    )
+
+    f1, f2 = st.columns(2)
+    dft["gpw_file"] = f1.text_input(
+        "GPAW restart file",
+        value=str(dft.get("gpw_file", inherited.get("gpw_file", "oxidation.gpw"))),
+    )
+    dft["txt_file"] = f2.text_input(
+        "GPAW log file",
+        value=str(dft.get("txt_file", inherited.get("txt_file", "gpaw.txt"))),
+    )
+
+    st.markdown("**Core GPAW settings**")
+    g1, g2, g3 = st.columns(3)
+    dft["xc"] = g1.text_input(
+        "XC functional",
+        value=str(dft.get("xc", inherited.get("xc", "PBE"))),
+    )
+    dft["mode"] = "pw"
+    dft["ecut_eV"] = float(
+        g2.number_input(
+            "Plane-wave cutoff (eV)",
+            min_value=50.0,
+            value=float(dft.get("ecut_eV", inherited.get("ecut_eV", 500.0))),
+            step=25.0,
+        )
+    )
+    dft["smearing_eV"] = float(
+        g3.number_input(
+            "Fermi-Dirac smearing (eV)",
+            min_value=0.0,
+            value=float(dft.get("smearing_eV", inherited.get("smearing_eV", 0.05))),
+            step=0.01,
+        )
+    )
+
+    raw_kpts = dft.get("kpts", [4, 4, 4])
+    if not isinstance(raw_kpts, (list, tuple)) or len(raw_kpts) != 3:
+        raw_kpts = [4, 4, 4]
+    k1, k2, k3, kg = st.columns(4)
+    dft["kpts"] = [
+        int(k1.number_input("k₁", min_value=2, value=max(2, int(raw_kpts[0])), step=1)),
+        int(k2.number_input("k₂", min_value=2, value=max(2, int(raw_kpts[1])), step=1)),
+        int(k3.number_input("k₃", min_value=2, value=max(2, int(raw_kpts[2])), step=1)),
+    ]
+    dft["gamma"] = kg.checkbox(
+        "Gamma-centered",
+        value=bool(dft.get("gamma", inherited.get("gamma", True))),
+    )
+
+    scf1, scf2, scf3 = st.columns(3)
+    dft["convergence_density"] = float(
+        scf1.number_input(
+            "Density convergence",
+            min_value=1.0e-10,
+            value=float(
+                dft.get(
+                    "convergence_density",
+                    inherited.get("convergence_density", 1.0e-5),
+                )
+            ),
+            format="%.1e",
+        )
+    )
+    dft["maxiter"] = int(
+        scf2.number_input(
+            "SCF max iterations",
+            min_value=1,
+            value=int(dft.get("maxiter", inherited.get("maxiter", 333))),
+            step=10,
+        )
+    )
+    dft["charge"] = float(
+        scf3.number_input(
+            "Net cell charge (e)",
+            value=float(dft.get("charge", inherited.get("charge", 0.0))),
+            step=1.0,
+        )
+    )
+
+    spin_options = ["auto", "true", "false"]
+    spin_current = str(dft.get("spinpol", inherited.get("spinpol", "auto"))).lower()
+    if spin_current not in spin_options:
+        spin_current = "auto"
+    dft["spinpol"] = st.selectbox(
+        "Spin polarization",
+        spin_options,
+        index=spin_options.index(spin_current),
+        help="Use the same spin treatment as oxidation when you want exact GPAW cache reuse.",
+    )
+
+    magmom_default = dft.get(
+        "initial_magmoms",
+        inherited.get("initial_magmoms", {}),
+    )
+    magmom_text = st.text_area(
+        "Optional initial magnetic moments by element (JSON)",
+        value=json.dumps(magmom_default or {}, indent=2),
+        height=100,
+        help='Example: {"Mn": 4.0, "Fe": 4.0, "Ni": 2.0}. Unlisted elements start at 0 μB.',
+    )
+    dft["initial_magmoms"] = _parse_json_mapping(
+        magmom_text, "Initial magnetic moments"
+    )
+
+    n1, n2 = st.columns(2)
+    nbands_default = dft.get("nbands", inherited.get("nbands"))
+    nbands_text = n1.text_input(
+        "Number of bands (optional)",
+        value="" if nbands_default is None else str(nbands_default),
+        help="Leave empty for GPAW default. Transport may require additional empty bands.",
+    )
+    dft["save_wavefunctions"] = n2.checkbox(
+        "Store wavefunctions in .gpw (larger file)",
+        value=bool(dft.get("save_wavefunctions", True)),
+        help="A wavefunction-capable file can also support later oxidation analysis.",
+    )
+
+    st.caption(
+        "Conductivity needs band dispersion, so Gamma-only sampling is not sufficient. "
+        "The k-point mesh, cutoff, smearing, number of bands, and interpolation settings "
+        "must be converged for production values."
+    )
+
+
 validation_error = None
-cfg = None
+parsed_cfg = None
 validated = None
-updated = {**raw, "conductivity": section}
+
 try:
-    section["temperatures_K"] = [float(x.strip()) for x in temps.split(",")]
-    section["excess_electrons_cm3"] = [float(x.strip()) for x in excess.split(",")]
-    dft["kpts"] = [int(x.strip()) for x in kpts.split(",")]
-    section["dft"] = dft
-    updated = {**raw, "conductivity": section}
-    cfg, validated = parse_config(updated, root)
+    temperatures_K = [
+        float(item.strip()) for item in temperatures_text.split(",") if item.strip()
+    ]
+    excess_electrons_cm3 = [
+        float(item.strip()) for item in excess_text.split(",") if item.strip()
+    ]
+    if not temperatures_K:
+        raise ValueError("At least one temperature is required.")
+    if not excess_electrons_cm3:
+        raise ValueError("At least one excess-electron value is required.")
+
+    if nbands_text.strip():
+        nbands = int(nbands_text.strip())
+        if nbands <= 0:
+            raise ValueError("Number of bands must be positive when specified.")
+        dft["nbands"] = nbands
+    else:
+        dft.pop("nbands", None)
+
+    conductivity.update(
+        {
+            "enabled": bool(enabled),
+            "fail_fast": bool(fail_fast),
+            "include_vacancy_free": bool(include_vacancy_free),
+            "include_oxygen_vacancies": bool(include_oxygen_vacancies),
+            "target_include": target_include,
+            "source_root": source_root,
+            "output_dir": output_dir,
+            "temperatures_K": temperatures_K,
+            "excess_electrons_cm3": excess_electrons_cm3,
+            "interpolation_factor": interpolation_factor,
+            "dos_points": dos_points,
+            "dft": dft,
+        }
+    )
+    if relaxation_time_fs is None:
+        conductivity.pop("relaxation_time_fs", None)
+    else:
+        conductivity["relaxation_time_fs"] = relaxation_time_fs
+
+    resolved_cfg = dict(cfg)
+    resolved_cfg["conductivity"] = conductivity
+    parsed_cfg, validated = parse_config(resolved_cfg, project_root)
 except (OSError, ValueError, TypeError, RuntimeError, KeyError) as exc:
     validation_error = str(exc)
+    resolved_cfg = dict(cfg)
+    resolved_cfg["conductivity"] = conductivity
+
+
+st.divider()
+st.subheader("Save and run")
+
+with st.expander("Preview [conductivity] TOML", expanded=False):
+    st.code(toml.dumps({"conductivity": conductivity}), language="toml")
+
+if validation_error is not None:
     st.error(validation_error)
 
-st.subheader("Actions")
-preview_col, save_col, run_col = st.columns(3)
+if parsed_cfg is not None and validated is not None:
+    with st.expander("Preview selected structures", expanded=False):
+        try:
+            preview_targets, preview_warnings = select_targets(parsed_cfg, validated)
+        except (OSError, ValueError, TypeError, RuntimeError, KeyError) as exc:
+            st.warning(str(exc))
+        else:
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {
+                            "target_id": target.target_id,
+                            "structure_kind": target.kind,
+                            "n_oxygen_vacancies": (
+                                target.n_vacancies
+                                if target.vacancy_species == "O"
+                                else 0
+                            ),
+                            "structure_path": str(target.structure_path),
+                        }
+                        for target in preview_targets
+                    ]
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
+            for warning in preview_warnings:
+                st.warning(warning)
 
-with preview_col:
-    preview_clicked = st.button(
-        "Preview selected structures",
-        disabled=validation_error is not None,
-        use_container_width=True,
+contains_dft_execution = bool(dft.get("execute", False))
+if contains_dft_execution and not target_include:
+    st.warning(
+        "DFT execution is enabled but no target selector is active. The calculation can run "
+        "for every discovered structure. For an expensive smoke test, select one exact target first."
     )
+
+confirm_dft = True
+if contains_dft_execution:
+    st.warning(
+        "The GPAW execution gate is ON. Running this page may launch DFT calculations for "
+        "selected targets. Compatible existing calculations are reused when permitted."
+    )
+    confirm_dft = st.checkbox(
+        "I confirm that I want the configured GPAW calculations to be allowed to run",
+        value=False,
+    )
+
+save_col, run_col = st.columns(2)
 with save_col:
-    save_clicked = st.button(
-        "Save settings",
-        disabled=validation_error is not None,
-        use_container_width=True,
-    )
-with run_col:
-    run_clicked = st.button(
-        "Run conductivity",
+    if st.button(
+        "Save conductivity settings",
         type="primary",
-        disabled=(not section["enabled"]) or validation_error is not None,
         use_container_width=True,
-        help=(
-            "Enable the conductivity stage above before running."
-            if not section["enabled"]
-            else "Save the current settings and run the conductivity stage."
-        ),
+        disabled=validation_error is not None,
+    ):
+        config_path.write_text(toml.dumps(resolved_cfg), encoding="utf-8")
+        st.success(f"Saved {config_path}")
+
+command = ["dopingflow", "conductivity", "-c", str(config_path)]
+
+with run_col:
+    run_disabled = (
+        (not enabled)
+        or validation_error is not None
+        or (contains_dft_execution and not confirm_dft)
     )
+    if st.button(
+        "Run conductivity analysis",
+        use_container_width=True,
+        disabled=run_disabled,
+    ):
+        config_path.write_text(toml.dumps(resolved_cfg), encoding="utf-8")
+        with st.spinner("Running conductivity analysis..."):
+            completed = subprocess.run(
+                command,
+                cwd=str(project_root),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        st.session_state["conductivity_last_stdout"] = completed.stdout
+        st.session_state["conductivity_last_stderr"] = completed.stderr
+        st.session_state["conductivity_last_returncode"] = completed.returncode
+        if completed.returncode == 0:
+            st.success("Conductivity analysis finished successfully.")
+        else:
+            st.error(
+                f"Conductivity analysis exited with return code {completed.returncode}."
+            )
 
-if not section["enabled"]:
-    st.caption("Enable **conductivity stage** above to activate the Run conductivity button.")
-elif validation_error is not None:
-    st.caption("Fix the validation error above to activate Preview, Save, and Run.")
+if not enabled:
+    st.caption("Enable **conductivity stage** above to activate Run conductivity analysis.")
 
-if preview_clicked and cfg is not None and validated is not None:
+st.code(" ".join(shlex.quote(token) for token in command), language="bash")
+if "conductivity_last_returncode" in st.session_state:
+    with st.expander("Last run output", expanded=True):
+        if st.session_state.get("conductivity_last_stdout"):
+            st.text(st.session_state["conductivity_last_stdout"])
+        if st.session_state.get("conductivity_last_stderr"):
+            st.text(st.session_state["conductivity_last_stderr"])
+
+
+st.divider()
+st.subheader("Results")
+
+source_path = Path(source_root).expanduser()
+if not source_path.is_absolute():
+    source_path = (project_root / source_path).resolve()
+results_root = Path(output_dir).expanduser()
+if not results_root.is_absolute():
+    results_root = (source_path / results_root).resolve()
+
+index_csv = results_root / "conductivity_structure_index.csv"
+results_json = results_root / "conductivity_results.json"
+transport_csv = results_root / "conductivity.csv"
+
+st.caption(f"Resolved output: `{results_root}`")
+
+if not index_csv.exists():
+    st.info(
+        "No conductivity_structure_index.csv found yet. Run the conductivity stage with "
+        "the updated workflow to create per-structure result folders and the structure browser."
+    )
+else:
     try:
-        chosen, warnings = select_targets(cfg, validated)
+        structure_index = pd.read_csv(index_csv)
+    except Exception as exc:
+        st.warning(f"Could not read {index_csv.name}: {exc}")
+    else:
+        st.markdown("#### Analysed structures")
+        overview_columns = [
+            column
+            for column in (
+                "target_id",
+                "structure_kind",
+                "n_oxygen_vacancies",
+                "status",
+                "dft_reused",
+                "error",
+            )
+            if column in structure_index.columns
+        ]
         st.dataframe(
-            pd.DataFrame([{"target_id": t.target_id, **t.metadata} for t in chosen]),
+            structure_index[overview_columns],
+            use_container_width=True,
             hide_index=True,
         )
-        for warning in warnings:
-            st.warning(warning)
-    except (OSError, ValueError, TypeError, RuntimeError, KeyError) as exc:
-        st.error(str(exc))
 
-if save_clicked:
-    path.write_text(toml.dumps(updated))
-    st.success("Settings saved")
-
-if run_clicked:
-    path.write_text(toml.dumps(updated))
-    with st.spinner("Running conductivity; GPAW may take a long time"):
-        result = subprocess.run(
-            [sys.executable, "-m", "dopingflow", "conductivity", "-c", str(path)],
-            cwd=root,
-            text=True,
-            capture_output=True,
-            check=False,
+        target_ids = structure_index["target_id"].astype(str).tolist()
+        selected_target = st.selectbox(
+            "Choose a structure",
+            target_ids,
+            key="conductivity_result_target",
         )
-    st.code(result.stdout + result.stderr)
-    if result.returncode:
-        st.error("Some targets did not complete. Inspect the reported errors.")
-    else:
-        st.success("Conductivity analysis completed")
+        selected_meta = structure_index[
+            structure_index["target_id"].astype(str) == selected_target
+        ].iloc[0]
 
-output = cfg.output_dir / "conductivity_results.json" if cfg is not None else None
-if output is not None and output.exists():
-    payload = json.loads(output.read_text())
-    st.subheader("Results")
-    st.dataframe(
-        pd.DataFrame(
-            [
-                {
-                    "target_id": r["target_id"],
-                    "status": r["status"],
-                    "DFT reused": r.get("dft_reused"),
-                    "error": r.get("error"),
-                }
-                for r in payload.get("results", [])
-            ]
-        ),
-        hide_index=True,
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Kind", str(selected_meta.get("structure_kind", "")))
+        m2.metric(
+            "O vacancies",
+            int(selected_meta.get("n_oxygen_vacancies", 0)),
+        )
+        m3.metric("Status", str(selected_meta.get("status", "unknown")))
+        reused_value = selected_meta.get("dft_reused")
+        if pd.isna(reused_value):
+            reused_label = "-"
+        else:
+            reused_label = "yes" if bool(reused_value) else "no"
+        m4.metric("DFT reused", reused_label)
+
+        st.caption(f"Structure file: `{selected_meta.get('structure_path', '')}`")
+        st.caption(
+            f"Per-structure results: `{selected_meta.get('output_directory', '')}`"
+        )
+
+        target_result_dir = Path(str(selected_meta.get("output_directory", "")))
+        target_results_file = target_result_dir / "conductivity.json"
+        target_result = {}
+        if target_results_file.exists():
+            try:
+                target_result = json.loads(
+                    target_results_file.read_text(encoding="utf-8")
+                )
+            except Exception as exc:
+                st.warning(f"Could not read {target_results_file}: {exc}")
+
+        if target_result:
+            status = str(target_result.get("status", "unknown"))
+            if status == "calculated":
+                st.success("Band-transport analysis completed for this structure.")
+            elif status == "selected":
+                st.info("This structure was selected but no transport calculation was executed.")
+            else:
+                st.warning(
+                    target_result.get("error")
+                    or f"Conductivity status: {status}"
+                )
+
+            rows = target_result.get("rows", []) or []
+            if rows:
+                st.markdown("#### Transport results")
+                transport_df = pd.DataFrame(rows)
+                display_columns = [
+                    column
+                    for column in (
+                        "temperature_K",
+                        "excess_electrons_cm3",
+                        "chemical_potential_relative_to_dft_fermi_eV",
+                        "sigma_over_tau_trace_average_S_per_m_per_s",
+                        "assumed_relaxation_time_fs",
+                        "conditional_sigma_trace_average_S_per_cm",
+                    )
+                    if column in transport_df.columns
+                ]
+                st.dataframe(
+                    transport_df[display_columns],
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+                labels = [
+                    (
+                        f"{row.get('temperature_K')} K | "
+                        f"excess e⁻ = {row.get('excess_electrons_cm3')} cm⁻³"
+                    )
+                    for row in rows
+                ]
+                selected_condition = st.selectbox(
+                    "Choose a transport condition",
+                    list(range(len(rows))),
+                    format_func=lambda index: labels[index],
+                    key="conductivity_result_condition",
+                )
+                row = rows[selected_condition]
+
+                r1, r2, r3, r4 = st.columns(4)
+                r1.metric("Temperature", f"{float(row['temperature_K']):g} K")
+                r2.metric(
+                    "Excess electrons",
+                    f"{float(row['excess_electrons_cm3']):.3e} cm⁻³",
+                )
+                r3.metric(
+                    "μ − E_F",
+                    f"{float(row['chemical_potential_relative_to_dft_fermi_eV']):+.4f} eV",
+                )
+                r4.metric(
+                    "Average σ/τ",
+                    f"{float(row['sigma_over_tau_trace_average_S_per_m_per_s']):.3e}",
+                )
+
+                sigma_tau = row.get("sigma_over_tau_S_per_m_per_s")
+                if sigma_tau is not None:
+                    st.markdown("##### σ/τ tensor (S m⁻¹ s⁻¹)")
+                    st.dataframe(
+                        pd.DataFrame(
+                            sigma_tau,
+                            index=["x", "y", "z"],
+                            columns=["x", "y", "z"],
+                        ),
+                        use_container_width=True,
+                    )
+
+                conditional_sigma = row.get("conditional_sigma_S_per_m")
+                if conditional_sigma is not None:
+                    st.markdown("##### Conditional σ tensor (S m⁻¹)")
+                    st.dataframe(
+                        pd.DataFrame(
+                            conditional_sigma,
+                            index=["x", "y", "z"],
+                            columns=["x", "y", "z"],
+                        ),
+                        use_container_width=True,
+                    )
+                    st.caption(
+                        "This absolute conductivity uses the explicitly assumed relaxation time; "
+                        "the relaxation time is not calculated by this workflow."
+                    )
+
+if results_json.exists():
+    st.download_button(
+        "Download results JSON",
+        results_json.read_bytes(),
+        file_name=results_json.name,
     )
-    for row in payload.get("results", []):
-        if row.get("rows"):
-            with st.expander(row["target_id"]):
-                st.dataframe(pd.DataFrame(row["rows"]), hide_index=True)
-    st.download_button("Download results JSON", output.read_bytes(), file_name=output.name)
-    csv = cfg.output_dir / "conductivity.csv"
-    if csv.exists():
-        st.download_button("Download transport CSV", csv.read_bytes(), file_name=csv.name)
+if transport_csv.exists():
+    st.download_button(
+        "Download transport CSV",
+        transport_csv.read_bytes(),
+        file_name=transport_csv.name,
+    )
