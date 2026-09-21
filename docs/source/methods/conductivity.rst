@@ -160,11 +160,62 @@ method-specific settings, a TOML preview, the same two-column save/run area,
 command preview and last-run output, followed by a per-structure results browser.
 Common GPAW fields use the same labels and configuration keys in both stages.
 
-``sigma_over_tau_S_per_m_per_s`` has units S m^-1 s^-1. The trace divided by
-three is a directional average, not a prediction for a porous electrode.
-Only if ``relaxation_time_fs`` is supplied are conditional absolute tensors
-(S/m) and averages (S/cm) emitted. Those quantities remain assumptions about
-the scattering time, not first-principles lifetime predictions.
+For human-readable reporting, the primary conductivity-per-relaxation-time
+quantity is written as ``sigma_over_tau_S_per_cm_per_fs``, in
+``S cm^-1 fs^-1``. This is exactly the same quantity as the retained raw SI
+field ``sigma_over_tau_S_per_m_per_s``; the numerical conversion is::
+
+    (sigma/tau)[S cm^-1 fs^-1] = 1e-17 * (sigma/tau)[S m^-1 s^-1]
+
+The trace divided by three is the directional average used for screening.
+The ``S cm^-1 fs^-1`` representation is convenient because an assumed
+relaxation time in femtoseconds converts directly to an estimated conductivity
+in ``S/cm``. For example, ``282 S cm^-1 fs^-1`` with an assumed
+``tau = 5 fs`` gives ``1410 S/cm``. The assumed-tau result remains
+conditional: the present backend does not calculate the scattering lifetime.
+
+ATO-normalized co-dopant comparison
+-----------------------------------
+
+The conductivity stage can normalize co-doped structures to one explicitly
+selected ATO reference target::
+
+    [conductivity.comparison]
+    enabled = true
+    reference_target = "Sb5/candidate_001"
+    reference_label = "ATO"
+    basis = "same-total-dopant"
+
+The reference target must be included in the same conductivity run and the
+selector must match exactly one successfully calculated target. Exact IDs,
+safe IDs, and shell-style wildcards are accepted.
+
+For each target and transport condition, DopingFlow reports::
+
+    relative_to_reference = (sigma/tau)_target / (sigma/tau)_ATO
+
+and::
+
+    percent_change_vs_reference = 100 * (relative_to_reference - 1)
+
+Thus a value of 1.0 (0%) preserves the ATO band-transport descriptor, values
+above 1.0 indicate larger ``sigma/tau``, and values below 1.0 indicate a
+smaller value. These are comparisons of the **band-structure contribution**
+only; different dopants or vacancies may also change the real scattering time.
+
+To avoid silently comparing unlike systems, reference normalization is only
+performed at the same temperature, excess-electron concentration, structure
+kind, and oxygen-vacancy count. The user must still choose a scientifically fair
+composition basis. Supported provenance labels are:
+
+* ``same-total-dopant``: for example 5% Sb ATO versus 2.5% Sb + 2.5% X;
+* ``fixed-sb``: keep the Sb concentration fixed while adding X;
+* ``custom``: another explicitly documented comparison basis.
+
+The comparison table is written to
+``conductivity_comparison.csv`` and ``conductivity_comparison.json``.
+The Streamlit page displays this table prominently above the per-structure
+browser.
 
 Converge k sampling, interpolation factor, integration grid, cutoff and empty
 bands. Chemical potentials within 10 kBT of the sampled energy limits and
