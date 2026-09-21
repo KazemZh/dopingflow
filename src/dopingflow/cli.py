@@ -229,7 +229,7 @@ def conductivity_cmd(
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview selection without DFT or transport"),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
-    """Step 12: Calculate band conductivity/tau on favorable or manually selected structures."""
+    """Step 12: Calculate band conductivity/tau on oxidation-style selected targets."""
     _init(config, verbose)
     output = run_conductivity_from_toml(config, dry_run=dry_run)
     if output is None:
