@@ -157,6 +157,601 @@ def _fallback_uniform_prior(
     }
 
 
+
+def _safe_reference_token(value: str) -> str:
+    text = str(value).strip().replace("\\", "_").replace("/", "_")
+    return "".join(ch if ch.isalnum() or ch in "._+-" else "_" for ch in text) or "reference"
+
+
+def _resolve_reference_path(cfg: OxidationConfig, raw: str | Path, *, base: Path | None = None) -> Path:
+    path = Path(str(raw)).expanduser()
+    if path.is_absolute():
+        return path.resolve()
+    return ((base or cfg.root) / path).resolve()
+
+
+def _reference_cache_root(
+    cfg: OxidationConfig,
+    settings: dict[str, Any],
+    output_root: str,
+) -> Path:
+    raw = str(settings.get("reference_cache_root") or "").strip()
+    if raw:
+        return _resolve_reference_path(cfg, raw)
+    base = Path(output_root).expanduser()
+    if not base.is_absolute():
+        base = cfg.source_root / base
+    return (base / "reference_calibration").resolve()
+
+
+def _reference_structure_files(root: Path) -> list[Path]:
+    if not root.exists():
+        return []
+    candidates: list[Path] = []
+    for pattern in ("POSCAR", "CONTCAR", "*.vasp", "*.cif"):
+        candidates.extend(path for path in root.rglob(pattern) if path.is_file())
+    # Prefer one POSCAR/CONTCAR-like file per directory to avoid double-counting
+    # the same reference when both source and relaxed names coexist.
+    selected: dict[str, Path] = {}
+    for path in sorted({p.resolve() for p in candidates}, key=lambda p: str(p)):
+        if path.name.upper() in {"POSCAR", "CONTCAR"}:
+            key = str(path.parent.resolve())
+            old = selected.get(key)
+            if old is None or (old.name.upper() == "POSCAR" and path.name.upper() == "CONTCAR"):
+                selected[key] = path
+        else:
+            selected[str(path)] = path
+    return list(selected.values())
+
+
+def _infer_binary_oxide_reference(
+    path: Path,
+    *,
+    peroxide_oo_cutoff_angstrom: float = 1.8,
+) -> dict[str, Any] | None:
+    """Infer a single-cation formal state from a simple binary oxide reference.
+
+    Only M_xO_y structures with an integer M oxidation state under O2- are
+    accepted automatically. Short O-O bonded structures are rejected so
+    peroxides/superoxides are not silently treated as ordinary O2- oxides.
+    """
+    try:
+        structure = Structure.from_file(path)
+    except Exception:
+        return None
+    symbols = sorted({site.specie.symbol for site in structure})
+    if "O" not in symbols:
+        return None
+    cations = [symbol for symbol in symbols if symbol != "O"]
+    if len(cations) != 1:
+        return None
+    if _short_oo(structure, peroxide_oo_cutoff_angstrom):
+        return None
+    amounts = structure.composition.get_el_amt_dict()
+    element = cations[0]
+    n_m = float(amounts.get(element, 0.0))
+    n_o = float(amounts.get("O", 0.0))
+    if n_m <= 0 or n_o <= 0:
+        return None
+    nominal = 2.0 * n_o / n_m
+    integer = int(round(nominal))
+    if integer <= 0 or not math.isclose(nominal, integer, abs_tol=1.0e-8):
+        return None
+    try:
+        allowed = {int(value) for value in Element(element).oxidation_states}
+    except Exception:
+        allowed = set()
+    if allowed and integer not in allowed:
+        return None
+    return {
+        "id": f"{structure.composition.reduced_formula}_{path.parent.name}",
+        "path": str(path.resolve()),
+        "element": element,
+        "oxidation_state": integer,
+        "source": "auto-binary-oxide",
+        "nominal_oxygen_state": -2,
+    }
+
+
+def _manifest_reference_entries(
+    cfg: OxidationConfig,
+    settings: dict[str, Any],
+) -> tuple[list[dict[str, Any]], str | None]:
+    raw = str(settings.get("reference_manifest") or "").strip()
+    default = cfg.root / "reference_structures" / "oxidation_states" / "manifest.json"
+    path = _resolve_reference_path(cfg, raw) if raw else default.resolve()
+    if not path.is_file():
+        return [], None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    rows = payload.get("references", []) if isinstance(payload, dict) else payload
+    if not isinstance(rows, list):
+        raise ValueError("Oxidation reference manifest must contain a list or {'references': [...]}")
+    entries: list[dict[str, Any]] = []
+    for pos, raw_row in enumerate(rows):
+        if not isinstance(raw_row, dict) or raw_row.get("enabled", True) is False:
+            continue
+        structure_raw = raw_row.get("path") or raw_row.get("structure_path")
+        element = str(raw_row.get("element") or "").strip()
+        state = raw_row.get("oxidation_state")
+        if not structure_raw or not element or state is None:
+            continue
+        structure_path = _resolve_reference_path(cfg, str(structure_raw), base=path.parent)
+        if not structure_path.is_file():
+            continue
+        numeric = float(state)
+        integer = int(round(numeric))
+        if not math.isclose(numeric, integer, abs_tol=1.0e-8):
+            raise ValueError(f"Reference manifest oxidation_state must be integer: {state}")
+        entry = {
+            "id": str(raw_row.get("id") or f"{element}_{integer:+d}_{pos:03d}"),
+            "path": str(structure_path),
+            "element": element,
+            "oxidation_state": integer,
+            "source": "manifest",
+        }
+        if isinstance(raw_row.get("initial_magmoms"), dict):
+            entry["initial_magmoms"] = {
+                str(k): float(v) for k, v in raw_row["initial_magmoms"].items()
+            }
+        if raw_row.get("kpts") is not None:
+            entry["kpts"] = [int(value) for value in raw_row["kpts"]]
+        entries.append(entry)
+    return entries, str(path)
+
+
+def _discover_reference_entries(
+    cfg: OxidationConfig,
+    settings: dict[str, Any],
+    *,
+    elements: set[str],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    manifest_entries, manifest_path = _manifest_reference_entries(cfg, settings)
+    raw_roots = settings.get("reference_roots")
+    if raw_roots is None:
+        raw_roots = [
+            "reference_structures/oxidation_states",
+            "reference_structures/oxides",
+        ]
+    elif isinstance(raw_roots, str):
+        raw_roots = [item.strip() for item in raw_roots.split(",") if item.strip()]
+    elif not isinstance(raw_roots, (list, tuple)):
+        raise ValueError("[oxidation.dft_auto].reference_roots must be a list or comma-separated string")
+
+    roots = [_resolve_reference_path(cfg, item) for item in raw_roots]
+    entries: list[dict[str, Any]] = list(manifest_entries)
+    manifest_paths = {Path(entry["path"]).resolve() for entry in manifest_entries}
+    cutoff = float(settings.get("peroxide_oo_cutoff_angstrom", 1.8))
+    for root in roots:
+        for path in _reference_structure_files(root):
+            if path.resolve() in manifest_paths:
+                continue
+            inferred = _infer_binary_oxide_reference(
+                path,
+                peroxide_oo_cutoff_angstrom=cutoff,
+            )
+            if inferred is not None:
+                entries.append(inferred)
+
+    # Exact path/element/state triples are unique. A manifest entry wins over
+    # an automatically inferred entry for the same structure.
+    unique: dict[tuple[str, str, int], dict[str, Any]] = {}
+    for entry in entries:
+        element = str(entry["element"])
+        if element not in elements or element == "O":
+            continue
+        key = (
+            str(Path(entry["path"]).resolve()),
+            element,
+            int(entry["oxidation_state"]),
+        )
+        if key not in unique or entry.get("source") == "manifest":
+            unique[key] = entry
+    final = sorted(
+        unique.values(),
+        key=lambda item: (
+            str(item["element"]),
+            int(item["oxidation_state"]),
+            str(item["id"]),
+        ),
+    )
+    return final, {
+        "manifest": manifest_path,
+        "roots": [str(root) for root in roots],
+        "n_discovered": len(final),
+    }
+
+
+def _reference_kpts(
+    target_structure: Structure,
+    reference_structure: Structure,
+    target_kpts: Sequence[int],
+    settings: dict[str, Any],
+    entry: dict[str, Any],
+) -> list[int]:
+    if entry.get("kpts") is not None:
+        values = [int(value) for value in entry["kpts"]]
+        if len(values) != 3 or any(value < 1 for value in values):
+            raise ValueError("Reference manifest kpts must contain three positive integers")
+        return values
+    mode = str(settings.get("reference_kpoint_mode", "match-density")).strip().lower()
+    if mode not in {"match-density", "same-grid"}:
+        raise ValueError(
+            "[oxidation.dft_auto].reference_kpoint_mode must be 'match-density' or 'same-grid'"
+        )
+    base = [int(value) for value in target_kpts]
+    if mode == "same-grid":
+        return base
+    maximum = max(1, int(settings.get("reference_kpts_max", 8)))
+    result: list[int] = []
+    for n_target, l_target, l_ref in zip(
+        base,
+        target_structure.lattice.abc,
+        reference_structure.lattice.abc,
+    ):
+        if l_ref <= 0:
+            result.append(n_target)
+            continue
+        estimate = int(round(float(n_target) * float(l_target) / float(l_ref)))
+        result.append(max(1, min(maximum, estimate)))
+    return result
+
+
+def _nominal_transition_metal_seed(element: str, oxidation_state: int) -> float:
+    """Conservative high-spin-like initial seed; it is not an OS descriptor."""
+    try:
+        el = Element(element)
+        if not el.is_transition_metal or el.group is None:
+            return 0.0
+        d_count = max(0, min(10, int(el.group) - int(oxidation_state)))
+        return float(min(d_count, 10 - d_count))
+    except Exception:
+        return 0.0
+
+
+def _reference_fingerprint_std(values: Sequence[float]) -> float:
+    if len(values) < 2:
+        return 0.0
+    mean = sum(float(value) for value in values) / len(values)
+    variance = sum((float(value) - mean) ** 2 for value in values) / (len(values) - 1)
+    return math.sqrt(max(variance, 0.0))
+
+
+def _calculate_reference_fingerprint(
+    cfg: OxidationConfig,
+    settings: dict[str, Any],
+    electronic_settings: dict[str, Any],
+    *,
+    target_structure: Structure,
+    output_root: str,
+    entry: dict[str, Any],
+    execute: bool,
+    reuse: bool,
+) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    from dopingflow import oxidation_dft as dft
+    from dopingflow.dft_cache import calculation_key, derived_current, ensure_gpaw, record_derived
+
+    path = Path(entry["path"]).resolve()
+    structure = Structure.from_file(path)
+    element = str(entry["element"])
+    state = int(entry["oxidation_state"])
+    reference_target = StructureTarget(
+        target_id=f"oxidation-reference/{_safe_reference_token(str(entry['id']))}",
+        parent_id=f"oxidation-reference/{element}",
+        kind="oxidation-reference",
+        structure_path=path,
+        n_vacancies=0,
+        vacancy_species=None,
+        metadata={
+            "reference_element": element,
+            "reference_oxidation_state": state,
+            "reference_source": entry.get("source"),
+        },
+    )
+
+    ref_settings = dict(electronic_settings)
+    ref_settings["charge"] = 0.0
+    ref_settings["save_wavefunctions"] = False
+    ref_settings["reuse_existing"] = reuse
+    ref_settings["execute"] = execute
+    ref_settings["kpts"] = _reference_kpts(
+        target_structure,
+        structure,
+        electronic_settings.get("kpts", [1, 1, 1]),
+        settings,
+        entry,
+    )
+
+    initial = dict(
+        settings.get("reference_initial_magmoms")
+        or ref_settings.get("initial_magmoms")
+        or {}
+    )
+    if isinstance(entry.get("initial_magmoms"), dict):
+        initial.update(entry["initial_magmoms"])
+    if bool(settings.get("reference_auto_magnetic_seed", True)) and element not in initial:
+        seed = _nominal_transition_metal_seed(element, state)
+        if seed > 0:
+            initial[element] = seed
+    ref_settings["initial_magmoms"] = initial
+
+    key, identity = calculation_key(reference_target, ref_settings)
+    cache_root = _reference_cache_root(cfg, settings, output_root)
+    workdir = (
+        cache_root
+        / element
+        / f"OS_{state:+d}"
+        / _safe_reference_token(str(entry["id"]))
+        / key[:12]
+    )
+    ref_settings["workdir"] = str(workdir)
+    fingerprint_file = workdir / "oxidation_reference_fingerprint.json"
+    if reuse and fingerprint_file.is_file():
+        try:
+            cached = json.loads(fingerprint_file.read_text(encoding="utf-8"))
+            if cached.get("calculation_key") == key:
+                return cached, {
+                    "id": entry["id"],
+                    "element": element,
+                    "oxidation_state": state,
+                    "status": "reused-fingerprint",
+                    "workdir": str(workdir),
+                }
+        except Exception:
+            pass
+
+    try:
+        gpw_path, gpw_reused = ensure_gpaw(reference_target, cfg, ref_settings)
+    except Exception as exc:
+        return None, {
+            "id": entry["id"],
+            "element": element,
+            "oxidation_state": state,
+            "status": "unavailable",
+            "error": f"{type(exc).__name__}: {exc}",
+            "workdir": str(workdir),
+        }
+
+    bader_settings = dict(cfg.settings.get("bader", {}) or {})
+    bader_settings.update(
+        {
+            "workdir": str(workdir),
+            "gpw_file": gpw_path.name,
+            "gridrefinement": int(
+                settings.get(
+                    "reference_bader_gridrefinement",
+                    bader_settings.get("gridrefinement", 2),
+                )
+            ),
+        }
+    )
+    acf = workdir / str(bader_settings.get("acf_file", "ACF.dat"))
+    bader_reuse = reuse and acf.is_file() and derived_current(acf, gpw_path)
+    bader_settings["execute"] = execute and not bader_reuse
+    if acf.is_file() and not bader_reuse and not execute:
+        return None, {
+            "id": entry["id"],
+            "element": element,
+            "oxidation_state": state,
+            "status": "unavailable",
+            "error": "Existing Bader reference is not verified against the current GPAW result",
+            "workdir": str(workdir),
+        }
+
+    try:
+        bader = dft._run_bader(reference_target, cfg, bader_settings)
+        if acf.is_file() and gpw_path.is_file():
+            record_derived(acf, gpw_path)
+    except Exception as exc:
+        return None, {
+            "id": entry["id"],
+            "element": element,
+            "oxidation_state": state,
+            "status": "unavailable",
+            "error": f"{type(exc).__name__}: {exc}",
+            "workdir": str(workdir),
+        }
+
+    values = [
+        float(record["bader_partial_charge"])
+        for record in bader.get("bader_partial_charges", [])
+        if record.get("element") == element
+        and record.get("bader_partial_charge") is not None
+    ]
+    if not values:
+        return None, {
+            "id": entry["id"],
+            "element": element,
+            "oxidation_state": state,
+            "status": "unavailable",
+            "error": f"No Bader values found for reference element {element}",
+            "workdir": str(workdir),
+        }
+
+    fingerprint = {
+        "schema_version": 1,
+        "id": str(entry["id"]),
+        "element": element,
+        "oxidation_state": state,
+        "structure_path": str(path),
+        "reference_source": entry.get("source"),
+        "calculation_key": key,
+        "calculation_identity": identity,
+        "workdir": str(workdir),
+        "kpts": list(ref_settings["kpts"]),
+        "initial_magmoms": initial,
+        "bader_values": values,
+        "mean": sum(values) / len(values),
+        "std": _reference_fingerprint_std(values),
+        "median": float(median(values)),
+        "mad": _mad(values),
+        "n_sites": len(values),
+        "gpw_reused": bool(gpw_reused),
+        "bader_reused": bool(bader_reuse),
+    }
+    workdir.mkdir(parents=True, exist_ok=True)
+    fingerprint_file.write_text(
+        json.dumps(fingerprint, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return fingerprint, {
+        "id": entry["id"],
+        "element": element,
+        "oxidation_state": state,
+        "status": "calculated",
+        "workdir": str(workdir),
+        "gpw_reused": bool(gpw_reused),
+        "bader_reused": bool(bader_reuse),
+    }
+
+
+def _aggregate_reference_fingerprints(
+    fingerprints: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
+    grouped: dict[str, dict[int, list[dict[str, Any]]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    for fingerprint in fingerprints:
+        grouped[str(fingerprint["element"])][
+            int(fingerprint["oxidation_state"])
+        ].append(fingerprint)
+
+    library: dict[str, Any] = {}
+    for element, by_state in grouped.items():
+        library[element] = {}
+        for state, records in by_state.items():
+            values = [
+                float(value)
+                for record in records
+                for value in record.get("bader_values", [])
+            ]
+            if not values:
+                continue
+            library[element][str(state)] = {
+                "mean": sum(values) / len(values),
+                "std": _reference_fingerprint_std(values),
+                "median": float(median(values)),
+                "mad": _mad(values),
+                "n": len(values),
+                "values": values,
+                "references": [
+                    {
+                        "id": record.get("id"),
+                        "structure_path": record.get("structure_path"),
+                        "calculation_key": record.get("calculation_key"),
+                        "kpts": record.get("kpts"),
+                    }
+                    for record in records
+                ],
+            }
+    return library
+
+
+def _merge_reference_libraries(
+    automatic: dict[str, Any],
+    explicit: dict[str, Any],
+) -> dict[str, Any]:
+    merged = json.loads(json.dumps(automatic)) if automatic else {}
+    for element, values in explicit.items():
+        if isinstance(values, dict):
+            merged.setdefault(str(element), {}).update(values)
+        else:
+            merged[str(element)] = values
+    return merged
+
+
+def _build_automatic_reference_library(
+    cfg: OxidationConfig,
+    settings: dict[str, Any],
+    electronic_settings: dict[str, Any],
+    *,
+    structure: Structure,
+    output_root: str,
+    execute: bool,
+    reuse: bool,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    mode = str(settings.get("reference_calibration", "auto")).strip().lower()
+    if mode not in {"off", "auto", "require"}:
+        raise ValueError(
+            "[oxidation.dft_auto].reference_calibration must be off, auto, or require"
+        )
+    if mode == "off":
+        return {}, {"mode": "off", "status": "disabled"}
+
+    elements = {site.specie.symbol for site in structure if site.specie.symbol != "O"}
+    entries, discovery = _discover_reference_entries(
+        cfg,
+        settings,
+        elements=elements,
+    )
+    reference_execute = execute and bool(settings.get("run_missing_references", True))
+    fingerprints: list[dict[str, Any]] = []
+    records: list[dict[str, Any]] = []
+    for entry in entries:
+        fingerprint, record = _calculate_reference_fingerprint(
+            cfg,
+            settings,
+            electronic_settings,
+            target_structure=structure,
+            output_root=output_root,
+            entry=entry,
+            execute=reference_execute,
+            reuse=reuse,
+        )
+        records.append(record)
+        if fingerprint is not None:
+            fingerprints.append(fingerprint)
+
+    library = _aggregate_reference_fingerprints(fingerprints)
+    min_states = max(2, int(settings.get("reference_min_states", 2)))
+    states_available = {
+        element: sorted(int(state) for state in values)
+        for element, values in library.items()
+        if isinstance(values, dict)
+    }
+    missing = sorted(
+        element
+        for element in elements
+        if len(states_available.get(element, [])) < min_states
+    )
+
+    cache_root = _reference_cache_root(cfg, settings, output_root)
+    cache_root.mkdir(parents=True, exist_ok=True)
+    library_path = cache_root / "bader_reference_fingerprints.json"
+    payload = {
+        "schema_version": 1,
+        "mode": mode,
+        "target_id": getattr(structure, "composition", None).reduced_formula
+        if getattr(structure, "composition", None) is not None
+        else None,
+        "library": library,
+        "states_available": states_available,
+        "elements_missing_minimum_states": missing,
+        "discovery": discovery,
+        "reference_runs": records,
+    }
+    library_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    meta = {
+        "mode": mode,
+        "status": "complete" if not missing else "partial",
+        "library_file": str(library_path),
+        "states_available": states_available,
+        "elements_missing_minimum_states": missing,
+        "discovery": discovery,
+        "reference_runs": records,
+        "run_missing_references": reference_execute,
+        "min_reference_states": min_states,
+    }
+    if mode == "require" and missing:
+        raise OptionalMethodUnavailable(
+            "Automatic Bader reference calibration is required but fewer than "
+            f"{min_states} oxidation-state references are available for: {', '.join(missing)}"
+        )
+    return library, meta
+
+
 def _load_refs(cfg: OxidationConfig, settings: dict[str, Any]) -> dict[str, Any]:
     refs = dict(settings.get("bader_reference_fingerprints", {}) or {})
     raw = str(settings.get("bader_reference_file") or "").strip()
