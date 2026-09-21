@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -107,6 +108,30 @@ def parse_config(raw, root):
         raise ValueError(
             "Only transport_regime='band' is implemented; localized carriers need a hopping model"
         )
+
+    comparison = section.get("comparison", {}) or {}
+    if not isinstance(comparison, dict):
+        raise TypeError("[conductivity.comparison] must be a TOML table")
+    comparison = dict(comparison)
+    comparison["enabled"] = bool(comparison.get("enabled", False))
+    comparison["reference_target"] = str(
+        comparison.get("reference_target", "")
+    ).strip()
+    comparison["reference_label"] = str(
+        comparison.get("reference_label", "ATO")
+    ).strip() or "ATO"
+    comparison["basis"] = str(
+        comparison.get("basis", "same-total-dopant")
+    ).strip().lower()
+    if comparison["basis"] not in {"same-total-dopant", "fixed-sb", "custom"}:
+        raise ValueError(
+            "[conductivity.comparison].basis must be same-total-dopant, fixed-sb, or custom"
+        )
+    if comparison["enabled"] and not comparison["reference_target"]:
+        raise ValueError(
+            "[conductivity.comparison].reference_target is required when comparison is enabled"
+        )
+    section["comparison"] = comparison
     section["dft"] = dft
     return cfg, section
 
@@ -205,10 +230,18 @@ def integrate_transport(data, section):
             tensor = np.asarray(sigma[0, 0])
             if not np.isfinite(tensor).all():
                 raise ValueError("Nonfinite transport tensor")
+            # Human-readable transport unit used by the GUI and comparison tables.
+            # 1 (S m^-1 s^-1) = 1e-17 (S cm^-1 fs^-1).
+            tensor_S_per_cm_per_fs = tensor * 1.0e-17
+            trace_average_S_per_cm_per_fs = float(
+                np.trace(tensor_S_per_cm_per_fs) / 3
+            )
             row = {
                 "temperature_K": temperature,
                 "excess_electrons_cm3": excess,
                 "chemical_potential_relative_to_dft_fermi_eV": float((mu - data.fermi) / eV),
+                "sigma_over_tau_S_per_cm_per_fs": tensor_S_per_cm_per_fs.tolist(),
+                "sigma_over_tau_trace_average_S_per_cm_per_fs": trace_average_S_per_cm_per_fs,
                 "sigma_over_tau_S_per_m_per_s": tensor.tolist(),
                 "sigma_over_tau_trace_average_S_per_m_per_s": float(np.trace(tensor) / 3),
             }
@@ -226,6 +259,114 @@ def integrate_transport(data, section):
             rows.append(row)
     return rows
 
+
+
+def _reference_matches(target_id, selector):
+    """Match an exact/safe target ID or shell-style wildcard selector."""
+    target_id = str(target_id).replace("\\", "/")
+    selector = str(selector).strip().replace("\\", "/")
+    if not selector:
+        return False
+    safe_id = target_id.replace("/", "__")
+    safe_selector = selector.replace("/", "__")
+    return (
+        fnmatch.fnmatchcase(target_id, selector)
+        or fnmatch.fnmatchcase(safe_id, safe_selector)
+    )
+
+
+def build_reference_comparison(results, comparison):
+    """Build condition-matched sigma/tau ratios relative to one explicit reference.
+
+    Comparisons are intentionally restricted to the same structure kind and oxygen
+    vacancy count as the reference. Temperature and rigid-band excess-electron
+    concentration must also match exactly. This avoids silently mixing physically
+    different comparison bases.
+    """
+    if not comparison.get("enabled", False):
+        return [], []
+
+    selector = str(comparison.get("reference_target", "")).strip()
+    matches = [
+        result
+        for result in results
+        if result.get("status") == "calculated"
+        and _reference_matches(result.get("target_id", ""), selector)
+    ]
+    warnings = []
+    if not matches:
+        warnings.append(
+            "Conductivity comparison reference matched no calculated target in this run: "
+            + selector
+        )
+        return [], warnings
+    if len(matches) > 1:
+        warnings.append(
+            "Conductivity comparison reference must match exactly one calculated target; "
+            f"{selector!r} matched {len(matches)} targets."
+        )
+        return [], warnings
+
+    reference = matches[0]
+    reference_rows = {
+        (
+            float(row["temperature_K"]),
+            float(row["excess_electrons_cm3"]),
+        ): row
+        for row in reference.get("rows", [])
+        if row.get("sigma_over_tau_trace_average_S_per_cm_per_fs") is not None
+    }
+    reference_kind = reference.get("kind")
+    reference_vacancies = int(reference.get("n_oxygen_vacancies", 0) or 0)
+    label = str(comparison.get("reference_label", "ATO"))
+    basis = str(comparison.get("basis", "same-total-dopant"))
+
+    rows = []
+    for result in results:
+        if result.get("status") != "calculated":
+            continue
+        if result.get("kind") != reference_kind:
+            continue
+        vacancies = int(result.get("n_oxygen_vacancies", 0) or 0)
+        if vacancies != reference_vacancies:
+            continue
+        for row in result.get("rows", []):
+            key = (
+                float(row["temperature_K"]),
+                float(row["excess_electrons_cm3"]),
+            )
+            reference_row = reference_rows.get(key)
+            if reference_row is None:
+                continue
+            value = float(row["sigma_over_tau_trace_average_S_per_cm_per_fs"])
+            reference_value = float(
+                reference_row["sigma_over_tau_trace_average_S_per_cm_per_fs"]
+            )
+            if not np.isfinite(value) or not np.isfinite(reference_value):
+                continue
+            if abs(reference_value) <= np.finfo(float).tiny:
+                warnings.append(
+                    f"Reference sigma/tau is zero for {key}; ratio cannot be calculated."
+                )
+                continue
+            ratio = value / reference_value
+            rows.append(
+                {
+                    "target_id": result["target_id"],
+                    "reference_target_id": reference["target_id"],
+                    "reference_label": label,
+                    "comparison_basis": basis,
+                    "structure_kind": result.get("kind"),
+                    "n_oxygen_vacancies": vacancies,
+                    "temperature_K": key[0],
+                    "excess_electrons_cm3": key[1],
+                    "sigma_over_tau_trace_average_S_per_cm_per_fs": value,
+                    "reference_sigma_over_tau_trace_average_S_per_cm_per_fs": reference_value,
+                    "relative_to_reference": ratio,
+                    "percent_change_vs_reference": 100.0 * (ratio - 1.0),
+                }
+            )
+    return rows, warnings
 
 def run_conductivity(raw, root, *, dry_run=False):
     if not (raw.get("conductivity", {}) or {}).get("enabled", False):
@@ -328,6 +469,13 @@ def run_conductivity(raw, root, *, dry_run=False):
         _json_write(target_dir / "summary.json", summary)
         structure_index.append(summary)
 
+    comparison_rows, comparison_warnings = build_reference_comparison(
+        results, section.get("comparison", {})
+    )
+    warnings.extend(comparison_warnings)
+    _csv_write(cfg.output_dir / "conductivity_comparison.csv", comparison_rows)
+    _json_write(cfg.output_dir / "conductivity_comparison.json", comparison_rows)
+
     _csv_write(cfg.output_dir / "conductivity_structure_index.csv", structure_index)
     _json_write(cfg.output_dir / "conductivity_structure_index.json", structure_index)
     output = cfg.output_dir / "conductivity_results.json"
@@ -339,11 +487,13 @@ def run_conductivity(raw, root, *, dry_run=False):
             "selection": selection,
             "warnings": warnings,
             "results": results,
+            "comparison": comparison_rows,
             "settings": section,
             "limitations": [
                 "Target discovery uses the same source_root, vacancy toggles, and target_include rules as oxidation-state analysis.",
                 "Band-like transport is a hypothesis requiring localization checks; polaron hopping and AMSET scattering are not calculated by this stage.",
-                "sigma/tau is not absolute conductivity. Any sigma uses the explicitly assumed relaxation time.",
+                "sigma/tau is not absolute conductivity. The primary human-readable unit is S cm^-1 fs^-1; raw SI S m^-1 s^-1 is retained. Any sigma uses the explicitly assumed relaxation time.",
+                "Reference-normalized comparisons require the same temperature, excess-electron concentration, structure kind, and oxygen-vacancy count. The user remains responsible for choosing a scientifically fair ATO reference composition.",
                 "Positive excess_electrons_cm3 adds electrons to the explicit structure; negative removes them. Zero preserves its DFT electron count. This is not a defect-ionization or mobile-carrier prediction.",
                 "Converge k mesh, interpolation, empty bands and DOS grid. Periodic vacancies do not model random-defect scattering or grain boundaries.",
             ],
