@@ -406,6 +406,48 @@ def test_reference_comparison_requires_available_persistent_reference():
     assert warnings and "not available" in warnings[0]
 
 
+def test_collect_compatible_results_accumulates_prior_runs(tmp_path):
+    output = tmp_path / "07_conductivity"
+    first = output / "structures" / "Ce2p5_Sb2p5" / "candidate_013"
+    second = output / "structures" / "Ti2p5_Sb2p5" / "candidate_004"
+    first.mkdir(parents=True)
+    second.mkdir(parents=True)
+
+    (first / "conductivity.json").write_text(
+        json.dumps(
+            {
+                "target_id": "Ce2p5_Sb2p5/candidate_013",
+                "status": "calculated",
+                "transport_settings_fingerprint": "same",
+                "rows": [],
+            }
+        )
+    )
+    (second / "conductivity.json").write_text(
+        json.dumps(
+            {
+                "target_id": "Ti2p5_Sb2p5/candidate_004",
+                "status": "calculated",
+                "transport_settings_fingerprint": "different",
+                "rows": [],
+            }
+        )
+    )
+    current = [
+        {
+            "target_id": "Nb2p5_Sb2p5/candidate_002",
+            "status": "calculated",
+            "transport_settings_fingerprint": "same",
+            "rows": [],
+        }
+    ]
+    records = c.collect_compatible_transport_results(output, "same", current)
+    assert {record["target_id"] for record in records} == {
+        "Ce2p5_Sb2p5/candidate_013",
+        "Nb2p5_Sb2p5/candidate_002",
+    }
+
+
 def test_explicit_reference_structure_can_live_outside_target_source(tmp_path):
     target_root = tmp_path / "vacancy-selected"
     parent(target_root, "codoped", -10)
