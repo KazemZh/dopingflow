@@ -41,21 +41,30 @@ status 1 if any target fails or is unavailable; the JSON contains each reason.
 Selection
 ---------
 
-* ``selection = "favorable"`` (default): choose ``top_k_per_group`` lowest relaxed
-  energies among configurations with identical elemental atom counts, vacancy
-  count and recorded backend/model/task. This is configuration preference, not
-  stability against decomposition. Known unconverged relaxations and missing
-  energies are excluded with warnings; old results with unknown convergence or
-  model provenance require the user's assessment.
-* ``selection = "manual"``: choose only ``target_include`` IDs/wildcards and
-  ``structure_paths``. Unmatched selectors fail before calculations start.
-* ``selection = "all"``: analyze all discovered eligible structures.
+Conductivity intentionally uses the **same structure-selection model as the
+oxidation-state stage**. The relevant parameters are::
 
-In favorable mode manual selections are added to the automatic shortlist.
-The available parents include all ``*/*/02_relax/POSCAR`` files, including those
-excluded by upstream filtering. Vacancy structures come from
-``vacancies_database.json``. Explicit structure paths are relative to input.toml
-unless absolute. Both classes can be enabled/disabled independently.
+    [conductivity]
+    source_root = "vacancy-selected"
+    include_vacancy_free = true
+    include_oxygen_vacancies = true
+    target_include = []
+
+``source_root`` has the same meaning as ``oxidation.source_root``: it is the root
+containing the selected relaxed parent structures and, when vacancy analysis is
+enabled, ``vacancies_database.json``. If omitted, it inherits
+``[structure].outdir``.
+
+``target_include`` is optional and behaves exactly like the oxidation selector.
+Leave it empty to analyze every discovered target. Otherwise use exact target IDs,
+safe IDs, or shell-style wildcards such as ``Sb5_Ti2p5/*``. Vacancy-free and
+oxygen-vacancy structures can be enabled or disabled independently.
+
+There is deliberately no second conductivity-specific ``favorable/manual/all``
+selector, ``top_k_per_group``, or arbitrary ``structure_paths`` interface. Parent
+and vacancy selection should happen once upstream; conductivity and oxidation then
+consume the same target namespace. This keeps the TOML and Streamlit interfaces
+consistent and prevents the two stages from silently choosing different structures.
 
 Shared DFT calculations
 -----------------------
@@ -66,7 +75,7 @@ conductivity settings take precedence. Set ``kpts`` explicitly: inheriting a
 Gamma-only oxidation mesh is rejected. At least two points in each grid
 direction are required, and this minimum is NOT a convergence criterion.
 
-Both stages use ``<structure.outdir>/dft_cache`` (or the same explicit
+Both stages use ``<source_root>/dft_cache`` (or the same explicit
 ``cache_root``). Cache identity includes geometry, site order/species and electronic
 settings: functional, cutoff, k mesh and offset convention, charge, spin,
 initial moments, smearing, density convergence, iteration limit and band count.
@@ -103,7 +112,7 @@ not a defect-equilibrium calculation.
 
 The results include:
 
-* ``selected_structures.json``: exact IDs, paths and selection-energy provenance.
+* ``selected_structures.json``: exact IDs, paths and shared target-selection provenance.
 * ``conductivity_results.json``: settings, warnings, per-target outcomes,
   GPAW paths/reuse and full Cartesian 3x3 conductivity/tau tensors.
 * ``conductivity.csv``: one row per target, temperature and excess density.
