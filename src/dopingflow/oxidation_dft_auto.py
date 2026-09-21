@@ -188,7 +188,16 @@ def _reference_structure_files(root: Path) -> list[Path]:
     if not root.exists():
         return []
     candidates: list[Path] = []
-    for pattern in ("POSCAR", "CONTCAR", "*.vasp", "*.cif"):
+    for pattern in (
+        "POSCAR",
+        "CONTCAR",
+        "*.POSCAR",
+        "*.CONTCAR",
+        "*.vasp",
+        "*.VASP",
+        "*.cif",
+        "*.CIF",
+    ):
         candidates.extend(path for path in root.rglob(pattern) if path.is_file())
     # Prefer one POSCAR/CONTCAR-like file per directory to avoid double-counting
     # the same reference when both source and relaxed names coexist.
