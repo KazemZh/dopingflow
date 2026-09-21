@@ -459,6 +459,108 @@ def test_dft_auto_preserves_mixed_valence_when_bader_populations_separate() -> N
     assert result["mixed_valence_diagnostics"]["Fe"]["supported"] is True
 
 
+def test_auto_reference_discovery_infers_binary_oxide_states(tmp_path: Path) -> None:
+    root = tmp_path / "reference_structures" / "oxides"
+    ti3_dir = root / "Ti2O3"
+    ti4_dir = root / "TiO2"
+    ti3_dir.mkdir(parents=True)
+    ti4_dir.mkdir(parents=True)
+
+    ti2o3 = Structure(
+        Lattice.cubic(10.0),
+        ["Ti", "Ti", "O", "O", "O"],
+        [
+            [0.0, 0.0, 0.0],
+            [0.5, 0.5, 0.5],
+            [0.25, 0.25, 0.25],
+            [0.75, 0.25, 0.25],
+            [0.25, 0.75, 0.75],
+        ],
+    )
+    tio2 = Structure(
+        Lattice.cubic(10.0),
+        ["Ti", "O", "O"],
+        [
+            [0.0, 0.0, 0.0],
+            [0.35, 0.35, 0.35],
+            [0.65, 0.65, 0.65],
+        ],
+    )
+    Poscar(ti2o3).write_file(ti3_dir / "POSCAR")
+    Poscar(tio2).write_file(ti4_dir / "POSCAR")
+
+    cfg = _cfg(tmp_path)
+    entries, meta = oxidation_dft_auto._discover_reference_entries(
+        cfg,
+        {"reference_roots": ["reference_structures/oxides"]},
+        elements={"Ti"},
+    )
+    assert [(entry["element"], entry["oxidation_state"]) for entry in entries] == [
+        ("Ti", 3),
+        ("Ti", 4),
+    ]
+    assert meta["n_discovered"] == 2
+
+
+def test_dft_auto_reference_calibration_can_override_structural_prior() -> None:
+    structure = Structure(
+        Lattice.cubic(8.0),
+        ["Ti", "O", "O"],
+        [[0.0, 0.0, 0.0], [0.4, 0.4, 0.4], [0.6, 0.6, 0.6]],
+    )
+    result = oxidation_dft_auto.synthesize_oxidation_states(
+        structure,
+        prior_states=[3, -2, -2],
+        bader_records=[
+            {"site_index": 0, "element": "Ti", "bader_partial_charge": 2.24},
+            {"site_index": 1, "element": "O", "bader_partial_charge": -1.12},
+            {"site_index": 2, "element": "O", "bader_partial_charge": -1.12},
+        ],
+        reference_fingerprints={
+            "Ti": {
+                "3": {"mean": 1.72, "std": 0.05, "n": 2},
+                "4": {"mean": 2.26, "std": 0.05, "n": 2},
+            }
+        },
+    )
+    ti = result["sites"][0]
+    assert ti["formal_oxidation_state"] == 4
+    assert ti["structural_prior_oxidation_state"] == 3
+    assert ti["reference_calibration_status"] == "calibrated"
+    assert ti["calibrated_oxidation_state"] == 4
+    assert ti["oxidation_state_status"] == "calibrated"
+    assert ti["calibration_confidence"] > 0.9
+
+
+def test_dft_auto_reference_calibration_marks_ambiguous_match() -> None:
+    structure = Structure(
+        Lattice.cubic(8.0),
+        ["Ti", "O", "O"],
+        [[0.0, 0.0, 0.0], [0.4, 0.4, 0.4], [0.6, 0.6, 0.6]],
+    )
+    result = oxidation_dft_auto.synthesize_oxidation_states(
+        structure,
+        prior_states=[3, -2, -2],
+        bader_records=[
+            {"site_index": 0, "element": "Ti", "bader_partial_charge": 2.20},
+            {"site_index": 1, "element": "O", "bader_partial_charge": -1.10},
+            {"site_index": 2, "element": "O", "bader_partial_charge": -1.10},
+        ],
+        reference_fingerprints={
+            "Ti": {
+                "3": {"mean": 2.10, "std": 0.08},
+                "4": {"mean": 2.30, "std": 0.08},
+            }
+        },
+    )
+    ti = result["sites"][0]
+    assert ti["formal_oxidation_state"] == 3
+    assert ti["reference_calibration_status"] == "ambiguous"
+    assert ti["oxidation_state_status"] == "suggested-ambiguous-calibration"
+    assert ti["calibrated_oxidation_state"] is None
+    assert len(ti["calibration_candidates"]) == 2
+
+
 def test_bader_default_gridrefinement_is_two(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
