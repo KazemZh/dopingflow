@@ -753,9 +753,11 @@ vacancy toggles, and optional `target_include` filters, then run without
 The GPAW + BoltzTraP2 backend reports **sigma/tau**, with optional explicitly
 assumed-tau conductivity. It shares compatible, provenance-checked GPAW results
 with oxidation analysis in either direction. Different structures/settings and
-Gamma-only meshes are not silently reused for transport. The Streamlit
-**Electronic Conductivity** page intentionally mirrors the oxidation structure
-selection controls so users do not need to learn a second target-selection scheme.
+Gamma-only meshes are not silently reused for transport. The Streamlit **Electronic Conductivity** page intentionally mirrors the oxidation
+stage wherever the concepts overlap: target/source controls, common GPAW labels and
+configuration keys, TOML preview, save/run layout, command/last-run output, and the
+per-structure results browser. The conductivity output tree also follows the same
+`structures/<target_id>/...` pattern.
 Install the transport extra with `pip install -e '.[conductivity]'` in the GPAW
 environment. Band-like transport is assumed; polaron hopping and scattering
 lifetimes are not calculated by this backend.
