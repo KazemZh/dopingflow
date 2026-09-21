@@ -36,6 +36,29 @@ def parent(root, name, energy, *, oxygen=2):
     return path
 
 
+def composition_parent(root, composition, name, energy):
+    structure = Structure(
+        Lattice.cubic(5),
+        ["Sn", "O", "O"],
+        [[0, 0, 0], [0.25, 0.25, 0.25], [0.75, 0.75, 0.75]],
+    )
+    candidate = root / composition / name
+    scan = candidate / "01_scan" / "POSCAR"
+    path = candidate / "02_relax" / "POSCAR"
+    scan.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    structure.to(filename=str(scan), fmt="poscar")
+    structure.to(filename=str(path), fmt="poscar")
+    (path.parent / "meta.json").write_text(
+        json.dumps({"energy_relaxed_eV": energy, "backend": "mace", "model": "test"})
+    )
+    selected = root / composition / "selected_candidates.txt"
+    names = selected.read_text().splitlines() if selected.exists() else []
+    if name not in names:
+        selected.write_text("\n".join([*names, name]) + "\n")
+    return path
+
+
 def test_selection_matches_oxidation_source_and_target_semantics(tmp_path):
     root = tmp_path / "structures"
     parent(root, "c1", -20)
@@ -446,6 +469,33 @@ def test_collect_compatible_results_accumulates_prior_runs(tmp_path):
         "Ce2p5_Sb2p5/candidate_013",
         "Nb2p5_Sb2p5/candidate_002",
     }
+
+
+def test_reference_auto_searches_structure_outdir_before_conductivity_source(tmp_path):
+    normal_root = tmp_path / "random_structures"
+    vacancy_root = tmp_path / "vacancy-selected"
+    composition_parent(normal_root, "Sb5", "candidate_001", -20)
+    parent(vacancy_root, "codoped", -10)
+
+    raw = {
+        "structure": {"outdir": str(normal_root)},
+        "conductivity": {
+            "enabled": True,
+            "source_root": str(vacancy_root),
+            "comparison": {
+                "enabled": True,
+                "reference_target": "Sb5/*",
+                "reference_label": "ATO 5% Sb",
+                "reference_sb_percent": 5.0,
+            },
+        },
+    }
+    cfg, settings = c.parse_config(raw, tmp_path)
+    ref_cfg, candidates = c.discover_reference_candidates(
+        raw, tmp_path, cfg, settings["comparison"]
+    )
+    assert ref_cfg.source_root == normal_root.resolve()
+    assert [target.target_id for target in candidates] == ["Sb5/candidate_001"]
 
 
 def test_explicit_reference_structure_can_live_outside_target_source(tmp_path):
