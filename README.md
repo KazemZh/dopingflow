@@ -758,6 +758,28 @@ stage wherever the concepts overlap: target/source controls, common GPAW labels 
 configuration keys, TOML preview, save/run layout, command/last-run output, and the
 per-structure results browser. The conductivity output tree also follows the same
 `structures/<target_id>/...` pattern.
-Install the transport extra with `pip install -e '.[conductivity]'` in the GPAW
-environment. Band-like transport is assumed; polaron hopping and scattering
-lifetimes are not calculated by this backend.
+For Linux/Conda environments, install BoltzTraP2 from conda-forge **before**
+installing the DopingFlow conductivity extra. This avoids pip trying to compile
+BoltzTraP2 (and its bundled spglib backend) from source::
+
+    conda activate dopingflow_gpaw
+    conda install -c conda-forge boltztrap2=26.3.1
+    pip install -e ".[conductivity]"
+
+If the GUI dependencies are also needed in the same environment, use::
+
+    pip install -e ".[gui,conductivity]"
+
+GPAW and its PAW datasets should remain installed from conda-forge rather than
+through this pip extra. A common symptom of attempting a source build of
+BoltzTraP2 with pip is an error such as `No such file or directory: 'cmake'`.
+Installing the conda-forge BoltzTraP2 package first is the recommended route.
+
+Quick checks::
+
+    python -c "import gpaw; print('GPAW:', gpaw.__version__)"
+    python -c "import BoltzTraP2; print('BoltzTraP2 OK')"
+    python -c "from dopingflow.conductivity import integrate_transport; print('DopingFlow conductivity OK')"
+
+Band-like transport is assumed; polaron hopping and scattering lifetimes are not
+calculated by this backend.
