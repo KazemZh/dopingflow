@@ -309,6 +309,7 @@ def _discover_reference_entries(
     raw_roots = settings.get("reference_roots")
     if raw_roots is None:
         raw_roots = [
+            "reference_structures/relaxed/refs",
             "reference_structures/oxidation_states",
             "reference_structures/oxides",
         ]
@@ -317,7 +318,16 @@ def _discover_reference_entries(
     elif not isinstance(raw_roots, (list, tuple)):
         raise ValueError("[oxidation.dft_auto].reference_roots must be a list or comma-separated string")
 
+    # Existing dopingflow projects historically store the relaxed reference
+    # phases in reference_structures/relaxed/refs.  Include that canonical
+    # directory by default even when an older saved GUI configuration still
+    # contains only oxidation_states/ and oxides/.
+    canonical_relaxed = (cfg.root / "reference_structures" / "relaxed" / "refs").resolve()
     roots = [_resolve_reference_path(cfg, item) for item in raw_roots]
+    if bool(settings.get("reference_include_project_relaxed_refs", True)):
+        if canonical_relaxed.exists() and canonical_relaxed not in roots:
+            roots.insert(0, canonical_relaxed)
+
     entries: list[dict[str, Any]] = list(manifest_entries)
     manifest_paths = {Path(entry["path"]).resolve() for entry in manifest_entries}
     cutoff = float(settings.get("peroxide_oo_cutoff_angstrom", 1.8))
@@ -346,6 +356,53 @@ def _discover_reference_entries(
         )
         if key not in unique or entry.get("source") == "manifest":
             unique[key] = entry
+
+    # Some long-lived projects already contain additional relaxed calibration
+    # oxides under reference_structures/corrections/*/relaxed_calibration
+    # (for example SnO or NbO2) but not in relaxed/refs.  Use those only to
+    # supplement an oxidation state that is completely absent from the primary
+    # reference roots; do not duplicate states already covered by canonical refs.
+    supplemental_used: list[str] = []
+    if bool(settings.get("reference_include_correction_calibration", True)):
+        present_states = {
+            (str(entry["element"]), int(entry["oxidation_state"]))
+            for entry in unique.values()
+        }
+        correction_root = (cfg.root / "reference_structures" / "corrections").resolve()
+        candidates: dict[tuple[str, int], list[dict[str, Any]]] = defaultdict(list)
+        if correction_root.exists():
+            for relaxed_root in sorted(correction_root.glob("*/relaxed_calibration")):
+                for path in _reference_structure_files(relaxed_root):
+                    inferred = _infer_binary_oxide_reference(
+                        path,
+                        peroxide_oo_cutoff_angstrom=cutoff,
+                    )
+                    if inferred is None:
+                        continue
+                    element = str(inferred["element"])
+                    state = int(inferred["oxidation_state"])
+                    if element not in elements or element == "O":
+                        continue
+                    key_state = (element, state)
+                    if key_state in present_states:
+                        continue
+                    inferred["source"] = "auto-correction-calibration-supplement"
+                    candidates[key_state].append(inferred)
+
+        # Deterministically select one existing relaxed structure per missing
+        # element/oxidation-state pair. This avoids counting duplicated
+        # correction snapshots as independent calibration observations.
+        for key_state, options in sorted(candidates.items()):
+            chosen = sorted(options, key=lambda item: str(item["path"]))[0]
+            key = (
+                str(Path(chosen["path"]).resolve()),
+                str(chosen["element"]),
+                int(chosen["oxidation_state"]),
+            )
+            unique[key] = chosen
+            present_states.add(key_state)
+            supplemental_used.append(str(chosen["path"]))
+
     final = sorted(
         unique.values(),
         key=lambda item: (
@@ -357,6 +414,8 @@ def _discover_reference_entries(
     return final, {
         "manifest": manifest_path,
         "roots": [str(root) for root in roots],
+        "canonical_relaxed_refs_included": canonical_relaxed in roots,
+        "correction_calibration_supplements": supplemental_used,
         "n_discovered": len(final),
     }
 
@@ -996,6 +1055,14 @@ def synthesize_oxidation_states(
     calibration_matches: dict[int, dict[str, Any]] = {}
 
     for i, site in enumerate(structure):
+        if site.specie.symbol == "O":
+            calibration_matches[i] = {
+                "status": "not-applicable",
+                "selected_state": None,
+                "confidence": None,
+                "candidates": [],
+            }
+            continue
         if i not in bader:
             continue
         match = _reference_match(site.specie.symbol, bader[i], refs, settings)
@@ -1171,6 +1238,8 @@ def synthesize_oxidation_states(
             oxidation_state_status = "suggested-ambiguous-calibration"
         elif calibration_status == "insufficient-reference-states":
             oxidation_state_status = "suggested-insufficient-calibration"
+        elif calibration_status == "not-applicable":
+            oxidation_state_status = "reference-calibration-not-applicable"
         else:
             oxidation_state_status = "suggested-uncalibrated"
         sites.append(
@@ -1219,6 +1288,9 @@ def synthesize_oxidation_states(
                 calibration_status_counts.get("insufficient-reference-states", 0)
             ),
             "n_uncalibrated_sites": int(calibration_status_counts.get("no-reference", 0)),
+            "n_not_applicable_sites": int(
+                calibration_status_counts.get("not-applicable", 0)
+            ),
         },
     }
 
