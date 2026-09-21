@@ -196,8 +196,13 @@ before production GPAW calculations are attempted.  Wannier90 is installed in th
    calibrated oxidation state.
 
    References are discovered by default from
-   ``reference_structures/oxidation_states`` and
-   ``reference_structures/oxides``.  Difficult/non-binary references can be
+   ``reference_structures/relaxed/refs``,
+   ``reference_structures/oxidation_states``, and
+   ``reference_structures/oxides``.  Existing correction-stage
+   ``relaxed_calibration`` structures can supplement an oxidation state that
+   is missing from those primary roots; only one deterministic structure is
+   selected per missing element/state pair to avoid double-counting duplicate
+   correction snapshots.  Difficult/non-binary references can be
    listed explicitly in
    ``reference_structures/oxidation_states/manifest.json``.  Manifest entries
    can specify the structure path, element, integer oxidation state, k-point
