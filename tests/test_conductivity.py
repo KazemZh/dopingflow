@@ -322,3 +322,22 @@ def test_custom_source_root_is_shared_with_oxidation_selection(tmp_path):
     chosen, _ = c.select_targets(cfg, settings)
     assert [t.target_id for t in chosen] == ["SnO2/chosen_candidate"]
 
+
+def test_source_root_defaults_to_oxidation_source_root(tmp_path):
+    default_root = tmp_path / "default"
+    oxidation_root = tmp_path / "vacancy-selected"
+    parent(default_root, "default_candidate", -2)
+    parent(oxidation_root, "oxidation_candidate", -1)
+
+    cfg, settings = c.parse_config(
+        {
+            "structure": {"outdir": str(default_root)},
+            "oxidation": {"source_root": str(oxidation_root)},
+            "conductivity": {},
+        },
+        tmp_path,
+    )
+    chosen, _ = c.select_targets(cfg, settings)
+    assert cfg.source_root == oxidation_root.resolve()
+    assert [t.target_id for t in chosen] == ["SnO2/oxidation_candidate"]
+
