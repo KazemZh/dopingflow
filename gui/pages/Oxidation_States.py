@@ -475,6 +475,7 @@ if "dft-auto" in methods:
             default_roots = auto.get(
                 "reference_roots",
                 [
+                    "reference_structures/relaxed/refs",
                     "reference_structures/oxidation_states",
                     "reference_structures/oxides",
                 ],
@@ -493,6 +494,25 @@ if "dft-auto" in methods:
             auto["reference_roots"] = [
                 line.strip() for line in roots_text.splitlines() if line.strip()
             ]
+            ir1, ir2 = st.columns(2)
+            auto["reference_include_project_relaxed_refs"] = ir1.checkbox(
+                "Always include project's relaxed references",
+                value=bool(auto.get("reference_include_project_relaxed_refs", True)),
+                disabled=auto["reference_calibration"] == "off",
+                help=(
+                    "Automatically includes reference_structures/relaxed/refs even for "
+                    "older saved configurations that do not list it explicitly."
+                ),
+            )
+            auto["reference_include_correction_calibration"] = ir2.checkbox(
+                "Supplement missing OS from correction references",
+                value=bool(auto.get("reference_include_correction_calibration", True)),
+                disabled=auto["reference_calibration"] == "off",
+                help=(
+                    "Uses one existing relaxed_calibration structure only when an "
+                    "element/oxidation-state pair is missing from the primary reference roots."
+                ),
+            )
             rr1, rr2 = st.columns(2)
             auto["reference_manifest"] = rr1.text_input(
                 "Optional reference manifest JSON",
