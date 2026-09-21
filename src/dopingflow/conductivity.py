@@ -472,6 +472,15 @@ def prepare_persistent_reference(raw, root, cfg, section, *, dry_run=False):
         record = dict(cached["record"])
         record["persistent_reference_reused"] = True
         record["reference_store"] = str(store)
+        record["reference_label"] = comparison.get("reference_label", "ATO 5% Sb")
+        record["reference_sb_percent"] = comparison.get("reference_sb_percent", 5.0)
+        record["comparison_basis"] = comparison.get(
+            "basis", "ato-5pct-sb-benchmark"
+        )
+        record["reference_fingerprint"] = fingerprint
+        record["transport_settings_fingerprint"] = fingerprint_payload[
+            "transport_settings_fingerprint"
+        ]
         return record, warnings
 
     record = {
@@ -485,6 +494,10 @@ def prepare_persistent_reference(raw, root, cfg, section, *, dry_run=False):
         "status": "selected" if dry_run else "pending",
         "persistent_reference_reused": False,
         "reference_store": str(store),
+        "reference_fingerprint": fingerprint,
+        "transport_settings_fingerprint": fingerprint_payload[
+            "transport_settings_fingerprint"
+        ],
     }
     if dry_run:
         return record, warnings
@@ -656,6 +669,8 @@ def run_conductivity(raw, root, *, dry_run=False):
 
     reference_record = None
     if section.get("comparison", {}).get("enabled", False):
+        reference_summary_path = cfg.output_dir / "conductivity_reference.json"
+        reference_summary_path.unlink(missing_ok=True)
         try:
             reference_record, reference_warnings = prepare_persistent_reference(
                 raw, root, cfg, section, dry_run=dry_run
