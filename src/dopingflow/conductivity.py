@@ -5,6 +5,8 @@ from __future__ import annotations
 import fnmatch
 import hashlib
 import json
+import os
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -372,17 +374,19 @@ def _reference_store_path(cfg, comparison):
     return cfg.output_dir / "references" / (slug or "ATO_5pct_Sb") / "reference.json"
 
 
-def _reference_transport_fingerprint(target, section):
-    """Fingerprint everything that changes the reusable sigma/tau reference."""
-    from dopingflow.dft_cache import calculation_key
+def _transport_settings_fingerprint(section):
+    """Fingerprint method/settings shared by every candidate in one comparison set."""
+    from dopingflow.dft_cache import electronic_settings
 
-    dft_key, dft_identity = calculation_key(target, section["dft"])
+    try:
+        gpaw_version = version("gpaw")
+    except PackageNotFoundError:
+        gpaw_version = None
     payload = {
-        "schema": 2,
-        "target_id": target.target_id,
-        "structure_path": str(target.structure_path.resolve()),
-        "dft_key": dft_key,
-        "dft_identity": dft_identity,
+        "schema": 1,
+        "gpaw_version": gpaw_version,
+        "setup_path": os.environ.get("GPAW_SETUP_PATH", ""),
+        "dft_settings": electronic_settings(section["dft"]),
         "temperatures_K": [float(v) for v in section["temperatures_K"]],
         "excess_electrons_cm3": [
             float(v) for v in section["excess_electrons_cm3"]
@@ -397,13 +401,37 @@ def _reference_transport_fingerprint(target, section):
     return digest, payload
 
 
+def _reference_transport_fingerprint(target, section):
+    """Fingerprint reference geometry plus the common comparison settings."""
+    from dopingflow.dft_cache import calculation_key
+
+    dft_key, dft_identity = calculation_key(target, section["dft"])
+    settings_fingerprint, settings_payload = _transport_settings_fingerprint(section)
+    payload = {
+        "schema": 3,
+        "target_id": target.target_id,
+        "structure_path": str(target.structure_path.resolve()),
+        "dft_key": dft_key,
+        "dft_identity": dft_identity,
+        "transport_settings_fingerprint": settings_fingerprint,
+        "transport_settings": settings_payload,
+        "reference_sb_percent": float(
+            section.get("comparison", {}).get("reference_sb_percent", 5.0)
+        ),
+    }
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    return digest, payload
+
+
 def _load_persistent_reference(path, fingerprint):
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError):
         return None
     if (
-        payload.get("schema_version") == 2
+        payload.get("schema_version") == 3
         and payload.get("fingerprint") == fingerprint
         and payload.get("record", {}).get("status") == "calculated"
     ):
@@ -494,13 +522,40 @@ def prepare_persistent_reference(raw, root, cfg, section, *, dry_run=False):
         }
     )
     payload = {
-        "schema_version": 2,
+        "schema_version": 3,
         "fingerprint": fingerprint,
         "fingerprint_payload": fingerprint_payload,
         "record": record,
     }
     _json_write(store, payload)
     return record, warnings
+
+
+def collect_compatible_transport_results(output_dir, settings_fingerprint, current_results=()):
+    """Collect prior per-target results compatible with the current comparison settings."""
+    records = {}
+    root = Path(output_dir) / "structures"
+    if root.exists():
+        for path in root.rglob("conductivity.json"):
+            try:
+                record = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError, TypeError):
+                continue
+            if (
+                record.get("status") == "calculated"
+                and record.get("transport_settings_fingerprint") == settings_fingerprint
+                and record.get("target_id")
+            ):
+                records[str(record["target_id"])] = record
+    # Current in-memory results take precedence over older copies.
+    for record in current_results:
+        if (
+            record.get("status") == "calculated"
+            and record.get("transport_settings_fingerprint") == settings_fingerprint
+            and record.get("target_id")
+        ):
+            records[str(record["target_id"])] = record
+    return list(records.values())
 
 
 def build_reference_comparison(results, comparison, reference=None):
@@ -595,6 +650,9 @@ def run_conductivity(raw, root, *, dry_run=False):
         for t in targets
     ]
     _json_write(cfg.output_dir / "selected_structures.json", selection)
+    transport_settings_fingerprint, transport_settings_payload = (
+        _transport_settings_fingerprint(section)
+    )
 
     reference_record = None
     if section.get("comparison", {}).get("enabled", False):
@@ -628,6 +686,8 @@ def run_conductivity(raw, root, *, dry_run=False):
             "structure_path": str(target.structure_path),
             "output_directory": str(target_dir),
             "status": "selected",
+            "transport_settings_fingerprint": transport_settings_fingerprint,
+            "transport_settings": transport_settings_payload,
         }
         if not dry_run:
             try:
@@ -695,13 +755,21 @@ def run_conductivity(raw, root, *, dry_run=False):
             "dft_reused": record.get("dft_reused"),
             "gpw_file": record.get("gpw_file"),
             "error": record.get("error"),
+            "transport_settings_fingerprint": record.get(
+                "transport_settings_fingerprint"
+            ),
             "output_directory": str(target_dir),
         }
         _json_write(target_dir / "summary.json", summary)
         structure_index.append(summary)
 
+    compatible_results = collect_compatible_transport_results(
+        cfg.output_dir,
+        transport_settings_fingerprint,
+        results,
+    )
     comparison_rows, comparison_warnings = build_reference_comparison(
-        results, section.get("comparison", {}), reference_record
+        compatible_results, section.get("comparison", {}), reference_record
     )
     warnings.extend(comparison_warnings)
     _csv_write(cfg.output_dir / "conductivity_comparison.csv", comparison_rows)
@@ -719,6 +787,7 @@ def run_conductivity(raw, root, *, dry_run=False):
             "warnings": warnings,
             "results": results,
             "comparison": comparison_rows,
+            "comparison_compatible_target_count": len(compatible_results),
             "reference": reference_record,
             "settings": section,
             "limitations": [
