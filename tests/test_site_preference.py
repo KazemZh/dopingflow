@@ -11,6 +11,7 @@ from dopingflow.site_preference import (
     dopant_pair_records,
     dopant_triplet_records,
     parse_site_preference_config,
+    run_site_preference,
     warren_cowley_records,
     symmetry_distinct_pair_orbits,
 )
@@ -241,3 +242,7 @@ def test_triplet_motif_classification(tmp_path):
     assert rows[0]["species_triplet"] == "Nb-Sb-Ti"
     assert rows[0]["motif"] == "connected_chain"
     assert rows[0]["neighbor_edge_count"] == 2
+
+
+def test_disabled_stage_is_backward_compatible_without_configuration(tmp_path):
+    assert run_site_preference({}, tmp_path) is None
