@@ -1141,22 +1141,38 @@ if not targets_df.empty and "target_id" in targets_df.columns:
                     None,
                 )
                 if alpha_col and "shell" in mc_one.columns:
-                    fig = px.bar(
-                        mc_one.sort_values("shell"),
-                        x="shell",
-                        y=alpha_col,
-                        labels={
-                            "shell": "Coordination shell",
-                            alpha_col: "Average α  (− associate, + avoid)",
-                        },
-                        title=f"{mc_pair}: finite-temperature local ordering",
-                    )
-                    fig.add_hline(y=0)
-                    st.plotly_chart(
-                        fig,
-                        use_container_width=True,
-                        key=f"site_pref_mc_sro_{safe_target}_{mc_pair}",
-                    )
+                    mc_one = mc_one.dropna(subset=[alpha_col]).copy()
+                    if not mc_one.empty:
+                        strongest_mc = mc_one.loc[mc_one[alpha_col].abs().idxmax()]
+                        alpha_mc = float(strongest_mc[alpha_col])
+                        if alpha_mc < -0.05:
+                            mc_meaning = "association"
+                        elif alpha_mc > 0.05:
+                            mc_meaning = "avoidance"
+                        else:
+                            mc_meaning = "approximately random mixing"
+                        st.success(
+                            f"At **{_fmt(mc_row.get('temperature_K'), 0, ' K')}**, "
+                            f"**{mc_pair}** shows its strongest average signal at "
+                            f"**{_shell_text(strongest_mc['shell'])}**: "
+                            f"**{mc_meaning}** (α = {alpha_mc:.2f})."
+                        )
+                        fig = px.bar(
+                            mc_one.sort_values("shell"),
+                            x="shell",
+                            y=alpha_col,
+                            labels={
+                                "shell": "Coordination shell",
+                                alpha_col: "Average α  (− associate, + avoid)",
+                            },
+                            title=f"{mc_pair}: finite-temperature local ordering",
+                        )
+                        fig.add_hline(y=0)
+                        st.plotly_chart(
+                            fig,
+                            use_container_width=True,
+                            key=f"site_pref_mc_sro_{safe_target}_{mc_pair}",
+                        )
                 with st.expander("MC SRO values", expanded=False):
                     st.dataframe(mc_one, use_container_width=True, hide_index=True)
 
