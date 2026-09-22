@@ -73,3 +73,27 @@ Important interpretation details:
   returned to the host species.
 - Ordering MC preserves the overall composition and uses cation identity swaps. Forces are
   not evaluated during MC; only the best occupation is optionally relaxed afterwards.
+
+
+## GUI result browser
+
+The Streamlit **Dopant Site Preference** page presents results one structure at a time rather
+than combining every composition in one plot.
+
+1. Select the composition.
+2. Select a vacancy-free or oxygen-vacancy structure.
+3. Read the **At a glance** energy/status row.
+4. Open only the relevant analysis tab:
+   - **Dopant pairs**: nearest shell and distance for each pair.
+   - **Local ordering**: Warren–Cowley alpha translated into association, random-like mixing,
+     or avoidance for one selected pair at a time.
+   - **O-vacancy relation**: nearest dopant–V_O shell and distance for vacancy structures.
+   - **Three-dopant motifs**: compact/chain/pair+third/dispersed arrangement for one triplet.
+   - **Compare same composition**: distance versus relative configuration energy using only
+     directly comparable structures.
+5. The **Controlled pair scan** is displayed one dopant pair at a time and highlights the
+   lowest-energy shell/orbit relative to the farthest tested separation.
+6. The **Finite-temperature ordering MC** is displayed one target at a time.
+
+Full CSV tables remain available under **Raw / global result tables** for auditing and export,
+but they are intentionally not the primary visualization.
