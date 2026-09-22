@@ -503,6 +503,7 @@ preference_csv = results_root / "pair_preference_summary.csv"
 nearest_csv = results_root / "nearest_pair_by_target.csv"
 sro_csv = results_root / "warren_cowley_sro.csv"
 vacancy_csv = results_root / "dopant_vacancy_pairs.csv"
+vacancy_preference_csv = results_root / "dopant_vacancy_preference_summary.csv"
 triplet_csv = results_root / "triplet_motif_summary.csv"
 pair_scan_csv = results_root / "pair_scan" / "pair_scan.csv"
 mc_summary = results_root / "ordering_mc" / "ordering_mc_summary.json"
@@ -578,10 +579,15 @@ if triplet_csv.exists() and triplet_csv.stat().st_size:
         "isolated pair + third = 1; dispersed = 0. The neighbor-shell cutoff is configurable above."
     )
 
+if vacancy_preference_csv.exists() and vacancy_preference_csv.stat().st_size:
+    st.markdown("#### Preferred dopant–oxygen-vacancy shells")
+    vacancy_pref = pd.read_csv(vacancy_preference_csv)
+    st.dataframe(vacancy_pref, use_container_width=True, hide_index=True)
+
 if vacancy_csv.exists() and vacancy_csv.stat().st_size:
-    st.markdown("#### Dopant–oxygen-vacancy positions")
-    vacancy = pd.read_csv(vacancy_csv)
-    st.dataframe(vacancy, use_container_width=True, hide_index=True)
+    with st.expander("All dopant–oxygen-vacancy distances", expanded=False):
+        vacancy = pd.read_csv(vacancy_csv)
+        st.dataframe(vacancy, use_container_width=True, hide_index=True)
 
 if pair_scan_csv.exists() and pair_scan_csv.stat().st_size:
     st.markdown("#### Controlled pair-shell scan")
