@@ -295,7 +295,7 @@ def parse_site_preference_config(raw: dict[str, Any], root: Path) -> SitePrefere
         root=root.resolve(),
         source_root=source_root,
         output_dir=output_dir,
-        enabled=bool(section.get("enabled", True)),
+        enabled=bool(section.get("enabled", False)),
         host_species=host_species,
         anion_species=anion_species,
         include_vacancy_free=bool(section.get("include_vacancy_free", True)),
@@ -1827,9 +1827,13 @@ def run_site_preference(
     raw: dict[str, Any],
     root: Path,
 ) -> Path | None:
-    cfg = parse_site_preference_config(raw, root)
-    if not cfg.enabled:
+    section = raw.get("site_preference", {}) or {}
+    if not isinstance(section, dict):
+        raise ValueError("[site_preference] must be a TOML table")
+    if not bool(section.get("enabled", False)):
         return None
+
+    cfg = parse_site_preference_config(raw, root)
 
     targets, parent_map, warnings = discover_site_preference_targets(cfg)
     cfg.output_dir.mkdir(parents=True, exist_ok=True)
