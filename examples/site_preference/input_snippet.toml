@@ -1,0 +1,36 @@
+[site_preference]
+enabled = true
+host_species = "Sn"
+anion_species = ["O"]
+include_vacancy_free = true
+include_oxygen_vacancies = true
+max_shells = 6
+shell_tolerance_angstrom = 0.12
+mapping_tolerance_angstrom = 1.5
+
+[site_preference.pair_scan]
+enabled = false
+execute = false
+pairs = ["Sb-Ti", "Sb-Nb", "Ti-Nb"]
+max_shells = 6
+backend = "mace"
+model = "small"
+task = ""
+device = "cpu"
+relax = true
+fmax = 0.05
+max_steps = 300
+
+[site_preference.ordering_mc]
+enabled = false
+execute = false
+temperature_K = 800
+steps = 10000
+burn_in = 2000
+sample_interval = 20
+max_targets = 5
+seed = 42
+backend = "mace"
+model = "small"
+device = "cpu"
+relax_best = true
