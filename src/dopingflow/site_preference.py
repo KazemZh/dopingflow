@@ -1291,6 +1291,7 @@ def run_ordering_mc(
             continue
 
         current_energy = float(structure_energy_with_calculator(current, calculator))
+        start_energy = current_energy
         best = current.copy()
         best_energy = current_energy
         accepted = 0
@@ -1310,8 +1311,8 @@ def run_ordering_mc(
                 break
 
             proposal = current.copy()
-            species_i = proposal[i].species
-            species_j = proposal[j].species
+            species_i = proposal[i].species_string
+            species_j = proposal[j].species_string
             proposal[i] = species_j
             proposal[j] = species_i
             proposal_energy = float(structure_energy_with_calculator(proposal, calculator))
@@ -1403,7 +1404,7 @@ def run_ordering_mc(
             "acceptance_fraction": accepted / attempted if attempted else 0.0,
             "samples": samples,
             "initial_energy_eV": target.energy_eV,
-            "mc_start_energy_eV": trace[0]["energy_eV"] if trace else current_energy,
+            "mc_start_energy_eV": start_energy,
             "best_mc_energy_eV": best_energy,
             "relaxation": relaxation,
             "sro_temperature_average": sro_rows,
