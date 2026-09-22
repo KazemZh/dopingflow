@@ -129,7 +129,7 @@ shell_tolerance = float(
     )
 )
 
-d1, d2 = st.columns(2)
+d1, d2, d3 = st.columns(3)
 mapping_tolerance = float(
     d1.number_input(
         "Parent ↔ vacancy mapping tolerance (Å)",
@@ -138,7 +138,23 @@ mapping_tolerance = float(
         step=0.05,
     )
 )
-target_include_text = d2.text_input(
+motif_neighbor_shell_max = int(
+    d2.number_input(
+        "Triplet motif neighbor shell",
+        min_value=1,
+        max_value=max_shells,
+        value=min(
+            int(section.get("motif_neighbor_shell_max", 1)),
+            max_shells,
+        ),
+        step=1,
+        help=(
+            "A pair counts as connected in Sb–X–Y motif classification when its "
+            "separation is within this cation coordination shell."
+        ),
+    )
+)
+target_include_text = d3.text_input(
     "Target selector(s), optional",
     value=_csv_text(section.get("target_include", [])),
     help="Exact IDs or wildcards, e.g. Sb5_Ti2p5/*.",
@@ -337,6 +353,7 @@ resolved_section.update(
         "max_shells": max_shells,
         "shell_tolerance_angstrom": shell_tolerance,
         "mapping_tolerance_angstrom": mapping_tolerance,
+        "motif_neighbor_shell_max": motif_neighbor_shell_max,
         "pair_scan": {
             **pair_saved,
             "enabled": pair_enabled,
@@ -486,16 +503,18 @@ preference_csv = results_root / "pair_preference_summary.csv"
 nearest_csv = results_root / "nearest_pair_by_target.csv"
 sro_csv = results_root / "warren_cowley_sro.csv"
 vacancy_csv = results_root / "dopant_vacancy_pairs.csv"
+triplet_csv = results_root / "triplet_motif_summary.csv"
 pair_scan_csv = results_root / "pair_scan" / "pair_scan.csv"
 mc_summary = results_root / "ordering_mc" / "ordering_mc_summary.json"
 
 if summary_path.exists():
     payload = json.loads(summary_path.read_text(encoding="utf-8"))
-    k1, k2, k3, k4 = st.columns(4)
+    k1, k2, k3, k4, k5 = st.columns(5)
     k1.metric("Structures", int(payload.get("n_targets", 0)))
     k2.metric("Dopant pairs", int(payload.get("n_dopant_pair_records", 0)))
-    k3.metric("Dopant–Vₒ pairs", int(payload.get("n_dopant_vacancy_records", 0)))
-    k4.metric("SRO records", int(payload.get("n_sro_records", 0)))
+    k3.metric("Triplets", int(payload.get("n_triplet_records", 0)))
+    k4.metric("Dopant–Vₒ pairs", int(payload.get("n_dopant_vacancy_records", 0)))
+    k5.metric("SRO records", int(payload.get("n_sro_records", 0)))
     for warning in payload.get("warnings", []) or []:
         st.warning(str(warning))
     for error in payload.get("analysis_errors", []) or []:
@@ -549,6 +568,15 @@ if sro_csv.exists() and sro_csv.stat().st_size:
             fig.add_hline(y=0)
             st.plotly_chart(fig, use_container_width=True)
             st.caption("α < 0: association; α ≈ 0: random; α > 0: avoidance.")
+
+if triplet_csv.exists() and triplet_csv.stat().st_size:
+    st.markdown("#### Triple-dopant motif preferences")
+    triplets = pd.read_csv(triplet_csv)
+    st.dataframe(triplets, use_container_width=True, hide_index=True)
+    st.caption(
+        "Motifs: compact triangle = 3 neighbor edges; connected chain = 2; "
+        "isolated pair + third = 1; dispersed = 0. The neighbor-shell cutoff is configurable above."
+    )
 
 if vacancy_csv.exists() and vacancy_csv.stat().st_size:
     st.markdown("#### Dopant–oxygen-vacancy positions")
