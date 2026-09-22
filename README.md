@@ -8,7 +8,8 @@
 
 `dopingflow` is a modular CLI pipeline for automated generation, screening,
 relaxation, formation-energy analysis, phase stability, oxygen-vacancy studies,
-and configurable oxidation-state analysis of doped crystal structures using
+dopant site-preference / short-range-order analysis, and configurable oxidation-state
+analysis of doped crystal structures using
 machine-learning interatomic potentials, graph neural networks, structural
 chemistry, and optional DFT post-processing.
 
@@ -22,6 +23,7 @@ Designed for **reproducible, scalable materials-discovery workflows**.
 - **Checked-in PDF user guide:** [dopingflow-user-guide.pdf](dopingflow-user-guide.pdf)
 - **Oxidation-state guide:** [`docs/source/methods/oxidation_states.rst`](docs/source/methods/oxidation_states.rst)
 - **Vacancy example:** [`examples/vacancies`](examples/vacancies)
+- **Dopant site-preference example:** [`examples/site_preference`](examples/site_preference)
 
 ---
 
@@ -154,6 +156,7 @@ dopingflow phase-diagram -c input.toml
 dopingflow vacancies -c input.toml
 dopingflow vacancies-mc-search -c input.toml
 dopingflow vacancies-finalize -c input.toml
+dopingflow site-preference -c input.toml
 dopingflow oxidation -c input.toml
 dopingflow surface -c input.toml
 ```
@@ -163,6 +166,26 @@ The ordinary pipeline can be run with:
 ```bash
 dopingflow run-all -c input.toml
 ```
+
+### Dopant site preference and cation ordering
+
+After relaxation/filtering (and optionally after oxygen-vacancy generation), run:
+
+```bash
+dopingflow site-preference -c input.toml
+```
+
+The stage analyses dopant–dopant and dopant–oxygen-vacancy distances by coordination
+shell, reports Warren–Cowley short-range-order parameters, and correlates pair
+arrangements with same-composition configuration energies. Optional controlled pair
+scans compare selected dopant pairs across host-cation shells, while optional
+finite-temperature cation-swap Monte Carlo samples composition-preserving ordering.
+Both expensive modes require an explicit `execute = true`; analysis of existing
+relaxed structures does not launch new MLFF calculations.
+
+See [`examples/site_preference`](examples/site_preference) for a ready-to-copy
+configuration snippet and interpretation notes.
+
 
 `dopingflow vacancies` remains the one-process vacancy command. Use it for
 symmetry enumeration or for Monte Carlo when all requested calculators are
