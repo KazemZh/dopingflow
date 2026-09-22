@@ -703,6 +703,12 @@ dedicated pages under `gui/pages/`, including:
   fitted correction to vacancy thermodynamics.
 - **Phase Diagram** — explores raw/corrected hull results and vacancy-resolved
   energy above hull.
+- **Dopant Site Preference** — uses a structure-first results browser. Select one
+  composition and one relaxed structure, then inspect dopant-pair geometry, local ordering,
+  oxygen-vacancy relations, three-dopant motifs, and same-composition energetic trends in
+  separate tabs. Controlled pair scans and ordering-MC results are also shown one pair/target
+  at a time with a plain-language conclusion; raw global tables remain available only in an
+  audit expander.
 - **Oxidation States** — configures structural/ML/DFT oxidation analysis and provides a
   structure browser: select an analyzed parent or vacancy structure, choose a method,
   and inspect atom-by-atom oxidation states/descriptors. Results are also written per
