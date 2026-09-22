@@ -77,7 +77,7 @@ a1, a2, a3 = st.columns(3)
 with a1:
     enabled = st.checkbox(
         "Enable site-preference stage",
-        value=bool(section.get("enabled", True)),
+        value=bool(section.get("enabled", False)),
     )
 with a2:
     include_vacancy_free = st.checkbox(
