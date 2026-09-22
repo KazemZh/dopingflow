@@ -75,25 +75,26 @@ Important interpretation details:
   not evaluated during MC; only the best occupation is optionally relaxed afterwards.
 
 
-## GUI result browser
+## GUI results explorer
 
-The Streamlit **Dopant Site Preference** page presents results one structure at a time rather
-than combining every composition in one plot.
+The Streamlit **Dopant Site Preference** page is organized for scientific interpretation,
+not for browsing raw CSV files.
 
-1. Select the composition.
-2. Select a vacancy-free or oxygen-vacancy structure.
-3. Read the **At a glance** energy/status row.
-4. Open only the relevant analysis tab:
-   - **Dopant pairs**: nearest shell and distance for each pair.
-   - **Local ordering**: Warren–Cowley alpha translated into association, random-like mixing,
-     or avoidance for one selected pair at a time.
-   - **O-vacancy relation**: nearest dopant–V_O shell and distance for vacancy structures.
-   - **Three-dopant motifs**: compact/chain/pair+third/dispersed arrangement for one triplet.
-   - **Compare same composition**: distance versus relative configuration energy using only
-     directly comparable structures.
-5. The **Controlled pair scan** is displayed one dopant pair at a time and highlights the
-   lowest-energy shell/orbit relative to the farthest tested separation.
-6. The **Finite-temperature ordering MC** is displayed one target at a time.
+The results area has four views:
 
-Full CSV tables remain available under **Raw / global result tables** for auditing and export,
-but they are intentionally not the primary visualization.
+- **Structure result** — select one composition and one relaxed structure. The page first
+  gives a short scientific summary: energetic position, important dopant geometry, strongest
+  local-order signal, vacancy environment when present, and three-dopant motif only when
+  relevant. Pair geometry, local ordering, vacancy environment, and energetic context are
+  then shown in separate compact sections.
+- **Controlled pair scan** — select one dopant pair. The page states whether a closer
+  arrangement or the largest tested separation is favored, reports the preferred shell,
+  distance and ΔE, and then shows the supporting energy-versus-distance plot.
+- **Ordering MC** — select one MC target and one dopant pair. The page translates
+  finite-temperature Warren–Cowley α into association, avoidance, or random-like mixing
+  and shows the shell-resolved values.
+- **Raw data** — keeps the complete CSV tables available for auditing/export without
+  cluttering the interpretation view.
+
+For structure-level plots, only the selected structure is shown. Energetic rankings include
+only structures with the same composition, structure type, and oxygen-vacancy count.
