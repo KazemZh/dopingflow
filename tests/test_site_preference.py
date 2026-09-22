@@ -9,6 +9,7 @@ from dopingflow.site_preference import (
     _cluster_distances,
     _nearest_pair_per_target,
     dopant_pair_records,
+    dopant_triplet_records,
     parse_site_preference_config,
     warren_cowley_records,
     symmetry_distinct_pair_orbits,
@@ -207,3 +208,36 @@ def test_pair_scan_enumerates_symmetry_distinct_orbits():
     # Labelled unlike dopants are retained as crystallographic assignments;
     # symmetry collapses only genuinely equivalent A/B placements.
     assert all(len(row["relative_cartesian_vector_angstrom"]) == 3 for row in rows)
+
+
+def test_triplet_motif_classification(tmp_path):
+    structure = Structure(
+        Lattice.cubic(4.0),
+        ["Sb", "Ti", "Nb", "Sn", "O", "O"],
+        [
+            [0, 0, 0],
+            [0.5, 0, 0],
+            [0, 0.5, 0],
+            [0.5, 0.5, 0],
+            [0.25, 0.25, 0.25],
+            [0.75, 0.75, 0.75],
+        ],
+    )
+    target = _target(tmp_path, structure)
+    cfg = parse_site_preference_config(
+        {
+            "doping": {"host_species": "Sn"},
+            "scan": {"anion_species": ["O"]},
+            "site_preference": {
+                "max_shells": 2,
+                "shell_tolerance_angstrom": 0.05,
+                "motif_neighbor_shell_max": 1,
+            },
+        },
+        tmp_path,
+    )
+    rows = dopant_triplet_records(target, structure, cfg)
+    assert len(rows) == 1
+    assert rows[0]["species_triplet"] == "Nb-Sb-Ti"
+    assert rows[0]["motif"] == "connected_chain"
+    assert rows[0]["neighbor_edge_count"] == 2
