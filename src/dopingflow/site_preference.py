@@ -83,6 +83,7 @@ class SitePreferenceConfig:
     max_shells: int
     shell_tolerance_angstrom: float
     mapping_tolerance_angstrom: float
+    motif_neighbor_shell_max: int
     pair_scan: PairScanConfig
     ordering_mc: OrderingMCConfig
     settings: dict[str, Any] = field(default_factory=dict)
@@ -224,6 +225,11 @@ def parse_site_preference_config(raw: dict[str, Any], root: Path) -> SitePrefere
     max_shells = _positive_int(section, "max_shells", 6)
     shell_tol = float(section.get("shell_tolerance_angstrom", 0.12))
     mapping_tol = float(section.get("mapping_tolerance_angstrom", 1.5))
+    motif_neighbor_shell_max = _positive_int(section, "motif_neighbor_shell_max", 1)
+    if motif_neighbor_shell_max > max_shells:
+        raise ValueError(
+            "[site_preference].motif_neighbor_shell_max cannot exceed max_shells"
+        )
     if not math.isfinite(shell_tol) or shell_tol <= 0:
         raise ValueError("[site_preference].shell_tolerance_angstrom must be > 0")
     if not math.isfinite(mapping_tol) or mapping_tol <= 0:
@@ -298,6 +304,7 @@ def parse_site_preference_config(raw: dict[str, Any], root: Path) -> SitePrefere
         max_shells=max_shells,
         shell_tolerance_angstrom=shell_tol,
         mapping_tolerance_angstrom=mapping_tol,
+        motif_neighbor_shell_max=motif_neighbor_shell_max,
         pair_scan=pair_scan,
         ordering_mc=ordering_mc,
         settings=dict(section),
@@ -594,6 +601,224 @@ def dopant_pair_records(
             }
         )
     return records
+
+
+def dopant_triplet_records(
+    target: PreferenceTarget,
+    structure: Structure,
+    cfg: SitePreferenceConfig,
+) -> list[dict[str, Any]]:
+    """Describe three-dopant motifs using the host-cation coordination shells."""
+    _, _, dopants = _indices_by_role(structure, cfg.host_species, cfg.anion_species)
+    if len(dopants) < 3:
+        return []
+    centers = cation_shell_centers(
+        structure,
+        cfg.host_species,
+        cfg.anion_species,
+        max_shells=cfg.max_shells,
+        tolerance=cfg.shell_tolerance_angstrom,
+    )
+    records: list[dict[str, Any]] = []
+    for i, j, k in combinations(dopants, 3):
+        indices = (i, j, k)
+        species = tuple(structure[index].species_string for index in indices)
+        pair_data: list[dict[str, Any]] = []
+        for left, right in ((i, j), (i, k), (j, k)):
+            distance = float(structure.get_distance(left, right))
+            shell = _shell_index(distance, centers)
+            pair_data.append(
+                {
+                    "pair": "-".join(
+                        _canonical_pair(
+                            structure[left].species_string,
+                            structure[right].species_string,
+                        )
+                    ),
+                    "site_i": int(left),
+                    "site_j": int(right),
+                    "distance_angstrom": distance,
+                    "shell": shell,
+                }
+            )
+
+        neighbor_edges = sum(
+            item["shell"] is not None
+            and int(item["shell"]) <= cfg.motif_neighbor_shell_max
+            for item in pair_data
+        )
+        if neighbor_edges == 3:
+            motif = "compact_triangle"
+        elif neighbor_edges == 2:
+            motif = "connected_chain"
+        elif neighbor_edges == 1:
+            motif = "isolated_pair_plus_third"
+        else:
+            motif = "dispersed"
+
+        distances = [float(item["distance_angstrom"]) for item in pair_data]
+        shell_signature = sorted(
+            int(item["shell"]) if item["shell"] is not None else 999
+            for item in pair_data
+        )
+        records.append(
+            {
+                "target_id": target.target_id,
+                "parent_id": target.parent_id,
+                "composition": target.composition_label,
+                "structure_kind": target.kind,
+                "n_oxygen_vacancies": target.n_vacancies,
+                "species_triplet": "-".join(sorted(species)),
+                "site_indices": [int(i), int(j), int(k)],
+                "motif": motif,
+                "neighbor_shell_max": cfg.motif_neighbor_shell_max,
+                "neighbor_edge_count": neighbor_edges,
+                "shell_signature": shell_signature,
+                "pair_data": pair_data,
+                "minimum_pair_distance_angstrom": min(distances),
+                "mean_pair_distance_angstrom": sum(distances) / 3.0,
+                "maximum_pair_distance_angstrom": max(distances),
+                "triangle_perimeter_angstrom": sum(distances),
+                "energy_total_eV": target.energy_eV,
+            }
+        )
+    return records
+
+
+def _triplet_target_presence(
+    triplet_records: Sequence[dict[str, Any]],
+    target_rows: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    meta = {row["target_id"]: row for row in target_rows}
+    counts: Counter[tuple[str, str, str]] = Counter()
+    for row in triplet_records:
+        counts[(row["target_id"], row["species_triplet"], row["motif"])] += 1
+
+    output: list[dict[str, Any]] = []
+    for (target_id, species_triplet, motif), count in sorted(counts.items()):
+        target = meta[target_id]
+        output.append(
+            {
+                "target_id": target_id,
+                "composition": target["composition"],
+                "structure_kind": target["structure_kind"],
+                "n_oxygen_vacancies": target["n_oxygen_vacancies"],
+                "species_triplet": species_triplet,
+                "motif": motif,
+                "n_instances": count,
+                "energy_total_eV": target["energy_total_eV"],
+                "delta_energy_within_group_eV": target[
+                    "delta_energy_within_group_eV"
+                ],
+            }
+        )
+    return output
+
+
+def _aggregate_triplet_preferences(
+    rows: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    grouped: dict[
+        tuple[str, str, int, str, str],
+        list[dict[str, Any]],
+    ] = defaultdict(list)
+    for row in rows:
+        grouped[
+            (
+                str(row["composition"]),
+                str(row["structure_kind"]),
+                int(row["n_oxygen_vacancies"]),
+                str(row["species_triplet"]),
+                str(row["motif"]),
+            )
+        ].append(row)
+
+    motif_stats: list[dict[str, Any]] = []
+    for key, group in grouped.items():
+        composition, kind, n_vac, species_triplet, motif = key
+        energies = [
+            float(row["delta_energy_within_group_eV"])
+            for row in group
+            if row.get("delta_energy_within_group_eV") is not None
+        ]
+        motif_stats.append(
+            {
+                "composition": composition,
+                "structure_kind": kind,
+                "n_oxygen_vacancies": n_vac,
+                "species_triplet": species_triplet,
+                "motif": motif,
+                "n_targets": len(group),
+                "n_instances": sum(int(row["n_instances"]) for row in group),
+                "median_delta_energy_within_group_eV": (
+                    median(energies) if energies else None
+                ),
+                "mean_delta_energy_within_group_eV": (
+                    sum(energies) / len(energies) if energies else None
+                ),
+            }
+        )
+
+    by_triplet: dict[tuple[str, str, int, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in motif_stats:
+        by_triplet[
+            (
+                row["composition"],
+                row["structure_kind"],
+                row["n_oxygen_vacancies"],
+                row["species_triplet"],
+            )
+        ].append(row)
+
+    preferred: list[dict[str, Any]] = []
+    for key, group in by_triplet.items():
+        energetic = [
+            row for row in group
+            if row["median_delta_energy_within_group_eV"] is not None
+        ]
+        if energetic:
+            best = min(
+                energetic,
+                key=lambda row: (
+                    float(row["median_delta_energy_within_group_eV"]),
+                    float(row["mean_delta_energy_within_group_eV"]),
+                ),
+            )
+            basis = "lowest median same-composition configuration energy"
+        else:
+            best = max(
+                group,
+                key=lambda row: (int(row["n_targets"]), int(row["n_instances"])),
+            )
+            basis = "most frequently observed motif; no comparable energies available"
+        composition, kind, n_vac, species_triplet = key
+        preferred.append(
+            {
+                "composition": composition,
+                "structure_kind": kind,
+                "n_oxygen_vacancies": n_vac,
+                "species_triplet": species_triplet,
+                "preferred_motif": best["motif"],
+                "n_targets": best["n_targets"],
+                "n_instances": best["n_instances"],
+                "median_delta_energy_within_group_eV": best[
+                    "median_delta_energy_within_group_eV"
+                ],
+                "preference_basis": basis,
+                "interpretation_note": (
+                    "Motifs are classified by the number of pair edges lying within "
+                    "motif_neighbor_shell_max; the energy remains a full-configuration energy."
+                ),
+            }
+        )
+    preferred.sort(
+        key=lambda row: (
+            row["composition"],
+            row["n_oxygen_vacancies"],
+            row["species_triplet"],
+        )
+    )
+    return preferred
 
 
 def _map_surviving_species(
@@ -1549,12 +1774,14 @@ def run_site_preference(
     pair_records: list[dict[str, Any]] = []
     vacancy_records: list[dict[str, Any]] = []
     sro_records: list[dict[str, Any]] = []
+    triplet_records: list[dict[str, Any]] = []
     analysis_errors: list[dict[str, str]] = []
 
     for target in targets:
         try:
             structure = Structure.from_file(target.structure_path)
             pair_records.extend(dopant_pair_records(target, structure, cfg))
+            triplet_records.extend(dopant_triplet_records(target, structure, cfg))
             sro_records.extend(warren_cowley_records(target, structure, cfg))
             if target.kind == "oxygen-vacancy":
                 parent_target = parent_map[target.parent_id]
@@ -1576,9 +1803,14 @@ def run_site_preference(
     target_rows = _target_rows(targets, pair_records)
     nearest_rows = _nearest_pair_per_target(pair_records, target_rows)
     preference_rows = _aggregate_pair_preferences(nearest_rows)
+    triplet_target_rows = _triplet_target_presence(triplet_records, target_rows)
+    triplet_preference_rows = _aggregate_triplet_preferences(triplet_target_rows)
 
     _write_csv(cfg.output_dir / "site_preference_targets.csv", target_rows)
     _write_csv(cfg.output_dir / "dopant_pairs.csv", pair_records)
+    _write_csv(cfg.output_dir / "dopant_triplets.csv", triplet_records)
+    _write_csv(cfg.output_dir / "triplet_target_motifs.csv", triplet_target_rows)
+    _write_csv(cfg.output_dir / "triplet_motif_summary.csv", triplet_preference_rows)
     _write_csv(cfg.output_dir / "dopant_vacancy_pairs.csv", vacancy_records)
     _write_csv(cfg.output_dir / "warren_cowley_sro.csv", sro_records)
     _write_csv(cfg.output_dir / "nearest_pair_by_target.csv", nearest_rows)
@@ -1595,6 +1827,8 @@ def run_site_preference(
         "n_dopant_pair_records": len(pair_records),
         "n_dopant_vacancy_records": len(vacancy_records),
         "n_sro_records": len(sro_records),
+        "n_triplet_records": len(triplet_records),
+        "n_triplet_preference_rows": len(triplet_preference_rows),
         "n_pair_preference_rows": len(preference_rows),
         "pair_scan_enabled": cfg.pair_scan.enabled,
         "pair_scan_executed": cfg.pair_scan.execute,
@@ -1607,6 +1841,9 @@ def run_site_preference(
         "outputs": {
             "targets": str(cfg.output_dir / "site_preference_targets.csv"),
             "dopant_pairs": str(cfg.output_dir / "dopant_pairs.csv"),
+            "dopant_triplets": str(cfg.output_dir / "dopant_triplets.csv"),
+            "triplet_target_motifs": str(cfg.output_dir / "triplet_target_motifs.csv"),
+            "triplet_motif_summary": str(cfg.output_dir / "triplet_motif_summary.csv"),
             "dopant_vacancy_pairs": str(cfg.output_dir / "dopant_vacancy_pairs.csv"),
             "warren_cowley_sro": str(cfg.output_dir / "warren_cowley_sro.csv"),
             "nearest_pair_by_target": str(cfg.output_dir / "nearest_pair_by_target.csv"),
@@ -1624,9 +1861,13 @@ def run_site_preference(
                 "Pair preferences from existing structures correlate nearest pair shell with "
                 "same-composition configuration energies; they are not isolated pair-binding energies."
             ),
+            "triplet_motifs": (
+                "Three-dopant motifs are classified from host-cation neighbor-shell connectivity "
+                "as compact triangles, connected chains, isolated pairs plus a third dopant, or dispersed."
+            ),
             "pair_scan": (
                 "The controlled pair scan replaces all cations by the host except the selected "
-                "dopant pair and compares representative cation-distance shells."
+                "dopant pair and compares all symmetry-distinct pair orientations in the requested shells."
             ),
             "ordering_mc": (
                 "Ordering MC preserves composition and swaps cation identities on the pre-relaxation "
