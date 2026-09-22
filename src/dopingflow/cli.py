@@ -17,6 +17,7 @@ from dopingflow.generate import run_generate_from_toml
 from dopingflow.logging import setup_logging
 from dopingflow.oxidation import run_oxidation_from_toml
 from dopingflow.conductivity import run_conductivity_from_toml
+from dopingflow.site_preference import run_site_preference_from_toml
 from dopingflow.phase_diagram_convergence_extensions import run_phase_diagram_from_toml
 from dopingflow.refs_oxygen_extensions import run_refs_build_from_toml
 from dopingflow.relax import run_relax_from_toml
@@ -213,7 +214,7 @@ def oxidation_cmd(
     ),
     verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
 ) -> None:
-    """Step 11: Analyze oxidation states/electronic descriptors on relaxed parent and O-vacancy structures."""
+    """Step 12: Analyze oxidation states/electronic descriptors on relaxed parent and O-vacancy structures."""
     _init(config, verbose)
     out_path = run_oxidation_from_toml(
         config,
@@ -223,13 +224,27 @@ def oxidation_cmd(
     typer.echo(f"\nWrote oxidation-state results JSON: {out_path}")
 
 
+@app.command("site-preference")
+def site_preference_cmd(
+    config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
+    verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
+) -> None:
+    """Step 11: Analyze dopant ordering, pair/site preferences, SRO, and optional ordering scans."""
+    _init(config, verbose)
+    output = run_site_preference_from_toml(config)
+    if output is None:
+        typer.echo("Site-preference stage disabled; set [site_preference].enabled=true")
+        return
+    typer.echo(f"\nWrote site-preference summary: {output}")
+
+
 @app.command("conductivity")
 def conductivity_cmd(
     config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview selection without DFT or transport"),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
-    """Step 12: Calculate band conductivity/tau on oxidation-style selected targets."""
+    """Step 13: Calculate band conductivity/tau on oxidation-style selected targets."""
     _init(config, verbose)
     output = run_conductivity_from_toml(config, dry_run=dry_run)
     if output is None:
@@ -253,7 +268,7 @@ def run_all_cmd(
         "--from",
         help=(
             "Start step key (refs, corrections, generate, scan, relax, filter, "
-            "bandgap, formation, collect, alloy-hull, phase-diagram, vacancies, oxidation, conductivity)"
+            "bandgap, formation, collect, alloy-hull, phase-diagram, vacancies, site-preference, oxidation, conductivity)"
         ),
     ),
     stop: str = typer.Option("phase-diagram", "--until", help="Stop step key (inclusive)"),
@@ -274,7 +289,8 @@ def run_all_cmd(
 
     Step keys:
       refs -> corrections -> generate -> scan -> relax -> filter -> bandgap
-      -> formation -> collect -> alloy-hull -> phase-diagram -> vacancies -> oxidation -> conductivity
+      -> formation -> collect -> alloy-hull -> phase-diagram -> vacancies
+      -> site-preference -> oxidation -> conductivity
     """
     _init(config, verbose)
 
@@ -297,8 +313,9 @@ def run_all_cmd(
         ("alloy-hull", "08 alloy-hull", lambda: run_alloy_hull_from_toml(config)),
         ("phase-diagram", "09 phase-diagram", lambda: run_phase_diagram_from_toml(config)),
         ("vacancies", "10 vacancies", lambda: run_vacancies_from_toml(config)),
-        ("oxidation", "11 oxidation", lambda: run_oxidation_from_toml(config)),
-        ("conductivity", "12 conductivity", lambda: run_conductivity_from_toml(config)),
+        ("site-preference", "11 site-preference", lambda: run_site_preference_from_toml(config)),
+        ("oxidation", "12 oxidation", lambda: run_oxidation_from_toml(config)),
+        ("conductivity", "13 conductivity", lambda: run_conductivity_from_toml(config)),
     ]
 
     key_to_idx = {k: i for i, (k, _, _) in enumerate(steps)}
@@ -338,7 +355,7 @@ def run_all_cmd(
         typer.echo(f"\n=== {title} ({k}) ===")
         res = fn()
 
-        if k in {"collect", "alloy-hull", "phase-diagram", "vacancies", "oxidation"} and isinstance(res, Path):
+        if k in {"collect", "alloy-hull", "phase-diagram", "vacancies", "site-preference", "oxidation"} and isinstance(res, Path):
             typer.echo(f"\nWrote output: {res}")
 
 
