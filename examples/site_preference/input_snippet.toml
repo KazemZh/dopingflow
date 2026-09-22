@@ -7,6 +7,7 @@ include_oxygen_vacancies = true
 max_shells = 6
 shell_tolerance_angstrom = 0.12
 mapping_tolerance_angstrom = 1.5
+motif_neighbor_shell_max = 1
 
 [site_preference.pair_scan]
 enabled = false
