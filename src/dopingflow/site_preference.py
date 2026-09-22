@@ -1390,7 +1390,10 @@ def run_ordering_mc(
 
     for target_index, target in enumerate(selected):
         rng = random.Random(settings.seed + target_index)
-        current = Structure.from_file(target.structure_path)
+        symmetry_source = Path(
+            str(target.metadata.get("symmetry_path") or target.structure_path)
+        )
+        current = Structure.from_file(symmetry_source)
         cations, _, _ = _indices_by_role(current, cfg.host_species, cfg.anion_species)
         movable = [
             index for index in cations
@@ -1515,7 +1518,8 @@ def run_ordering_mc(
             "accepted_moves": accepted,
             "acceptance_fraction": accepted / attempted if attempted else 0.0,
             "samples": samples,
-            "initial_energy_eV": target.energy_eV,
+            "source_relaxed_energy_eV": target.energy_eV,
+            "mc_sampling_geometry": str(symmetry_source),
             "mc_start_energy_eV": start_energy,
             "best_mc_energy_eV": best_energy,
             "relaxation": relaxation,
@@ -1625,8 +1629,9 @@ def run_site_preference(
                 "dopant pair and compares representative cation-distance shells."
             ),
             "ordering_mc": (
-                "Ordering MC preserves composition and swaps cation identities on a fixed geometry "
-                "during sampling; only the best structure is optionally relaxed afterwards."
+                "Ordering MC preserves composition and swaps cation identities on the pre-relaxation "
+                "symmetry geometry so the starting ordering does not receive a relaxation bias; only "
+                "the best sampled occupation is optionally relaxed afterwards."
             ),
         },
         "config": {
