@@ -64,6 +64,9 @@ Important interpretation details:
 
 - Warren–Cowley alpha < 0 means association relative to random occupancy.
 - Warren–Cowley alpha > 0 means avoidance.
+- For three or more dopants, the stage also reports explicit triplet motifs: compact triangle,
+  connected chain, isolated pair plus a third dopant, or dispersed. The neighbor-shell cutoff
+  used to define motif connectivity is `motif_neighbor_shell_max`.
 - Energy trends extracted from the existing structure ensemble are configuration-energy
   correlations, not isolated pair-binding energies.
 - The controlled pair scan is the cleaner energetic test because all other cation sites are
