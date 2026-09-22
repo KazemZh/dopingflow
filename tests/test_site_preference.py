@@ -11,6 +11,7 @@ from dopingflow.site_preference import (
     dopant_pair_records,
     parse_site_preference_config,
     warren_cowley_records,
+    symmetry_distinct_pair_orbits,
 )
 
 
@@ -173,3 +174,36 @@ def test_preference_summary_uses_same_composition_energy_data():
     close = [row for row in nearest if row["target_id"] == "A/c1"][0]
     assert close["delta_E_vs_farthest_eV"] == pytest.approx(-0.2)
     assert "proxy" in close["proxy_note"].lower()
+
+
+def test_pair_scan_enumerates_symmetry_distinct_orbits():
+    host = Structure(
+        Lattice.cubic(4.0),
+        ["Sn", "Sn", "Sn", "Sn", "O", "O"],
+        [
+            [0, 0, 0],
+            [0.5, 0, 0],
+            [0, 0.5, 0],
+            [0.5, 0.5, 0],
+            [0.25, 0.25, 0.25],
+            [0.75, 0.75, 0.75],
+        ],
+    )
+    rows = symmetry_distinct_pair_orbits(
+        host,
+        [0, 1, 2, 3],
+        "Sb",
+        "Ti",
+        max_shells=3,
+        tolerance=0.05,
+        symprec=1e-3,
+        angle_tolerance=5.0,
+    )
+    assert rows
+    assert all(row["degeneracy"] >= 1 for row in rows)
+    assert all(row["orbit"] >= 1 for row in rows)
+    assert all(row["shell"] >= 1 for row in rows)
+    assert sum(row["degeneracy"] for row in rows) == 12
+    # Labelled unlike dopants are retained as crystallographic assignments;
+    # symmetry collapses only genuinely equivalent A/B placements.
+    assert all(len(row["relative_cartesian_vector_angstrom"]) == 3 for row in rows)
