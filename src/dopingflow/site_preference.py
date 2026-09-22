@@ -1097,13 +1097,7 @@ def symmetry_distinct_pair_orbits(
     )
 
     indices = list(cation_indices)
-    centers = cation_shell_centers(
-        structure,
-        host_species=structure[indices[0]].species_string if indices else "",
-        anion_species=(),
-        max_shells=max_shells,
-        tolerance=tolerance,
-    ) if False else _cluster_distances(
+    centers = _cluster_distances(
         (structure.get_distance(i, j) for i, j in combinations(indices, 2)),
         tolerance,
         max_shells,
