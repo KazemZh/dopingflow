@@ -26,6 +26,8 @@ class PairScanConfig:
     source_target: str = ""
     pairs: tuple[tuple[str, str], ...] = ()
     max_shells: int = 6
+    symprec: float = 1e-3
+    angle_tolerance: float = 5.0
     backend: str = "mace"
     model: str = "small"
     task: str = ""
@@ -237,6 +239,8 @@ def parse_site_preference_config(raw: dict[str, Any], root: Path) -> SitePrefere
         source_target=str(pair_section.get("source_target", "")).strip(),
         pairs=_parse_pairs(pair_section.get("pairs")),
         max_shells=_positive_int(pair_section, "max_shells", max_shells),
+        symprec=float(pair_section.get("symprec", scan.get("symprec", 1e-3))),
+        angle_tolerance=float(pair_section.get("angle_tolerance", 5.0)),
         relax=bool(pair_section.get("relax", True)),
         optimizer=str(pair_section.get("optimizer", "bfgs")).strip().lower(),
         fmax=float(pair_section.get("fmax", 0.05)),
@@ -247,6 +251,10 @@ def parse_site_preference_config(raw: dict[str, Any], root: Path) -> SitePrefere
     )
     if pair_scan.fmax <= 0:
         raise ValueError("[site_preference.pair_scan].fmax must be > 0")
+    if not math.isfinite(pair_scan.symprec) or pair_scan.symprec <= 0:
+        raise ValueError("[site_preference.pair_scan].symprec must be > 0")
+    if not math.isfinite(pair_scan.angle_tolerance) or pair_scan.angle_tolerance <= 0:
+        raise ValueError("[site_preference.pair_scan].angle_tolerance must be > 0")
 
     mc_section = section.get("ordering_mc", {}) or {}
     if not isinstance(mc_section, dict):
@@ -730,7 +738,9 @@ def warren_cowley_records(
                     continue
                 concentration_b = (count_b - 1) / (n_cations - 1)
             else:
-                concentration_b = count_b / n_cations
+                if n_cations <= 1:
+                    continue
+                concentration_b = count_b / (n_cations - 1)
             if concentration_b <= 0:
                 continue
 
@@ -1063,28 +1073,117 @@ def _host_only_parent(
     return parent, cations
 
 
-def _representative_pairs_by_shell(
+def symmetry_distinct_pair_orbits(
     structure: Structure,
     cation_indices: Sequence[int],
+    element_a: str,
+    element_b: str,
+    *,
     max_shells: int,
     tolerance: float,
-) -> list[tuple[int, int, int, float, float]]:
-    raw = [
-        (i, j, float(structure.get_distance(i, j)))
-        for i, j in combinations(cation_indices, 2)
-    ]
-    centers = _cluster_distances((item[2] for item in raw), tolerance, max_shells)
-    representatives: list[tuple[int, int, int, float, float]] = []
-    for shell, center in enumerate(centers, start=1):
-        candidates = sorted(
-            raw,
-            key=lambda item: (abs(item[2] - center), item[0], item[1]),
+    symprec: float,
+    angle_tolerance: float,
+) -> list[dict[str, Any]]:
+    """Enumerate symmetry-distinct placements for one dopant pair on the cation sublattice.
+
+    Unlike dopants are treated as labelled species, so A-at-i/B-at-j and A-at-j/B-at-i
+    collapse only when a host-lattice symmetry operation actually maps one assignment
+    onto the other. This prevents a radial-distance-only scan from hiding inequivalent
+    crystallographic orientations.
+    """
+    from dopingflow.utils.symmetry import (
+        build_sublattice_symmetry_permutations,
+        canonical_occupancy_key,
+    )
+
+    indices = list(cation_indices)
+    centers = cation_shell_centers(
+        structure,
+        host_species=structure[indices[0]].species_string if indices else "",
+        anion_species=(),
+        max_shells=max_shells,
+        tolerance=tolerance,
+    ) if False else _cluster_distances(
+        (structure.get_distance(i, j) for i, j in combinations(indices, 2)),
+        tolerance,
+        max_shells,
+    )
+    if not centers:
+        return []
+
+    permutations = build_sublattice_symmetry_permutations(
+        structure,
+        indices,
+        symprec=symprec,
+        angle_tolerance=angle_tolerance,
+    )
+    n_sites = len(indices)
+    same_species = element_a == element_b
+    assignments: Iterable[tuple[int, int]]
+    if same_species:
+        assignments = combinations(range(n_sites), 2)
+    else:
+        assignments = (
+            (i, j)
+            for i in range(n_sites)
+            for j in range(n_sites)
+            if i != j
         )
-        if not candidates:
+
+    orbits: dict[bytes, dict[str, Any]] = {}
+    for pos_i, pos_j in assignments:
+        labels = [0] * n_sites
+        labels[pos_i] = 1
+        labels[pos_j] = 1 if same_species else 2
+        key = canonical_occupancy_key(labels, permutations)
+        if key in orbits:
+            orbits[key]["degeneracy"] += 1
             continue
-        i, j, distance = candidates[0]
-        representatives.append((shell, i, j, distance, center))
-    return representatives
+
+        site_i = indices[pos_i]
+        site_j = indices[pos_j]
+        distance, image = structure.lattice.get_distance_and_image(
+            structure[site_i].frac_coords,
+            structure[site_j].frac_coords,
+        )
+        shell = _shell_index(float(distance), centers)
+        if shell is None or shell > max_shells:
+            continue
+        delta_frac = (
+            structure[site_j].frac_coords
+            + image
+            - structure[site_i].frac_coords
+        )
+        orbits[key] = {
+            "canonical_key": key.hex(),
+            "site_i": int(site_i),
+            "site_j": int(site_j),
+            "shell": int(shell),
+            "shell_center_angstrom": float(centers[shell - 1]),
+            "initial_distance_angstrom": float(distance),
+            "relative_fractional_vector": [float(value) for value in delta_frac],
+            "relative_cartesian_vector_angstrom": [
+                float(value)
+                for value in structure.lattice.get_cartesian_coords(delta_frac)
+            ],
+            "degeneracy": 1,
+            "symmetry_operation_count": len(permutations),
+        }
+
+    rows = sorted(
+        orbits.values(),
+        key=lambda row: (
+            int(row["shell"]),
+            float(row["initial_distance_angstrom"]),
+            row["canonical_key"],
+        ),
+    )
+    per_shell_count: dict[int, int] = defaultdict(int)
+    for row in rows:
+        shell = int(row["shell"])
+        per_shell_count[shell] += 1
+        row["orbit"] = per_shell_count[shell]
+    return rows
 
 
 def run_pair_scan(
@@ -1102,14 +1201,6 @@ def run_pair_scan(
     parent, cations = _host_only_parent(
         source_structure, cfg.host_species, cfg.anion_species
     )
-    reps = _representative_pairs_by_shell(
-        parent,
-        cations,
-        settings.max_shells,
-        cfg.shell_tolerance_angstrom,
-    )
-    if not reps:
-        raise RuntimeError("Pair scan found no cation-cation shells")
 
     pairs = settings.pairs or _auto_pair_types(targets, cfg)
     if not pairs:
@@ -1127,11 +1218,34 @@ def run_pair_scan(
     rows: list[dict[str, Any]] = []
     for element_a, element_b in pairs:
         pair_name = f"{element_a}-{element_b}"
-        for shell, i, j, initial_distance, shell_center in reps:
+        orbits = symmetry_distinct_pair_orbits(
+            parent,
+            cations,
+            element_a,
+            element_b,
+            max_shells=settings.max_shells,
+            tolerance=cfg.shell_tolerance_angstrom,
+            symprec=settings.symprec,
+            angle_tolerance=settings.angle_tolerance,
+        )
+        if not orbits:
+            log.warning("No pair orbits found for %s", pair_name)
+            continue
+        for orbit_record in orbits:
+            shell = int(orbit_record["shell"])
+            orbit = int(orbit_record["orbit"])
+            i = int(orbit_record["site_i"])
+            j = int(orbit_record["site_j"])
+            initial_distance = float(orbit_record["initial_distance_angstrom"])
             structure = parent.copy()
             structure[i] = element_a
             structure[j] = element_b
-            run_dir = root / pair_name / f"shell_{shell:02d}"
+            run_dir = (
+                root
+                / pair_name
+                / f"shell_{shell:02d}"
+                / f"orbit_{orbit:02d}"
+            )
             run_dir.mkdir(parents=True, exist_ok=True)
             Poscar(structure).write_file(run_dir / "POSCAR_initial")
 
@@ -1139,9 +1253,7 @@ def run_pair_scan(
                 "pair": pair_name,
                 "element_a": element_a,
                 "element_b": element_b,
-                "shell": shell,
-                "shell_center_angstrom": shell_center,
-                "initial_distance_angstrom": initial_distance,
+                **orbit_record,
                 "source_target": source.target_id,
                 "source_structure": str(symmetry_path),
                 "backend": settings.backend,
@@ -1190,18 +1302,24 @@ def run_pair_scan(
         evaluated = [row for row in pair_rows if row["energy_total_eV"] is not None]
         if not evaluated:
             continue
-        farthest = max(
-            evaluated,
-            key=lambda row: float(row["final_distance_angstrom"]),
+        farthest_shell = max(int(row["shell"]) for row in evaluated)
+        farthest_candidates = [
+            row for row in evaluated if int(row["shell"]) == farthest_shell
+        ]
+        farthest = min(
+            farthest_candidates,
+            key=lambda row: float(row["energy_total_eV"]),
         )
         far_energy = float(farthest["energy_total_eV"])
         for row in pair_rows:
             if row["energy_total_eV"] is not None:
                 row["delta_E_vs_farthest_eV"] = float(row["energy_total_eV"]) - far_energy
                 row["farthest_reference_shell"] = farthest["shell"]
+                row["farthest_reference_orbit"] = farthest["orbit"]
             else:
                 row["delta_E_vs_farthest_eV"] = None
                 row["farthest_reference_shell"] = None
+                row["farthest_reference_orbit"] = None
 
     _write_csv(root / "pair_scan.csv", rows)
     _write_json(root / "pair_scan.json", rows)
