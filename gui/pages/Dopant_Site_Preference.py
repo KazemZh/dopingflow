@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import json
 import shlex
 import subprocess
@@ -488,10 +489,71 @@ if "site_pref_returncode" in st.session_state:
             st.text(st.session_state["site_pref_stderr"])
 
 st.divider()
-st.subheader("Results")
+st.subheader("Results explorer")
 st.caption(
-    "Results are shown one structure at a time. Select a structure first, then inspect "
-    "only the analyses that apply to it. Global/raw tables are kept at the bottom for auditing."
+    "The primary view is intentionally interpretation-first: one structure, one scientific "
+    "question at a time. Detailed CSV tables are kept in the Raw data tab."
+)
+
+st.markdown(
+    """
+    <style>
+    .df-hero {
+        border: 1px solid rgba(128,128,128,0.28);
+        border-radius: 14px;
+        padding: 1rem 1.15rem;
+        margin: 0.35rem 0 0.8rem 0;
+        background: rgba(128,128,128,0.055);
+    }
+    .df-hero-title {
+        font-size: 1.12rem;
+        font-weight: 700;
+        margin-bottom: 0.35rem;
+    }
+    .df-hero-sub {
+        opacity: 0.78;
+        font-size: 0.92rem;
+        line-height: 1.35;
+    }
+    .df-takeaway {
+        border: 1px solid rgba(128,128,128,0.25);
+        border-left: 5px solid rgba(55,110,180,0.85);
+        border-radius: 10px;
+        padding: 0.78rem 0.9rem;
+        margin: 0.45rem 0;
+        background: rgba(128,128,128,0.035);
+        min-height: 5.2rem;
+    }
+    .df-takeaway-title {
+        font-size: 0.80rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        opacity: 0.70;
+        margin-bottom: 0.22rem;
+        font-weight: 650;
+    }
+    .df-takeaway-main {
+        font-size: 1.02rem;
+        font-weight: 650;
+        line-height: 1.33;
+    }
+    .df-takeaway-note {
+        margin-top: 0.22rem;
+        font-size: 0.82rem;
+        opacity: 0.72;
+        line-height: 1.30;
+    }
+    .df-section-note {
+        border-radius: 9px;
+        padding: 0.72rem 0.85rem;
+        margin: 0.35rem 0 0.7rem 0;
+        background: rgba(128,128,128,0.07);
+        font-size: 0.92rem;
+        line-height: 1.38;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
 source_path = Path(source_root).expanduser()
@@ -500,7 +562,6 @@ if not source_path.is_absolute():
 results_root = Path(output_dir).expanduser()
 if not results_root.is_absolute():
     results_root = (source_path / results_root).resolve()
-st.caption(f"Resolved output: {results_root}")
 
 summary_path = results_root / "site_preference_summary.json"
 targets_csv = results_root / "site_preference_targets.csv"
@@ -514,7 +575,7 @@ vacancy_preference_csv = results_root / "dopant_vacancy_preference_summary.csv"
 triplet_target_csv = results_root / "triplet_target_motifs.csv"
 triplet_csv = results_root / "triplet_motif_summary.csv"
 pair_scan_csv = results_root / "pair_scan" / "pair_scan.csv"
-mc_summary = results_root / "ordering_mc" / "ordering_mc_summary.json"
+mc_summary_path = results_root / "ordering_mc" / "ordering_mc_summary.json"
 
 
 def _read_csv(path: Path) -> pd.DataFrame:
@@ -524,6 +585,15 @@ def _read_csv(path: Path) -> pd.DataFrame:
         return pd.read_csv(path)
     except (pd.errors.EmptyDataError, OSError, ValueError):
         return pd.DataFrame()
+
+
+def _read_json(path: Path, default):
+    if not path.exists() or path.stat().st_size == 0:
+        return default
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return default
 
 
 def _one_target(df: pd.DataFrame, target_id: str) -> pd.DataFrame:
@@ -559,6 +629,40 @@ def _plain_motif(value: str) -> str:
     }.get(str(value), str(value).replace("_", " "))
 
 
+def _safe(value) -> str:
+    return html.escape(str(value), quote=True)
+
+
+def _takeaway(title: str, main: str, note: str = "") -> str:
+    note_html = (
+        f'<div class="df-takeaway-note">{_safe(note)}</div>' if note else ""
+    )
+    return (
+        '<div class="df-takeaway">'
+        f'<div class="df-takeaway-title">{_safe(title)}</div>'
+        f'<div class="df-takeaway-main">{_safe(main)}</div>'
+        f"{note_html}</div>"
+    )
+
+
+def _pair_priority(frame: pd.DataFrame) -> pd.DataFrame:
+    if frame.empty or "pair" not in frame.columns:
+        return frame
+    out = frame.copy()
+    parts = out["pair"].astype(str).str.split("-", n=1, expand=True)
+    if parts.shape[1] == 2:
+        out["_hetero"] = parts[0] != parts[1]
+        out["_sb"] = parts.apply(
+            lambda row: "Sb" in {str(row.iloc[0]), str(row.iloc[1])},
+            axis=1,
+        )
+        out = out.sort_values(
+            ["_sb", "_hetero", "nearest_distance_angstrom"],
+            ascending=[False, False, True],
+        )
+    return out
+
+
 targets_df = _read_csv(targets_csv)
 pairs_df = _read_csv(pairs_csv)
 nearest_df = _read_csv(nearest_csv)
@@ -570,631 +674,824 @@ vacancy_pref_df = _read_csv(vacancy_preference_csv)
 triplet_target_df = _read_csv(triplet_target_csv)
 triplet_pref_df = _read_csv(triplet_csv)
 pair_scan_df = _read_csv(pair_scan_csv)
+summary_payload = _read_json(summary_path, {})
+mc_rows = _read_json(mc_summary_path, [])
+if isinstance(mc_rows, dict):
+    mc_rows = list(mc_rows.values())
+if not isinstance(mc_rows, list):
+    mc_rows = []
 
-if summary_path.exists():
-    try:
-        payload = json.loads(summary_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError, TypeError) as exc:
-        payload = {}
-        st.warning(f"Could not read site-preference summary: {exc}")
-    if payload:
+if summary_payload:
+    with st.expander("Run summary", expanded=False):
         k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Structures analysed", int(payload.get("n_targets", 0)))
-        k2.metric("Dopant-pair records", int(payload.get("n_dopant_pair_records", 0)))
-        k3.metric("Dopant–Vₒ records", int(payload.get("n_dopant_vacancy_records", 0)))
-        k4.metric("Pair-scan records", int(payload.get("n_pair_scan_rows", 0)))
-        for warning in payload.get("warnings", []) or []:
+        k1.metric("Structures", int(summary_payload.get("n_targets", 0)))
+        k2.metric("Dopant-pair records", int(summary_payload.get("n_dopant_pair_records", 0)))
+        k3.metric("Dopant–Vₒ records", int(summary_payload.get("n_dopant_vacancy_records", 0)))
+        k4.metric("Pair-scan records", int(summary_payload.get("n_pair_scan_rows", 0)))
+        for warning in summary_payload.get("warnings", []) or []:
             st.warning(str(warning))
-        for error in payload.get("analysis_errors", []) or []:
+        for error in summary_payload.get("analysis_errors", []) or []:
             st.error(f"{error.get('target_id')}: {error.get('error')}")
-elif targets_df.empty:
-    st.info("No site-preference results found yet. Save the settings and run the stage.")
 
-if not targets_df.empty and "target_id" in targets_df.columns:
-    st.markdown("### 1. Structure browser")
-    st.write(
-        "Choose one composition and one relaxed structure. The panels below answer the "
-        "site-preference questions for that structure only."
-    )
+structure_tab, scan_tab, mc_tab, raw_tab = st.tabs(
+    ["Structure result", "Controlled pair scan", "Ordering MC", "Raw data"]
+)
 
-    composition_options = sorted(
-        targets_df["composition"].dropna().astype(str).unique().tolist()
-    ) if "composition" in targets_df.columns else ["all"]
-    selected_composition = st.selectbox(
-        "Composition",
-        composition_options,
-        key="site_pref_result_composition",
-    )
-    subset = targets_df.copy()
-    if "composition" in subset.columns:
-        subset = subset[subset["composition"].astype(str) == selected_composition]
-
-    kind_options = ["All"]
-    if "structure_kind" in subset.columns:
-        kind_options += sorted(subset["structure_kind"].dropna().astype(str).unique().tolist())
-    selected_kind = st.selectbox(
-        "Structure type",
-        kind_options,
-        key="site_pref_result_kind",
-    )
-    if selected_kind != "All" and "structure_kind" in subset.columns:
-        subset = subset[subset["structure_kind"].astype(str) == selected_kind]
-
-    if subset.empty:
-        st.warning("No structures match the selected filters.")
+with structure_tab:
+    if targets_df.empty or "target_id" not in targets_df.columns:
+        st.info("No structure-level site-preference results are available yet.")
     else:
-        def _target_label(row) -> str:
-            target = str(row.get("target_id", ""))
-            kind = str(row.get("structure_kind", ""))
-            n_vac = row.get("n_oxygen_vacancies", 0)
-            delta = row.get("delta_energy_within_group_eV")
-            delta_text = _fmt(delta, 3, " eV")
-            return f"{target}  |  {kind}  |  Vₒ={n_vac}  |  ΔE={delta_text}"
+        st.markdown("### Select a structure")
+        s1, s2, s3 = st.columns([1.0, 0.9, 2.1])
 
-        label_to_target = {
-            _target_label(row): str(row["target_id"])
-            for _, row in subset.iterrows()
-        }
-        selected_label = st.selectbox(
-            "Structure",
-            list(label_to_target.keys()),
-            key="site_pref_result_target",
+        compositions = (
+            sorted(targets_df["composition"].dropna().astype(str).unique().tolist())
+            if "composition" in targets_df.columns
+            else ["all"]
         )
-        selected_target = label_to_target[selected_label]
-        selected_meta = subset[
-            subset["target_id"].astype(str) == selected_target
-        ].iloc[0]
-
-        st.markdown("#### At a glance")
-        a, b, c, d, e = st.columns(5)
-        a.metric("Composition", str(selected_meta.get("composition", "—")))
-        b.metric("Type", str(selected_meta.get("structure_kind", "—")))
-        c.metric("O vacancies", int(selected_meta.get("n_oxygen_vacancies", 0)))
-        d.metric(
-            "ΔE in same group",
-            _fmt(selected_meta.get("delta_energy_within_group_eV"), 3, " eV"),
-            help="Energy above the lowest-energy structure with the same composition, structure type and vacancy count.",
+        selected_composition = s1.selectbox(
+            "Composition",
+            compositions,
+            key="site_result_composition_v3",
         )
-        e.metric(
-            "Total energy",
-            _fmt(selected_meta.get("energy_total_eV"), 3, " eV"),
-        )
-
-        selected_nearest = _one_target(nearest_df, selected_target)
-        selected_sro = _one_target(sro_df, selected_target)
-        selected_vacancy = _one_target(nearest_vacancy_df, selected_target)
-        selected_triplets = _one_target(triplet_target_df, selected_target)
-
-        tab_pair, tab_order, tab_vac, tab_triplet, tab_compare = st.tabs(
-            [
-                "Dopant pairs",
-                "Local ordering",
-                "O-vacancy relation",
-                "Three-dopant motifs",
-                "Compare same composition",
+        filtered = targets_df.copy()
+        if "composition" in filtered.columns:
+            filtered = filtered[
+                filtered["composition"].astype(str) == selected_composition
             ]
+
+        kind_options = ["All"]
+        if "structure_kind" in filtered.columns:
+            kind_options += sorted(
+                filtered["structure_kind"].dropna().astype(str).unique().tolist()
+            )
+        selected_kind = s2.selectbox(
+            "Type",
+            kind_options,
+            key="site_result_kind_v3",
         )
+        if selected_kind != "All" and "structure_kind" in filtered.columns:
+            filtered = filtered[
+                filtered["structure_kind"].astype(str) == selected_kind
+            ]
 
-        with tab_pair:
-            st.markdown("#### Where are the dopants relative to each other?")
-            if selected_nearest.empty:
-                st.info("No dopant-pair records are available for this structure.")
+        if filtered.empty:
+            st.warning("No structures match the selected composition/type.")
+        else:
+            filtered = filtered.sort_values(
+                "delta_energy_within_group_eV"
+                if "delta_energy_within_group_eV" in filtered.columns
+                else "target_id"
+            ).copy()
+
+            def _structure_label(row) -> str:
+                delta = _fmt(row.get("delta_energy_within_group_eV"), 3, " eV")
+                n_vac = int(row.get("n_oxygen_vacancies", 0))
+                return f"{row.get('target_id')}   |   ΔE {delta}   |   Vₒ {n_vac}"
+
+            label_map = {
+                _structure_label(row): str(row["target_id"])
+                for _, row in filtered.iterrows()
+            }
+            selected_label = s3.selectbox(
+                "Structure",
+                list(label_map.keys()),
+                key="site_result_target_v3",
+            )
+            selected_target = label_map[selected_label]
+            selected_meta = filtered[
+                filtered["target_id"].astype(str) == selected_target
+            ].iloc[0]
+
+            selected_nearest = _one_target(nearest_df, selected_target)
+            selected_pairs = _one_target(pairs_df, selected_target)
+            selected_sro = _one_target(sro_df, selected_target)
+            selected_vacancy = _one_target(nearest_vacancy_df, selected_target)
+            selected_triplets = _one_target(triplet_target_df, selected_target)
+
+            hero_kind = str(selected_meta.get("structure_kind", "structure"))
+            hero_formula = str(selected_meta.get("formula", ""))
+            hero_delta = selected_meta.get("delta_energy_within_group_eV")
+            hero_text = (
+                f"{hero_kind} • {hero_formula} • "
+                f"{int(selected_meta.get('n_oxygen_vacancies', 0))} oxygen vacancy(ies)"
+            )
+            st.markdown(
+                (
+                    '<div class="df-hero">'
+                    f'<div class="df-hero-title">{_safe(selected_target)}</div>'
+                    f'<div class="df-hero-sub">{_safe(hero_text)}</div>'
+                    "</div>"
+                ),
+                unsafe_allow_html=True,
+            )
+
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric(
+                "Relative energy",
+                _fmt(hero_delta, 3, " eV"),
+                help="Relative to the lowest-energy structure with the same composition, structure type and vacancy count.",
+            )
+            m2.metric("Total energy", _fmt(selected_meta.get("energy_total_eV"), 3, " eV"))
+            m3.metric("Atoms", str(selected_meta.get("n_atoms", "—")))
+            m4.metric("Dopant pairs", str(selected_meta.get("n_dopant_pairs", "—")))
+
+            st.markdown("### What this structure tells us")
+            takeaways: list[tuple[str, str, str]] = []
+
+            try:
+                delta_value = float(hero_delta)
+            except (TypeError, ValueError):
+                delta_value = None
+            if delta_value is not None and pd.notna(delta_value):
+                if abs(delta_value) <= 1e-8:
+                    takeaways.append(
+                        (
+                            "Energetic position",
+                            "Lowest-energy structure in its directly comparable group.",
+                            "This compares only the same composition, structure type and vacancy count.",
+                        )
+                    )
+                else:
+                    takeaways.append(
+                        (
+                            "Energetic position",
+                            f"{delta_value:.3f} eV above the lowest-energy comparable structure.",
+                            "Smaller ΔE means a more favorable configuration within this group.",
+                        )
+                    )
+
+            prioritized_pairs = _pair_priority(selected_nearest)
+            if not prioritized_pairs.empty:
+                pair_row = prioritized_pairs.iloc[0]
+                takeaways.append(
+                    (
+                        "Dopant geometry",
+                        f"{pair_row['pair']}: {_shell_text(pair_row['nearest_shell'])} "
+                        f"at {float(pair_row['nearest_distance_angstrom']):.2f} Å.",
+                        "This is the nearest occurrence of the highlighted dopant pair in this structure.",
+                    )
+                )
+
+            if not selected_sro.empty and "warren_cowley_alpha" in selected_sro.columns:
+                valid_sro = selected_sro.dropna(subset=["warren_cowley_alpha"]).copy()
+                if not valid_sro.empty:
+                    sro_row = valid_sro.loc[
+                        valid_sro["warren_cowley_alpha"].abs().idxmax()
+                    ]
+                    alpha = float(sro_row["warren_cowley_alpha"])
+                    meaning = (
+                        "association"
+                        if alpha < -0.05
+                        else "avoidance"
+                        if alpha > 0.05
+                        else "approximately random mixing"
+                    )
+                    takeaways.append(
+                        (
+                            "Local ordering",
+                            f"{sro_row['pair']}: {meaning} at {_shell_text(sro_row['shell'])} "
+                            f"(α = {alpha:.2f}).",
+                            "This is a local occupancy statistic, not by itself an energetic pair-binding result.",
+                        )
+                    )
+
+            if (
+                str(selected_meta.get("structure_kind", "")) == "oxygen-vacancy"
+                and not selected_vacancy.empty
+            ):
+                vrow = selected_vacancy.sort_values(
+                    "nearest_distance_angstrom"
+                ).iloc[0]
+                takeaways.append(
+                    (
+                        "Vacancy environment",
+                        f"Closest relation is {vrow['pair']} at "
+                        f"{_shell_text(vrow['nearest_shell'])}, "
+                        f"{float(vrow['nearest_distance_angstrom']):.2f} Å.",
+                        "This describes the selected relaxed vacancy configuration.",
+                    )
+                )
+
+            if not selected_triplets.empty:
+                trow = selected_triplets.sort_values(
+                    "n_instances", ascending=False
+                ).iloc[0]
+                takeaways.append(
+                    (
+                        "Three-dopant motif",
+                        f"{trow['species_triplet']}: {_plain_motif(trow['motif'])}.",
+                        f"Observed {int(trow['n_instances'])} time(s) in this structure.",
+                    )
+                )
+
+            if not takeaways:
+                st.info("No interpretable site-preference descriptors are available for this structure.")
             else:
-                simple = selected_nearest.copy()
-                simple["Nearest distance (Å)"] = simple["nearest_distance_angstrom"].map(
-                    lambda x: round(float(x), 3) if pd.notna(x) else None
-                )
-                simple["Nearest shell"] = simple["nearest_shell"].map(_shell_text)
-                simple = simple.rename(columns={"pair": "Pair"})
-                st.dataframe(
-                    simple[["Pair", "Nearest shell", "Nearest distance (Å)"]],
-                    use_container_width=True,
-                    hide_index=True,
-                )
-
-                pair_choices = simple["Pair"].astype(str).unique().tolist()
-                selected_pair = st.selectbox(
-                    "Inspect pair",
-                    pair_choices,
-                    key=f"site_pref_pair_{selected_target}",
-                )
-                row = simple[simple["Pair"].astype(str) == selected_pair].iloc[0]
-                st.success(
-                    f"In this structure, the closest **{selected_pair}** pair is "
-                    f"**{_shell_text(row['nearest_shell'])}** at "
-                    f"**{_fmt(row['nearest_distance_angstrom'], 3, ' Å')}**."
-                )
-
-                pair_detail = _one_target(pairs_df, selected_target)
-                if not pair_detail.empty and "pair" in pair_detail.columns:
-                    pair_detail = pair_detail[pair_detail["pair"].astype(str) == selected_pair].copy()
-                    if not pair_detail.empty:
-                        pair_detail["label"] = [
-                            f"{_shell_text(shell)} · {float(dist):.2f} Å"
-                            for shell, dist in zip(
-                                pair_detail["shell"],
-                                pair_detail["distance_angstrom"],
+                for start in range(0, len(takeaways), 2):
+                    cols = st.columns(2)
+                    for col, item in zip(cols, takeaways[start : start + 2]):
+                        with col:
+                            st.markdown(
+                                _takeaway(item[0], item[1], item[2]),
+                                unsafe_allow_html=True,
                             )
-                        ]
-                        fig = px.bar(
-                            pair_detail.sort_values("distance_angstrom"),
-                            x="label",
-                            y="distance_angstrom",
-                            labels={
-                                "label": "Pair occurrence",
-                                "distance_angstrom": "Distance (Å)",
-                            },
-                            title=f"{selected_pair} separations in the selected structure",
+
+            st.divider()
+            st.markdown("### Pair geometry")
+            st.caption(
+                "Read this section as geometry only: which dopant pairs are closest, "
+                "at which coordination shell, and at what distance."
+            )
+            if selected_nearest.empty:
+                st.info("No dopant-pair geometry is available for this structure.")
+            else:
+                pair_geom = selected_nearest[
+                    ["pair", "nearest_shell", "nearest_distance_angstrom"]
+                ].copy()
+                pair_geom["Shell"] = pair_geom["nearest_shell"].map(_shell_text)
+                pair_geom["Distance (Å)"] = pd.to_numeric(
+                    pair_geom["nearest_distance_angstrom"], errors="coerce"
+                ).round(3)
+                pair_geom = pair_geom.rename(columns={"pair": "Pair"})
+                pair_geom = pair_geom.sort_values("Distance (Å)")
+
+                left, right = st.columns([1.15, 1.85])
+                with left:
+                    st.dataframe(
+                        pair_geom[["Pair", "Shell", "Distance (Å)"]],
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+                with right:
+                    geom_plot = pair_geom.dropna(subset=["Distance (Å)"]).copy()
+                    if not geom_plot.empty:
+                        fig = px.scatter(
+                            geom_plot,
+                            x="Distance (Å)",
+                            y="Pair",
+                            text="Shell",
+                            labels={"Distance (Å)": "Nearest separation (Å)"},
+                        )
+                        fig.update_traces(
+                            marker={"size": 14},
+                            textposition="middle right",
+                        )
+                        fig.update_layout(
+                            height=max(260, 58 * len(geom_plot)),
+                            margin={"l": 10, "r": 45, "t": 20, "b": 35},
+                            showlegend=False,
                         )
                         st.plotly_chart(
                             fig,
                             use_container_width=True,
-                            key=f"site_pref_pair_dist_{selected_target}_{selected_pair}",
+                            key=f"site_geom_v3_{selected_target}",
                         )
 
-        with tab_order:
-            st.markdown("#### Do the dopants locally associate or avoid each other?")
+            st.divider()
+            st.markdown("### Local ordering")
             st.caption(
-                "Warren–Cowley α is translated here into plain language: "
-                "negative = association, near zero = roughly random, positive = avoidance."
+                "For one selected dopant pair, α < 0 means association, α ≈ 0 random-like "
+                "mixing, and α > 0 avoidance."
             )
             if selected_sro.empty:
-                st.info(
-                    "No local-ordering result is available for this structure. "
-                    "This can happen when there are too few atoms of a dopant type."
-                )
+                st.info("No Warren–Cowley local-ordering result is available for this structure.")
             else:
                 sro_pairs = selected_sro["pair"].dropna().astype(str).unique().tolist()
-                sro_pair = st.selectbox(
-                    "Dopant pair",
+                selected_sro_pair = st.selectbox(
+                    "Pair to inspect",
                     sro_pairs,
-                    key=f"site_pref_sro_pair_{selected_target}",
+                    key=f"site_sro_pair_v3_{selected_target}",
                 )
                 one_sro = selected_sro[
-                    selected_sro["pair"].astype(str) == sro_pair
-                ].copy().sort_values("shell")
-                if not one_sro.empty:
+                    selected_sro["pair"].astype(str) == selected_sro_pair
+                ].copy()
+                one_sro = one_sro.dropna(
+                    subset=["shell", "warren_cowley_alpha"]
+                ).sort_values("shell")
+
+                if one_sro.empty:
+                    st.info("No valid shell-resolved α values are available for this pair.")
+                else:
                     strongest = one_sro.loc[
                         one_sro["warren_cowley_alpha"].abs().idxmax()
                     ]
                     alpha = float(strongest["warren_cowley_alpha"])
-                    if alpha < -0.05:
-                        message = "association — the pair occurs together more than expected randomly"
-                    elif alpha > 0.05:
-                        message = "avoidance — the pair occurs together less than expected randomly"
-                    else:
-                        message = "approximately random local mixing"
-                    st.success(
-                        f"Strongest signal for **{sro_pair}**: **{message}** at "
-                        f"**{_shell_text(strongest['shell'])}** "
-                        f"(α = {alpha:.2f})."
+                    meaning = (
+                        "ASSOCIATES"
+                        if alpha < -0.05
+                        else "AVOIDS"
+                        if alpha > 0.05
+                        else "IS APPROXIMATELY RANDOM"
                     )
-                    fig = px.bar(
-                        one_sro,
-                        x="shell",
-                        y="warren_cowley_alpha",
-                        labels={
-                            "shell": "Coordination shell",
-                            "warren_cowley_alpha": "α  (− associate, + avoid)",
-                        },
-                        title=f"{sro_pair}: local ordering by coordination shell",
+                    st.markdown(
+                        _takeaway(
+                            "Strongest local-order signal",
+                            f"{selected_sro_pair} {meaning} at {_shell_text(strongest['shell'])}.",
+                            f"α = {alpha:.2f}. The sign gives the direction of ordering; |α| gives its strength.",
+                        ),
+                        unsafe_allow_html=True,
                     )
-                    fig.add_hline(y=0)
-                    st.plotly_chart(
-                        fig,
-                        use_container_width=True,
-                        key=f"site_pref_sro_{selected_target}_{sro_pair}",
-                    )
-                    display_sro = one_sro[
-                        [
-                            "shell",
-                            "shell_center_angstrom",
-                            "warren_cowley_alpha",
-                            "interpretation",
-                        ]
+
+                    sro_left, sro_right = st.columns([1.75, 1.0])
+                    with sro_left:
+                        fig = px.line(
+                            one_sro,
+                            x="shell",
+                            y="warren_cowley_alpha",
+                            markers=True,
+                            labels={
+                                "shell": "Coordination shell",
+                                "warren_cowley_alpha": "α",
+                            },
+                        )
+                        fig.add_hline(y=0, line_dash="dash")
+                        fig.update_layout(
+                            height=330,
+                            margin={"l": 20, "r": 15, "t": 20, "b": 45},
+                            showlegend=False,
+                        )
+                        st.plotly_chart(
+                            fig,
+                            use_container_width=True,
+                            key=f"site_sro_v3_{selected_target}_{selected_sro_pair}",
+                        )
+                    with sro_right:
+                        sro_table = one_sro[
+                            ["shell", "warren_cowley_alpha", "interpretation"]
+                        ].copy()
+                        sro_table["Shell"] = sro_table["shell"].map(_shell_text)
+                        sro_table["α"] = pd.to_numeric(
+                            sro_table["warren_cowley_alpha"], errors="coerce"
+                        ).round(3)
+                        sro_table["Meaning"] = (
+                            sro_table["interpretation"]
+                            .astype(str)
+                            .str.replace("approximately-random", "random-like", regex=False)
+                        )
+                        st.dataframe(
+                            sro_table[["Shell", "α", "Meaning"]],
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+
+            if str(selected_meta.get("structure_kind", "")) == "oxygen-vacancy":
+                st.divider()
+                st.markdown("### Oxygen-vacancy environment")
+                st.caption(
+                    "This section answers which dopant lies closest to Vₒ in this particular relaxed structure."
+                )
+                if selected_vacancy.empty:
+                    st.info("No mapped dopant–oxygen-vacancy distances are available.")
+                else:
+                    vplot = selected_vacancy[
+                        ["pair", "nearest_shell", "nearest_distance_angstrom"]
                     ].copy()
-                    display_sro.columns = [
-                        "Shell",
-                        "Shell distance (Å)",
-                        "α",
-                        "Meaning",
-                    ]
-                    st.dataframe(display_sro, use_container_width=True, hide_index=True)
+                    vplot["Shell"] = vplot["nearest_shell"].map(_shell_text)
+                    vplot["Distance (Å)"] = pd.to_numeric(
+                        vplot["nearest_distance_angstrom"], errors="coerce"
+                    ).round(3)
+                    vplot = vplot.sort_values("Distance (Å)")
+                    closest = vplot.iloc[0]
+                    st.markdown(
+                        _takeaway(
+                            "Nearest dopant to Vₒ",
+                            f"{closest['pair']} at {closest['Shell']}, {closest['Distance (Å)']:.2f} Å.",
+                            "A lower distance means the dopant is geometrically closer to the vacancy in this structure.",
+                        ),
+                        unsafe_allow_html=True,
+                    )
+                    vleft, vright = st.columns([1.0, 1.8])
+                    with vleft:
+                        st.dataframe(
+                            vplot.rename(columns={"pair": "Pair"})[
+                                ["Pair", "Shell", "Distance (Å)"]
+                            ],
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+                    with vright:
+                        fig = px.bar(
+                            vplot,
+                            x="Distance (Å)",
+                            y="pair",
+                            orientation="h",
+                            text="Shell",
+                            labels={"pair": "Dopant–Vₒ"},
+                        )
+                        fig.update_layout(
+                            height=max(250, 55 * len(vplot)),
+                            margin={"l": 10, "r": 20, "t": 20, "b": 35},
+                            showlegend=False,
+                        )
+                        st.plotly_chart(
+                            fig,
+                            use_container_width=True,
+                            key=f"site_vac_v3_{selected_target}",
+                        )
 
-        with tab_vac:
-            st.markdown("#### Which dopant is closest to the oxygen vacancy?")
-            if str(selected_meta.get("structure_kind", "")) != "oxygen-vacancy":
-                st.info("This is a vacancy-free structure, so this analysis does not apply.")
-            elif selected_vacancy.empty:
-                st.info("No mapped dopant–oxygen-vacancy records are available for this structure.")
-            else:
-                vac_simple = selected_vacancy.copy().sort_values("nearest_distance_angstrom")
-                closest = vac_simple.iloc[0]
-                st.success(
-                    f"Closest dopant–vacancy relation: **{closest['pair']}**, "
-                    f"**{_shell_text(closest['nearest_shell'])}**, "
-                    f"**{_fmt(closest['nearest_distance_angstrom'], 3, ' Å')}**."
+            if not selected_triplets.empty:
+                st.divider()
+                st.markdown("### Three-dopant arrangement")
+                st.caption(
+                    "Shown only when three-dopant motifs actually exist in the selected structure."
                 )
-                vac_display = vac_simple[
-                    ["pair", "nearest_shell", "nearest_distance_angstrom"]
-                ].copy()
-                vac_display["nearest_shell"] = vac_display["nearest_shell"].map(_shell_text)
-                vac_display.columns = ["Dopant–Vₒ", "Nearest shell", "Nearest distance (Å)"]
-                st.dataframe(vac_display, use_container_width=True, hide_index=True)
-                fig = px.bar(
-                    vac_simple,
-                    x="pair",
-                    y="nearest_distance_angstrom",
-                    labels={
-                        "pair": "Dopant–Vₒ pair",
-                        "nearest_distance_angstrom": "Nearest distance (Å)",
-                    },
-                    title="Nearest dopant–oxygen-vacancy distances",
+                triplet_species = (
+                    selected_triplets["species_triplet"]
+                    .dropna()
+                    .astype(str)
+                    .unique()
+                    .tolist()
                 )
-                st.plotly_chart(
-                    fig,
-                    use_container_width=True,
-                    key=f"site_pref_vac_{selected_target}",
-                )
-
-        with tab_triplet:
-            st.markdown("#### How are groups of three dopants arranged?")
-            st.caption(
-                "Compact triangle = all three close; connected chain = two neighbor links; "
-                "isolated pair + third = only one neighbor link; dispersed = no close links."
-            )
-            if selected_triplets.empty:
-                st.info("No three-dopant motif is present or available for this structure.")
-            else:
-                triplet_species = selected_triplets[
-                    "species_triplet"
-                ].dropna().astype(str).unique().tolist()
                 triplet_choice = st.selectbox(
-                    "Dopant triplet",
+                    "Triplet",
                     triplet_species,
-                    key=f"site_pref_triplet_{selected_target}",
+                    key=f"site_triplet_v3_{selected_target}",
                 )
                 one_triplet = selected_triplets[
-                    selected_triplets["species_triplet"].astype(str) == triplet_choice
+                    selected_triplets["species_triplet"].astype(str)
+                    == triplet_choice
                 ].copy()
-                if not one_triplet.empty:
-                    best_count = one_triplet.sort_values(
-                        "n_instances", ascending=False
-                    ).iloc[0]
-                    st.success(
-                        f"For **{triplet_choice}**, the most common motif in this structure is "
-                        f"**{_plain_motif(best_count['motif'])}** "
-                        f"({int(best_count['n_instances'])} occurrence(s))."
-                    )
-                    plot_triplet = (
-                        one_triplet.groupby("motif", as_index=False)["n_instances"].sum()
-                    )
-                    plot_triplet["motif"] = plot_triplet["motif"].map(_plain_motif)
-                    fig = px.bar(
-                        plot_triplet,
-                        x="motif",
-                        y="n_instances",
-                        labels={"motif": "Motif", "n_instances": "Count"},
-                        title=f"{triplet_choice}: motif counts in selected structure",
-                    )
-                    st.plotly_chart(
-                        fig,
-                        use_container_width=True,
-                        key=f"site_pref_triplet_plot_{selected_target}_{triplet_choice}",
-                    )
-                    st.dataframe(
-                        plot_triplet.rename(
-                            columns={"motif": "Motif", "n_instances": "Count"}
+                motif_counts = (
+                    one_triplet.groupby("motif", as_index=False)["n_instances"].sum()
+                    .sort_values("n_instances", ascending=False)
+                )
+                if not motif_counts.empty:
+                    dominant = motif_counts.iloc[0]
+                    st.markdown(
+                        _takeaway(
+                            "Dominant motif",
+                            f"{triplet_choice}: {_plain_motif(dominant['motif'])}.",
+                            f"{int(dominant['n_instances'])} occurrence(s) in this structure.",
                         ),
+                        unsafe_allow_html=True,
+                    )
+                    motif_counts["Motif"] = motif_counts["motif"].map(_plain_motif)
+                    motif_counts["Count"] = motif_counts["n_instances"].astype(int)
+                    st.dataframe(
+                        motif_counts[["Motif", "Count"]],
                         use_container_width=True,
                         hide_index=True,
                     )
 
-        with tab_compare:
-            st.markdown("#### Does a particular arrangement correlate with lower energy?")
+            st.divider()
+            st.markdown("### Energetic context")
             st.caption(
-                "This comparison uses only structures with the same composition, structure type "
-                "and oxygen-vacancy count. It is a configuration-energy trend, not an isolated "
-                "pair-binding energy."
+                "This ranking contains only directly comparable structures: same composition, "
+                "structure type, and oxygen-vacancy count. 0 eV is the best structure in that group."
             )
-            if selected_nearest.empty:
-                st.info("No pair information is available for comparison.")
+            comparable = targets_df.copy()
+            mask = pd.Series(True, index=comparable.index)
+            if "composition" in comparable.columns:
+                mask &= comparable["composition"].astype(str) == str(
+                    selected_meta.get("composition", "")
+                )
+            if "structure_kind" in comparable.columns:
+                mask &= comparable["structure_kind"].astype(str) == str(
+                    selected_meta.get("structure_kind", "")
+                )
+            if "n_oxygen_vacancies" in comparable.columns:
+                mask &= pd.to_numeric(
+                    comparable["n_oxygen_vacancies"], errors="coerce"
+                ).fillna(-1) == float(selected_meta.get("n_oxygen_vacancies", 0))
+            comparable = comparable[mask].dropna(
+                subset=["delta_energy_within_group_eV"]
+            ).copy()
+            if comparable.empty:
+                st.info("No comparable structure energies are available.")
             else:
-                compare_pairs = selected_nearest["pair"].dropna().astype(str).unique().tolist()
-                compare_pair = st.selectbox(
-                    "Pair to compare across structures",
-                    compare_pairs,
-                    key=f"site_pref_compare_pair_{selected_target}",
+                comparable["Selected"] = comparable["target_id"].astype(str).map(
+                    lambda value: "Selected structure" if value == selected_target else "Other"
                 )
-                comp_rows = nearest_df.copy()
-                conditions = pd.Series(True, index=comp_rows.index)
-                if "composition" in comp_rows.columns:
-                    conditions &= comp_rows["composition"].astype(str) == str(
-                        selected_meta.get("composition", "")
-                    )
-                if "structure_kind" in comp_rows.columns:
-                    conditions &= comp_rows["structure_kind"].astype(str) == str(
-                        selected_meta.get("structure_kind", "")
-                    )
-                if "n_oxygen_vacancies" in comp_rows.columns:
-                    conditions &= pd.to_numeric(
-                        comp_rows["n_oxygen_vacancies"], errors="coerce"
-                    ).fillna(-1) == float(selected_meta.get("n_oxygen_vacancies", 0))
-                conditions &= comp_rows["pair"].astype(str) == compare_pair
-                comp_rows = comp_rows[conditions].copy()
-                comp_rows = comp_rows.dropna(
-                    subset=["nearest_distance_angstrom", "delta_energy_within_group_eV"]
+                comparable["Short ID"] = comparable["target_id"].astype(str).map(
+                    lambda value: value[-42:] if len(value) > 42 else value
                 )
-                if len(comp_rows) < 2:
-                    st.info(
-                        "At least two comparable structures are needed to infer an energetic "
-                        "site-preference trend."
-                    )
-                else:
-                    best = comp_rows.loc[
-                        comp_rows["delta_energy_within_group_eV"].idxmin()
-                    ]
-                    st.success(
-                        f"Lowest-energy observed **{compare_pair}** arrangement: "
-                        f"**{_shell_text(best['nearest_shell'])}** at "
-                        f"**{_fmt(best['nearest_distance_angstrom'], 3, ' Å')}**."
-                    )
-                    fig = px.scatter(
-                        comp_rows,
-                        x="nearest_distance_angstrom",
-                        y="delta_energy_within_group_eV",
-                        hover_name="target_id",
-                        symbol="nearest_shell",
-                        labels={
-                            "nearest_distance_angstrom": f"Nearest {compare_pair} distance (Å)",
-                            "delta_energy_within_group_eV": "ΔE within comparable structures (eV)",
-                        },
-                        title=f"{compare_pair}: distance versus relative configuration energy",
-                    )
-                    st.plotly_chart(
-                        fig,
-                        use_container_width=True,
-                        key=f"site_pref_compare_{selected_target}_{compare_pair}",
-                    )
+                comparable = comparable.sort_values(
+                    "delta_energy_within_group_eV", ascending=True
+                )
+                fig = px.bar(
+                    comparable,
+                    x="delta_energy_within_group_eV",
+                    y="Short ID",
+                    orientation="h",
+                    color="Selected",
+                    labels={
+                        "delta_energy_within_group_eV": "Relative energy ΔE (eV)",
+                        "Short ID": "Structure",
+                    },
+                    category_orders={"Selected": ["Selected structure", "Other"]},
+                )
+                fig.update_layout(
+                    height=max(300, min(700, 36 * len(comparable) + 120)),
+                    margin={"l": 10, "r": 20, "t": 20, "b": 40},
+                    legend_title_text="",
+                )
+                st.plotly_chart(
+                    fig,
+                    use_container_width=True,
+                    key=f"site_energy_rank_v3_{selected_target}",
+                )
 
-                pref_match = pref_df.copy()
-                if not pref_match.empty:
-                    mask = pd.Series(True, index=pref_match.index)
-                    if "composition" in pref_match.columns:
-                        mask &= pref_match["composition"].astype(str) == str(
-                            selected_meta.get("composition", "")
-                        )
-                    if "structure_kind" in pref_match.columns:
-                        mask &= pref_match["structure_kind"].astype(str) == str(
-                            selected_meta.get("structure_kind", "")
-                        )
-                    if "n_oxygen_vacancies" in pref_match.columns:
-                        mask &= pd.to_numeric(
-                            pref_match["n_oxygen_vacancies"], errors="coerce"
-                        ).fillna(-1) == float(selected_meta.get("n_oxygen_vacancies", 0))
-                    if "pair" in pref_match.columns:
-                        mask &= pref_match["pair"].astype(str) == compare_pair
-                    pref_match = pref_match[mask]
-                    if not pref_match.empty:
-                        p = pref_match.iloc[0]
-                        st.info(
-                            f"Summary across this group: preferred observed shell = "
-                            f"**{_shell_text(p.get('preferred_shell'))}** "
-                            f"(mean distance {_fmt(p.get('preferred_shell_mean_distance_angstrom'), 3, ' Å')})."
-                        )
-
-    st.markdown("### 2. Controlled pair scan")
+with scan_tab:
+    st.markdown("### Controlled pair interaction")
     st.caption(
-        "This is the cleaner energetic test. Choose one dopant pair at a time; "
-        "the plot compares only its symmetry-distinct shell/orientation calculations."
+        "This is the clean energetic test: all other cation sites are returned to the host, "
+        "then one dopant pair is placed at symmetry-distinct separations/orientations."
     )
-    if pair_scan_df.empty:
-        st.info("No controlled pair-scan results are available yet.")
-    elif "pair" not in pair_scan_df.columns:
-        st.warning("pair_scan.csv does not contain a pair column.")
+    if pair_scan_df.empty or "pair" not in pair_scan_df.columns:
+        st.info("No controlled pair-scan energies are available yet.")
     else:
         scan_pairs = pair_scan_df["pair"].dropna().astype(str).unique().tolist()
         scan_pair = st.selectbox(
-            "Controlled pair",
+            "Dopant pair",
             scan_pairs,
-            key="site_pref_controlled_pair",
+            key="site_pair_scan_v3",
         )
         scan_one = pair_scan_df[
             pair_scan_df["pair"].astype(str) == scan_pair
         ].copy()
-        evaluated = scan_one.dropna(subset=["delta_E_vs_farthest_eV"]).copy()
-        if evaluated.empty:
-            st.warning(
-                "Structures were generated for this pair, but no evaluated MLFF energies are "
-                "available yet."
-            )
-            cols = [
-                col for col in
-                ["shell", "orbit", "initial_distance_angstrom", "run_directory"]
-                if col in scan_one.columns
-            ]
-            if cols:
-                st.dataframe(scan_one[cols], use_container_width=True, hide_index=True)
+        if "delta_E_vs_farthest_eV" not in scan_one.columns:
+            st.warning("Pair structures exist, but evaluated ΔE values are not present.")
         else:
-            distance_col = (
-                "final_distance_angstrom"
-                if "final_distance_angstrom" in evaluated.columns
-                and evaluated["final_distance_angstrom"].notna().any()
-                else "initial_distance_angstrom"
-            )
-            best = evaluated.loc[evaluated["delta_E_vs_farthest_eV"].idxmin()]
-            sign_text = (
-                "favored relative to the farthest tested separation"
-                if float(best["delta_E_vs_farthest_eV"]) < -1e-6
-                else "similar in energy to the farthest tested separation"
-            )
-            st.success(
-                f"Best **{scan_pair}** arrangement: **{_shell_text(best['shell'])}**, "
-                f"orbit **{int(best['orbit'])}**, "
-                f"{_fmt(best[distance_col], 3, ' Å')}; "
-                f"ΔE = **{_fmt(best['delta_E_vs_farthest_eV'], 3, ' eV')}**, {sign_text}."
-            )
-            fig = px.scatter(
-                evaluated,
-                x=distance_col,
-                y="delta_E_vs_farthest_eV",
-                symbol="shell",
-                hover_data=[
-                    col for col in ["orbit", "degeneracy", "energy_total_eV"]
-                    if col in evaluated.columns
-                ],
-                labels={
-                    distance_col: "Dopant separation (Å)",
-                    "delta_E_vs_farthest_eV": "ΔE vs farthest tested shell (eV)",
-                },
-                title=f"{scan_pair}: controlled interaction scan",
-            )
-            fig.add_hline(y=0)
-            st.plotly_chart(
-                fig,
-                use_container_width=True,
-                key=f"site_pref_pair_scan_{scan_pair}",
-            )
-            scan_cols = [
-                col for col in
-                [
-                    "shell",
-                    "orbit",
-                    distance_col,
-                    "delta_E_vs_farthest_eV",
-                    "energy_total_eV",
-                    "converged",
+            evaluated = scan_one.dropna(
+                subset=["delta_E_vs_farthest_eV"]
+            ).copy()
+            if evaluated.empty:
+                st.warning("Pair structures were generated, but MLFF energies have not been evaluated.")
+            else:
+                distance_col = (
+                    "final_distance_angstrom"
+                    if "final_distance_angstrom" in evaluated.columns
+                    and evaluated["final_distance_angstrom"].notna().any()
+                    else "initial_distance_angstrom"
+                )
+                evaluated = evaluated.dropna(subset=[distance_col]).copy()
+                best = evaluated.loc[
+                    evaluated["delta_E_vs_farthest_eV"].idxmin()
                 ]
-                if col in evaluated.columns
-            ]
-            st.dataframe(
-                evaluated.sort_values("delta_E_vs_farthest_eV")[scan_cols],
-                use_container_width=True,
-                hide_index=True,
-            )
-
-    st.markdown("### 3. Finite-temperature ordering MC")
-    st.caption(
-        "Choose one MC target at a time. This summarizes collective cation ordering at the "
-        "configured temperature rather than mixing all compositions in one table."
-    )
-    if not mc_summary.exists():
-        st.info("No ordering-MC summary is available yet.")
-    else:
-        try:
-            mc_rows = json.loads(mc_summary.read_text(encoding="utf-8"))
-        except (OSError, ValueError, TypeError) as exc:
-            st.warning(f"Could not read MC summary: {exc}")
-            mc_rows = []
-        if isinstance(mc_rows, dict):
-            mc_rows = list(mc_rows.values())
-        if not mc_rows:
-            st.info("The ordering-MC summary is empty.")
-        else:
-            mc_labels = [
-                str(row.get("target_id", f"target {idx + 1}"))
-                for idx, row in enumerate(mc_rows)
-            ]
-            mc_choice = st.selectbox(
-                "MC structure",
-                mc_labels,
-                key="site_pref_mc_target",
-            )
-            mc_row = next(
-                row for row in mc_rows
-                if str(row.get("target_id", "")) == mc_choice
-            )
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Temperature", _fmt(mc_row.get("temperature_K"), 0, " K"))
-            m2.metric(
-                "Acceptance",
-                _fmt(
-                    100.0 * float(mc_row.get("acceptance_fraction", 0.0)),
-                    1,
-                    "%",
-                ),
-            )
-            m3.metric("Samples", str(mc_row.get("samples", "—")))
-            m4.metric(
-                "Best MC energy",
-                _fmt(mc_row.get("best_mc_energy_eV"), 3, " eV"),
-            )
-
-            safe_target = mc_choice.replace("/", "__")
-            sro_average_path = (
-                results_root / "ordering_mc" / safe_target / "sro_temperature_average.csv"
-            )
-            mc_sro = _read_csv(sro_average_path)
-            if not mc_sro.empty and "pair" in mc_sro.columns:
-                mc_pair = st.selectbox(
-                    "MC ordering pair",
-                    mc_sro["pair"].dropna().astype(str).unique().tolist(),
-                    key=f"site_pref_mc_pair_{safe_target}",
+                farthest_shell = int(
+                    pd.to_numeric(evaluated["shell"], errors="coerce").max()
                 )
-                mc_one = mc_sro[mc_sro["pair"].astype(str) == mc_pair].copy()
-                alpha_col = next(
-                    (
-                        col for col in
-                        ["mean_warren_cowley_alpha", "warren_cowley_alpha", "alpha_mean"]
-                        if col in mc_one.columns
+                best_shell = int(float(best["shell"]))
+                best_delta = float(best["delta_E_vs_farthest_eV"])
+                if best_shell < farthest_shell and best_delta < -0.01:
+                    interaction = "A closer dopant arrangement is energetically preferred."
+                elif best_shell == farthest_shell:
+                    interaction = "The largest tested separation is energetically preferred."
+                else:
+                    interaction = "No strong preference relative to the farthest tested separation is resolved."
+
+                st.markdown(
+                    _takeaway(
+                        "Pair-scan conclusion",
+                        interaction,
+                        f"Best {scan_pair}: {_shell_text(best_shell)}, orbit {int(best['orbit'])}, "
+                        f"{float(best[distance_col]):.2f} Å, ΔE = {best_delta:.3f} eV.",
                     ),
-                    None,
+                    unsafe_allow_html=True,
                 )
-                if alpha_col and "shell" in mc_one.columns:
-                    mc_one = mc_one.dropna(subset=[alpha_col]).copy()
-                    if not mc_one.empty:
-                        strongest_mc = mc_one.loc[mc_one[alpha_col].abs().idxmax()]
-                        alpha_mc = float(strongest_mc[alpha_col])
-                        if alpha_mc < -0.05:
-                            mc_meaning = "association"
-                        elif alpha_mc > 0.05:
-                            mc_meaning = "avoidance"
-                        else:
-                            mc_meaning = "approximately random mixing"
-                        st.success(
-                            f"At **{_fmt(mc_row.get('temperature_K'), 0, ' K')}**, "
-                            f"**{mc_pair}** shows its strongest average signal at "
-                            f"**{_shell_text(strongest_mc['shell'])}**: "
-                            f"**{mc_meaning}** (α = {alpha_mc:.2f})."
-                        )
-                        fig = px.bar(
-                            mc_one.sort_values("shell"),
+
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Preferred shell", _shell_text(best_shell))
+                c2.metric("Separation", _fmt(best[distance_col], 2, " Å"))
+                c3.metric("ΔE vs farthest", _fmt(best_delta, 3, " eV"))
+                c4.metric("Configurations tested", str(len(evaluated)))
+
+                evaluated["Label"] = [
+                    f"{_shell_text(shell)} / o{int(orbit)}"
+                    for shell, orbit in zip(evaluated["shell"], evaluated["orbit"])
+                ]
+                fig = px.scatter(
+                    evaluated,
+                    x=distance_col,
+                    y="delta_E_vs_farthest_eV",
+                    text="Label",
+                    hover_data=[
+                        col
+                        for col in ["energy_total_eV", "degeneracy", "converged"]
+                        if col in evaluated.columns
+                    ],
+                    labels={
+                        distance_col: "Dopant separation (Å)",
+                        "delta_E_vs_farthest_eV": "ΔE relative to farthest tested arrangement (eV)",
+                    },
+                )
+                fig.add_hline(y=0, line_dash="dash")
+                fig.update_traces(marker={"size": 13}, textposition="top center")
+                fig.update_layout(
+                    height=430,
+                    margin={"l": 20, "r": 25, "t": 20, "b": 45},
+                    showlegend=False,
+                )
+                st.plotly_chart(
+                    fig,
+                    use_container_width=True,
+                    key=f"site_pair_scan_plot_v3_{scan_pair}",
+                )
+
+                shell_summary = (
+                    evaluated.groupby("shell", as_index=False)
+                    .agg(
+                        best_delta_eV=("delta_E_vs_farthest_eV", "min"),
+                        mean_distance_angstrom=(distance_col, "mean"),
+                        n_orientations=("orbit", "count"),
+                    )
+                    .sort_values("shell")
+                )
+                shell_summary["Shell"] = shell_summary["shell"].map(_shell_text)
+                shell_summary["Best ΔE (eV)"] = shell_summary["best_delta_eV"].round(3)
+                shell_summary["Mean distance (Å)"] = shell_summary[
+                    "mean_distance_angstrom"
+                ].round(3)
+                shell_summary["Orientations"] = shell_summary[
+                    "n_orientations"
+                ].astype(int)
+                st.dataframe(
+                    shell_summary[
+                        ["Shell", "Mean distance (Å)", "Best ΔE (eV)", "Orientations"]
+                    ],
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+with mc_tab:
+    st.markdown("### Finite-temperature cation ordering")
+    st.caption(
+        "Monte Carlo keeps the composition fixed and samples cation occupations. "
+        "Select one structure and one pair; the GUI translates the shell-resolved α values."
+    )
+    if not mc_rows:
+        st.info("No ordering-MC result is available yet.")
+    else:
+        mc_labels = [
+            str(row.get("target_id", f"target {idx + 1}"))
+            for idx, row in enumerate(mc_rows)
+        ]
+        mc_choice = st.selectbox(
+            "MC structure",
+            mc_labels,
+            key="site_mc_target_v3",
+        )
+        mc_row = next(
+            row for row in mc_rows
+            if str(row.get("target_id", "")) == mc_choice
+        )
+
+        start_energy = mc_row.get("mc_start_energy_eV")
+        best_energy = mc_row.get("best_mc_energy_eV")
+        try:
+            improvement = float(best_energy) - float(start_energy)
+        except (TypeError, ValueError):
+            improvement = None
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Temperature", _fmt(mc_row.get("temperature_K"), 0, " K"))
+        c2.metric(
+            "Acceptance",
+            _fmt(100.0 * float(mc_row.get("acceptance_fraction", 0.0)), 1, "%"),
+        )
+        c3.metric("Samples", str(mc_row.get("samples", "—")))
+        c4.metric(
+            "Best vs MC start",
+            _fmt(improvement, 3, " eV") if improvement is not None else "—",
+        )
+
+        safe_target = (
+            mc_choice.replace("\\", "__").replace("/", "__")
+        )
+        safe_target = "".join(
+            ch if ch.isalnum() or ch in "._-" else "_" for ch in safe_target
+        )
+        mc_sro = _read_csv(
+            results_root
+            / "ordering_mc"
+            / safe_target
+            / "sro_temperature_average.csv"
+        )
+        if mc_sro.empty:
+            embedded = mc_row.get("sro_temperature_average", [])
+            if isinstance(embedded, list) and embedded:
+                mc_sro = pd.DataFrame(embedded)
+
+        if mc_sro.empty or "pair" not in mc_sro.columns:
+            st.info("No finite-temperature SRO values are available for this MC target.")
+        else:
+            mc_pairs = mc_sro["pair"].dropna().astype(str).unique().tolist()
+            mc_pair = st.selectbox(
+                "Pair to inspect",
+                mc_pairs,
+                key=f"site_mc_pair_v3_{safe_target}",
+            )
+            one_mc = mc_sro[
+                mc_sro["pair"].astype(str) == mc_pair
+            ].copy()
+            alpha_col = next(
+                (
+                    col
+                    for col in [
+                        "mean_warren_cowley_alpha",
+                        "warren_cowley_alpha",
+                        "alpha_mean",
+                    ]
+                    if col in one_mc.columns
+                ),
+                None,
+            )
+            if alpha_col is None or "shell" not in one_mc.columns:
+                st.warning("The MC SRO table does not contain shell-resolved α values.")
+            else:
+                one_mc = one_mc.dropna(
+                    subset=[alpha_col, "shell"]
+                ).sort_values("shell")
+                if one_mc.empty:
+                    st.info("No valid α values are available for this pair.")
+                else:
+                    strongest = one_mc.loc[one_mc[alpha_col].abs().idxmax()]
+                    alpha = float(strongest[alpha_col])
+                    meaning = (
+                        "association"
+                        if alpha < -0.05
+                        else "avoidance"
+                        if alpha > 0.05
+                        else "approximately random mixing"
+                    )
+                    st.markdown(
+                        _takeaway(
+                            "Finite-temperature ordering",
+                            f"{mc_pair}: {meaning} at {_shell_text(strongest['shell'])}.",
+                            f"Average α = {alpha:.2f} at {float(mc_row.get('temperature_K', 0)):.0f} K.",
+                        ),
+                        unsafe_allow_html=True,
+                    )
+
+                    left, right = st.columns([1.8, 1.0])
+                    with left:
+                        fig = px.line(
+                            one_mc,
                             x="shell",
                             y=alpha_col,
+                            markers=True,
                             labels={
                                 "shell": "Coordination shell",
-                                alpha_col: "Average α  (− associate, + avoid)",
+                                alpha_col: "Average α",
                             },
-                            title=f"{mc_pair}: finite-temperature local ordering",
                         )
-                        fig.add_hline(y=0)
+                        fig.add_hline(y=0, line_dash="dash")
+                        fig.update_layout(
+                            height=350,
+                            margin={"l": 20, "r": 15, "t": 20, "b": 45},
+                            showlegend=False,
+                        )
                         st.plotly_chart(
                             fig,
                             use_container_width=True,
-                            key=f"site_pref_mc_sro_{safe_target}_{mc_pair}",
+                            key=f"site_mc_plot_v3_{safe_target}_{mc_pair}",
                         )
-                with st.expander("MC SRO values", expanded=False):
-                    st.dataframe(mc_one, use_container_width=True, hide_index=True)
+                    with right:
+                        mc_table = one_mc[["shell", alpha_col]].copy()
+                        mc_table["Shell"] = mc_table["shell"].map(_shell_text)
+                        mc_table["Average α"] = pd.to_numeric(
+                            mc_table[alpha_col], errors="coerce"
+                        ).round(3)
+                        mc_table["Meaning"] = mc_table["Average α"].map(
+                            lambda value: (
+                                "association"
+                                if value < -0.05
+                                else "avoidance"
+                                if value > 0.05
+                                else "random-like"
+                            )
+                        )
+                        st.dataframe(
+                            mc_table[["Shell", "Average α", "Meaning"]],
+                            use_container_width=True,
+                            hide_index=True,
+                        )
 
-    with st.expander("Raw / global result tables", expanded=False):
-        st.caption(
-            "These tables are retained for auditing and export. They are intentionally not "
-            "the main visualization."
-        )
-        raw_tables = [
-            ("Structures", targets_df),
-            ("All dopant pairs", pairs_df),
-            ("Nearest pair by structure", nearest_df),
-            ("Pair preference summary", pref_df),
-            ("Warren–Cowley SRO", sro_df),
-            ("All dopant–Vₒ pairs", vacancy_df),
-            ("Nearest dopant–Vₒ by structure", nearest_vacancy_df),
-            ("Dopant–Vₒ preference summary", vacancy_pref_df),
-            ("Triplet motifs by structure", triplet_target_df),
-            ("Triplet preference summary", triplet_pref_df),
-            ("Controlled pair scan", pair_scan_df),
-        ]
-        for title, frame in raw_tables:
-            if not frame.empty:
-                st.markdown(f"**{title}**")
+with raw_tab:
+    st.markdown("### Raw result tables")
+    st.caption(
+        f"Output directory: {results_root}. These tables are for auditing/export; "
+        "they are not intended as the primary scientific view."
+    )
+    raw_tables = [
+        ("Structures", targets_df),
+        ("All dopant pairs", pairs_df),
+        ("Nearest pair by structure", nearest_df),
+        ("Pair preference summary", pref_df),
+        ("Warren–Cowley SRO", sro_df),
+        ("All dopant–Vₒ pairs", vacancy_df),
+        ("Nearest dopant–Vₒ by structure", nearest_vacancy_df),
+        ("Dopant–Vₒ preference summary", vacancy_pref_df),
+        ("Triplet motifs by structure", triplet_target_df),
+        ("Triplet preference summary", triplet_pref_df),
+        ("Controlled pair scan", pair_scan_df),
+    ]
+    any_raw = False
+    for title, frame in raw_tables:
+        if not frame.empty:
+            any_raw = True
+            with st.expander(title, expanded=False):
                 st.dataframe(frame, use_container_width=True, hide_index=True)
+    if not any_raw:
+        st.info("No raw result tables are available yet.")
