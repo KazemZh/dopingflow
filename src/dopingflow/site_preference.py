@@ -1118,6 +1118,69 @@ def _nearest_pair_per_target(
     return output
 
 
+def _nearest_vacancy_pair_per_target(
+    vacancy_records: Sequence[dict[str, Any]],
+    target_rows: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Reduce each dopant–vacancy pair type to its nearest vacancy in each target."""
+    target_meta = {row["target_id"]: row for row in target_rows}
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in vacancy_records:
+        grouped[(row["target_id"], row["pair"])].append(row)
+
+    output: list[dict[str, Any]] = []
+    for (target_id, pair), records in grouped.items():
+        nearest = min(records, key=lambda row: float(row["distance_angstrom"]))
+        meta = target_meta[target_id]
+        output.append(
+            {
+                "target_id": target_id,
+                "composition": meta["composition"],
+                "structure_kind": meta["structure_kind"],
+                "n_oxygen_vacancies": meta["n_oxygen_vacancies"],
+                "pair": pair,
+                "nearest_distance_angstrom": nearest["distance_angstrom"],
+                "nearest_shell": nearest["shell"],
+                "energy_total_eV": meta["energy_total_eV"],
+                "delta_energy_within_group_eV": meta["delta_energy_within_group_eV"],
+            }
+        )
+
+    farthest_reference: dict[tuple[str, str, int, str], dict[str, Any]] = {}
+    for row in output:
+        key = (
+            row["composition"],
+            row["structure_kind"],
+            int(row["n_oxygen_vacancies"]),
+            row["pair"],
+        )
+        current = farthest_reference.get(key)
+        if current is None or float(row["nearest_distance_angstrom"]) > float(
+            current["nearest_distance_angstrom"]
+        ):
+            farthest_reference[key] = row
+
+    for row in output:
+        key = (
+            row["composition"],
+            row["structure_kind"],
+            int(row["n_oxygen_vacancies"]),
+            row["pair"],
+        )
+        reference = farthest_reference[key]
+        if row["energy_total_eV"] is not None and reference["energy_total_eV"] is not None:
+            row["delta_E_vs_farthest_eV"] = float(row["energy_total_eV"]) - float(
+                reference["energy_total_eV"]
+            )
+        else:
+            row["delta_E_vs_farthest_eV"] = None
+        row["farthest_reference_target"] = reference["target_id"]
+        row["proxy_note"] = (
+            "Configuration-energy proxy: vacancy position and other local arrangements can also differ."
+        )
+    return output
+
+
 def _aggregate_pair_preferences(nearest_rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
     grouped: dict[tuple[str, str, int, str, int], list[dict[str, Any]]] = defaultdict(list)
     for row in nearest_rows:
@@ -1803,6 +1866,13 @@ def run_site_preference(
     target_rows = _target_rows(targets, pair_records)
     nearest_rows = _nearest_pair_per_target(pair_records, target_rows)
     preference_rows = _aggregate_pair_preferences(nearest_rows)
+    nearest_vacancy_rows = _nearest_vacancy_pair_per_target(vacancy_records, target_rows)
+    vacancy_preference_rows = _aggregate_pair_preferences(nearest_vacancy_rows)
+    for row in vacancy_preference_rows:
+        row["interpretation_note"] = (
+            "Observed dopant–oxygen-vacancy shell preference from same-composition vacancy "
+            "configurations; vacancy placement and other local ordering can also affect the energy."
+        )
     triplet_target_rows = _triplet_target_presence(triplet_records, target_rows)
     triplet_preference_rows = _aggregate_triplet_preferences(triplet_target_rows)
 
@@ -1812,6 +1882,14 @@ def run_site_preference(
     _write_csv(cfg.output_dir / "triplet_target_motifs.csv", triplet_target_rows)
     _write_csv(cfg.output_dir / "triplet_motif_summary.csv", triplet_preference_rows)
     _write_csv(cfg.output_dir / "dopant_vacancy_pairs.csv", vacancy_records)
+    _write_csv(
+        cfg.output_dir / "nearest_dopant_vacancy_by_target.csv",
+        nearest_vacancy_rows,
+    )
+    _write_csv(
+        cfg.output_dir / "dopant_vacancy_preference_summary.csv",
+        vacancy_preference_rows,
+    )
     _write_csv(cfg.output_dir / "warren_cowley_sro.csv", sro_records)
     _write_csv(cfg.output_dir / "nearest_pair_by_target.csv", nearest_rows)
     _write_csv(cfg.output_dir / "pair_preference_summary.csv", preference_rows)
@@ -1826,6 +1904,7 @@ def run_site_preference(
         "n_targets": len(targets),
         "n_dopant_pair_records": len(pair_records),
         "n_dopant_vacancy_records": len(vacancy_records),
+        "n_dopant_vacancy_preference_rows": len(vacancy_preference_rows),
         "n_sro_records": len(sro_records),
         "n_triplet_records": len(triplet_records),
         "n_triplet_preference_rows": len(triplet_preference_rows),
@@ -1845,6 +1924,12 @@ def run_site_preference(
             "triplet_target_motifs": str(cfg.output_dir / "triplet_target_motifs.csv"),
             "triplet_motif_summary": str(cfg.output_dir / "triplet_motif_summary.csv"),
             "dopant_vacancy_pairs": str(cfg.output_dir / "dopant_vacancy_pairs.csv"),
+            "nearest_dopant_vacancy_by_target": str(
+                cfg.output_dir / "nearest_dopant_vacancy_by_target.csv"
+            ),
+            "dopant_vacancy_preference_summary": str(
+                cfg.output_dir / "dopant_vacancy_preference_summary.csv"
+            ),
             "warren_cowley_sro": str(cfg.output_dir / "warren_cowley_sro.csv"),
             "nearest_pair_by_target": str(cfg.output_dir / "nearest_pair_by_target.csv"),
             "pair_preference_summary": str(cfg.output_dir / "pair_preference_summary.csv"),
