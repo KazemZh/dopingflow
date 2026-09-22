@@ -73,420 +73,426 @@ def _pairs_text(value) -> str:
     return ", ".join(output)
 
 
-st.subheader("Analysis")
-a1, a2, a3 = st.columns(3)
-with a1:
-    enabled = st.checkbox(
-        "Enable site-preference stage",
-        value=bool(section.get("enabled", False)),
-    )
-with a2:
-    include_vacancy_free = st.checkbox(
-        "Vacancy-free structures",
-        value=bool(section.get("include_vacancy_free", True)),
-    )
-with a3:
-    include_oxygen_vacancies = st.checkbox(
-        "O-vacancy structures",
-        value=bool(section.get("include_oxygen_vacancies", True)),
-    )
-
-b1, b2, b3 = st.columns(3)
-host_species = b1.text_input(
-    "Host cation",
-    value=str(section.get("host_species", doping.get("host_species", "Sn"))),
-)
-anion_species_text = b2.text_input(
-    "Anion species",
-    value=_csv_text(section.get("anion_species", scan.get("anion_species", ["O"]))),
-)
-output_dir = b3.text_input(
-    "Output directory",
-    value=str(section.get("output_dir", "06_site_preference")),
-)
-
-source_root = st.text_input(
-    "Source root",
-    value=str(section.get("source_root", structure.get("outdir", "random_structures"))),
-    help="Contains selected_candidates.txt files and, when applicable, vacancies_database.json.",
-)
-
-c1, c2 = st.columns(2)
-max_shells = int(
-    c1.number_input(
-        "Maximum coordination shells",
-        min_value=1,
-        value=int(section.get("max_shells", 6)),
-        step=1,
-    )
-)
-shell_tolerance = float(
-    c2.number_input(
-        "Shell clustering tolerance (Å)",
-        min_value=0.001,
-        value=float(section.get("shell_tolerance_angstrom", 0.12)),
-        step=0.01,
-        format="%.3f",
-    )
-)
-
-d1, d2, d3 = st.columns(3)
-mapping_tolerance = float(
-    d1.number_input(
-        "Parent ↔ vacancy mapping tolerance (Å)",
-        min_value=0.05,
-        value=float(section.get("mapping_tolerance_angstrom", 1.5)),
-        step=0.05,
-    )
-)
-motif_neighbor_shell_max = int(
-    d2.number_input(
-        "Triplet motif neighbor shell",
-        min_value=1,
-        max_value=max_shells,
-        value=min(
-            int(section.get("motif_neighbor_shell_max", 1)),
-            max_shells,
-        ),
-        step=1,
-        help=(
-            "A pair counts as connected in Sb–X–Y motif classification when its "
-            "separation is within this cation coordination shell."
-        ),
-    )
-)
-target_include_text = d3.text_input(
-    "Target selector(s), optional",
-    value=_csv_text(section.get("target_include", [])),
-    help="Exact IDs or wildcards, e.g. Sb5_Ti2p5/*.",
-)
-
-pair_saved = dict(section.get("pair_scan", {}) or {})
-with st.expander("Controlled dopant-pair shell scan", expanded=False):
+with st.expander("Configuration & run controls", expanded=False):
     st.caption(
-        "Build a host-only cation sublattice from a selected parent, place one dopant pair "
-        "at representative coordination shells, then optionally evaluate/relax each shell "
-        "with the selected MLFF. ΔE is reported relative to the farthest evaluated shell."
+        "Open this only when you want to change settings or launch a calculation. "
+        "The scientific results explorer stays uncluttered below."
     )
-    p1, p2 = st.columns(2)
-    pair_enabled = p1.checkbox(
-        "Enable pair scan",
-        value=bool(pair_saved.get("enabled", False)),
-        key="site_pair_enabled",
+    st.subheader("Analysis")
+    a1, a2, a3 = st.columns(3)
+    with a1:
+        enabled = st.checkbox(
+            "Enable site-preference stage",
+            value=bool(section.get("enabled", False)),
+        )
+    with a2:
+        include_vacancy_free = st.checkbox(
+            "Vacancy-free structures",
+            value=bool(section.get("include_vacancy_free", True)),
+        )
+    with a3:
+        include_oxygen_vacancies = st.checkbox(
+            "O-vacancy structures",
+            value=bool(section.get("include_oxygen_vacancies", True)),
+        )
+
+    b1, b2, b3 = st.columns(3)
+    host_species = b1.text_input(
+        "Host cation",
+        value=str(section.get("host_species", doping.get("host_species", "Sn"))),
     )
-    pair_execute = p2.checkbox(
-        "Execute MLFF energies/relaxations",
-        value=bool(pair_saved.get("execute", False)),
-        key="site_pair_execute",
+    anion_species_text = b2.text_input(
+        "Anion species",
+        value=_csv_text(section.get("anion_species", scan.get("anion_species", ["O"]))),
     )
-    pair_source = st.text_input(
-        "Source parent target (optional)",
-        value=str(pair_saved.get("source_target", "")),
-        help="Leave empty to use the lowest-energy selected vacancy-free parent.",
+    output_dir = b3.text_input(
+        "Output directory",
+        value=str(section.get("output_dir", "06_site_preference")),
     )
-    pair_text = st.text_input(
-        "Pairs",
-        value=_pairs_text(pair_saved.get("pairs", [])),
-        placeholder="Sb-Ti, Sb-Nb, Ti-Nb",
-        help="Leave empty to infer all dopant pair types present in the selected structures.",
+
+    source_root = st.text_input(
+        "Source root",
+        value=str(section.get("source_root", structure.get("outdir", "random_structures"))),
+        help="Contains selected_candidates.txt files and, when applicable, vacancies_database.json.",
     )
-    p3, p4, p5 = st.columns(3)
-    pair_max_shells = int(
-        p3.number_input(
-            "Pair-scan shells",
+
+    c1, c2 = st.columns(2)
+    max_shells = int(
+        c1.number_input(
+            "Maximum coordination shells",
             min_value=1,
-            value=int(pair_saved.get("max_shells", max_shells)),
+            value=int(section.get("max_shells", 6)),
             step=1,
         )
     )
-    pair_relax = p4.checkbox(
-        "Relax each shell",
-        value=bool(pair_saved.get("relax", True)),
-    )
-    pair_backend = p5.selectbox(
-        "MLFF backend",
-        ["mace", "grace", "m3gnet", "uma"],
-        index=["mace", "grace", "m3gnet", "uma"].index(
-            str(pair_saved.get("backend", "mace")).lower()
-            if str(pair_saved.get("backend", "mace")).lower()
-            in ["mace", "grace", "m3gnet", "uma"]
-            else "mace"
-        ),
-    )
-    p6, p7, p8 = st.columns(3)
-    pair_model = p6.text_input("Model", value=str(pair_saved.get("model", "small")))
-    pair_device = p7.selectbox(
-        "Device",
-        ["cpu", "cuda"],
-        index=1 if str(pair_saved.get("device", "cpu")).lower() == "cuda" else 0,
-    )
-    pair_fmax = float(
-        p8.number_input(
-            "Relax fmax (eV/Å)",
+    shell_tolerance = float(
+        c2.number_input(
+            "Shell clustering tolerance (Å)",
             min_value=0.001,
-            value=float(pair_saved.get("fmax", 0.05)),
+            value=float(section.get("shell_tolerance_angstrom", 0.12)),
             step=0.01,
+            format="%.3f",
         )
     )
-    p9, p10 = st.columns(2)
-    pair_max_steps = int(
-        p9.number_input(
-            "Relax max steps",
-            min_value=1,
-            value=int(pair_saved.get("max_steps", 300)),
-            step=10,
-        )
-    )
-    pair_task = p10.text_input("Backend task (optional)", value=str(pair_saved.get("task", "")))
 
-mc_saved = dict(section.get("ordering_mc", {}) or {})
-with st.expander("Finite-temperature cation-ordering Monte Carlo", expanded=False):
-    st.caption(
-        "Composition is fixed. MC swaps cation identities without force calculations; "
-        "single-point MLFF energies drive Metropolis acceptance. The best occupation can "
-        "optionally be relaxed at the end."
-    )
-    m1, m2 = st.columns(2)
-    mc_enabled = m1.checkbox(
-        "Enable ordering MC",
-        value=bool(mc_saved.get("enabled", False)),
-        key="site_mc_enabled",
-    )
-    mc_execute = m2.checkbox(
-        "Execute MC",
-        value=bool(mc_saved.get("execute", False)),
-        key="site_mc_execute",
-    )
-    mc_targets = st.text_input(
-        "MC target selector(s), optional",
-        value=_csv_text(mc_saved.get("target_include", [])),
-        help="Leave empty to use the lowest-energy vacancy-free parent from each composition.",
-    )
-    m3, m4, m5, m6 = st.columns(4)
-    mc_temperature = float(
-        m3.number_input(
-            "Temperature (K)",
-            min_value=1.0,
-            value=float(mc_saved.get("temperature_K", 800.0)),
-            step=50.0,
+    d1, d2, d3 = st.columns(3)
+    mapping_tolerance = float(
+        d1.number_input(
+            "Parent ↔ vacancy mapping tolerance (Å)",
+            min_value=0.05,
+            value=float(section.get("mapping_tolerance_angstrom", 1.5)),
+            step=0.05,
         )
     )
-    mc_steps = int(
-        m4.number_input(
-            "MC steps",
-            min_value=2,
-            value=int(mc_saved.get("steps", 10000)),
-            step=1000,
-        )
-    )
-    mc_burn = int(
-        m5.number_input(
-            "Burn-in",
-            min_value=0,
-            value=int(mc_saved.get("burn_in", 2000)),
-            step=500,
-        )
-    )
-    mc_interval = int(
-        m6.number_input(
-            "Sample interval",
+    motif_neighbor_shell_max = int(
+        d2.number_input(
+            "Triplet motif neighbor shell",
             min_value=1,
-            value=int(mc_saved.get("sample_interval", 20)),
-            step=5,
-        )
-    )
-    m7, m8, m9 = st.columns(3)
-    mc_max_targets = int(
-        m7.number_input(
-            "Maximum MC targets",
-            min_value=1,
-            value=int(mc_saved.get("max_targets", 5)),
+            max_value=max_shells,
+            value=min(
+                int(section.get("motif_neighbor_shell_max", 1)),
+                max_shells,
+            ),
             step=1,
+            help=(
+                "A pair counts as connected in Sb–X–Y motif classification when its "
+                "separation is within this cation coordination shell."
+            ),
         )
     )
-    mc_backend = m8.selectbox(
-        "MC MLFF backend",
-        ["mace", "grace", "m3gnet", "uma"],
-        index=["mace", "grace", "m3gnet", "uma"].index(
-            str(mc_saved.get("backend", "mace")).lower()
-            if str(mc_saved.get("backend", "mace")).lower()
-            in ["mace", "grace", "m3gnet", "uma"]
-            else "mace"
-        ),
-        key="site_mc_backend",
+    target_include_text = d3.text_input(
+        "Target selector(s), optional",
+        value=_csv_text(section.get("target_include", [])),
+        help="Exact IDs or wildcards, e.g. Sb5_Ti2p5/*.",
     )
-    mc_model = m9.text_input("MC model", value=str(mc_saved.get("model", "small")))
-    m10, m11, m12 = st.columns(3)
-    mc_relax_best = m10.checkbox(
-        "Relax best MC occupation",
-        value=bool(mc_saved.get("relax_best", True)),
-    )
-    mc_device = m11.selectbox(
-        "MC device",
-        ["cpu", "cuda"],
-        index=1 if str(mc_saved.get("device", "cpu")).lower() == "cuda" else 0,
-        key="site_mc_device",
-    )
-    mc_seed = int(
-        m12.number_input(
-            "MC random seed",
-            value=int(mc_saved.get("seed", 42)),
-            step=1,
+
+    pair_saved = dict(section.get("pair_scan", {}) or {})
+    with st.expander("Controlled dopant-pair shell scan", expanded=False):
+        st.caption(
+            "Build a host-only cation sublattice from a selected parent, place one dopant pair "
+            "at representative coordination shells, then optionally evaluate/relax each shell "
+            "with the selected MLFF. ΔE is reported relative to the farthest evaluated shell."
         )
-    )
-
-target_include = _parse_csv(target_include_text)
-anion_species = _parse_csv(anion_species_text)
-pairs = _parse_csv(pair_text)
-mc_target_include = _parse_csv(mc_targets)
-
-resolved_section = dict(section)
-resolved_section.update(
-    {
-        "enabled": enabled,
-        "source_root": source_root,
-        "output_dir": output_dir,
-        "host_species": host_species.strip(),
-        "anion_species": anion_species,
-        "include_vacancy_free": include_vacancy_free,
-        "include_oxygen_vacancies": include_oxygen_vacancies,
-        "target_include": target_include,
-        "max_shells": max_shells,
-        "shell_tolerance_angstrom": shell_tolerance,
-        "mapping_tolerance_angstrom": mapping_tolerance,
-        "motif_neighbor_shell_max": motif_neighbor_shell_max,
-        "pair_scan": {
-            **pair_saved,
-            "enabled": pair_enabled,
-            "execute": pair_execute,
-            "source_target": pair_source.strip(),
-            "pairs": pairs,
-            "max_shells": pair_max_shells,
-            "relax": pair_relax,
-            "backend": pair_backend,
-            "model": pair_model.strip(),
-            "task": pair_task.strip(),
-            "device": pair_device,
-            "fmax": pair_fmax,
-            "max_steps": pair_max_steps,
-        },
-        "ordering_mc": {
-            **mc_saved,
-            "enabled": mc_enabled,
-            "execute": mc_execute,
-            "target_include": mc_target_include,
-            "max_targets": mc_max_targets,
-            "temperature_K": mc_temperature,
-            "steps": mc_steps,
-            "burn_in": mc_burn,
-            "sample_interval": mc_interval,
-            "seed": mc_seed,
-            "backend": mc_backend,
-            "model": mc_model.strip(),
-            "device": mc_device,
-            "relax_best": mc_relax_best,
-        },
-    }
-)
-resolved_cfg = dict(cfg)
-resolved_cfg["site_preference"] = resolved_section
-
-validation_error = None
-parsed_cfg = None
-try:
-    parsed_cfg = parse_site_preference_config(resolved_cfg, project_root)
-except (OSError, ValueError, TypeError, RuntimeError, KeyError) as exc:
-    validation_error = str(exc)
-
-st.divider()
-st.subheader("Save and run")
-
-with st.expander("Preview site_preference TOML", expanded=False):
-    st.code(toml.dumps({"site_preference": resolved_section}), language="toml")
-
-if validation_error:
-    st.error(validation_error)
-
-if parsed_cfg is not None:
-    with st.expander("Preview selected structures", expanded=False):
-        try:
-            preview_targets, _, preview_warnings = discover_site_preference_targets(parsed_cfg)
-        except Exception as exc:
-            st.warning(str(exc))
-        else:
-            st.dataframe(
-                pd.DataFrame(
-                    [
-                        {
-                            "target_id": target.target_id,
-                            "kind": target.kind,
-                            "O vacancies": target.n_vacancies,
-                            "energy (eV)": target.energy_eV,
-                            "structure": str(target.structure_path),
-                        }
-                        for target in preview_targets
-                    ]
-                ),
-                use_container_width=True,
-                hide_index=True,
+        p1, p2 = st.columns(2)
+        pair_enabled = p1.checkbox(
+            "Enable pair scan",
+            value=bool(pair_saved.get("enabled", False)),
+            key="site_pair_enabled",
+        )
+        pair_execute = p2.checkbox(
+            "Execute MLFF energies/relaxations",
+            value=bool(pair_saved.get("execute", False)),
+            key="site_pair_execute",
+        )
+        pair_source = st.text_input(
+            "Source parent target (optional)",
+            value=str(pair_saved.get("source_target", "")),
+            help="Leave empty to use the lowest-energy selected vacancy-free parent.",
+        )
+        pair_text = st.text_input(
+            "Pairs",
+            value=_pairs_text(pair_saved.get("pairs", [])),
+            placeholder="Sb-Ti, Sb-Nb, Ti-Nb",
+            help="Leave empty to infer all dopant pair types present in the selected structures.",
+        )
+        p3, p4, p5 = st.columns(3)
+        pair_max_shells = int(
+            p3.number_input(
+                "Pair-scan shells",
+                min_value=1,
+                value=int(pair_saved.get("max_shells", max_shells)),
+                step=1,
             )
-            for warning in preview_warnings:
-                st.warning(warning)
-
-expensive = (pair_enabled and pair_execute) or (mc_enabled and mc_execute)
-confirm = True
-if expensive:
-    st.warning(
-        "MLFF execution is enabled. Pair scans may relax several coordination shells, and "
-        "ordering MC may require many single-point energy evaluations."
-    )
-    confirm = st.checkbox(
-        "I confirm that the configured MLFF calculations may run",
-        value=False,
-    )
-
-save_col, run_col = st.columns(2)
-with save_col:
-    if st.button(
-        "Save site-preference settings",
-        type="primary",
-        use_container_width=True,
-        disabled=validation_error is not None,
-    ):
-        config_path.write_text(toml.dumps(resolved_cfg), encoding="utf-8")
-        st.success(f"Saved {config_path}")
-
-command = ["dopingflow", "site-preference", "-c", str(config_path)]
-with run_col:
-    if st.button(
-        "Run site-preference analysis",
-        use_container_width=True,
-        disabled=(not enabled) or validation_error is not None or not confirm,
-    ):
-        config_path.write_text(toml.dumps(resolved_cfg), encoding="utf-8")
-        with st.spinner("Running dopant site-preference analysis..."):
-            completed = subprocess.run(
-                command,
-                cwd=str(project_root),
-                text=True,
-                capture_output=True,
-                check=False,
+        )
+        pair_relax = p4.checkbox(
+            "Relax each shell",
+            value=bool(pair_saved.get("relax", True)),
+        )
+        pair_backend = p5.selectbox(
+            "MLFF backend",
+            ["mace", "grace", "m3gnet", "uma"],
+            index=["mace", "grace", "m3gnet", "uma"].index(
+                str(pair_saved.get("backend", "mace")).lower()
+                if str(pair_saved.get("backend", "mace")).lower()
+                in ["mace", "grace", "m3gnet", "uma"]
+                else "mace"
+            ),
+        )
+        p6, p7, p8 = st.columns(3)
+        pair_model = p6.text_input("Model", value=str(pair_saved.get("model", "small")))
+        pair_device = p7.selectbox(
+            "Device",
+            ["cpu", "cuda"],
+            index=1 if str(pair_saved.get("device", "cpu")).lower() == "cuda" else 0,
+        )
+        pair_fmax = float(
+            p8.number_input(
+                "Relax fmax (eV/Å)",
+                min_value=0.001,
+                value=float(pair_saved.get("fmax", 0.05)),
+                step=0.01,
             )
-        st.session_state["site_pref_stdout"] = completed.stdout
-        st.session_state["site_pref_stderr"] = completed.stderr
-        st.session_state["site_pref_returncode"] = completed.returncode
-        if completed.returncode == 0:
-            st.success("Site-preference analysis finished successfully.")
-        else:
-            st.error(f"Analysis exited with return code {completed.returncode}.")
+        )
+        p9, p10 = st.columns(2)
+        pair_max_steps = int(
+            p9.number_input(
+                "Relax max steps",
+                min_value=1,
+                value=int(pair_saved.get("max_steps", 300)),
+                step=10,
+            )
+        )
+        pair_task = p10.text_input("Backend task (optional)", value=str(pair_saved.get("task", "")))
 
-st.code(" ".join(shlex.quote(token) for token in command), language="bash")
-if "site_pref_returncode" in st.session_state:
-    with st.expander("Last run output", expanded=True):
-        if st.session_state.get("site_pref_stdout"):
-            st.text(st.session_state["site_pref_stdout"])
-        if st.session_state.get("site_pref_stderr"):
-            st.text(st.session_state["site_pref_stderr"])
+    mc_saved = dict(section.get("ordering_mc", {}) or {})
+    with st.expander("Finite-temperature cation-ordering Monte Carlo", expanded=False):
+        st.caption(
+            "Composition is fixed. MC swaps cation identities without force calculations; "
+            "single-point MLFF energies drive Metropolis acceptance. The best occupation can "
+            "optionally be relaxed at the end."
+        )
+        m1, m2 = st.columns(2)
+        mc_enabled = m1.checkbox(
+            "Enable ordering MC",
+            value=bool(mc_saved.get("enabled", False)),
+            key="site_mc_enabled",
+        )
+        mc_execute = m2.checkbox(
+            "Execute MC",
+            value=bool(mc_saved.get("execute", False)),
+            key="site_mc_execute",
+        )
+        mc_targets = st.text_input(
+            "MC target selector(s), optional",
+            value=_csv_text(mc_saved.get("target_include", [])),
+            help="Leave empty to use the lowest-energy vacancy-free parent from each composition.",
+        )
+        m3, m4, m5, m6 = st.columns(4)
+        mc_temperature = float(
+            m3.number_input(
+                "Temperature (K)",
+                min_value=1.0,
+                value=float(mc_saved.get("temperature_K", 800.0)),
+                step=50.0,
+            )
+        )
+        mc_steps = int(
+            m4.number_input(
+                "MC steps",
+                min_value=2,
+                value=int(mc_saved.get("steps", 10000)),
+                step=1000,
+            )
+        )
+        mc_burn = int(
+            m5.number_input(
+                "Burn-in",
+                min_value=0,
+                value=int(mc_saved.get("burn_in", 2000)),
+                step=500,
+            )
+        )
+        mc_interval = int(
+            m6.number_input(
+                "Sample interval",
+                min_value=1,
+                value=int(mc_saved.get("sample_interval", 20)),
+                step=5,
+            )
+        )
+        m7, m8, m9 = st.columns(3)
+        mc_max_targets = int(
+            m7.number_input(
+                "Maximum MC targets",
+                min_value=1,
+                value=int(mc_saved.get("max_targets", 5)),
+                step=1,
+            )
+        )
+        mc_backend = m8.selectbox(
+            "MC MLFF backend",
+            ["mace", "grace", "m3gnet", "uma"],
+            index=["mace", "grace", "m3gnet", "uma"].index(
+                str(mc_saved.get("backend", "mace")).lower()
+                if str(mc_saved.get("backend", "mace")).lower()
+                in ["mace", "grace", "m3gnet", "uma"]
+                else "mace"
+            ),
+            key="site_mc_backend",
+        )
+        mc_model = m9.text_input("MC model", value=str(mc_saved.get("model", "small")))
+        m10, m11, m12 = st.columns(3)
+        mc_relax_best = m10.checkbox(
+            "Relax best MC occupation",
+            value=bool(mc_saved.get("relax_best", True)),
+        )
+        mc_device = m11.selectbox(
+            "MC device",
+            ["cpu", "cuda"],
+            index=1 if str(mc_saved.get("device", "cpu")).lower() == "cuda" else 0,
+            key="site_mc_device",
+        )
+        mc_seed = int(
+            m12.number_input(
+                "MC random seed",
+                value=int(mc_saved.get("seed", 42)),
+                step=1,
+            )
+        )
+
+    target_include = _parse_csv(target_include_text)
+    anion_species = _parse_csv(anion_species_text)
+    pairs = _parse_csv(pair_text)
+    mc_target_include = _parse_csv(mc_targets)
+
+    resolved_section = dict(section)
+    resolved_section.update(
+        {
+            "enabled": enabled,
+            "source_root": source_root,
+            "output_dir": output_dir,
+            "host_species": host_species.strip(),
+            "anion_species": anion_species,
+            "include_vacancy_free": include_vacancy_free,
+            "include_oxygen_vacancies": include_oxygen_vacancies,
+            "target_include": target_include,
+            "max_shells": max_shells,
+            "shell_tolerance_angstrom": shell_tolerance,
+            "mapping_tolerance_angstrom": mapping_tolerance,
+            "motif_neighbor_shell_max": motif_neighbor_shell_max,
+            "pair_scan": {
+                **pair_saved,
+                "enabled": pair_enabled,
+                "execute": pair_execute,
+                "source_target": pair_source.strip(),
+                "pairs": pairs,
+                "max_shells": pair_max_shells,
+                "relax": pair_relax,
+                "backend": pair_backend,
+                "model": pair_model.strip(),
+                "task": pair_task.strip(),
+                "device": pair_device,
+                "fmax": pair_fmax,
+                "max_steps": pair_max_steps,
+            },
+            "ordering_mc": {
+                **mc_saved,
+                "enabled": mc_enabled,
+                "execute": mc_execute,
+                "target_include": mc_target_include,
+                "max_targets": mc_max_targets,
+                "temperature_K": mc_temperature,
+                "steps": mc_steps,
+                "burn_in": mc_burn,
+                "sample_interval": mc_interval,
+                "seed": mc_seed,
+                "backend": mc_backend,
+                "model": mc_model.strip(),
+                "device": mc_device,
+                "relax_best": mc_relax_best,
+            },
+        }
+    )
+    resolved_cfg = dict(cfg)
+    resolved_cfg["site_preference"] = resolved_section
+
+    validation_error = None
+    parsed_cfg = None
+    try:
+        parsed_cfg = parse_site_preference_config(resolved_cfg, project_root)
+    except (OSError, ValueError, TypeError, RuntimeError, KeyError) as exc:
+        validation_error = str(exc)
+
+    st.divider()
+    st.subheader("Save and run")
+
+    with st.expander("Preview site_preference TOML", expanded=False):
+        st.code(toml.dumps({"site_preference": resolved_section}), language="toml")
+
+    if validation_error:
+        st.error(validation_error)
+
+    if parsed_cfg is not None:
+        with st.expander("Preview selected structures", expanded=False):
+            try:
+                preview_targets, _, preview_warnings = discover_site_preference_targets(parsed_cfg)
+            except Exception as exc:
+                st.warning(str(exc))
+            else:
+                st.dataframe(
+                    pd.DataFrame(
+                        [
+                            {
+                                "target_id": target.target_id,
+                                "kind": target.kind,
+                                "O vacancies": target.n_vacancies,
+                                "energy (eV)": target.energy_eV,
+                                "structure": str(target.structure_path),
+                            }
+                            for target in preview_targets
+                        ]
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+                for warning in preview_warnings:
+                    st.warning(warning)
+
+    expensive = (pair_enabled and pair_execute) or (mc_enabled and mc_execute)
+    confirm = True
+    if expensive:
+        st.warning(
+            "MLFF execution is enabled. Pair scans may relax several coordination shells, and "
+            "ordering MC may require many single-point energy evaluations."
+        )
+        confirm = st.checkbox(
+            "I confirm that the configured MLFF calculations may run",
+            value=False,
+        )
+
+    save_col, run_col = st.columns(2)
+    with save_col:
+        if st.button(
+            "Save site-preference settings",
+            type="primary",
+            use_container_width=True,
+            disabled=validation_error is not None,
+        ):
+            config_path.write_text(toml.dumps(resolved_cfg), encoding="utf-8")
+            st.success(f"Saved {config_path}")
+
+    command = ["dopingflow", "site-preference", "-c", str(config_path)]
+    with run_col:
+        if st.button(
+            "Run site-preference analysis",
+            use_container_width=True,
+            disabled=(not enabled) or validation_error is not None or not confirm,
+        ):
+            config_path.write_text(toml.dumps(resolved_cfg), encoding="utf-8")
+            with st.spinner("Running dopant site-preference analysis..."):
+                completed = subprocess.run(
+                    command,
+                    cwd=str(project_root),
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+            st.session_state["site_pref_stdout"] = completed.stdout
+            st.session_state["site_pref_stderr"] = completed.stderr
+            st.session_state["site_pref_returncode"] = completed.returncode
+            if completed.returncode == 0:
+                st.success("Site-preference analysis finished successfully.")
+            else:
+                st.error(f"Analysis exited with return code {completed.returncode}.")
+
+    st.code(" ".join(shlex.quote(token) for token in command), language="bash")
+    if "site_pref_returncode" in st.session_state:
+        with st.expander("Last run output", expanded=True):
+            if st.session_state.get("site_pref_stdout"):
+                st.text(st.session_state["site_pref_stdout"])
+            if st.session_state.get("site_pref_stderr"):
+                st.text(st.session_state["site_pref_stderr"])
+
 
 st.divider()
 st.subheader("Results explorer")
