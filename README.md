@@ -845,30 +845,22 @@ calculated by this backend.
 For screening, the primary GUI/reporting unit is **S cm⁻¹ fs⁻¹** for
 `sigma/tau`; raw SI `S m⁻¹ s⁻¹` values remain in the JSON for reproducibility.
 
-The default project benchmark is **ATO with 5% Sb**. The optional
-`[conductivity.comparison]` section points to one vacancy-free 5% Sb ATO
-structure, which may live in a different source tree or be supplied by an
-explicit POSCAR/CIF path. DopingFlow calculates this benchmark once with the same
-GPAW/BoltzTraP2 settings, stores a fingerprinted
-`references/.../reference.json`, and reuses it in later co-dopant runs while
-the geometry and DFT/transport settings remain compatible. The reference does
-not have to be part of the current target selection. The reference input accepts
-either a normal structure-tree root plus an exact target such as
-`Sb5/candidate_003`, or a direct candidate/structure path such as
-`.../Sb5/candidate_003`, `.../candidate_003/*`, or
-`.../candidate_003/02_relax/POSCAR`.
+The optional `[conductivity.comparison]` workflow is **material-agnostic**:
+users may choose any vacancy-free structure as a persistent conductivity reference.
+For the current ATO study, **ATO with 5% Sb** is a project-specific benchmark, but
+it is not hard-coded. The reference may live in another structure tree or be
+supplied directly by POSCAR/CIF/candidate path. DopingFlow stores a fingerprinted
+`references/.../reference.json` and reuses it while the geometry and
+DFT/transport settings remain compatible.
 
-If screened co-dopant calculations are already complete, run
-`dopingflow conductivity -c input.toml --reference-only` (or use the matching
-GUI action) to calculate/reuse only the ATO reference and rebuild the cumulative
-comparison table. Existing screened-target GPAW/BoltzTraP2 calculations are not
-rerun.
+Each compatible screened structure gets a `sigma/tau` ratio and percentage
+change relative to the selected reference at matching temperature/carrier
+conditions. The GUI also shows the reference trace average and its full 3x3
+`sigma/tau` tensor. The comparison table accumulates compatible saved
+per-structure results across runs; results with different fingerprinted settings
+are excluded rather than silently mixed.
 
-Each screened parent or oxygen-vacancy structure then gets a
-`sigma/tau` ratio and percentage change relative to the common 5% Sb ATO
-benchmark at matching temperature/carrier conditions. The comparison table
-accumulates compatible per-structure results across separate runs, so co-dopants
-can be screened one at a time without recalculating ATO. Saved results with
-different fingerprinted DFT/transport settings are excluded rather than mixed.
-This comparison measures the band-structure contribution to transport; it does
-not assume that different dopants or vacancies share the same scattering lifetime.
+The normal Streamlit page keeps the same **Save settings / Run analysis** layout
+as oxidation-state and dopant site-preference analysis. A reference-only CLI
+utility remains available for advanced recovery/rebuild workflows:
+`dopingflow conductivity -c input.toml --reference-only`.
