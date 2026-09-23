@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
+import glob
 import hashlib
 import json
 import os
@@ -311,6 +312,73 @@ def _resolved_path(value, root):
     return (path if path.is_absolute() else Path(root) / path).resolve()
 
 
+def _reference_target_id_from_structure(path):
+    path = Path(path).resolve()
+    candidate_dir = path.parent.parent if path.parent.name == "02_relax" else path.parent
+    if candidate_dir.parent != candidate_dir:
+        return f"{candidate_dir.parent.name}/{candidate_dir.name}"
+    return "ATO5/reference"
+
+
+def _candidate_structure_from_path(path):
+    """Resolve a file/directory candidate hint to the relaxed structure file."""
+    path = Path(path).expanduser()
+    if path.is_file():
+        return path.resolve()
+    if not path.is_dir():
+        return None
+    for candidate in (
+        path / "02_relax" / "POSCAR",
+        path / "02_relax" / "CONTCAR",
+        path / "POSCAR",
+        path / "CONTCAR",
+    ):
+        if candidate.is_file():
+            return candidate.resolve()
+    return None
+
+
+def _resolve_reference_structure_hint(value, root):
+    """Accept a POSCAR/CIF, candidate directory, or simple candidate glob.
+
+    A common GUI input is a path ending in candidate_003/*. Treat this as the
+    candidate directory and prefer 02_relax/POSCAR rather than requiring the
+    user to know the exact relaxed-file path.
+    """
+    text = str(value or "").strip()
+    if not text:
+        return None
+
+    expanded = os.path.expanduser(text)
+    if expanded.endswith("/*"):
+        base = _resolved_path(expanded[:-2], root)
+        resolved = _candidate_structure_from_path(base)
+        if resolved is not None:
+            return resolved
+
+    direct = _resolved_path(expanded, root)
+    resolved = _candidate_structure_from_path(direct)
+    if resolved is not None:
+        return resolved
+
+    if any(char in expanded for char in "*?[]"):
+        pattern = expanded
+        if not Path(pattern).is_absolute():
+            pattern = str(Path(root) / pattern)
+        candidates = []
+        for match in sorted(glob.glob(pattern)):
+            resolved = _candidate_structure_from_path(match)
+            if resolved is not None and resolved not in candidates:
+                candidates.append(resolved)
+        if len(candidates) == 1:
+            return candidates[0]
+        if len(candidates) > 1:
+            raise ValueError(
+                "ATO reference path pattern matched multiple relaxed structures: "
+                + ", ".join(str(path) for path in candidates[:8])
+            )
+    return None
+
 def _reference_cfg(raw, root, cfg, comparison, *, source_root=None):
     source_value = source_root
     if source_value is None:
@@ -364,16 +432,28 @@ def discover_reference_candidates(raw, root, cfg, comparison):
     from a derived tree such as vacancy-selected.
     """
     explicit = str(comparison.get("reference_structure_path", "")).strip()
-    if explicit:
-        structure_path = _resolved_path(explicit, root)
-        if not structure_path.is_file():
-            raise FileNotFoundError(
-                f"ATO reference structure does not exist: {structure_path}"
-            )
+    source_hint = str(comparison.get("reference_source_root", "")).strip()
+    structure_path = _resolve_reference_structure_hint(explicit, root) if explicit else None
+
+    # Be forgiving when a candidate directory (or candidate_003/*) was pasted
+    # into "reference source root" instead of the explicit-structure field.
+    if structure_path is None and source_hint:
+        structure_path = _resolve_reference_structure_hint(source_hint, root)
+
+    if explicit and structure_path is None:
+        raise FileNotFoundError(
+            "ATO reference structure path could not be resolved. Provide a POSCAR/CIF, "
+            "a candidate directory containing 02_relax/POSCAR, or a pattern resolving "
+            f"to one candidate: {explicit}"
+        )
+
+    if structure_path is not None:
         target_id = str(comparison.get("reference_target", "")).strip()
         if not target_id or any(char in target_id for char in "*?[]"):
-            target_id = "ATO5/reference"
-        return _reference_cfg(raw, root, cfg, comparison), [
+            target_id = _reference_target_id_from_structure(structure_path)
+        explicit_comparison = dict(comparison)
+        explicit_comparison["reference_source_root"] = ""
+        return _reference_cfg(raw, root, cfg, explicit_comparison), [
             StructureTarget(
                 target_id=target_id,
                 parent_id=target_id,
@@ -716,6 +796,78 @@ def build_reference_comparison(results, comparison, reference=None):
             )
     return rows, warnings
 
+def rebuild_reference_comparison(raw, root):
+    """Calculate/reuse only the ATO reference and rebuild comparison tables.
+
+    Existing co-dopant conductivity.json files are read from disk; no screened
+    target GPAW or BoltzTraP2 calculation is rerun by this operation.
+    """
+    if not (raw.get("conductivity", {}) or {}).get("enabled", False):
+        raise ValueError("Conductivity is disabled; enable [conductivity] first")
+
+    cfg, section = parse_config(raw, root)
+    comparison = section.get("comparison", {})
+    if not comparison.get("enabled", False):
+        raise ValueError(
+            "ATO comparison is disabled; enable [conductivity.comparison] first"
+        )
+
+    cfg.output_dir.mkdir(parents=True, exist_ok=True)
+    warnings = []
+    reference_summary_path = cfg.output_dir / "conductivity_reference.json"
+    reference_summary_path.unlink(missing_ok=True)
+
+    try:
+        reference_record, reference_warnings = prepare_persistent_reference(
+            raw, root, cfg, section, dry_run=False
+        )
+        warnings.extend(reference_warnings)
+    except Exception as exc:
+        message = (
+            "ATO 5% Sb reference unavailable: "
+            f"{type(exc).__name__}: {exc}"
+        )
+        reference_record = {
+            "reference_label": comparison.get("reference_label", "ATO 5% Sb"),
+            "reference_sb_percent": comparison.get("reference_sb_percent", 5.0),
+            "comparison_basis": comparison.get("basis", "ato-5pct-sb-benchmark"),
+            "status": "unavailable",
+            "error": message,
+            "persistent_reference_reused": False,
+        }
+        _json_write(reference_summary_path, reference_record)
+        raise
+
+    _json_write(reference_summary_path, reference_record)
+    settings_fingerprint, _ = _transport_settings_fingerprint(section)
+    compatible_results = collect_compatible_transport_results(
+        cfg.output_dir, settings_fingerprint
+    )
+    comparison_rows, comparison_warnings = build_reference_comparison(
+        compatible_results, comparison, reference_record
+    )
+    warnings.extend(comparison_warnings)
+
+    comparison_csv = cfg.output_dir / "conductivity_comparison.csv"
+    comparison_json = cfg.output_dir / "conductivity_comparison.json"
+    _csv_write(comparison_csv, comparison_rows)
+    _json_write(comparison_json, comparison_rows)
+
+    results_json = cfg.output_dir / "conductivity_results.json"
+    if results_json.exists():
+        try:
+            payload = json.loads(results_json.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            payload = {}
+        payload["reference"] = reference_record
+        payload["comparison"] = comparison_rows
+        payload["comparison_compatible_target_count"] = len(compatible_results)
+        existing_warnings = payload.get("warnings", []) or []
+        payload["warnings"] = list(dict.fromkeys([*existing_warnings, *warnings]))
+        _json_write(results_json, payload)
+
+    return comparison_json
+
 def run_conductivity(raw, root, *, dry_run=False):
     if not (raw.get("conductivity", {}) or {}).get("enabled", False):
         return None
@@ -911,3 +1063,10 @@ def run_conductivity(raw, root, *, dry_run=False):
 def run_conductivity_from_toml(config_path, *, dry_run=False):
     path = Path(config_path).resolve()
     return run_conductivity(tomllib.loads(path.read_text()), path.parent, dry_run=dry_run)
+
+
+def rebuild_reference_comparison_from_toml(config_path):
+    path = Path(config_path).resolve()
+    return rebuild_reference_comparison(
+        tomllib.loads(path.read_text()), path.parent
+    )
