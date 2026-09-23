@@ -1161,7 +1161,7 @@ def run_conductivity(raw, root, *, dry_run=False):
                 "Target discovery uses the same source_root, vacancy toggles, and target_include rules as oxidation-state analysis.",
                 "Band-like transport is a hypothesis requiring localization checks; polaron hopping and AMSET scattering are not calculated by this stage.",
                 "sigma/tau is not absolute conductivity. The primary human-readable unit is S cm^-1 fs^-1; raw SI S m^-1 s^-1 is retained. Any sigma uses the explicitly assumed relaxation time.",
-                "Reference-normalized comparisons use the persistent vacancy-free 5% Sb ATO benchmark at the same temperature and excess-electron concentration. The benchmark is intentionally shared across all screened co-dopants and vacancy counts.",
+                "Reference-normalized comparisons use the selected persistent vacancy-free benchmark at the same temperature and excess-electron concentration. The same reference is shared across all compatible screened structures and vacancy counts.",
                 "Positive excess_electrons_cm3 adds electrons to the explicit structure; negative removes them. Zero preserves its DFT electron count. This is not a defect-ionization or mobile-carrier prediction.",
                 "Converge k mesh, interpolation, empty bands and DOS grid. Periodic vacancies do not model random-defect scattering or grain boundaries.",
             ],
