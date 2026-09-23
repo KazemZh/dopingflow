@@ -823,7 +823,17 @@ explicit POSCAR/CIF path. DopingFlow calculates this benchmark once with the sam
 GPAW/BoltzTraP2 settings, stores a fingerprinted
 `references/.../reference.json`, and reuses it in later co-dopant runs while
 the geometry and DFT/transport settings remain compatible. The reference does
-not have to be part of the current target selection.
+not have to be part of the current target selection. The reference input accepts
+either a normal structure-tree root plus an exact target such as
+`Sb5/candidate_003`, or a direct candidate/structure path such as
+`.../Sb5/candidate_003`, `.../candidate_003/*`, or
+`.../candidate_003/02_relax/POSCAR`.
+
+If screened co-dopant calculations are already complete, run
+`dopingflow conductivity -c input.toml --reference-only` (or use the matching
+GUI action) to calculate/reuse only the ATO reference and rebuild the cumulative
+comparison table. Existing screened-target GPAW/BoltzTraP2 calculations are not
+rerun.
 
 Each screened parent or oxygen-vacancy structure then gets a
 `sigma/tau` ratio and percentage change relative to the common 5% Sb ATO
