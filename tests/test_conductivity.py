@@ -526,6 +526,118 @@ def test_explicit_reference_structure_can_live_outside_target_source(tmp_path):
     assert candidates[0].structure_path == reference_path.resolve()
 
 
+def test_reference_candidate_directory_and_trailing_glob_resolve_relaxed_poscar(tmp_path):
+    root = tmp_path / "complete"
+    path = composition_parent(root, "Sb5", "candidate_003", -20)
+    candidate_dir = path.parent.parent
+
+    resolved_dir = c._resolve_reference_structure_hint(str(candidate_dir), tmp_path)
+    resolved_glob = c._resolve_reference_structure_hint(str(candidate_dir) + "/*", tmp_path)
+    assert resolved_dir == path.resolve()
+    assert resolved_glob == path.resolve()
+
+
+def test_reference_source_root_accepts_candidate_directory_hint(tmp_path):
+    target_root = tmp_path / "vacancy-selected"
+    parent(target_root, "codoped", -10)
+    ref_root = tmp_path / "complete"
+    reference_path = composition_parent(ref_root, "Sb5", "candidate_003", -20)
+
+    raw = {
+        "structure": {"outdir": str(target_root)},
+        "conductivity": {
+            "enabled": True,
+            "source_root": str(target_root),
+            "comparison": {
+                "enabled": True,
+                "reference_source_root": str(reference_path.parent.parent) + "/*",
+                "reference_target": "Sb5/*",
+            },
+        },
+    }
+    cfg, settings = c.parse_config(raw, tmp_path)
+    _, candidates = c.discover_reference_candidates(
+        raw, tmp_path, cfg, settings["comparison"]
+    )
+    assert len(candidates) == 1
+    assert candidates[0].target_id == "Sb5/candidate_003"
+    assert candidates[0].structure_path == reference_path.resolve()
+
+
+def test_reference_only_rebuild_does_not_rerun_screened_targets(tmp_path, monkeypatch):
+    source = tmp_path / "vacancy-selected"
+    source.mkdir()
+    raw = {
+        "structure": {"outdir": str(source)},
+        "conductivity": {
+            "enabled": True,
+            "source_root": str(source),
+            "temperatures_K": [300.0],
+            "excess_electrons_cm3": [0.0],
+            "interpolation_factor": 5,
+            "dos_points": 4000,
+            "comparison": {
+                "enabled": True,
+                "reference_target": "Sb5/candidate_003",
+                "reference_label": "ATO 5% Sb",
+                "reference_sb_percent": 5.0,
+                "basis": "ato-5pct-sb-benchmark",
+            },
+            "dft": {"kpts": [2, 2, 2], "execute": False},
+        },
+    }
+    cfg, section = c.parse_config(raw, tmp_path)
+    fingerprint, payload = c._transport_settings_fingerprint(section)
+    target_dir = cfg.output_dir / "structures" / "Ce2p5_Sb2p5" / "candidate_013"
+    target_dir.mkdir(parents=True)
+    (target_dir / "conductivity.json").write_text(
+        json.dumps(
+            {
+                "target_id": "Ce2p5_Sb2p5/candidate_013",
+                "kind": "vacancy-free",
+                "n_oxygen_vacancies": 0,
+                "status": "calculated",
+                "transport_settings_fingerprint": fingerprint,
+                "transport_settings": payload,
+                "rows": [
+                    {
+                        "temperature_K": 300.0,
+                        "excess_electrons_cm3": 0.0,
+                        "sigma_over_tau_trace_average_S_per_cm_per_fs": 282.0,
+                    }
+                ],
+            }
+        )
+    )
+
+    reference = {
+        "target_id": "Sb5/candidate_003",
+        "kind": "vacancy-free",
+        "n_oxygen_vacancies": 0,
+        "status": "calculated",
+        "reference_label": "ATO 5% Sb",
+        "reference_sb_percent": 5.0,
+        "rows": [
+            {
+                "temperature_K": 300.0,
+                "excess_electrons_cm3": 0.0,
+                "sigma_over_tau_trace_average_S_per_cm_per_fs": 250.0,
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        c, "prepare_persistent_reference", lambda *args, **kwargs: (reference, [])
+    )
+    monkeypatch.setattr(
+        c, "select_targets", lambda *args, **kwargs: pytest.fail("screened targets were rediscovered/rerun")
+    )
+
+    output = c.rebuild_reference_comparison(raw, tmp_path)
+    rows = json.loads(output.read_text())
+    assert len(rows) == 1
+    assert rows[0]["target_id"] == "Ce2p5_Sb2p5/candidate_013"
+    assert rows[0]["relative_to_reference"] == pytest.approx(282.0 / 250.0)
+
 def test_default_comparison_is_5pct_sb_benchmark(tmp_path):
     raw = {
         "conductivity": {
