@@ -433,12 +433,17 @@ def discover_reference_candidates(raw, root, cfg, comparison):
     """
     explicit = str(comparison.get("reference_structure_path", "")).strip()
     source_hint = str(comparison.get("reference_source_root", "")).strip()
+    target_hint = str(comparison.get("reference_target", "")).strip()
     structure_path = _resolve_reference_structure_hint(explicit, root) if explicit else None
+    resolved_from_target_hint = False
 
     # Be forgiving when a candidate directory (or candidate_003/*) was pasted
-    # into "reference source root" instead of the explicit-structure field.
+    # into either the source-root or target-selector field.
     if structure_path is None and source_hint:
         structure_path = _resolve_reference_structure_hint(source_hint, root)
+    if structure_path is None and target_hint:
+        structure_path = _resolve_reference_structure_hint(target_hint, root)
+        resolved_from_target_hint = structure_path is not None
 
     if explicit and structure_path is None:
         raise FileNotFoundError(
@@ -448,8 +453,8 @@ def discover_reference_candidates(raw, root, cfg, comparison):
         )
 
     if structure_path is not None:
-        target_id = str(comparison.get("reference_target", "")).strip()
-        if not target_id or any(char in target_id for char in "*?[]"):
+        target_id = target_hint
+        if resolved_from_target_hint or not target_id or any(char in target_id for char in "*?[]"):
             target_id = _reference_target_id_from_structure(structure_path)
         explicit_comparison = dict(comparison)
         explicit_comparison["reference_source_root"] = ""
