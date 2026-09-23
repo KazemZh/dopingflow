@@ -12,6 +12,8 @@ import streamlit as st
 import toml
 
 from dopingflow.conductivity import (
+    build_reference_comparison,
+    collect_compatible_transport_results,
     discover_reference_candidates,
     parse_config,
     select_targets,
@@ -279,29 +281,9 @@ with st.expander("Reference comparison", expanded=True):
         ),
     )
 
-    basis_options = [
-        "reference-benchmark",
-        "same-total-dopant",
-        "fixed-composition",
-        "custom",
-    ]
-    current_basis = str(comparison.get("basis", "reference-benchmark")).lower()
-    if current_basis == "ato-5pct-sb-benchmark":
-        current_basis = "reference-benchmark"
-    elif current_basis == "fixed-sb":
-        current_basis = "fixed-composition"
-    if current_basis not in basis_options:
-        current_basis = "reference-benchmark"
-    basis = st.selectbox(
-        "Comparison basis",
-        basis_options,
-        index=basis_options.index(current_basis),
-        disabled=not comparison_enabled,
-        help=(
-            "reference-benchmark compares every compatible screened structure with the selected "
-            "common reference. Other labels are metadata for specialized comparison designs."
-        ),
-    )
+    # All implemented comparisons use one selected common reference. Legacy
+    # basis names are normalized by the backend when older input files are loaded.
+    basis = "reference-benchmark"
 
     st.info(
         "The reference does not need to be part of the current target selection. Its transport "
