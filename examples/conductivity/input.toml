@@ -23,18 +23,19 @@ dos_points = 4000
 fail_fast = false
 # relaxation_time_fs = 10.0 # Optional ASSUMPTION, not a calculated lifetime.
 
-# Optional persistent ATO-normalized comparison.
-# 5% Sb ATO is the common project benchmark for all co-dopants/vacancy structures.
-# The reference is calculated once and reused in later runs when its fingerprint
-# (geometry + DFT + transport settings) remains compatible.
+# Optional persistent reference-normalized comparison.
+# The workflow is material-agnostic: choose any vacancy-free benchmark structure.
+# For the current ATO project, "ATO 5% Sb" is one useful example.
+# The reference is calculated once and reused when its geometry + DFT + transport
+# fingerprint remains compatible.
 [conductivity.comparison]
 enabled = false
-reference_label = "ATO 5% Sb"
-reference_sb_percent = 5.0
+reference_label = "Reference"     # e.g. "ATO 5% Sb"
+reference_composition = ""        # e.g. "5% Sb"
 reference_source_root = ""        # empty = search [structure].outdir, then conductivity.source_root
-reference_target = "Sb5/*"       # preferably replace with one exact target ID
-reference_structure_path = ""    # optional POSCAR/CIF path; bypasses discovery
-basis = "ato-5pct-sb-benchmark"
+reference_target = ""             # e.g. "Sb5/candidate_003"
+reference_structure_path = ""     # optional POSCAR/CIF/candidate directory
+basis = "reference-benchmark"
 
 [conductivity.dft]
 code = "gpaw"
