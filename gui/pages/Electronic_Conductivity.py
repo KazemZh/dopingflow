@@ -794,8 +794,7 @@ else:
                 [
                     {
                         "target_id": (
-                            f"[Reference] {reference_record.get('reference_label', 'Reference')} "
-                            f"({reference_record.get('target_id', '')})"
+                            f"Reference — ({reference_record.get('target_id', '')})"
                         ),
                         "structure_kind": "reference",
                         "n_oxygen_vacancies": int(
@@ -838,8 +837,7 @@ else:
             chooser_options,
             format_func=(
                 lambda value: (
-                    f"Reference — {reference_record.get('reference_label', 'Reference')} "
-                    f"({reference_record.get('target_id', '')})"
+                    f"Reference — ({reference_record.get('target_id', '')})"
                     if value == reference_choice
                     else value
                 )
