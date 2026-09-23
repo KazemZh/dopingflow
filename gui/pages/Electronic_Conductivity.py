@@ -222,93 +222,94 @@ with st.expander("Band transport (BoltzTraP2)", expanded=True):
     )
 
 
-with st.expander("ATO reference comparison", expanded=True):
+with st.expander("Reference comparison", expanded=True):
     comparison = dict(conductivity.get("comparison", {}) or {})
     comparison_enabled = st.checkbox(
-        "Compare all screened structures with a persistent 5% Sb ATO reference",
+        "Compare screened structures with a persistent conductivity reference",
         value=bool(comparison.get("enabled", False)),
         help=(
-            "The 5% Sb ATO benchmark is calculated once with the same GPAW/BoltzTraP2 "
-            "settings and then reused in later co-dopant runs while its fingerprint remains compatible."
+            "Choose any vacancy-free structure as the common benchmark. For the current ATO "
+            "study this can be 5% Sb ATO, but the workflow itself is material-agnostic."
         ),
     )
+
+    legacy_composition = ""
+    if comparison.get("reference_sb_percent") is not None:
+        legacy_composition = f"{float(comparison['reference_sb_percent']):g}% Sb"
 
     r1, r2 = st.columns(2)
     reference_label = r1.text_input(
         "Reference label",
-        value=str(comparison.get("reference_label", "ATO 5% Sb")),
+        value=str(comparison.get("reference_label", "Reference")),
         disabled=not comparison_enabled,
+        help="Human-readable name, e.g. 'ATO 5% Sb', 'undoped SnO₂', or another benchmark.",
     )
-    reference_sb_percent = float(
-        r2.number_input(
-            "Sb content in ATO reference (%)",
-            min_value=0.1,
-            value=float(comparison.get("reference_sb_percent", 5.0)),
-            step=0.5,
-            disabled=not comparison_enabled,
-        )
+    reference_composition = r2.text_input(
+        "Reference composition / note (optional)",
+        value=str(comparison.get("reference_composition", legacy_composition)),
+        disabled=not comparison_enabled,
+        help="Free-text metadata such as '5% Sb', 'SnO₂', or 'TiO₂ rutile'.",
     )
 
     reference_source_root = st.text_input(
-        "ATO reference source root",
+        "Reference source root",
         value=str(comparison.get("reference_source_root", "")),
         disabled=not comparison_enabled,
         help=(
-            "Normally this is the structure-tree root containing Sb5/. Leave empty to search "
-            "[structure].outdir first and then the conductivity source root. For convenience, "
-            "a candidate directory such as .../Sb5/candidate_003 or .../candidate_003/* is also accepted."
+            "Structure-tree root containing the reference. Leave empty to search [structure].outdir "
+            "and then the conductivity source root. A candidate directory can also be pasted directly."
         ),
     )
     reference_target = st.text_input(
-        "ATO reference target selector",
-        value=str(comparison.get("reference_target", "Sb5/*")),
+        "Reference target selector",
+        value=str(comparison.get("reference_target", "")),
         disabled=not comparison_enabled,
         help=(
-            "Exact target ID, safe ID, or wildcard. It must resolve to exactly one vacancy-free "
-            "5% Sb ATO structure. For production, prefer an exact ID such as Sb5/candidate_003."
+            "Exact target ID, safe ID, or wildcard resolving to one vacancy-free structure. "
+            "For example: Sb5/candidate_003."
         ),
     )
     reference_structure_path = st.text_input(
-        "Explicit ATO reference structure path (optional)",
+        "Explicit reference structure path (optional)",
         value=str(comparison.get("reference_structure_path", "")),
         disabled=not comparison_enabled,
         help=(
-            "Optional direct POSCAR/CIF path or candidate directory. Paths such as "
-            ".../Sb5/candidate_003, .../Sb5/candidate_003/*, and "
-            ".../Sb5/candidate_003/02_relax/POSCAR are accepted; the relaxed POSCAR is preferred automatically."
+            "Optional direct POSCAR/CIF path or candidate directory. Candidate directories and "
+            "paths ending in /* are resolved preferentially to 02_relax/POSCAR."
         ),
     )
 
     basis_options = [
-        "ato-5pct-sb-benchmark",
+        "reference-benchmark",
         "same-total-dopant",
-        "fixed-sb",
+        "fixed-composition",
         "custom",
     ]
-    current_basis = str(
-        comparison.get("basis", "ato-5pct-sb-benchmark")
-    ).lower()
+    current_basis = str(comparison.get("basis", "reference-benchmark")).lower()
+    if current_basis == "ato-5pct-sb-benchmark":
+        current_basis = "reference-benchmark"
+    elif current_basis == "fixed-sb":
+        current_basis = "fixed-composition"
     if current_basis not in basis_options:
-        current_basis = "ato-5pct-sb-benchmark"
+        current_basis = "reference-benchmark"
     basis = st.selectbox(
         "Comparison basis",
         basis_options,
         index=basis_options.index(current_basis),
         disabled=not comparison_enabled,
         help=(
-            "ato-5pct-sb-benchmark uses 5% Sb ATO as the common benchmark for every screened "
-            "co-dopant/vacancy structure. The other labels remain available for specialized studies."
+            "reference-benchmark compares every compatible screened structure with the selected "
+            "common reference. Other labels are metadata for specialized comparison designs."
         ),
     )
 
     st.info(
-        "The reference does not need to be part of the current target selection. DopingFlow stores "
-        "its transport result persistently and reuses it in later runs when the reference geometry, "
-        "GPAW settings, temperatures/carrier conditions, interpolation factor, and DOS grid match."
+        "The reference does not need to be part of the current target selection. Its transport "
+        "result is stored persistently and reused while geometry and GPAW/BoltzTraP2 settings remain compatible."
     )
     st.caption(
-        "If the compatible ATO reference has never been calculated, enable the GPAW execution gate "
-        "below for the first run. Later runs can keep execution off and reuse the saved benchmark."
+        "If the compatible reference has never been calculated, enable the GPAW execution gate "
+        "for the run. Later runs can reuse the saved reference."
     )
 
 
@@ -508,8 +509,8 @@ try:
                 "reference_target": reference_target.strip(),
                 "reference_structure_path": reference_structure_path.strip(),
                 "reference_source_root": reference_source_root.strip(),
-                "reference_label": reference_label.strip() or "ATO 5% Sb",
-                "reference_sb_percent": reference_sb_percent,
+                "reference_label": reference_label.strip() or "Reference",
+                "reference_composition": reference_composition.strip(),
                 "basis": basis,
             },
             "dft": dft,
@@ -575,35 +576,34 @@ if parsed_cfg is not None and validated is not None:
                         validated.get("comparison", {}),
                     )
                 except Exception as exc:
-                    st.warning(f"ATO reference preview: {exc}")
+                    st.warning(f"Reference preview: {exc}")
                 else:
                     if len(reference_candidates) == 1:
                         ref = reference_candidates[0]
                         st.success(
-                            "ATO reference resolved independently of the current target selection: "
+                            "Reference resolved independently of the current target selection: "
                             f"{ref.target_id} → {ref.structure_path}"
                         )
                     elif reference_candidates:
                         st.warning(
-                            "ATO reference selector currently matches multiple vacancy-free structures: "
+                            "Reference selector currently matches multiple vacancy-free structures: "
                             + ", ".join(t.target_id for t in reference_candidates[:8])
                         )
                     else:
-                        st.warning("ATO reference selector currently matches no vacancy-free structure.")
+                        st.warning("Reference selector currently matches no vacancy-free structure.")
 
 contains_dft_execution = bool(dft.get("execute", False))
 if contains_dft_execution and not target_include:
     st.warning(
-        "DFT execution is enabled but no target selector is active. A FULL conductivity run can "
-        "launch calculations for every discovered structure. The ATO comparison-only action below "
-        "does not rerun screened targets."
+        "DFT execution is enabled but no target selector is active. The conductivity run can "
+        "launch calculations for every discovered structure."
     )
 
 confirm_dft = True
 if contains_dft_execution:
     st.warning(
         "The GPAW execution gate is ON. Running this page may launch DFT calculations for "
-        "selected targets and, when needed, the persistent 5% Sb ATO reference. Compatible "
+        "selected targets and, when needed, the selected conductivity reference. Compatible "
         "existing calculations are reused when permitted."
     )
     confirm_dft = st.checkbox(
@@ -611,7 +611,7 @@ if contains_dft_execution:
         value=False,
     )
 
-save_col, reference_col, run_col = st.columns(3)
+save_col, run_col = st.columns(2)
 with save_col:
     if st.button(
         "Save conductivity settings",
@@ -623,42 +623,6 @@ with save_col:
         st.success(f"Saved {config_path}")
 
 command = ["dopingflow", "conductivity", "-c", str(config_path)]
-reference_command = [*command, "--reference-only"]
-
-reference_disabled = (
-    (not enabled)
-    or (not comparison_enabled)
-    or validation_error is not None
-    or (contains_dft_execution and not confirm_dft)
-)
-with reference_col:
-    if st.button(
-        "Build/update ATO comparison only",
-        use_container_width=True,
-        disabled=reference_disabled,
-        help=(
-            "Calculate or reuse only the 5% Sb ATO reference and rebuild the comparison "
-            "from saved conductivity results. Existing co-dopant calculations are not rerun."
-        ),
-    ):
-        config_path.write_text(toml.dumps(resolved_cfg), encoding="utf-8")
-        with st.spinner("Preparing ATO reference and rebuilding comparison..."):
-            completed = subprocess.run(
-                reference_command,
-                cwd=str(project_root),
-                text=True,
-                capture_output=True,
-                check=False,
-            )
-        st.session_state["conductivity_last_stdout"] = completed.stdout
-        st.session_state["conductivity_last_stderr"] = completed.stderr
-        st.session_state["conductivity_last_returncode"] = completed.returncode
-        if completed.returncode == 0:
-            st.success("ATO reference/comparison updated without rerunning screened targets.")
-        else:
-            st.error(
-                f"ATO reference/comparison exited with return code {completed.returncode}."
-            )
 
 with run_col:
     run_disabled = (
@@ -667,7 +631,7 @@ with run_col:
         or (contains_dft_execution and not confirm_dft)
     )
     if st.button(
-        "Run full conductivity analysis",
+        "Run conductivity analysis",
         use_container_width=True,
         disabled=run_disabled,
     ):
@@ -691,14 +655,9 @@ with run_col:
             )
 
 if not enabled:
-    st.caption("Enable **conductivity stage** above to activate the run actions.")
-elif not comparison_enabled:
-    st.caption("Enable the **ATO reference comparison** to activate the comparison-only action.")
+    st.caption("Enable **conductivity stage** above to activate the run action.")
 
-st.caption("Full analysis command:")
 st.code(" ".join(shlex.quote(token) for token in command), language="bash")
-st.caption("ATO comparison-only command (does not rerun screened targets):")
-st.code(" ".join(shlex.quote(token) for token in reference_command), language="bash")
 if "conductivity_last_returncode" in st.session_state:
     with st.expander("Last run output", expanded=True):
         if st.session_state.get("conductivity_last_stdout"):
@@ -744,13 +703,13 @@ if reference_json.exists():
     except Exception as exc:
         st.warning(f"Could not read {reference_json.name}: {exc}")
     else:
-        st.markdown("#### Persistent ATO reference")
+        st.markdown("#### Persistent conductivity reference")
         rr1, rr2, rr3, rr4 = st.columns(4)
-        rr1.metric("Reference", str(reference_record.get("reference_label", "ATO 5% Sb")))
-        rr2.metric(
-            "Sb content",
-            f"{float(reference_record.get('reference_sb_percent', 5.0)):g}%",
-        )
+        rr1.metric("Reference", str(reference_record.get("reference_label", "Reference")))
+        reference_composition_value = str(reference_record.get("reference_composition", "")).strip()
+        if not reference_composition_value and reference_record.get("reference_sb_percent") is not None:
+            reference_composition_value = f"{float(reference_record['reference_sb_percent']):g}% Sb"
+        rr2.metric("Composition", reference_composition_value or "-")
         rr3.metric("Status", str(reference_record.get("status", "unknown")))
         rr4.metric(
             "Reference reused",
@@ -782,6 +741,36 @@ if reference_json.exists():
                 hide_index=True,
             )
 
+            tensor_rows = [
+                row
+                for row in reference_rows
+                if row.get("sigma_over_tau_S_per_cm_per_fs") is not None
+            ]
+            if tensor_rows:
+                st.markdown("**Reference σ/τ tensor (S cm⁻¹ fs⁻¹)**")
+                tensor_labels = [
+                    (
+                        f"T={float(row.get('temperature_K', 0)):g} K, "
+                        f"excess e⁻={float(row.get('excess_electrons_cm3', 0)):g} cm⁻³"
+                    )
+                    for row in tensor_rows
+                ]
+                tensor_index = st.selectbox(
+                    "Tensor condition",
+                    range(len(tensor_rows)),
+                    format_func=lambda idx: tensor_labels[idx],
+                    key="conductivity_reference_tensor_condition",
+                )
+                tensor = pd.DataFrame(
+                    tensor_rows[tensor_index]["sigma_over_tau_S_per_cm_per_fs"],
+                    index=["x", "y", "z"],
+                    columns=["x", "y", "z"],
+                )
+                st.dataframe(
+                    tensor.style.format("{:.6g}"),
+                    use_container_width=True,
+                )
+
 if comparison_csv.exists() and comparison_csv.stat().st_size > 0:
     try:
         comparison_df = pd.read_csv(comparison_csv)
@@ -789,7 +778,7 @@ if comparison_csv.exists() and comparison_csv.stat().st_size > 0:
         st.warning(f"Could not read {comparison_csv.name}: {exc}")
     else:
         if not comparison_df.empty:
-            st.markdown("#### ATO-normalized conductivity comparison")
+            st.markdown("#### Reference-normalized conductivity comparison")
             comparison_df = comparison_df.sort_values(
                 ["temperature_K", "excess_electrons_cm3", "relative_to_reference"],
                 ascending=[True, True, False],
@@ -799,9 +788,9 @@ if comparison_csv.exists() and comparison_csv.stat().st_size > 0:
                 columns={
                     "target_id": "Structure",
                     "sigma_over_tau_trace_average_S_per_cm_per_fs": "Avg. σ/τ (S cm⁻¹ fs⁻¹)",
-                    "reference_sigma_over_tau_trace_average_S_per_cm_per_fs": "ATO σ/τ (S cm⁻¹ fs⁻¹)",
-                    "relative_to_reference": "Relative to ATO",
-                    "percent_change_vs_reference": "Change vs ATO (%)",
+                    "reference_sigma_over_tau_trace_average_S_per_cm_per_fs": "Reference σ/τ (S cm⁻¹ fs⁻¹)",
+                    "relative_to_reference": "Relative to reference",
+                    "percent_change_vs_reference": "Change vs reference (%)",
                     "temperature_K": "T (K)",
                     "excess_electrons_cm3": "Excess e⁻ (cm⁻³)",
                 }
@@ -813,9 +802,9 @@ if comparison_csv.exists() and comparison_csv.stat().st_size > 0:
                     "T (K)",
                     "Excess e⁻ (cm⁻³)",
                     "Avg. σ/τ (S cm⁻¹ fs⁻¹)",
-                    "ATO σ/τ (S cm⁻¹ fs⁻¹)",
-                    "Relative to ATO",
-                    "Change vs ATO (%)",
+                    "Reference σ/τ (S cm⁻¹ fs⁻¹)",
+                    "Relative to reference",
+                    "Change vs reference (%)",
                 )
                 if column in comparison_display.columns
             ]
@@ -826,7 +815,7 @@ if comparison_csv.exists() and comparison_csv.stat().st_size > 0:
             )
             first = comparison_df.iloc[0]
             st.caption(
-                f"Reference: {first.get('reference_label', 'ATO')} = "
+                f"Reference: {first.get('reference_label', 'Reference')} = "
                 f"{first.get('reference_target_id', '')}; comparison basis = "
                 f"{first.get('comparison_basis', '')}."
             )
@@ -835,9 +824,8 @@ if comparison_enabled and (
     not comparison_csv.exists() or comparison_csv.stat().st_size == 0
 ):
     st.info(
-        "No ATO-normalized comparison rows are available yet. The 5% Sb reference "
-        "must first resolve and be calculated/reused with settings compatible with "
-        "the screened structures."
+        "No reference-normalized comparison rows are available yet. The selected reference "
+        "must first resolve and be calculated/reused with settings compatible with the screened structures."
     )
 
 if not index_csv.exists():
