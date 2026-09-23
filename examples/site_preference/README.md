@@ -48,6 +48,8 @@ steps = 10000
 burn_in = 2000
 sample_interval = 20
 max_targets = 5
+parallel_targets = 1
+omp_threads = 1
 backend = "mace"
 model = "small"
 device = "cpu"
@@ -59,6 +61,24 @@ Run with:
 ~~~bash
 dopingflow site-preference -c input.toml
 ~~~
+
+### Parallel CPU ordering MC
+
+A single Metropolis chain remains sequential, but independent compositions/targets can run
+simultaneously. For example, on a 32-CPU allocation:
+
+~~~toml
+[site_preference.ordering_mc]
+parallel_targets = 4
+omp_threads = 8
+device = "cpu"
+~~~
+
+This requests up to four independent MC workers, with eight CPU threads available to the
+MLFF in each worker (up to 32 CPU threads total). The effective worker count is automatically
+limited by the number of selected MC targets. Each worker loads its own MLFF model, so memory
+usage also increases with `parallel_targets`. Parallel target execution is currently restricted
+to `device = "cpu"`; use `parallel_targets = 1` for CUDA.
 
 Important interpretation details:
 
