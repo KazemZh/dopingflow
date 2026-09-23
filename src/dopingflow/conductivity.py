@@ -672,17 +672,31 @@ def _reference_transport_fingerprint(target, section):
     return digest, payload
 
 
-def _load_persistent_reference(path, fingerprint):
+def _load_persistent_reference(path, fingerprint, fingerprint_payload=None):
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError):
         return None
-    if (
-        payload.get("schema_version") == 3
-        and payload.get("fingerprint") == fingerprint
-        and payload.get("record", {}).get("status") == "calculated"
-    ):
+    if payload.get("schema_version") != 3:
+        return None
+    if payload.get("record", {}).get("status") != "calculated":
+        return None
+    if payload.get("fingerprint") == fingerprint:
         return payload
+
+    # Reference label/composition are metadata, not physics. Older reference
+    # fingerprints included ATO-specific composition fields, so accept a cached
+    # record when the actual structure, DFT identity, and transport settings match.
+    if fingerprint_payload is not None:
+        old = payload.get("fingerprint_payload", {}) or {}
+        physical_keys = (
+            "target_id",
+            "structure_path",
+            "dft_key",
+            "transport_settings_fingerprint",
+        )
+        if all(old.get(key) == fingerprint_payload.get(key) for key in physical_keys):
+            return payload
     return None
 
 
@@ -712,7 +726,9 @@ def prepare_persistent_reference(raw, root, cfg, section, *, dry_run=False):
         target, section
     )
     store = _reference_store_path(cfg, comparison)
-    cached = _load_persistent_reference(store, fingerprint)
+    cached = _load_persistent_reference(
+        store, fingerprint, fingerprint_payload
+    )
     if cached is not None:
         record = dict(cached["record"])
         record["persistent_reference_reused"] = True
