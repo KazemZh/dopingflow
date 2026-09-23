@@ -281,9 +281,8 @@ with st.expander("Reference comparison", expanded=True):
         ),
     )
 
-    # All implemented comparisons use one selected common reference. Legacy
-    # basis names are normalized by the backend when older input files are loaded.
-    basis = "reference-benchmark"
+    # All implemented comparisons use the selected common reference. The basis
+    # is backend metadata and is intentionally not exposed as a GUI setting.
 
     st.info(
         "The reference does not need to be part of the current target selection. Its transport "
@@ -493,7 +492,6 @@ try:
                 "reference_source_root": reference_source_root.strip(),
                 "reference_label": reference_label.strip() or "Reference",
                 "reference_composition": reference_composition.strip(),
-                "basis": basis,
             },
             "dft": dft,
         }
