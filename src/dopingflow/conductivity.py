@@ -147,12 +147,17 @@ def parse_config(raw, root):
     comparison["basis"] = str(
         comparison.get("basis", "reference-benchmark")
     ).strip().lower()
+    legacy_basis_map = {
+        "ato-5pct-sb-benchmark": "reference-benchmark",
+        "fixed-sb": "fixed-composition",
+    }
+    comparison["basis"] = legacy_basis_map.get(
+        comparison["basis"], comparison["basis"]
+    )
     allowed_bases = {
         "reference-benchmark",
-        "ato-5pct-sb-benchmark",  # legacy
         "same-total-dopant",
         "fixed-composition",
-        "fixed-sb",  # legacy
         "custom",
     }
     if comparison["basis"] not in allowed_bases:
