@@ -245,7 +245,7 @@ def conductivity_cmd(
     reference_only: bool = typer.Option(
         False,
         "--reference-only",
-        help="Calculate/reuse only the ATO reference and rebuild comparison tables from saved target results",
+        help="Calculate/reuse only the selected conductivity reference and rebuild comparison tables from saved target results",
     ),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
@@ -255,7 +255,7 @@ def conductivity_cmd(
         if dry_run:
             raise typer.BadParameter("--reference-only cannot be combined with --dry-run")
         output = rebuild_reference_comparison_from_toml(config)
-        typer.echo(f"Wrote ATO comparison results: {output}")
+        typer.echo(f"Wrote reference comparison results: {output}")
         return
     output = run_conductivity_from_toml(config, dry_run=dry_run)
     if output is None:
