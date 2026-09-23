@@ -220,6 +220,66 @@ def gpaw_bands(path):
     )
 
 
+def _solve_mu_for_count(bandlib, energy, dos, electrons, temperature, dosweight):
+    """Solve the finite-T chemical potential against the actual DOS electron count.
+
+    BoltzTraP2.solve_for_mu(refine=True) uses a bounded minimization whose default
+    energy tolerance can leave an electron-count residual larger than DopingFlow's
+    validation threshold for steep DOS features. Increasing DOS bins does not fix
+    that optimizer tolerance. Start from the upstream estimate, then refine the
+    electron-count equation with a bracketed root solve when needed.
+    """
+    mu = bandlib.solve_for_mu(
+        energy, dos, electrons, temperature, dosweight=dosweight, refine=True
+    )
+
+    def count_residual(mu_value):
+        integrated = -float(
+            bandlib.calc_N(
+                energy, dos, float(mu_value), temperature, dosweight=dosweight
+            )
+        )
+        return integrated - electrons
+
+    residual = count_residual(mu)
+    tolerance = max(1.0e-6, 1.0e-8 * abs(electrons))
+    if abs(residual) <= tolerance:
+        return float(mu), float(residual), tolerance
+
+    low = float(energy[0])
+    high = float(energy[-1])
+    low_residual = count_residual(low)
+    high_residual = count_residual(high)
+    if low_residual == 0.0:
+        return low, 0.0, tolerance
+    if high_residual == 0.0:
+        return high, 0.0, tolerance
+    if low_residual * high_residual > 0.0:
+        raise ValueError(
+            "Requested carrier count is not bracketed by the sampled band-energy range; "
+            "increase nbands / energy range rather than dos_points. "
+            f"Electron-count residuals at the DOS limits are {low_residual:.3e} and "
+            f"{high_residual:.3e} electrons."
+        )
+
+    from scipy.optimize import brentq
+
+    mu = brentq(
+        count_residual,
+        low,
+        high,
+        xtol=1.0e-13,
+        rtol=max(4.0 * np.finfo(float).eps, 1.0e-14),
+        maxiter=200,
+    )
+    residual = count_residual(mu)
+    if abs(residual) > tolerance:
+        raise ValueError(
+            "Carrier-count root solve did not converge to the requested electron count: "
+            f"residual={residual:.3e} electrons (tolerance={tolerance:.3e})."
+        )
+    return float(mu), float(residual), tolerance
+
 def integrate_transport(data, section):
     from BoltzTraP2 import bandlib, fite, sphere
     from BoltzTraP2.units import BOLTZMANN, eV
@@ -244,8 +304,13 @@ def integrate_transport(data, section):
             electrons = data.nelect + excess * volume_cm3
             if electrons <= 0:
                 raise ValueError("Requested excess carrier concentration leaves no electrons")
-            mu = bandlib.solve_for_mu(
-                energy, dos, electrons, temperature, dosweight=data.dosweight, refine=True
+            mu, mu_count_residual, count_tolerance = _solve_mu_for_count(
+                bandlib,
+                energy,
+                dos,
+                electrons,
+                temperature,
+                data.dosweight,
             )
             if not energy[0] + margin < mu < energy[-1] - margin:
                 raise ValueError(
@@ -255,8 +320,15 @@ def integrate_transport(data, section):
             counts, L0, L1, L2, _ = bandlib.fermiintegrals(
                 energy, dos, vvdos, mur, Tr, dosweight=data.dosweight
             )
-            if abs(-counts[0, 0] - electrons) > 1e-4:
-                raise ValueError("Carrier-count integration did not converge; increase dos_points")
+            integrated_electrons = float(-counts[0, 0])
+            carrier_count_residual = integrated_electrons - electrons
+            if abs(carrier_count_residual) > count_tolerance:
+                raise ValueError(
+                    "Carrier-count integration is inconsistent after chemical-potential "
+                    "root refinement: "
+                    f"residual={carrier_count_residual:.3e} electrons "
+                    f"(tolerance={count_tolerance:.3e})."
+                )
             sigma, _, _, _ = bandlib.calc_Onsager_coefficients(L0, L1, L2, mur, Tr, volume_au)
             tensor = np.asarray(sigma[0, 0])
             if not np.isfinite(tensor).all():
@@ -271,6 +343,10 @@ def integrate_transport(data, section):
                 "temperature_K": temperature,
                 "excess_electrons_cm3": excess,
                 "chemical_potential_relative_to_dft_fermi_eV": float((mu - data.fermi) / eV),
+                "target_electron_count": float(electrons),
+                "integrated_electron_count": integrated_electrons,
+                "carrier_count_residual_electrons": carrier_count_residual,
+                "chemical_potential_solver_residual_electrons": mu_count_residual,
                 "sigma_over_tau_S_per_cm_per_fs": tensor_S_per_cm_per_fs.tolist(),
                 "sigma_over_tau_trace_average_S_per_cm_per_fs": trace_average_S_per_cm_per_fs,
                 "sigma_over_tau_S_per_m_per_s": tensor.tolist(),
