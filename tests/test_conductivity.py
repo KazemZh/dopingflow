@@ -790,7 +790,35 @@ def test_legacy_ato_reference_metadata_is_migrated(tmp_path):
     assert comparison["reference_label"] == "ATO 5% Sb"
     assert comparison["reference_composition"] == "5% Sb"
     assert comparison["reference_sb_percent"] == pytest.approx(5.0)
-    assert comparison["basis"] == "ato-5pct-sb-benchmark"
+    assert comparison["basis"] == "reference-benchmark"
+
+
+def test_legacy_reference_cache_reused_when_physical_fingerprint_matches(tmp_path):
+    path = tmp_path / "reference.json"
+    old_payload = {
+        "schema_version": 3,
+        "fingerprint": "legacy-digest",
+        "fingerprint_payload": {
+            "target_id": "Sb5/candidate_003",
+            "structure_path": "/tmp/Sb5/candidate_003/02_relax/POSCAR",
+            "dft_key": "same-dft",
+            "transport_settings_fingerprint": "same-transport",
+            "reference_sb_percent": 5.0,
+        },
+        "record": {"status": "calculated", "rows": []},
+    }
+    path.write_text(json.dumps(old_payload))
+    current_payload = {
+        "target_id": "Sb5/candidate_003",
+        "structure_path": "/tmp/Sb5/candidate_003/02_relax/POSCAR",
+        "dft_key": "same-dft",
+        "transport_settings_fingerprint": "same-transport",
+        "reference_composition": "5% Sb",
+    }
+    loaded = c._load_persistent_reference(
+        path, "new-digest", current_payload
+    )
+    assert loaded == old_payload
 
 
 def test_stale_legacy_metadata_cannot_override_modern_manifest(tmp_path, monkeypatch):
