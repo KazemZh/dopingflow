@@ -114,6 +114,8 @@ def _parse_kpts(settings: dict[str, Any]) -> tuple[int, int, int]:
         raw = [item.strip() for item in raw.replace("x", ",").split(",") if item.strip()]
     if not isinstance(raw, (list, tuple)) or len(raw) != 3:
         raise ValueError("[oxidation.dft_electronic].kpts must contain three positive integers")
+    if any(isinstance(value, bool) or float(value) != int(value) for value in raw):
+        raise ValueError("kpts must contain integers, not fractional values or booleans")
     kpts = tuple(int(value) for value in raw)
     if any(value < 1 for value in kpts):
         raise ValueError("[oxidation.dft_electronic].kpts values must be >= 1")
@@ -201,6 +203,8 @@ def _run_gpaw_single_point(
         "convergence": {"density": convergence_density},
         "txt": str(txt_path),
     }
+    if settings.get("nbands") is not None:
+        kwargs["nbands"] = int(settings["nbands"])
     maxiter = int(settings.get("maxiter", 333))
     if maxiter > 0:
         kwargs["maxiter"] = maxiter
@@ -240,6 +244,7 @@ def _run_gpaw_single_point(
             "smearing_eV": smearing,
             "convergence_density": convergence_density,
             "maxiter": maxiter,
+            "nbands": settings.get("nbands"),
             "charge": charge,
             "spinpol": spin_mode,
             "initial_magmoms": initial_map,
@@ -264,14 +269,8 @@ def _run_dft_electronic(
         )
 
     workdir = _workdir(target, cfg, settings)
-    gpw_path = workdir / str(settings.get("gpw_file", "oxidation.gpw"))
-    if bool(settings.get("execute", False)):
-        gpw_path = _run_gpaw_single_point(target, cfg, settings)
-    if not gpw_path.is_file():
-        raise OptionalMethodUnavailable(
-            f"GPAW electronic analysis needs {gpw_path}. Set execute=true to run the GPAW "
-            "single point directly, or point workdir/output_root to an existing GPAW result."
-        )
+    from dopingflow.dft_cache import ensure_gpaw
+    gpw_path, reused = ensure_gpaw(target, cfg, settings)
 
     atoms, calc = _gpaw_restart(gpw_path)
     original = Structure.from_file(target.structure_path)
@@ -395,6 +394,7 @@ def _run_dft_electronic(
         "final_energy_eV": final_energy,
         "efermi_eV": efermi,
         "dos_descriptors": dos_descriptors,
+        "reused_existing": reused,
     }
     (workdir / "electronic_summary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8"

@@ -434,15 +434,190 @@ if "dft-auto" in methods:
             key="oxidation_dft_auto_wavefunctions",
             help="Needed for automatic band-edge and Wannier analysis.",
         )
+        with st.expander("Automatic oxidation-state reference calibration", expanded=True):
+            calibration_modes = ["auto", "off", "require"]
+            calibration_mode = str(auto.get("reference_calibration", "auto")).lower()
+            if calibration_mode not in calibration_modes:
+                calibration_mode = "auto"
+            r1, r2, r3 = st.columns(3)
+            auto["reference_calibration"] = r1.selectbox(
+                "Reference calibration",
+                calibration_modes,
+                index=calibration_modes.index(calibration_mode),
+                key="oxidation_dft_auto_reference_calibration",
+                help=(
+                    "auto discovers/caches suitable binary oxide references; require stops if "
+                    "two oxidation-state references are not available for every cation."
+                ),
+            )
+            auto["run_missing_references"] = r2.checkbox(
+                "Run missing reference DFT/Bader",
+                value=bool(auto.get("run_missing_references", True)),
+                key="oxidation_dft_auto_run_reference",
+                disabled=auto["reference_calibration"] == "off",
+                help=(
+                    "Reference calculations are still protected by the main dft-auto execution "
+                    "confirmation. Existing compatible reference fingerprints are reused."
+                ),
+            )
+            kpoint_modes = ["match-density", "same-grid"]
+            kpoint_mode = str(auto.get("reference_kpoint_mode", "match-density")).lower()
+            if kpoint_mode not in kpoint_modes:
+                kpoint_mode = "match-density"
+            auto["reference_kpoint_mode"] = r3.selectbox(
+                "Reference k-point mode",
+                kpoint_modes,
+                index=kpoint_modes.index(kpoint_mode),
+                disabled=auto["reference_calibration"] == "off",
+                help="match-density scales the reference mesh to approximately preserve reciprocal-space sampling density.",
+            )
+
+            default_roots = auto.get(
+                "reference_roots",
+                [
+                    "reference_structures/relaxed/refs",
+                    "reference_structures/oxidation_states",
+                    "reference_structures/oxides",
+                ],
+            )
+            if isinstance(default_roots, str):
+                roots_text = default_roots
+            else:
+                roots_text = "\n".join(str(item) for item in default_roots)
+            roots_text = st.text_area(
+                "Reference structure roots (one per line)",
+                value=roots_text,
+                height=80,
+                key="oxidation_dft_auto_reference_roots",
+                disabled=auto["reference_calibration"] == "off",
+            )
+            auto["reference_roots"] = [
+                line.strip() for line in roots_text.splitlines() if line.strip()
+            ]
+            ir1, ir2 = st.columns(2)
+            auto["reference_include_project_relaxed_refs"] = ir1.checkbox(
+                "Always include project's relaxed references",
+                value=bool(auto.get("reference_include_project_relaxed_refs", True)),
+                disabled=auto["reference_calibration"] == "off",
+                help=(
+                    "Automatically includes reference_structures/relaxed/refs even for "
+                    "older saved configurations that do not list it explicitly."
+                ),
+            )
+            auto["reference_include_correction_calibration"] = ir2.checkbox(
+                "Supplement missing OS from correction references",
+                value=bool(auto.get("reference_include_correction_calibration", True)),
+                disabled=auto["reference_calibration"] == "off",
+                help=(
+                    "Uses one existing relaxed_calibration structure only when an "
+                    "element/oxidation-state pair is missing from the primary reference roots."
+                ),
+            )
+            rr1, rr2 = st.columns(2)
+            auto["reference_manifest"] = rr1.text_input(
+                "Optional reference manifest JSON",
+                value=str(auto.get("reference_manifest", "")),
+                key="oxidation_dft_auto_reference_manifest",
+                disabled=auto["reference_calibration"] == "off",
+                help=(
+                    "Optional explicit references for difficult or non-binary cases. Relative paths "
+                    "inside the manifest are resolved from the manifest directory."
+                ),
+            )
+            auto["reference_cache_root"] = rr2.text_input(
+                "Reference calibration cache",
+                value=str(auto.get("reference_cache_root", "")),
+                key="oxidation_dft_auto_reference_cache",
+                disabled=auto["reference_calibration"] == "off",
+                help="Empty uses <dft output root>/reference_calibration.",
+            )
+            rc1, rc2, rc3 = st.columns(3)
+            auto["reference_min_states"] = int(
+                rc1.number_input(
+                    "Minimum OS references / element",
+                    min_value=2,
+                    value=max(2, int(auto.get("reference_min_states", 2))),
+                    step=1,
+                    disabled=auto["reference_calibration"] == "off",
+                )
+            )
+            auto["reference_kpts_max"] = int(
+                rc2.number_input(
+                    "Maximum reference k-point mesh",
+                    min_value=1,
+                    value=max(1, int(auto.get("reference_kpts_max", 8))),
+                    step=1,
+                    disabled=auto["reference_calibration"] == "off",
+                )
+            )
+            auto["reference_auto_magnetic_seed"] = rc3.checkbox(
+                "Auto magnetic seed for transition-metal references",
+                value=bool(auto.get("reference_auto_magnetic_seed", True)),
+                disabled=auto["reference_calibration"] == "off",
+                help="Used only as an SCF initialization; it is not treated as oxidation-state evidence.",
+            )
+            reference_spin_options = ["auto", "true", "false"]
+            reference_spin = str(auto.get("reference_spinpol", "auto")).lower()
+            if reference_spin not in reference_spin_options:
+                reference_spin = "auto"
+            auto["reference_spinpol"] = st.selectbox(
+                "Reference spin polarization",
+                reference_spin_options,
+                index=reference_spin_options.index(reference_spin),
+                disabled=auto["reference_calibration"] == "off",
+                help=(
+                    "Independent from the target spin setting. 'auto' lets nonzero reference "
+                    "magnetic seeds activate spin when needed."
+                ),
+            )
+
+            with st.expander("Calibration decision thresholds", expanded=False):
+                ct1, ct2, ct3, ct4 = st.columns(4)
+                auto["reference_max_z"] = float(
+                    ct1.number_input(
+                        "Max z-distance",
+                        min_value=0.1,
+                        value=float(auto.get("reference_max_z", 2.5)),
+                        step=0.1,
+                    )
+                )
+                auto["reference_min_z_gap"] = float(
+                    ct2.number_input(
+                        "Min z-gap",
+                        min_value=0.0,
+                        value=float(auto.get("reference_min_z_gap", 0.75)),
+                        step=0.05,
+                    )
+                )
+                auto["reference_min_probability"] = float(
+                    ct3.number_input(
+                        "Min relative likelihood",
+                        min_value=0.0,
+                        max_value=1.0,
+                        value=float(auto.get("reference_min_probability", 0.70)),
+                        step=0.05,
+                    )
+                )
+                auto["reference_min_probability_margin"] = float(
+                    ct4.number_input(
+                        "Min likelihood margin",
+                        min_value=0.0,
+                        max_value=1.0,
+                        value=float(auto.get("reference_min_probability_margin", 0.20)),
+                        step=0.05,
+                    )
+                )
+
         auto["bader_reference_file"] = st.text_input(
-            "Optional same-method Bader reference fingerprint JSON",
+            "Optional manual Bader fingerprint JSON override",
             value=str(auto.get("bader_reference_file", "")),
             key="oxidation_dft_auto_reference_file",
-            help="Optional calibration strengthens absolute oxidation-state discrimination. The workflow still returns a conservative suggestion without it.",
+            help="Manual fingerprints override automatically generated fingerprints for matching element/oxidation-state entries.",
         )
         st.caption(
-            "dft-auto runs/reuses GPAW, Bader, band-edge localization, and—only when useful—Wannier analysis. "
-            "It does not force charge neutrality by inventing localized mixed valence: residual charge can be reported as delocalized electrons or holes."
+            "dft-auto runs/reuses GPAW, Bader, automatic same-method reference calibration, "
+            "band-edge localization, and—only when useful—Wannier analysis. It does not force "
+            "charge neutrality by inventing localized mixed valence."
         )
         oxidation["dft_auto"] = auto
 
@@ -1002,6 +1177,46 @@ else:
                     "Localization",
                     str(compensation.get("localization", "not-evaluated")),
                 )
+                calibration = method_result.get("reference_calibration", {}) or {}
+                calibration_summary = summary.get("reference_calibration_summary", {}) or {}
+                if calibration:
+                    st.markdown("##### Automatic reference calibration")
+                    cr1, cr2, cr3, cr4 = st.columns(4)
+                    states_available = calibration.get("states_available", {}) or {}
+                    cr1.metric("Calibration status", str(calibration.get("status", "unknown")))
+                    cr2.metric(
+                        "Calibrated sites",
+                        int(calibration_summary.get("n_calibrated_sites", 0)),
+                    )
+                    cr3.metric(
+                        "Ambiguous sites",
+                        int(calibration_summary.get("n_ambiguous_sites", 0)),
+                    )
+                    cr4.metric(
+                        "Reference elements",
+                        len(states_available),
+                    )
+                    missing_refs = calibration.get("elements_missing_minimum_states", []) or []
+                    if missing_refs:
+                        st.warning(
+                            "Insufficient oxidation-state reference coverage for: "
+                            + ", ".join(str(item) for item in missing_refs)
+                        )
+                    if states_available:
+                        st.dataframe(
+                            pd.DataFrame(
+                                [
+                                    {
+                                        "element": element,
+                                        "reference_oxidation_states": states,
+                                    }
+                                    for element, states in states_available.items()
+                                ]
+                            ),
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+
                 component_status = method_result.get("component_status", {}) or {}
                 if component_status:
                     st.markdown("##### Automatic diagnostic stages")
@@ -1107,6 +1322,10 @@ else:
                         "formal_oxidation_state",
                         "confidence",
                         "confidence_label",
+                        "oxidation_state_status",
+                        "reference_calibration_status",
+                        "calibrated_oxidation_state",
+                        "calibration_confidence",
                         "structural_prior_oxidation_state",
                         "coordination_number",
                         "bader_partial_charge",

@@ -1,0 +1,60 @@
+# Merge these tables into the input.toml of an existing relaxed dopingflow project.
+[structure]
+outdir = "random_structures"
+
+[conductivity]
+enabled = true
+# Structure selection intentionally mirrors [oxidation].
+# Omit source_root to inherit [oxidation].source_root when set,
+# otherwise [structure].outdir.
+source_root = "random_structures"
+include_vacancy_free = true
+include_oxygen_vacancies = true
+# Optional exact target IDs, safe IDs, or shell-style wildcard patterns.
+# Leave empty to analyze every discovered target under source_root.
+target_include = []         # e.g. ["Sb05/candidate_0002", "Sb05/*/V_O_01/*"]
+output_dir = "07_conductivity"
+temperatures_K = [300.0, 353.0]
+# Additional electrons relative to the explicit DFT structure, per cm^3.
+# 0 = native electron count; positive = electrons; negative = holes.
+excess_electrons_cm3 = [0.0]
+interpolation_factor = 5
+dos_points = 4000
+fail_fast = false
+# relaxation_time_fs = 10.0 # Optional ASSUMPTION, not a calculated lifetime.
+
+# Optional persistent ATO-normalized comparison.
+# 5% Sb ATO is the common project benchmark for all co-dopants/vacancy structures.
+# The reference is calculated once and reused in later runs when its fingerprint
+# (geometry + DFT + transport settings) remains compatible.
+[conductivity.comparison]
+enabled = false
+reference_label = "ATO 5% Sb"
+reference_sb_percent = 5.0
+reference_source_root = ""        # empty = search [structure].outdir, then conductivity.source_root
+reference_target = "Sb5/*"       # preferably replace with one exact target ID
+reference_structure_path = ""    # optional POSCAR/CIF path; bypasses discovery
+basis = "ato-5pct-sb-benchmark"
+
+[conductivity.dft]
+code = "gpaw"
+execute = false            # Same execution gate concept as oxidation
+reuse_existing = true      # Reuse compatible oxidation/conductivity GPAW outputs
+output_root = "dft_conductivity"
+gpw_file = "oxidation.gpw"
+txt_file = "gpaw.txt"
+
+# Common GPAW parameter names intentionally match oxidation.dft_electronic.
+# When omitted, compatible physical values inherit from oxidation where possible.
+xc = "PBE"
+ecut_eV = 500.0
+smearing_eV = 0.05
+kpts = [4, 4, 4]           # Starting mesh only: converge for the target cell
+gamma = true
+convergence_density = 1.0e-5
+maxiter = 333
+charge = 0.0
+spinpol = "auto"
+initial_magmoms = {}
+# nbands = 100             # Optional; include enough empty bands for transport
+save_wavefunctions = true  # Supports later oxidation wavefunction analysis

@@ -19,6 +19,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# On Linux/Conda, install the compiled BoltzTraP2 package first:
+#   conda install -c conda-forge boltztrap2=26.3.1
+# then run:
+#   pip install -e ".[conductivity]"
+# Otherwise pip may try to compile BoltzTraP2/spglib from source and require CMake.
+conductivity = [
+  "BoltzTraP2>=26.3.1",
+  "ase>=3.22",
+]
+
 m3gnet = [
   "m3gnet==0.2.4",
   "tensorflow==2.15.1",

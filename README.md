@@ -527,7 +527,7 @@ methods = ["dft-auto"]
 
 [oxidation.dft_auto]
 output_root = "dft_oxidation"
-execute = false              # true runs missing GPAW/Bader/Wannier steps
+execute = false              # true runs missing GPAW/Bader/Wannier/reference steps
 reuse_existing = true
 xc = "PBE"
 ecut_eV = 500.0
@@ -537,14 +537,43 @@ smearing_eV = 0.05
 spinpol = "auto"
 band_edge_analysis = true
 wannier_mode = "auto"        # only when electronic compensation needs clarification
+
+# Automatic same-method Bader calibration
+reference_calibration = "auto"   # off | auto | require
+reference_roots = [
+  "reference_structures/relaxed/refs",
+  "reference_structures/oxidation_states",
+  "reference_structures/oxides",
+]
+run_missing_references = true
+reference_kpoint_mode = "match-density"
+reference_min_states = 2
 ```
 
 The automated result contains one suggested integer oxidation state per atom,
 a confidence value, the Bader descriptor, and any residual electronic
 compensation (electrons or holes). It deliberately does not force charge
 neutrality by inventing localized mixed-valence atoms when DFT descriptors show
-no such site separation. Optional same-method Bader reference fingerprints can
-further strengthen absolute oxidation-state discrimination.
+no such site separation.
+
+With `reference_calibration = "auto"`, dopingflow automatically scans the
+configured reference roots for simple binary oxides. Existing projects also
+include `reference_structures/relaxed/refs` automatically, and missing
+element/oxidation-state pairs can be supplemented from existing
+`reference_structures/corrections/*/relaxed_calibration` structures, infers the nominal cation
+oxidation state from stoichiometry under O2-, rejects short-O--O peroxide-like
+references, and runs/reuses the same GPAW+Bader workflow. At least two reference
+oxidation states for an element are required before the Bader calibration is
+allowed to override the structural prior. The resulting fingerprints are cached
+under `dft_oxidation/reference_calibration/` and reused across target
+structures. Ambiguous matches remain explicitly marked as ambiguous rather than
+being promoted to a calibrated state.
+
+An optional
+`reference_structures/oxidation_states/manifest.json` can provide explicit
+references, oxidation states, k-point grids, and initial magnetic moments for
+difficult/non-binary cases. Manual `bader_reference_file` entries remain
+supported and override matching automatically generated fingerprints.
 
 The lower-level GPAW electronic route can still be configured directly:
 
@@ -739,3 +768,78 @@ Proprietary and confidential.
 Unauthorized use, modification, or distribution is prohibited.
 
 The native GPAW/Wannier90 adapter supports both the GPAW 25.7 `gpaw.wannier90` interface and the newer `gpaw.wannier.wannier90` interface.
+
+
+### Electronic conductivity (optional)
+
+Use `dopingflow conductivity -c input.toml --dry-run` to preview the same
+parent/vacancy targets selected by the oxidation-style `source_root`,
+vacancy toggles, and optional `target_include` filters, then run without
+`--dry-run`. Enable `[conductivity].enabled = true`; see
+[`examples/conductivity/input.toml`](examples/conductivity/input.toml) and the
+[conductivity guide](docs/source/methods/conductivity.rst).
+
+The GPAW + BoltzTraP2 backend reports **sigma/tau**, with optional explicitly
+assumed-tau conductivity. It shares compatible, provenance-checked GPAW results
+with oxidation analysis in either direction. Different structures/settings and
+Gamma-only meshes are not silently reused for transport. The Streamlit **Electronic Conductivity** page intentionally mirrors the oxidation
+stage wherever the concepts overlap: target/source controls, common GPAW labels and
+configuration keys, TOML preview, save/run layout, command/last-run output, and the
+per-structure results browser. The conductivity output tree also follows the same
+`structures/<target_id>/...` pattern.
+For Linux/Conda environments, install BoltzTraP2 from conda-forge **before**
+installing the DopingFlow conductivity extra. This avoids pip trying to compile
+BoltzTraP2 (and its bundled spglib backend) from source::
+
+    conda activate dopingflow_gpaw
+    conda install -c conda-forge boltztrap2=26.3.1
+    pip install -e ".[conductivity]"
+
+If the GUI dependencies are also needed in the same environment, use::
+
+    pip install -e ".[gui,conductivity]"
+
+GPAW and its PAW datasets should remain installed from conda-forge rather than
+through this pip extra. A common symptom of attempting a source build of
+BoltzTraP2 with pip is an error such as `No such file or directory: 'cmake'`.
+Installing the conda-forge BoltzTraP2 package first is the recommended route.
+
+Quick checks::
+
+    python -c "import gpaw; print('GPAW:', gpaw.__version__)"
+    python -c "import BoltzTraP2; print('BoltzTraP2 OK')"
+    python -c "from dopingflow.conductivity import integrate_transport; print('DopingFlow conductivity OK')"
+
+Band-like transport is assumed; polaron hopping and scattering lifetimes are not
+calculated by this backend.
+
+For screening, the primary GUI/reporting unit is **S cm⁻¹ fs⁻¹** for
+`sigma/tau`; raw SI `S m⁻¹ s⁻¹` values remain in the JSON for reproducibility.
+
+The default project benchmark is **ATO with 5% Sb**. The optional
+`[conductivity.comparison]` section points to one vacancy-free 5% Sb ATO
+structure, which may live in a different source tree or be supplied by an
+explicit POSCAR/CIF path. DopingFlow calculates this benchmark once with the same
+GPAW/BoltzTraP2 settings, stores a fingerprinted
+`references/.../reference.json`, and reuses it in later co-dopant runs while
+the geometry and DFT/transport settings remain compatible. The reference does
+not have to be part of the current target selection. The reference input accepts
+either a normal structure-tree root plus an exact target such as
+`Sb5/candidate_003`, or a direct candidate/structure path such as
+`.../Sb5/candidate_003`, `.../candidate_003/*`, or
+`.../candidate_003/02_relax/POSCAR`.
+
+If screened co-dopant calculations are already complete, run
+`dopingflow conductivity -c input.toml --reference-only` (or use the matching
+GUI action) to calculate/reuse only the ATO reference and rebuild the cumulative
+comparison table. Existing screened-target GPAW/BoltzTraP2 calculations are not
+rerun.
+
+Each screened parent or oxygen-vacancy structure then gets a
+`sigma/tau` ratio and percentage change relative to the common 5% Sb ATO
+benchmark at matching temperature/carrier conditions. The comparison table
+accumulates compatible per-structure results across separate runs, so co-dopants
+can be screened one at a time without recalculating ATO. Saved results with
+different fingerprinted DFT/transport settings are excluded rather than mixed.
+This comparison measures the band-structure contribution to transport; it does
+not assume that different dopants or vacancies share the same scattering lifetime.
