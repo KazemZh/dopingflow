@@ -270,6 +270,41 @@ def test_spin_channels_are_both_loaded(monkeypatch):
     assert not np.array_equal(data.ebands[:2], data.ebands[2:])
 
 
+def test_mu_solver_refines_upstream_count_residual():
+    class FakeBandlib:
+        @staticmethod
+        def solve_for_mu(energy, dos, electrons, temperature, dosweight=2.0, refine=False):
+            return 4.9
+
+        @staticmethod
+        def calc_N(energy, dos, mu, temperature, dosweight=2.0):
+            return -float(mu)
+
+    energy = np.linspace(0.0, 10.0, 101)
+    dos = np.ones_like(energy)
+    mu, residual, tolerance = c._solve_mu_for_count(
+        FakeBandlib, energy, dos, 5.0, 300.0, 2.0
+    )
+    assert mu == pytest.approx(5.0, abs=1e-10)
+    assert abs(residual) <= tolerance
+
+
+def test_mu_solver_reports_band_range_problem_not_dos_grid():
+    class FakeBandlib:
+        @staticmethod
+        def solve_for_mu(energy, dos, electrons, temperature, dosweight=2.0, refine=False):
+            return 1.0
+
+        @staticmethod
+        def calc_N(energy, dos, mu, temperature, dosweight=2.0):
+            # At most two electrons are represented by the sampled bands.
+            return -min(float(mu), 2.0)
+
+    energy = np.linspace(0.0, 2.0, 21)
+    dos = np.ones_like(energy)
+    with pytest.raises(ValueError, match="increase nbands / energy range rather than dos_points"):
+        c._solve_mu_for_count(FakeBandlib, energy, dos, 5.0, 300.0, 2.0)
+
 def test_real_boltztrap_parabolic_band():
     """Independent Drude limit catches atomic/SI units, volume and spin factors."""
     pytest.importorskip("BoltzTraP2")
