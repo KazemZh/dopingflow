@@ -174,107 +174,76 @@ in ``S/cm``. For example, ``282 S cm^-1 fs^-1`` with an assumed
 ``tau = 5 fs`` gives ``1410 S/cm``. The assumed-tau result remains
 conditional: the present backend does not calculate the scattering lifetime.
 
-ATO-normalized co-dopant comparison
------------------------------------
+Reference-normalized comparison
+-------------------------------
 
-For this project, the default benchmark is vacancy-free **ATO with 5% Sb**.
-The reference is independent of the current co-dopant target selection: it can
-live in another DopingFlow structure tree or be supplied as an explicit
-POSCAR/CIF path.
+The comparison workflow is **material-agnostic**. A user may choose any
+vacancy-free structure as the persistent conductivity benchmark. For the current
+ATO study, vacancy-free **ATO with 5% Sb** is a useful project-specific reference,
+but it is not hard-coded into the workflow.
 
-A typical configuration is::
+A generic configuration is::
 
     [conductivity.comparison]
     enabled = true
-    reference_label = "ATO 5% Sb"
-    reference_sb_percent = 5.0
+    reference_label = "Reference"
+    reference_composition = ""
     reference_source_root = "../random_structures"
-    reference_target = "Sb5/candidate_001"
+    reference_target = "Host/candidate_001"
     reference_structure_path = ""
-    basis = "ato-5pct-sb-benchmark"
+    basis = "reference-benchmark"
 
-``reference_source_root`` defaults to the conductivity source root when left
-empty. ``reference_target`` accepts the same exact/safe/wildcard syntax as the
-normal target selector, but it must resolve to **exactly one vacancy-free
-structure**. For production use an exact target ID rather than a broad wildcard.
-If the ATO structure is outside a DopingFlow tree,
-``reference_structure_path`` can point directly to a POSCAR or CIF and bypasses
-reference discovery.
+For the present ATO study the same fields can instead be set, for example, to::
 
-The first time a compatible ATO benchmark is needed, DopingFlow runs or reuses
-the GPAW single point using the same ``conductivity.dft`` settings and then runs
+    reference_label = "ATO 5% Sb"
+    reference_composition = "5% Sb"
+    reference_target = "Sb5/candidate_003"
+
+The reference does not need to be part of the current target selection.
+``reference_target`` accepts the same exact/safe/wildcard syntax as the normal
+target selector and must resolve to exactly one vacancy-free structure.
+Alternatively, ``reference_structure_path`` may point directly to a POSCAR/CIF
+or candidate directory and bypass target discovery.
+
+The first time a compatible reference is needed, DopingFlow runs or reuses the
+GPAW single point using the same ``conductivity.dft`` settings and then runs
 BoltzTraP2. A successful reference is stored below the conductivity output
 directory under ``references/<reference-label>/reference.json`` and summarized
-in ``conductivity_reference.json``.
-
-On later co-dopant runs, the stored ATO transport result is reused without
-recalculating GPAW or BoltzTraP2 when its fingerprint still matches. The
-fingerprint includes the reference geometry, GPAW electronic settings, GPAW
-version/setup identity, temperatures, excess-carrier conditions, interpolation
-factor, DOS grid, and transport regime. If only a transport setting changes,
-the existing compatible GPAW cache can still be reused while BoltzTraP2 is
-recomputed. If a DFT-defining setting changes, a compatible GPAW result is
-required or ``conductivity.dft.execute = true`` must be enabled.
-
-The benchmark is intentionally applied to **all screened structures**, including
-oxygen-vacancy structures, because it answers the project-level question:
-does a candidate preserve or improve the band-transport descriptor relative to
-the 5% Sb ATO baseline? The output records both the candidate and reference
-vacancy counts so this provenance remains explicit.
+in ``conductivity_reference.json``. Later runs reuse it while its fingerprint
+remains compatible.
 
 For each target and transport condition, DopingFlow reports::
 
-    relative_to_reference = (sigma/tau)_target / (sigma/tau)_ATO
+    relative_to_reference = (sigma/tau)_target / (sigma/tau)_reference
 
 and::
 
     percent_change_vs_reference = 100 * (relative_to_reference - 1)
 
-Thus a value of 1.0 (0%) preserves the ATO band-transport descriptor, values
-above 1.0 indicate larger ``sigma/tau``, and values below 1.0 indicate a
-smaller value. Comparisons require the same temperature and rigid-band
-excess-electron concentration as the stored reference. They remain comparisons
-of the **band-structure contribution** only; different dopants or vacancies may
-also change the real scattering time.
+Thus 1.0 (0%) means the target preserves the reference band-transport descriptor;
+values above 1.0 are larger and values below 1.0 are smaller. Comparisons require
+the same temperature and rigid-band excess-electron concentration. These remain
+comparisons of the **band-structure contribution** only; different structures may
+have different real scattering times.
 
-The comparison table is written to
-``conductivity_comparison.csv`` and ``conductivity_comparison.json`` and is
-displayed prominently in the Streamlit page above the per-structure browser.
+The comparison table is written to ``conductivity_comparison.csv`` and
+``conductivity_comparison.json``. The Streamlit page shows the chosen reference,
+its trace-average ``sigma/tau``, the **full 3x3 reference conductivity/tau tensor**,
+and the target/reference ratios.
 
-The table is **cumulative across separate conductivity runs**. DopingFlow scans
-the per-structure ``conductivity.json`` files already present under the current
-conductivity output directory and includes prior targets only when their saved
-transport-settings fingerprint matches the current GPAW/BoltzTraP2 settings.
-This makes it possible to run Ce, Ti, Mn, Nb, and other co-dopants one at a time
-while maintaining one growing comparison against the same 5% Sb ATO benchmark.
-Results calculated with a different k mesh, XC functional, cutoff, smearing,
-spin setup, temperature/carrier grid, interpolation factor, DOS grid, or other
-fingerprinted settings are not silently mixed into the table.
-If the expensive screened-target calculations are already finished and only the
-ATO reference needs to be added or corrected, use the reference-only mode::
+The table is cumulative across compatible saved per-target results. DopingFlow
+includes prior targets only when their transport-settings fingerprint matches the
+current GPAW/BoltzTraP2 settings, so results produced with incompatible meshes,
+functionals, temperatures, carrier grids, or transport settings are not mixed.
+
+The optional CLI command::
 
     dopingflow conductivity -c input.toml --reference-only
 
-This operation calculates or reuses only the configured 5% Sb ATO reference and
-rebuilds ``conductivity_comparison.csv/json`` from the saved compatible
-per-target results. It does **not** rerun GPAW or BoltzTraP2 for the screened
-co-dopant structures.
-
-For reference-path input, the workflow accepts either a structure-tree root plus
-an exact target::
-
-    reference_source_root = "/path/to/complete-structure-tree"
-    reference_target = "Sb5/candidate_003"
-
-or a direct relaxed structure/candidate hint::
-
-    reference_structure_path = "/path/to/Sb5/candidate_003/02_relax/POSCAR"
-    reference_structure_path = "/path/to/Sb5/candidate_003"
-    reference_structure_path = "/path/to/Sb5/candidate_003/*"
-
-A candidate directory is resolved preferentially to ``02_relax/POSCAR``. For
-convenience, the same candidate-directory form is also recognized if it is
-accidentally pasted into ``reference_source_root``.
+rebuilds only the persistent reference/comparison from saved target results. The
+main Streamlit workflow intentionally keeps the same simple two-button
+**Save settings / Run analysis** layout as the oxidation-state and dopant
+site-preference pages.
 
 Converge k sampling, interpolation factor, integration grid, cutoff and empty
 bands. Chemical potentials within 10 kBT of the sampled energy limits and
