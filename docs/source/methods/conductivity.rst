@@ -250,6 +250,31 @@ while maintaining one growing comparison against the same 5% Sb ATO benchmark.
 Results calculated with a different k mesh, XC functional, cutoff, smearing,
 spin setup, temperature/carrier grid, interpolation factor, DOS grid, or other
 fingerprinted settings are not silently mixed into the table.
+If the expensive screened-target calculations are already finished and only the
+ATO reference needs to be added or corrected, use the reference-only mode::
+
+    dopingflow conductivity -c input.toml --reference-only
+
+This operation calculates or reuses only the configured 5% Sb ATO reference and
+rebuilds ``conductivity_comparison.csv/json`` from the saved compatible
+per-target results. It does **not** rerun GPAW or BoltzTraP2 for the screened
+co-dopant structures.
+
+For reference-path input, the workflow accepts either a structure-tree root plus
+an exact target::
+
+    reference_source_root = "/path/to/complete-structure-tree"
+    reference_target = "Sb5/candidate_003"
+
+or a direct relaxed structure/candidate hint::
+
+    reference_structure_path = "/path/to/Sb5/candidate_003/02_relax/POSCAR"
+    reference_structure_path = "/path/to/Sb5/candidate_003"
+    reference_structure_path = "/path/to/Sb5/candidate_003/*"
+
+A candidate directory is resolved preferentially to ``02_relax/POSCAR``. For
+convenience, the same candidate-directory form is also recognized if it is
+accidentally pasted into ``reference_source_root``.
 
 Converge k sampling, interpolation factor, integration grid, cutoff and empty
 bands. Chemical potentials within 10 kBT of the sampled energy limits and
