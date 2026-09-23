@@ -120,7 +120,7 @@ def parse_config(raw, root):
     comparison = dict(comparison)
     comparison["enabled"] = bool(comparison.get("enabled", False))
     comparison["reference_target"] = str(
-        comparison.get("reference_target", "Sb5/*")
+        comparison.get("reference_target", "")
     ).strip()
     comparison["reference_structure_path"] = str(
         comparison.get("reference_structure_path", "")
@@ -129,37 +129,44 @@ def parse_config(raw, root):
         comparison.get("reference_source_root", "")
     ).strip()
     comparison["reference_label"] = str(
-        comparison.get("reference_label", "ATO 5% Sb")
-    ).strip() or "ATO 5% Sb"
-    comparison["reference_sb_percent"] = float(
-        comparison.get("reference_sb_percent", 5.0)
-    )
-    if (
-        not np.isfinite(comparison["reference_sb_percent"])
-        or comparison["reference_sb_percent"] <= 0
-    ):
-        raise ValueError(
-            "[conductivity.comparison].reference_sb_percent must be finite and positive"
-        )
+        comparison.get("reference_label", "Reference")
+    ).strip() or "Reference"
+    comparison["reference_composition"] = str(
+        comparison.get("reference_composition", "")
+    ).strip()
+    # Backward compatibility for inputs written by the ATO-specific GUI.
+    if "reference_sb_percent" in comparison:
+        legacy_sb = float(comparison["reference_sb_percent"])
+        if not np.isfinite(legacy_sb) or legacy_sb <= 0:
+            raise ValueError(
+                "[conductivity.comparison].reference_sb_percent must be finite and positive"
+            )
+        comparison["reference_sb_percent"] = legacy_sb
+        if not comparison["reference_composition"]:
+            comparison["reference_composition"] = f"{legacy_sb:g}% Sb"
     comparison["basis"] = str(
-        comparison.get("basis", "ato-5pct-sb-benchmark")
+        comparison.get("basis", "reference-benchmark")
     ).strip().lower()
     allowed_bases = {
-        "ato-5pct-sb-benchmark",
+        "reference-benchmark",
+        "ato-5pct-sb-benchmark",  # legacy
         "same-total-dopant",
-        "fixed-sb",
+        "fixed-composition",
+        "fixed-sb",  # legacy
         "custom",
     }
     if comparison["basis"] not in allowed_bases:
         raise ValueError(
-            "[conductivity.comparison].basis must be ato-5pct-sb-benchmark, "
-            "same-total-dopant, fixed-sb, or custom"
+            "[conductivity.comparison].basis must be reference-benchmark, "
+            "same-total-dopant, fixed-composition, or custom"
         )
     if comparison["enabled"] and not (
-        comparison["reference_target"] or comparison["reference_structure_path"]
+        comparison["reference_target"]
+        or comparison["reference_structure_path"]
+        or comparison["reference_source_root"]
     ):
         raise ValueError(
-            "[conductivity.comparison] needs reference_target or reference_structure_path "
+            "[conductivity.comparison] needs a reference target, source, or structure path "
             "when comparison is enabled"
         )
     section["comparison"] = comparison
@@ -393,7 +400,7 @@ def _reference_target_id_from_structure(path):
     candidate_dir = path.parent.parent if path.parent.name == "02_relax" else path.parent
     if candidate_dir.parent != candidate_dir:
         return f"{candidate_dir.parent.name}/{candidate_dir.name}"
-    return "ATO5/reference"
+    return "reference/reference"
 
 
 def _candidate_structure_from_path(path):
@@ -450,7 +457,7 @@ def _resolve_reference_structure_hint(value, root):
             return candidates[0]
         if len(candidates) > 1:
             raise ValueError(
-                "ATO reference path pattern matched multiple relaxed structures: "
+                "Reference path pattern matched multiple relaxed structures: "
                 + ", ".join(str(path) for path in candidates[:8])
             )
     return None
@@ -500,12 +507,11 @@ def _automatic_reference_roots(raw, root, cfg, comparison):
 
 
 def discover_reference_candidates(raw, root, cfg, comparison):
-    """Return vacancy-free candidates for the persistent ATO reference.
+    """Return vacancy-free candidates for the persistent conductivity reference.
 
     When no explicit reference root is supplied, search the project's normal
-    structure output first and the conductivity source root second. This makes
-    a pure 5% Sb ATO parent discoverable even when conductivity targets come
-    from a derived tree such as vacancy-selected.
+    structure output first and the conductivity source root second. The reference
+    can be any user-selected material/structure; 5% Sb ATO is only one use case.
     """
     explicit = str(comparison.get("reference_structure_path", "")).strip()
     source_hint = str(comparison.get("reference_source_root", "")).strip()
@@ -523,7 +529,7 @@ def discover_reference_candidates(raw, root, cfg, comparison):
 
     if explicit and structure_path is None:
         raise FileNotFoundError(
-            "ATO reference structure path could not be resolved. Provide a POSCAR/CIF, "
+            "Reference structure path could not be resolved. Provide a POSCAR/CIF, "
             "a candidate directory containing 02_relax/POSCAR, or a pattern resolving "
             f"to one candidate: {explicit}"
         )
@@ -543,8 +549,8 @@ def discover_reference_candidates(raw, root, cfg, comparison):
                 n_vacancies=0,
                 vacancy_species=None,
                 metadata={
-                    "reference_label": comparison.get("reference_label", "ATO 5% Sb"),
-                    "reference_sb_percent": comparison.get("reference_sb_percent", 5.0),
+                    "reference_label": comparison.get("reference_label", "Reference"),
+                    "reference_composition": comparison.get("reference_composition", ""),
                     "explicit_reference_structure": True,
                 },
             )
@@ -576,7 +582,7 @@ def discover_reference_candidates(raw, root, cfg, comparison):
     if not matches:
         details = "; ".join(errors)
         message = (
-            "ATO 5% Sb reference matched no vacancy-free structure. "
+            "Conductivity reference matched no vacancy-free structure. "
             f"Searched reference roots: {', '.join(searched) or '(none)'}. "
             "Set an exact reference_source_root/reference_target or provide "
             "reference_structure_path."
@@ -594,7 +600,7 @@ def discover_reference_candidates(raw, root, cfg, comparison):
         )
         suffix = "" if len(matches) <= 8 else ", ..."
         raise ValueError(
-            "ATO 5% Sb reference selector must resolve to exactly one vacancy-free "
+            "Conductivity reference selector must resolve to exactly one vacancy-free "
             f"structure across the searched roots; matched {len(matches)}: {names}{suffix}"
         )
     ref_cfg, target = matches[0]
@@ -602,9 +608,9 @@ def discover_reference_candidates(raw, root, cfg, comparison):
 
 
 def _reference_store_path(cfg, comparison):
-    label = str(comparison.get("reference_label", "ATO 5% Sb"))
+    label = str(comparison.get("reference_label", "Reference"))
     slug = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in label).strip("_")
-    return cfg.output_dir / "references" / (slug or "ATO_5pct_Sb") / "reference.json"
+    return cfg.output_dir / "references" / (slug or "Reference") / "reference.json"
 
 
 def _transport_settings_fingerprint(section):
@@ -648,8 +654,11 @@ def _reference_transport_fingerprint(target, section):
         "dft_identity": dft_identity,
         "transport_settings_fingerprint": settings_fingerprint,
         "transport_settings": settings_payload,
-        "reference_sb_percent": float(
-            section.get("comparison", {}).get("reference_sb_percent", 5.0)
+        "reference_composition": str(
+            section.get("comparison", {}).get("reference_composition", "")
+        ),
+        "legacy_reference_sb_percent": section.get("comparison", {}).get(
+            "reference_sb_percent"
         ),
     }
     digest = hashlib.sha256(
@@ -673,7 +682,7 @@ def _load_persistent_reference(path, fingerprint):
 
 
 def prepare_persistent_reference(raw, root, cfg, section, *, dry_run=False):
-    """Load or calculate the reusable 5% Sb ATO conductivity benchmark."""
+    """Load or calculate the reusable user-selected conductivity reference."""
     comparison = section.get("comparison", {})
     if not comparison.get("enabled", False):
         return None, []
@@ -684,13 +693,13 @@ def prepare_persistent_reference(raw, root, cfg, section, *, dry_run=False):
     )
     if not candidates:
         raise OptionalMethodUnavailable(
-            "ATO 5% Sb reference matched no vacancy-free structure."
+            "Conductivity reference matched no vacancy-free structure."
         )
     if len(candidates) != 1:
         names = ", ".join(target.target_id for target in candidates[:8])
         suffix = "" if len(candidates) <= 8 else ", ..."
         raise ValueError(
-            "ATO 5% Sb reference selector must resolve to exactly one vacancy-free "
+            "Conductivity reference selector must resolve to exactly one vacancy-free "
             f"structure; matched {len(candidates)}: {names}{suffix}"
         )
     target = candidates[0]
@@ -703,7 +712,7 @@ def prepare_persistent_reference(raw, root, cfg, section, *, dry_run=False):
         record = dict(cached["record"])
         record["persistent_reference_reused"] = True
         record["reference_store"] = str(store)
-        record["reference_label"] = comparison.get("reference_label", "ATO 5% Sb")
+        record["reference_label"] = comparison.get("reference_label", "Reference")
         record["reference_sb_percent"] = comparison.get("reference_sb_percent", 5.0)
         record["comparison_basis"] = comparison.get(
             "basis", "ato-5pct-sb-benchmark"
@@ -719,9 +728,9 @@ def prepare_persistent_reference(raw, root, cfg, section, *, dry_run=False):
         "kind": target.kind,
         "n_oxygen_vacancies": 0,
         "structure_path": str(target.structure_path),
-        "reference_label": comparison.get("reference_label", "ATO 5% Sb"),
-        "reference_sb_percent": comparison.get("reference_sb_percent", 5.0),
-        "comparison_basis": comparison.get("basis", "ato-5pct-sb-benchmark"),
+        "reference_label": comparison.get("reference_label", "Reference"),
+        "reference_composition": comparison.get("reference_composition", ""),
+        "comparison_basis": comparison.get("basis", "reference-benchmark"),
         "status": "selected" if dry_run else "pending",
         "persistent_reference_reused": False,
         "reference_store": str(store),
@@ -730,6 +739,8 @@ def prepare_persistent_reference(raw, root, cfg, section, *, dry_run=False):
             "transport_settings_fingerprint"
         ],
     }
+    if comparison.get("reference_sb_percent") is not None:
+        record["reference_sb_percent"] = comparison.get("reference_sb_percent")
     if dry_run:
         return record, warnings
 
@@ -737,7 +748,7 @@ def prepare_persistent_reference(raw, root, cfg, section, *, dry_run=False):
         import BoltzTraP2  # noqa: F401
     except ImportError as exc:
         raise OptionalMethodUnavailable(
-            "Install dopingflow[conductivity] and GPAW to calculate the ATO reference"
+            "Install dopingflow[conductivity] and GPAW to calculate the conductivity reference"
         ) from exc
 
     from dopingflow.dft_cache import ensure_gpaw
@@ -803,16 +814,15 @@ def collect_compatible_transport_results(output_dir, settings_fingerprint, curre
 
 
 def build_reference_comparison(results, comparison, reference=None):
-    """Compare every calculated target with one persistent ATO benchmark.
+    """Compare every calculated target with one persistent user-selected reference.
 
-    The 5% Sb ATO benchmark is deliberately universal across the screened
-    co-dopant set, including vacancy-containing structures. Temperature and
-    rigid-band excess-electron concentration must match the reference.
+    The same reference is used across the screened set, including vacancy-containing
+    structures. Temperature and rigid-band excess-electron concentration must match.
     """
     if not comparison.get("enabled", False):
         return [], []
     if not reference or reference.get("status") != "calculated":
-        return [], ["ATO 5% Sb reference conductivity is not available yet."]
+        return [], ["Reference conductivity is not available yet."]
 
     reference_rows = {
         (
@@ -822,9 +832,9 @@ def build_reference_comparison(results, comparison, reference=None):
         for row in reference.get("rows", [])
         if row.get("sigma_over_tau_trace_average_S_per_cm_per_fs") is not None
     }
-    label = str(comparison.get("reference_label", "ATO 5% Sb"))
+    label = str(comparison.get("reference_label", "Reference"))
     basis = str(
-        comparison.get("basis", "ato-5pct-sb-benchmark")
+        comparison.get("basis", "reference-benchmark")
     )
     reference_vacancies = int(reference.get("n_oxygen_vacancies", 0) or 0)
 
@@ -858,9 +868,10 @@ def build_reference_comparison(results, comparison, reference=None):
                     "target_id": result["target_id"],
                     "reference_target_id": reference["target_id"],
                     "reference_label": label,
-                    "reference_sb_percent": comparison.get(
-                        "reference_sb_percent", 5.0
+                    "reference_composition": comparison.get(
+                        "reference_composition", ""
                     ),
+                    "reference_sb_percent": comparison.get("reference_sb_percent"),
                     "comparison_basis": basis,
                     "structure_kind": result.get("kind"),
                     "n_oxygen_vacancies": int(
@@ -878,10 +889,10 @@ def build_reference_comparison(results, comparison, reference=None):
     return rows, warnings
 
 def rebuild_reference_comparison(raw, root):
-    """Calculate/reuse only the ATO reference and rebuild comparison tables.
+    """Calculate/reuse only the selected reference and rebuild comparison tables.
 
-    Existing co-dopant conductivity.json files are read from disk; no screened
-    target GPAW or BoltzTraP2 calculation is rerun by this operation.
+    Existing target conductivity.json files are read from disk; no screened target
+    GPAW or BoltzTraP2 calculation is rerun by this operation.
     """
     if not (raw.get("conductivity", {}) or {}).get("enabled", False):
         raise ValueError("Conductivity is disabled; enable [conductivity] first")
@@ -890,7 +901,7 @@ def rebuild_reference_comparison(raw, root):
     comparison = section.get("comparison", {})
     if not comparison.get("enabled", False):
         raise ValueError(
-            "ATO comparison is disabled; enable [conductivity.comparison] first"
+            "Reference comparison is disabled; enable [conductivity.comparison] first"
         )
 
     cfg.output_dir.mkdir(parents=True, exist_ok=True)
@@ -905,13 +916,13 @@ def rebuild_reference_comparison(raw, root):
         warnings.extend(reference_warnings)
     except Exception as exc:
         message = (
-            "ATO 5% Sb reference unavailable: "
+            "Conductivity reference unavailable: "
             f"{type(exc).__name__}: {exc}"
         )
         reference_record = {
-            "reference_label": comparison.get("reference_label", "ATO 5% Sb"),
+            "reference_label": comparison.get("reference_label", "Reference"),
             "reference_sb_percent": comparison.get("reference_sb_percent", 5.0),
-            "comparison_basis": comparison.get("basis", "ato-5pct-sb-benchmark"),
+            "comparison_basis": comparison.get("basis", "reference-benchmark"),
             "status": "unavailable",
             "error": message,
             "persistent_reference_reused": False,
@@ -949,8 +960,10 @@ def rebuild_reference_comparison(raw, root):
         # target warnings, but remove stale ATO-reference failures so the GUI reflects
         # the current calculated reference state.
         stale_reference_prefixes = (
-            "ATO 5% Sb reference unavailable:",
-            "ATO 5% Sb reference conductivity is not available yet.",
+            "Conductivity reference unavailable:",
+            "Reference conductivity is not available yet.",
+            "ATO 5% Sb reference unavailable:",  # legacy
+            "ATO 5% Sb reference conductivity is not available yet.",  # legacy
         )
         existing_warnings = [
             warning
@@ -994,19 +1007,19 @@ def run_conductivity(raw, root, *, dry_run=False):
             warnings.extend(reference_warnings)
         except Exception as exc:
             message = (
-                "ATO 5% Sb reference unavailable: "
+                "Conductivity reference unavailable: "
                 f"{type(exc).__name__}: {exc}"
             )
             warnings.append(message)
             reference_record = {
                 "reference_label": section.get("comparison", {}).get(
-                    "reference_label", "ATO 5% Sb"
+                    "reference_label", "Reference"
                 ),
-                "reference_sb_percent": section.get("comparison", {}).get(
-                    "reference_sb_percent", 5.0
+                "reference_composition": section.get("comparison", {}).get(
+                    "reference_composition", ""
                 ),
                 "comparison_basis": section.get("comparison", {}).get(
-                    "basis", "ato-5pct-sb-benchmark"
+                    "basis", "reference-benchmark"
                 ),
                 "status": "unavailable",
                 "error": message,
