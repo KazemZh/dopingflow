@@ -8,6 +8,7 @@ from dopingflow.site_preference import (
     _aggregate_pair_preferences,
     _cluster_distances,
     _nearest_pair_per_target,
+    _ordering_mc_worker_count,
     dopant_pair_records,
     dopant_triplet_records,
     parse_site_preference_config,
@@ -45,6 +46,8 @@ def test_parse_site_preference_defaults(tmp_path):
     assert cfg.output_dir == (tmp_path / "structures" / "06_site_preference").resolve()
     assert not cfg.pair_scan.enabled
     assert not cfg.ordering_mc.enabled
+    assert cfg.ordering_mc.parallel_targets == 1
+    assert cfg.ordering_mc.omp_threads == 1
 
 
 @pytest.mark.parametrize(
@@ -55,6 +58,8 @@ def test_parse_site_preference_defaults(tmp_path):
         {"mapping_tolerance_angstrom": -1},
         {"ordering_mc": {"temperature_K": 0}},
         {"ordering_mc": {"steps": 100, "burn_in": 100}},
+        {"ordering_mc": {"parallel_targets": 0}},
+        {"ordering_mc": {"parallel_targets": 2, "device": "cuda"}},
     ],
 )
 def test_bad_config_rejected(tmp_path, section):
@@ -64,6 +69,26 @@ def test_bad_config_rejected(tmp_path, section):
     }
     with pytest.raises(ValueError):
         parse_site_preference_config(raw, tmp_path)
+
+
+def test_ordering_mc_parallel_cpu_config(tmp_path):
+    raw = {
+        "doping": {"host_species": "Sn"},
+        "site_preference": {
+            "ordering_mc": {
+                "enabled": True,
+                "execute": True,
+                "parallel_targets": 4,
+                "omp_threads": 8,
+                "device": "cpu",
+            }
+        },
+    }
+    cfg = parse_site_preference_config(raw, tmp_path)
+    assert cfg.ordering_mc.parallel_targets == 4
+    assert cfg.ordering_mc.omp_threads == 8
+    assert _ordering_mc_worker_count(cfg.ordering_mc, 10) == 4
+    assert _ordering_mc_worker_count(cfg.ordering_mc, 2) == 2
 
 
 def test_cluster_distances_groups_relaxed_shell_splitting():
