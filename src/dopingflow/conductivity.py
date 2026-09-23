@@ -868,6 +868,19 @@ def rebuild_reference_comparison(raw, root):
         payload["comparison"] = comparison_rows
         payload["comparison_compatible_target_count"] = len(compatible_results)
         existing_warnings = payload.get("warnings", []) or []
+        # A successful reference-only rebuild supersedes reference-unavailable
+        # diagnostics left behind by an earlier failed attempt. Preserve unrelated
+        # target warnings, but remove stale ATO-reference failures so the GUI reflects
+        # the current calculated reference state.
+        stale_reference_prefixes = (
+            "ATO 5% Sb reference unavailable:",
+            "ATO 5% Sb reference conductivity is not available yet.",
+        )
+        existing_warnings = [
+            warning
+            for warning in existing_warnings
+            if not any(str(warning).startswith(prefix) for prefix in stale_reference_prefixes)
+        ]
         payload["warnings"] = list(dict.fromkeys([*existing_warnings, *warnings]))
         _json_write(results_json, payload)
 
