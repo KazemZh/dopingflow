@@ -679,137 +679,101 @@ if results_json.exists():
                 for warning in run_warnings:
                     st.warning(str(warning))
 
+reference_record = {}
+reference_rows = []
 if reference_json.exists():
     try:
         reference_record = json.loads(reference_json.read_text(encoding="utf-8"))
     except Exception as exc:
         st.warning(f"Could not read {reference_json.name}: {exc}")
+        reference_record = {}
     else:
-        st.markdown("#### Persistent conductivity reference")
-        rr1, rr2, rr3, rr4 = st.columns(4)
-        rr1.metric("Reference", str(reference_record.get("reference_label", "Reference")))
-        reference_composition_value = str(reference_record.get("reference_composition", "")).strip()
-        if not reference_composition_value and reference_record.get("reference_sb_percent") is not None:
-            reference_composition_value = f"{float(reference_record['reference_sb_percent']):g}% Sb"
-        rr2.metric("Composition", reference_composition_value or "-")
-        rr3.metric("Status", str(reference_record.get("status", "unknown")))
-        rr4.metric(
-            "Reference reused",
-            "yes" if reference_record.get("persistent_reference_reused") else "no",
-        )
-        st.caption(f"Target: `{reference_record.get('target_id', '')}`")
-        st.caption(f"Structure: `{reference_record.get('structure_path', '')}`")
-        st.caption(f"Persistent store: `{reference_record.get('reference_store', '')}`")
-        if reference_record.get("error"):
-            st.warning(str(reference_record["error"]))
         reference_rows = [
             _readable_transport_row(row)
             for row in (reference_record.get("rows", []) or [])
         ]
-        if reference_rows:
-            ref_df = pd.DataFrame(reference_rows)
-            ref_columns = [
-                column
-                for column in (
-                    "temperature_K",
-                    "excess_electrons_cm3",
-                    "sigma_over_tau_trace_average_S_per_cm_per_fs",
-                )
-                if column in ref_df.columns
-            ]
-            st.dataframe(
-                ref_df[ref_columns],
-                use_container_width=True,
-                hide_index=True,
-            )
 
-            tensor_rows = [
-                row
-                for row in reference_rows
-                if row.get("sigma_over_tau_S_per_cm_per_fs") is not None
-            ]
-            if tensor_rows:
-                st.markdown("**Reference σ/τ tensor (S cm⁻¹ fs⁻¹)**")
-                tensor_labels = [
-                    (
-                        f"T={float(row.get('temperature_K', 0)):g} K, "
-                        f"excess e⁻={float(row.get('excess_electrons_cm3', 0)):g} cm⁻³"
-                    )
-                    for row in tensor_rows
-                ]
-                tensor_index = st.selectbox(
-                    "Tensor condition",
-                    range(len(tensor_rows)),
-                    format_func=lambda idx: tensor_labels[idx],
-                    key="conductivity_reference_tensor_condition",
-                )
-                tensor = pd.DataFrame(
-                    tensor_rows[tensor_index]["sigma_over_tau_S_per_cm_per_fs"],
-                    index=["x", "y", "z"],
-                    columns=["x", "y", "z"],
-                )
-                st.dataframe(
-                    tensor.style.format("{:.6g}"),
-                    use_container_width=True,
-                )
-
+# Prefer the persisted comparison table, but rebuild a read-only view directly
+# from compatible saved conductivity.json files when the CSV has not yet been
+# refreshed. This never launches GPAW or BoltzTraP2.
+comparison_df = pd.DataFrame()
 if comparison_csv.exists() and comparison_csv.stat().st_size > 0:
     try:
         comparison_df = pd.read_csv(comparison_csv)
     except Exception as exc:
         st.warning(f"Could not read {comparison_csv.name}: {exc}")
-    else:
-        if not comparison_df.empty:
-            st.markdown("#### Reference-normalized conductivity comparison")
-            comparison_df = comparison_df.sort_values(
-                ["temperature_K", "excess_electrons_cm3", "relative_to_reference"],
-                ascending=[True, True, False],
-                kind="stable",
-            )
-            comparison_display = comparison_df.rename(
-                columns={
-                    "target_id": "Structure",
-                    "sigma_over_tau_trace_average_S_per_cm_per_fs": "Avg. σ/τ (S cm⁻¹ fs⁻¹)",
-                    "reference_sigma_over_tau_trace_average_S_per_cm_per_fs": "Reference σ/τ (S cm⁻¹ fs⁻¹)",
-                    "relative_to_reference": "Relative to reference",
-                    "percent_change_vs_reference": "Change vs reference (%)",
-                    "temperature_K": "T (K)",
-                    "excess_electrons_cm3": "Excess e⁻ (cm⁻³)",
-                }
-            )
-            columns = [
-                column
-                for column in (
-                    "Structure",
-                    "T (K)",
-                    "Excess e⁻ (cm⁻³)",
-                    "Avg. σ/τ (S cm⁻¹ fs⁻¹)",
-                    "Reference σ/τ (S cm⁻¹ fs⁻¹)",
-                    "Relative to reference",
-                    "Change vs reference (%)",
-                )
-                if column in comparison_display.columns
-            ]
-            st.dataframe(
-                comparison_display[columns],
-                use_container_width=True,
-                hide_index=True,
-            )
-            first = comparison_df.iloc[0]
-            st.caption(
-                f"Reference: {first.get('reference_label', 'Reference')} = "
-                f"{first.get('reference_target_id', '')}; comparison basis = "
-                f"{first.get('comparison_basis', '')}."
-            )
+        comparison_df = pd.DataFrame()
 
-if comparison_enabled and (
-    not comparison_csv.exists() or comparison_csv.stat().st_size == 0
+if (
+    comparison_enabled
+    and reference_record.get("status") == "calculated"
+    and comparison_df.empty
 ):
-    st.info(
-        "No reference-normalized comparison rows are available yet. The selected reference "
-        "must first resolve and be calculated/reused with settings compatible with the screened structures."
-    )
+    reference_fingerprint = str(reference_record.get("transport_settings_fingerprint", "")).strip()
+    if reference_fingerprint:
+        compatible_saved = collect_compatible_transport_results(
+            results_root, reference_fingerprint
+        )
+        live_rows, live_warnings = build_reference_comparison(
+            compatible_saved,
+            {
+                "enabled": True,
+                "reference_label": reference_record.get("reference_label", reference_label or "Reference"),
+                "reference_composition": reference_record.get("reference_composition", reference_composition),
+                "basis": "reference-benchmark",
+            },
+            reference_record,
+        )
+        comparison_df = pd.DataFrame(live_rows)
+        for warning in live_warnings:
+            st.warning(str(warning))
 
+if not comparison_df.empty:
+    st.markdown("#### Reference-normalized conductivity comparison")
+    comparison_df = comparison_df.sort_values(
+        ["temperature_K", "excess_electrons_cm3", "relative_to_reference"],
+        ascending=[True, True, False],
+        kind="stable",
+    )
+    comparison_display = comparison_df.rename(
+        columns={
+            "target_id": "Structure",
+            "sigma_over_tau_trace_average_S_per_cm_per_fs": "Avg. σ/τ (S cm⁻¹ fs⁻¹)",
+            "reference_sigma_over_tau_trace_average_S_per_cm_per_fs": "Reference σ/τ (S cm⁻¹ fs⁻¹)",
+            "relative_to_reference": "Relative to reference",
+            "percent_change_vs_reference": "Change vs reference (%)",
+            "temperature_K": "T (K)",
+            "excess_electrons_cm3": "Excess e⁻ (cm⁻³)",
+        }
+    )
+    columns = [
+        column
+        for column in (
+            "Structure",
+            "T (K)",
+            "Excess e⁻ (cm⁻³)",
+            "Avg. σ/τ (S cm⁻¹ fs⁻¹)",
+            "Reference σ/τ (S cm⁻¹ fs⁻¹)",
+            "Relative to reference",
+            "Change vs reference (%)",
+        )
+        if column in comparison_display.columns
+    ]
+    st.dataframe(
+        comparison_display[columns],
+        use_container_width=True,
+        hide_index=True,
+    )
+    first = comparison_df.iloc[0]
+    st.caption(
+        f"Reference: {first.get('reference_label', 'Reference')} = "
+        f"{first.get('reference_target_id', '')}."
+    )
+elif comparison_enabled:
+    st.info(
+        "No reference-normalized comparison rows are available yet. Only saved target "
+        "results with the same transport fingerprint as the selected reference are compared."
+    )
 if not index_csv.exists():
     st.info(
         "No conductivity_structure_index.csv found yet. Run the conductivity stage with "
