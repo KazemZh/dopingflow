@@ -786,6 +786,35 @@ else:
         st.warning(f"Could not read {index_csv.name}: {exc}")
     else:
         st.markdown("#### Analysed structures")
+        overview_frame = structure_index.copy()
+        reference_choice = "__conductivity_reference__"
+        reference_available = bool(
+            reference_record and reference_record.get("target_id")
+        )
+        if reference_available:
+            reference_overview = pd.DataFrame(
+                [
+                    {
+                        "target_id": (
+                            f"[Reference] {reference_record.get('reference_label', 'Reference')} "
+                            f"({reference_record.get('target_id', '')})"
+                        ),
+                        "structure_kind": "reference",
+                        "n_oxygen_vacancies": int(
+                            reference_record.get("n_oxygen_vacancies", 0) or 0
+                        ),
+                        "status": reference_record.get("status", "unknown"),
+                        "dft_reused": reference_record.get("dft_reused"),
+                        "error": reference_record.get("error"),
+                    }
+                ]
+            )
+            overview_frame = pd.concat(
+                [reference_overview, overview_frame],
+                ignore_index=True,
+                sort=False,
+            )
+
         overview_columns = [
             column
             for column in (
@@ -796,23 +825,52 @@ else:
                 "dft_reused",
                 "error",
             )
-            if column in structure_index.columns
+            if column in overview_frame.columns
         ]
         st.dataframe(
-            structure_index[overview_columns],
+            overview_frame[overview_columns],
             use_container_width=True,
             hide_index=True,
         )
 
         target_ids = structure_index["target_id"].astype(str).tolist()
+        chooser_options = ([reference_choice] if reference_available else []) + target_ids
         selected_target = st.selectbox(
             "Choose a structure",
-            target_ids,
+            chooser_options,
+            format_func=(
+                lambda value: (
+                    f"Reference — {reference_record.get('reference_label', 'Reference')} "
+                    f"({reference_record.get('target_id', '')})"
+                    if value == reference_choice
+                    else value
+                )
+            ),
             key="conductivity_result_target",
         )
-        selected_meta = structure_index[
-            structure_index["target_id"].astype(str) == selected_target
-        ].iloc[0]
+        selected_is_reference = selected_target == reference_choice
+        if selected_is_reference:
+            selected_target_id = str(reference_record.get("target_id", ""))
+            selected_meta = {
+                "target_id": selected_target_id,
+                "structure_kind": "reference",
+                "n_oxygen_vacancies": int(
+                    reference_record.get("n_oxygen_vacancies", 0) or 0
+                ),
+                "status": reference_record.get("status", "unknown"),
+                "dft_reused": reference_record.get("dft_reused"),
+                "structure_path": reference_record.get("structure_path", ""),
+                "output_directory": (
+                    Path(str(reference_record.get("reference_store", ""))).parent
+                    if reference_record.get("reference_store")
+                    else ""
+                ),
+            }
+        else:
+            selected_target_id = selected_target
+            selected_meta = structure_index[
+                structure_index["target_id"].astype(str) == selected_target
+            ].iloc[0].to_dict()
 
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Kind", str(selected_meta.get("structure_kind", "")))
@@ -833,21 +891,28 @@ else:
             f"Per-structure results: `{selected_meta.get('output_directory', '')}`"
         )
 
-        target_result_dir = Path(str(selected_meta.get("output_directory", "")))
-        target_results_file = target_result_dir / "conductivity.json"
         target_result = {}
-        if target_results_file.exists():
-            try:
-                target_result = json.loads(
-                    target_results_file.read_text(encoding="utf-8")
+        if selected_is_reference:
+            target_result = dict(reference_record)
+            if reference_record.get("reference_store"):
+                st.caption(
+                    f"Persistent reference store: `{reference_record.get('reference_store')}`"
                 )
-            except Exception as exc:
-                st.warning(f"Could not read {target_results_file}: {exc}")
+        else:
+            target_result_dir = Path(str(selected_meta.get("output_directory", "")))
+            target_results_file = target_result_dir / "conductivity.json"
+            if target_results_file.exists():
+                try:
+                    target_result = json.loads(
+                        target_results_file.read_text(encoding="utf-8")
+                    )
+                except Exception as exc:
+                    st.warning(f"Could not read {target_results_file}: {exc}")
 
         if target_result:
             status = str(target_result.get("status", "unknown"))
             if status == "calculated":
-                st.success("Band-transport analysis completed for this structure.")
+                st.success("Band-transport analysis completed for this reference." if selected_is_reference else "Band-transport analysis completed for this structure.")
             elif status == "selected":
                 st.info("This structure was selected but no transport calculation was executed.")
             else:
@@ -910,6 +975,75 @@ else:
                     "Average σ/τ",
                     f"{float(row['sigma_over_tau_trace_average_S_per_cm_per_fs']):.3f} S cm⁻¹ fs⁻¹",
                 )
+
+                comparison_match = None
+                if selected_is_reference:
+                    comparison_match = {
+                        "reference_sigma_over_tau_trace_average_S_per_cm_per_fs": float(
+                            row["sigma_over_tau_trace_average_S_per_cm_per_fs"]
+                        ),
+                        "relative_to_reference": 1.0,
+                        "percent_change_vs_reference": 0.0,
+                        "reference_label": reference_record.get(
+                            "reference_label", "Reference"
+                        ),
+                    }
+                elif not comparison_df.empty:
+                    target_mask = (
+                        comparison_df["target_id"].astype(str) == selected_target_id
+                    )
+                    temp_mask = (
+                        pd.to_numeric(
+                            comparison_df["temperature_K"], errors="coerce"
+                        ).sub(float(row["temperature_K"])).abs()
+                        < 1.0e-9
+                    )
+                    excess_mask = (
+                        pd.to_numeric(
+                            comparison_df["excess_electrons_cm3"], errors="coerce"
+                        ).sub(float(row["excess_electrons_cm3"])).abs()
+                        < max(
+                            1.0,
+                            abs(float(row["excess_electrons_cm3"])) * 1.0e-12,
+                        )
+                    )
+                    matched = comparison_df[target_mask & temp_mask & excess_mask]
+                    if not matched.empty:
+                        comparison_match = matched.iloc[0].to_dict()
+
+                if comparison_match is not None:
+                    st.markdown("##### Relative to selected reference")
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric(
+                        "Reference",
+                        str(
+                            comparison_match.get(
+                                "reference_label",
+                                reference_record.get("reference_label", "Reference"),
+                            )
+                        ),
+                    )
+                    c2.metric(
+                        "Reference σ/τ",
+                        (
+                            f"{float(comparison_match['reference_sigma_over_tau_trace_average_S_per_cm_per_fs']):.3f} "
+                            "S cm⁻¹ fs⁻¹"
+                        ),
+                    )
+                    c3.metric(
+                        "Relative to reference",
+                        f"{float(comparison_match['relative_to_reference']):.4f}×",
+                    )
+                    c4.metric(
+                        "Change vs reference",
+                        f"{float(comparison_match['percent_change_vs_reference']):+.2f}%",
+                    )
+                elif comparison_enabled and reference_record.get("status") == "calculated":
+                    st.info(
+                        "No compatible reference comparison is available for this transport "
+                        "condition. Check that this structure and the reference were evaluated "
+                        "with the same conductivity settings."
+                    )
 
                 sigma_tau = row.get("sigma_over_tau_S_per_cm_per_fs")
                 if sigma_tau is not None:
