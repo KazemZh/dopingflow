@@ -665,6 +665,62 @@ def test_reference_only_rebuild_does_not_rerun_screened_targets(tmp_path, monkey
     assert rows[0]["target_id"] == "Ce2p5_Sb2p5/candidate_013"
     assert rows[0]["relative_to_reference"] == pytest.approx(282.0 / 250.0)
 
+def test_reference_only_rebuild_clears_stale_reference_warnings(tmp_path, monkeypatch):
+    source = tmp_path / "vacancy-selected"
+    source.mkdir()
+    raw = {
+        "structure": {"outdir": str(source)},
+        "conductivity": {
+            "enabled": True,
+            "source_root": str(source),
+            "temperatures_K": [300.0],
+            "excess_electrons_cm3": [0.0],
+            "interpolation_factor": 5,
+            "dos_points": 4000,
+            "comparison": {"enabled": True, "reference_target": "Sb5/candidate_003"},
+            "dft": {"kpts": [2, 2, 2], "execute": False},
+        },
+    }
+    cfg, section = c.parse_config(raw, tmp_path)
+    fingerprint, payload = c._transport_settings_fingerprint(section)
+    target_dir = cfg.output_dir / "structures" / "Ce2p5_Sb2p5" / "candidate_013"
+    target_dir.mkdir(parents=True)
+    (target_dir / "conductivity.json").write_text(
+        json.dumps({
+            "target_id": "Ce2p5_Sb2p5/candidate_013",
+            "status": "calculated",
+            "transport_settings_fingerprint": fingerprint,
+            "transport_settings": payload,
+            "rows": [{"temperature_K": 300.0, "excess_electrons_cm3": 0.0,
+                      "sigma_over_tau_trace_average_S_per_cm_per_fs": 282.0}],
+        })
+    )
+    cfg.output_dir.mkdir(parents=True, exist_ok=True)
+    (cfg.output_dir / "conductivity_results.json").write_text(json.dumps({
+        "warnings": [
+            "ATO 5% Sb reference unavailable: ValueError: Carrier-count integration did not converge; increase dos_points",
+            "ATO 5% Sb reference conductivity is not available yet.",
+            "unrelated warning",
+        ],
+        "results": [],
+    }))
+    reference = {
+        "target_id": "Sb5/candidate_003",
+        "kind": "vacancy-free",
+        "n_oxygen_vacancies": 0,
+        "status": "calculated",
+        "reference_label": "ATO 5% Sb",
+        "reference_sb_percent": 5.0,
+        "rows": [{"temperature_K": 300.0, "excess_electrons_cm3": 0.0,
+                  "sigma_over_tau_trace_average_S_per_cm_per_fs": 250.0}],
+    }
+    monkeypatch.setattr(c, "prepare_persistent_reference", lambda *args, **kwargs: (reference, []))
+
+    c.rebuild_reference_comparison(raw, tmp_path)
+    refreshed = json.loads((cfg.output_dir / "conductivity_results.json").read_text())
+    assert refreshed["warnings"] == ["unrelated warning"]
+    assert refreshed["reference"]["status"] == "calculated"
+
 def test_default_comparison_is_5pct_sb_benchmark(tmp_path):
     raw = {
         "conductivity": {
