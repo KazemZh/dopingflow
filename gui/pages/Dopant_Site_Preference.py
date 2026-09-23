@@ -307,9 +307,33 @@ with st.expander("Configuration & run controls", expanded=False):
                 min_value=1,
                 value=int(mc_saved.get("max_targets", 5)),
                 step=1,
+                help="Maximum number of independent compositions/targets included in the MC run.",
             )
         )
-        mc_backend = m8.selectbox(
+        mc_parallel_targets = int(
+            m8.number_input(
+                "Parallel MC targets",
+                min_value=1,
+                value=int(mc_saved.get("parallel_targets", 1)),
+                step=1,
+                help=(
+                    "Number of independent compositions run simultaneously. "
+                    "Each individual MC chain remains sequential."
+                ),
+            )
+        )
+        mc_omp_threads = int(
+            m9.number_input(
+                "CPU threads per target",
+                min_value=1,
+                value=int(mc_saved.get("omp_threads", 1)),
+                step=1,
+                help="OpenMP CPU threads available to each MLFF worker.",
+            )
+        )
+
+        m10, m11, m12 = st.columns(3)
+        mc_backend = m10.selectbox(
             "MC MLFF backend",
             ["mace", "grace", "m3gnet", "uma"],
             index=["mace", "grace", "m3gnet", "uma"].index(
@@ -320,25 +344,42 @@ with st.expander("Configuration & run controls", expanded=False):
             ),
             key="site_mc_backend",
         )
-        mc_model = m9.text_input("MC model", value=str(mc_saved.get("model", "small")))
-        m10, m11, m12 = st.columns(3)
-        mc_relax_best = m10.checkbox(
-            "Relax best MC occupation",
-            value=bool(mc_saved.get("relax_best", True)),
+        mc_model = m11.text_input(
+            "MC model",
+            value=str(mc_saved.get("model", "small")),
         )
-        mc_device = m11.selectbox(
+        mc_device = m12.selectbox(
             "MC device",
             ["cpu", "cuda"],
             index=1 if str(mc_saved.get("device", "cpu")).lower() == "cuda" else 0,
             key="site_mc_device",
         )
+
+        m13, m14 = st.columns(2)
+        mc_relax_best = m13.checkbox(
+            "Relax best MC occupation",
+            value=bool(mc_saved.get("relax_best", True)),
+        )
         mc_seed = int(
-            m12.number_input(
+            m14.number_input(
                 "MC random seed",
                 value=int(mc_saved.get("seed", 42)),
                 step=1,
             )
         )
+
+        effective_workers_preview = min(mc_parallel_targets, mc_max_targets)
+        if mc_device == "cpu":
+            st.info(
+                f"CPU plan: up to {effective_workers_preview} MC target(s) in parallel "
+                f"× {mc_omp_threads} thread(s) per target = "
+                f"up to {effective_workers_preview * mc_omp_threads} requested CPU threads."
+            )
+        elif mc_parallel_targets > 1:
+            st.warning(
+                "Parallel MC targets > 1 is currently supported only for device='cpu'. "
+                "Set Parallel MC targets to 1 for CUDA."
+            )
 
     target_include = _parse_csv(target_include_text)
     anion_species = _parse_csv(anion_species_text)
@@ -381,6 +422,7 @@ with st.expander("Configuration & run controls", expanded=False):
                 "execute": mc_execute,
                 "target_include": mc_target_include,
                 "max_targets": mc_max_targets,
+                "parallel_targets": mc_parallel_targets,
                 "temperature_K": mc_temperature,
                 "steps": mc_steps,
                 "burn_in": mc_burn,
@@ -389,6 +431,7 @@ with st.expander("Configuration & run controls", expanded=False):
                 "backend": mc_backend,
                 "model": mc_model.strip(),
                 "device": mc_device,
+                "omp_threads": mc_omp_threads,
                 "relax_best": mc_relax_best,
             },
         }
