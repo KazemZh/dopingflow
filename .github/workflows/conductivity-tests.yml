@@ -1,5 +1,18 @@
 name: Electronic conductivity tests
 on:
+  push:
+    branches:
+      - feature/dopant-site-preference
+    paths:
+      - 'src/dopingflow/conductivity.py'
+      - 'src/dopingflow/dft_cache.py'
+      - 'src/dopingflow/oxidation_dft*.py'
+      - 'src/dopingflow/cli.py'
+      - 'src/dopingflow/__main__.py'
+      - 'tests/test_conductivity.py'
+      - 'gui/pages/Electronic_Conductivity.py'
+      - 'pyproject.toml'
+      - '.github/workflows/conductivity-tests.yml'
   pull_request:
     paths:
       - 'src/dopingflow/conductivity.py'
