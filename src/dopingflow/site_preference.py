@@ -5,7 +5,9 @@ import fnmatch
 import json
 import logging
 import math
+import multiprocessing as mp
 import random
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass, field
 from itertools import combinations
@@ -49,6 +51,7 @@ class OrderingMCConfig:
     execute: bool = False
     target_include: tuple[str, ...] = ()
     max_targets: int = 5
+    parallel_targets: int = 1
     temperature_K: float = 800.0
     steps: int = 10000
     burn_in: int = 2000
@@ -271,6 +274,7 @@ def parse_site_preference_config(raw: dict[str, Any], root: Path) -> SitePrefere
         execute=bool(mc_section.get("execute", False)),
         target_include=_parse_string_list(mc_section.get("target_include")),
         max_targets=_positive_int(mc_section, "max_targets", 5),
+        parallel_targets=_positive_int(mc_section, "parallel_targets", 1),
         temperature_K=float(mc_section.get("temperature_K", 800.0)),
         steps=_positive_int(mc_section, "steps", 10000),
         burn_in=max(0, int(mc_section.get("burn_in", 2000))),
@@ -290,6 +294,11 @@ def parse_site_preference_config(raw: dict[str, Any], root: Path) -> SitePrefere
         raise ValueError("[site_preference.ordering_mc].burn_in must be smaller than steps")
     if ordering_mc.fmax <= 0:
         raise ValueError("[site_preference.ordering_mc].fmax must be > 0")
+    if ordering_mc.parallel_targets > 1 and ordering_mc.device != "cpu":
+        raise ValueError(
+            "[site_preference.ordering_mc].parallel_targets > 1 is supported only "
+            "with device = 'cpu'"
+        )
 
     return SitePreferenceConfig(
         root=root.resolve(),
@@ -1335,7 +1344,9 @@ def _build_calculator(settings: PairScanConfig | OrderingMCConfig, stage_name: s
         prepare_backend_runtime,
     )
 
-    check_backend_dependency(settings.backend, stage_name=stage_name)
+    # Configure CPU/GPU runtime before importing the heavy backend. This is
+    # especially important for spawned MC workers because OpenMP thread limits
+    # should be visible when PyTorch/MACE is first imported.
     prepare_backend_runtime(
         backend=settings.backend,
         device=settings.device,
@@ -1343,6 +1354,7 @@ def _build_calculator(settings: PairScanConfig | OrderingMCConfig, stage_name: s
         tf_threads=settings.tf_threads,
         omp_threads=settings.omp_threads,
     )
+    check_backend_dependency(settings.backend, stage_name=stage_name)
     return build_ase_calculator(
         backend=settings.backend,
         model=settings.model,
@@ -1639,6 +1651,227 @@ def _mc_sro_snapshot(
     return warren_cowley_records(target, structure, cfg)
 
 
+_ORDERING_MC_WORKER_CFG: SitePreferenceConfig | None = None
+_ORDERING_MC_WORKER_CALCULATOR: Any = None
+
+
+def _ordering_mc_worker_count(
+    settings: OrderingMCConfig,
+    n_targets: int,
+) -> int:
+    """Return the effective number of independent target workers."""
+    if n_targets <= 0:
+        return 0
+    return min(max(1, int(settings.parallel_targets)), int(n_targets))
+
+
+def _run_ordering_mc_target(
+    cfg: SitePreferenceConfig,
+    target: PreferenceTarget,
+    target_index: int,
+    calculator: Any,
+) -> dict[str, Any] | None:
+    """Run one sequential Markov chain for one composition/target.
+
+    A single chain is intentionally not split between processes. Parallelism is
+    introduced only across independent targets, preserving the original
+    Metropolis transition sequence for each target and its deterministic
+    seed = base_seed + target_index.
+    """
+    settings = cfg.ordering_mc
+    from dopingflow.ml_relaxation import (
+        relax_structure_with_calculator,
+        structure_energy_with_calculator,
+    )
+
+    k_b_eV_per_K = 8.617333262145e-5
+    beta = 1.0 / (k_b_eV_per_K * settings.temperature_K)
+    rng = random.Random(settings.seed + target_index)
+    symmetry_source = Path(
+        str(target.metadata.get("symmetry_path") or target.structure_path)
+    )
+    current = Structure.from_file(symmetry_source)
+    cations, _, _ = _indices_by_role(
+        current,
+        cfg.host_species,
+        cfg.anion_species,
+    )
+    movable = [
+        index
+        for index in cations
+        if current[index].species_string == cfg.host_species
+        or current[index].species_string not in cfg.anion_species
+    ]
+    distinct_species = {current[index].species_string for index in movable}
+    if len(distinct_species) < 2:
+        log.warning("Skipping MC for %s: only one cation species", target.target_id)
+        return None
+
+    current_energy = float(
+        structure_energy_with_calculator(current, calculator)
+    )
+    start_energy = current_energy
+    best = current.copy()
+    best_energy = current_energy
+    accepted = 0
+    attempted = 0
+    samples = 0
+    sro_accumulator: dict[tuple[str, int], list[float]] = defaultdict(list)
+    trace: list[dict[str, Any]] = []
+
+    for step in range(1, settings.steps + 1):
+        different = False
+        for _ in range(50):
+            i, j = rng.sample(movable, 2)
+            if current[i].species_string != current[j].species_string:
+                different = True
+                break
+        if not different:
+            break
+
+        proposal = current.copy()
+        species_i = proposal[i].species_string
+        species_j = proposal[j].species_string
+        proposal[i] = species_j
+        proposal[j] = species_i
+        proposal_energy = float(
+            structure_energy_with_calculator(proposal, calculator)
+        )
+        delta = proposal_energy - current_energy
+        accept = delta <= 0 or rng.random() < math.exp(-beta * delta)
+        attempted += 1
+        if accept:
+            current = proposal
+            current_energy = proposal_energy
+            accepted += 1
+            if current_energy < best_energy:
+                best = current.copy()
+                best_energy = current_energy
+
+        if step > settings.burn_in and (
+            (step - settings.burn_in) % settings.sample_interval == 0
+        ):
+            samples += 1
+            pseudo_target = PreferenceTarget(
+                target_id=target.target_id,
+                parent_id=target.parent_id,
+                kind=target.kind,
+                structure_path=target.structure_path,
+                energy_eV=current_energy,
+                energy_source="ordering_mc",
+            )
+            for row in _mc_sro_snapshot(current, pseudo_target, cfg):
+                sro_accumulator[(row["pair"], int(row["shell"]))].append(
+                    float(row["warren_cowley_alpha"])
+                )
+
+        if step == 1 or step % max(1, settings.sample_interval * 10) == 0:
+            trace.append(
+                {
+                    "step": step,
+                    "energy_eV": current_energy,
+                    "best_energy_eV": best_energy,
+                    "accepted": accepted,
+                    "attempted": attempted,
+                }
+            )
+
+    root = cfg.output_dir / "ordering_mc"
+    target_dir = root / target.safe_id
+    target_dir.mkdir(parents=True, exist_ok=True)
+    Poscar(best).write_file(target_dir / "POSCAR_best_mc")
+
+    best_relaxed_energy: float | None = None
+    if settings.relax_best:
+        relaxed, best_relaxed_energy, nsteps, final_force, converged = (
+            relax_structure_with_calculator(
+                best,
+                calculator=calculator,
+                optimizer_name=settings.optimizer,
+                fmax=settings.fmax,
+                max_steps=settings.max_steps,
+                relax_mode=settings.relax_mode,
+                cell_filter=settings.cell_filter,
+            )
+        )
+        Poscar(relaxed).write_file(target_dir / "POSCAR_best_relaxed")
+        relaxation = {
+            "energy_relaxed_eV": float(best_relaxed_energy),
+            "optimizer_steps": int(nsteps),
+            "final_fmax_eV_per_A": float(final_force),
+            "converged": bool(converged),
+        }
+    else:
+        relaxation = None
+
+    sro_rows = [
+        {
+            "target_id": target.target_id,
+            "pair": pair,
+            "shell": shell,
+            "temperature_K": settings.temperature_K,
+            "n_samples": len(values),
+            "mean_warren_cowley_alpha": sum(values) / len(values),
+            "median_warren_cowley_alpha": median(values),
+        }
+        for (pair, shell), values in sorted(sro_accumulator.items())
+        if values
+    ]
+    _write_csv(target_dir / "sro_temperature_average.csv", sro_rows)
+    _write_json(target_dir / "trace.json", trace)
+
+    summary = {
+        "target_id": target.target_id,
+        "temperature_K": settings.temperature_K,
+        "steps_requested": settings.steps,
+        "steps_attempted": attempted,
+        "accepted_moves": accepted,
+        "acceptance_fraction": accepted / attempted if attempted else 0.0,
+        "samples": samples,
+        "source_relaxed_energy_eV": target.energy_eV,
+        "mc_sampling_geometry": str(symmetry_source),
+        "mc_start_energy_eV": start_energy,
+        "best_mc_energy_eV": best_energy,
+        "relaxation": relaxation,
+        "sro_temperature_average": sro_rows,
+        "backend": settings.backend,
+        "model": settings.model,
+        "task": settings.task,
+        "parallel_targets": settings.parallel_targets,
+        "omp_threads_per_target": settings.omp_threads,
+    }
+    _write_json(target_dir / "summary.json", summary)
+    return summary
+
+
+def _init_ordering_mc_worker(cfg: SitePreferenceConfig) -> None:
+    """Initialize one spawned CPU worker and load one reusable MLFF calculator."""
+    global _ORDERING_MC_WORKER_CFG, _ORDERING_MC_WORKER_CALCULATOR
+    _ORDERING_MC_WORKER_CFG = cfg
+    _ORDERING_MC_WORKER_CALCULATOR = _build_calculator(
+        cfg.ordering_mc,
+        "Site-preference ordering MC",
+    )
+
+
+def _run_ordering_mc_worker(
+    payload: tuple[int, PreferenceTarget],
+) -> tuple[int, dict[str, Any] | None]:
+    """ProcessPool entry point; calculator is reused for tasks handled by this worker."""
+    if _ORDERING_MC_WORKER_CFG is None or _ORDERING_MC_WORKER_CALCULATOR is None:
+        raise RuntimeError("Ordering-MC worker was not initialized")
+    target_index, target = payload
+    return (
+        target_index,
+        _run_ordering_mc_target(
+            _ORDERING_MC_WORKER_CFG,
+            target,
+            target_index,
+            _ORDERING_MC_WORKER_CALCULATOR,
+        ),
+    )
+
+
 def run_ordering_mc(
     cfg: SitePreferenceConfig,
     targets: Sequence[PreferenceTarget],
@@ -1651,6 +1884,7 @@ def run_ordering_mc(
     if not selected:
         raise RuntimeError("Ordering MC selected no vacancy-free structures")
 
+    worker_count = _ordering_mc_worker_count(settings, len(selected))
     plan = [
         {
             "target_id": target.target_id,
@@ -1658,6 +1892,10 @@ def run_ordering_mc(
             "temperature_K": settings.temperature_K,
             "steps": settings.steps,
             "execute": settings.execute,
+            "parallel_targets_requested": settings.parallel_targets,
+            "parallel_targets_effective": worker_count,
+            "omp_threads_per_target": settings.omp_threads,
+            "requested_cpu_threads": worker_count * settings.omp_threads,
         }
         for target in selected
     ]
@@ -1666,162 +1904,67 @@ def run_ordering_mc(
     if not settings.execute:
         return plan
 
-    calculator = _build_calculator(settings, "Site-preference ordering MC")
-    from dopingflow.ml_relaxation import (
-        relax_structure_with_calculator,
-        structure_energy_with_calculator,
-    )
+    summaries_by_index: dict[int, dict[str, Any]] = {}
 
-    k_b_eV_per_K = 8.617333262145e-5
-    beta = 1.0 / (k_b_eV_per_K * settings.temperature_K)
-    summaries: list[dict[str, Any]] = []
-
-    for target_index, target in enumerate(selected):
-        rng = random.Random(settings.seed + target_index)
-        symmetry_source = Path(
-            str(target.metadata.get("symmetry_path") or target.structure_path)
+    if worker_count <= 1:
+        calculator = _build_calculator(
+            settings,
+            "Site-preference ordering MC",
         )
-        current = Structure.from_file(symmetry_source)
-        cations, _, _ = _indices_by_role(current, cfg.host_species, cfg.anion_species)
-        movable = [
-            index for index in cations
-            if current[index].species_string == cfg.host_species
-            or current[index].species_string not in cfg.anion_species
-        ]
-        distinct_species = {current[index].species_string for index in movable}
-        if len(distinct_species) < 2:
-            log.warning("Skipping MC for %s: only one cation species", target.target_id)
-            continue
-
-        current_energy = float(structure_energy_with_calculator(current, calculator))
-        start_energy = current_energy
-        best = current.copy()
-        best_energy = current_energy
-        accepted = 0
-        attempted = 0
-        samples = 0
-        sro_accumulator: dict[tuple[str, int], list[float]] = defaultdict(list)
-        trace: list[dict[str, Any]] = []
-
-        for step in range(1, settings.steps + 1):
-            different = False
-            for _ in range(50):
-                i, j = rng.sample(movable, 2)
-                if current[i].species_string != current[j].species_string:
-                    different = True
-                    break
-            if not different:
-                break
-
-            proposal = current.copy()
-            species_i = proposal[i].species_string
-            species_j = proposal[j].species_string
-            proposal[i] = species_j
-            proposal[j] = species_i
-            proposal_energy = float(structure_energy_with_calculator(proposal, calculator))
-            delta = proposal_energy - current_energy
-            accept = delta <= 0 or rng.random() < math.exp(-beta * delta)
-            attempted += 1
-            if accept:
-                current = proposal
-                current_energy = proposal_energy
-                accepted += 1
-                if current_energy < best_energy:
-                    best = current.copy()
-                    best_energy = current_energy
-
-            if step > settings.burn_in and (
-                (step - settings.burn_in) % settings.sample_interval == 0
-            ):
-                samples += 1
-                pseudo_target = PreferenceTarget(
-                    target_id=target.target_id,
-                    parent_id=target.parent_id,
-                    kind=target.kind,
-                    structure_path=target.structure_path,
-                    energy_eV=current_energy,
-                    energy_source="ordering_mc",
-                )
-                for row in _mc_sro_snapshot(current, pseudo_target, cfg):
-                    sro_accumulator[(row["pair"], int(row["shell"]))].append(
-                        float(row["warren_cowley_alpha"])
-                    )
-            if step == 1 or step % max(1, settings.sample_interval * 10) == 0:
-                trace.append(
-                    {
-                        "step": step,
-                        "energy_eV": current_energy,
-                        "best_energy_eV": best_energy,
-                        "accepted": accepted,
-                        "attempted": attempted,
-                    }
-                )
-
-        target_dir = root / target.safe_id
-        target_dir.mkdir(parents=True, exist_ok=True)
-        Poscar(best).write_file(target_dir / "POSCAR_best_mc")
-        best_relaxed_energy: float | None = None
-        if settings.relax_best:
-            relaxed, best_relaxed_energy, nsteps, final_force, converged = (
-                relax_structure_with_calculator(
-                    best,
-                    calculator=calculator,
-                    optimizer_name=settings.optimizer,
-                    fmax=settings.fmax,
-                    max_steps=settings.max_steps,
-                    relax_mode=settings.relax_mode,
-                    cell_filter=settings.cell_filter,
-                )
+        for target_index, target in enumerate(selected):
+            summary = _run_ordering_mc_target(
+                cfg,
+                target,
+                target_index,
+                calculator,
             )
-            Poscar(relaxed).write_file(target_dir / "POSCAR_best_relaxed")
-            relaxation = {
-                "energy_relaxed_eV": float(best_relaxed_energy),
-                "optimizer_steps": int(nsteps),
-                "final_fmax_eV_per_A": float(final_force),
-                "converged": bool(converged),
+            if summary is not None:
+                summaries_by_index[target_index] = summary
+    else:
+        log.info(
+            "Ordering MC: running %d independent targets with %d CPU workers "
+            "and %d OpenMP thread(s) per worker (up to %d CPU threads requested)",
+            len(selected),
+            worker_count,
+            settings.omp_threads,
+            worker_count * settings.omp_threads,
+        )
+        # Spawn instead of fork: PyTorch/MACE thread pools and model state are
+        # initialized cleanly inside each worker. Each worker loads one model and
+        # reuses it for any targets assigned to that process.
+        context = mp.get_context("spawn")
+        with ProcessPoolExecutor(
+            max_workers=worker_count,
+            mp_context=context,
+            initializer=_init_ordering_mc_worker,
+            initargs=(cfg,),
+        ) as executor:
+            futures = {
+                executor.submit(
+                    _run_ordering_mc_worker,
+                    (target_index, target),
+                ): (target_index, target)
+                for target_index, target in enumerate(selected)
             }
-        else:
-            relaxation = None
+            for future in as_completed(futures):
+                target_index, target = futures[future]
+                try:
+                    result_index, summary = future.result()
+                except Exception as exc:
+                    raise RuntimeError(
+                        "Parallel ordering MC failed for "
+                        f"{target.target_id}: {type(exc).__name__}: {exc}"
+                    ) from exc
+                if summary is not None:
+                    summaries_by_index[result_index] = summary
 
-        sro_rows = [
-            {
-                "target_id": target.target_id,
-                "pair": pair,
-                "shell": shell,
-                "temperature_K": settings.temperature_K,
-                "n_samples": len(values),
-                "mean_warren_cowley_alpha": sum(values) / len(values),
-                "median_warren_cowley_alpha": median(values),
-            }
-            for (pair, shell), values in sorted(sro_accumulator.items())
-            if values
-        ]
-        _write_csv(target_dir / "sro_temperature_average.csv", sro_rows)
-        _write_json(target_dir / "trace.json", trace)
-        summary = {
-            "target_id": target.target_id,
-            "temperature_K": settings.temperature_K,
-            "steps_requested": settings.steps,
-            "steps_attempted": attempted,
-            "accepted_moves": accepted,
-            "acceptance_fraction": accepted / attempted if attempted else 0.0,
-            "samples": samples,
-            "source_relaxed_energy_eV": target.energy_eV,
-            "mc_sampling_geometry": str(symmetry_source),
-            "mc_start_energy_eV": start_energy,
-            "best_mc_energy_eV": best_energy,
-            "relaxation": relaxation,
-            "sro_temperature_average": sro_rows,
-            "backend": settings.backend,
-            "model": settings.model,
-            "task": settings.task,
-        }
-        _write_json(target_dir / "summary.json", summary)
-        summaries.append(summary)
-
+    summaries = [
+        summaries_by_index[index]
+        for index in range(len(selected))
+        if index in summaries_by_index
+    ]
     _write_json(root / "ordering_mc_summary.json", summaries)
     return summaries
-
 
 def run_site_preference(
     raw: dict[str, Any],
