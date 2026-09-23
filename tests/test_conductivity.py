@@ -537,6 +537,33 @@ def test_reference_candidate_directory_and_trailing_glob_resolve_relaxed_poscar(
     assert resolved_glob == path.resolve()
 
 
+def test_reference_target_selector_accepts_absolute_candidate_glob(tmp_path):
+    target_root = tmp_path / "vacancy-selected"
+    parent(target_root, "codoped", -10)
+    ref_root = tmp_path / "complete"
+    reference_path = composition_parent(ref_root, "Sb5", "candidate_003", -20)
+    pasted = str(reference_path.parent.parent) + "/*"
+
+    raw = {
+        "structure": {"outdir": str(target_root)},
+        "conductivity": {
+            "enabled": True,
+            "source_root": str(target_root),
+            "comparison": {
+                "enabled": True,
+                "reference_target": pasted,
+                "reference_label": "ATO 5% Sb",
+            },
+        },
+    }
+    cfg, settings = c.parse_config(raw, tmp_path)
+    _, candidates = c.discover_reference_candidates(
+        raw, tmp_path, cfg, settings["comparison"]
+    )
+    assert len(candidates) == 1
+    assert candidates[0].target_id == "Sb5/candidate_003"
+    assert candidates[0].structure_path == reference_path.resolve()
+
 def test_reference_source_root_accepts_candidate_directory_hint(tmp_path):
     target_root = tmp_path / "vacancy-selected"
     parent(target_root, "codoped", -10)
