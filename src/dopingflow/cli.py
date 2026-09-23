@@ -16,7 +16,7 @@ from dopingflow.formation_oxygen_extensions import run_formation_from_toml
 from dopingflow.generate import run_generate_from_toml
 from dopingflow.logging import setup_logging
 from dopingflow.oxidation import run_oxidation_from_toml
-from dopingflow.conductivity import run_conductivity_from_toml
+from dopingflow.conductivity import rebuild_reference_comparison_from_toml, run_conductivity_from_toml
 from dopingflow.phase_diagram_convergence_extensions import run_phase_diagram_from_toml
 from dopingflow.refs_oxygen_extensions import run_refs_build_from_toml
 from dopingflow.relax import run_relax_from_toml
@@ -227,10 +227,21 @@ def oxidation_cmd(
 def conductivity_cmd(
     config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview selection without DFT or transport"),
+    reference_only: bool = typer.Option(
+        False,
+        "--reference-only",
+        help="Calculate/reuse only the ATO reference and rebuild comparison tables from saved target results",
+    ),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
     """Step 12: Calculate band conductivity/tau on oxidation-style selected targets."""
     _init(config, verbose)
+    if reference_only:
+        if dry_run:
+            raise typer.BadParameter("--reference-only cannot be combined with --dry-run")
+        output = rebuild_reference_comparison_from_toml(config)
+        typer.echo(f"Wrote ATO comparison results: {output}")
+        return
     output = run_conductivity_from_toml(config, dry_run=dry_run)
     if output is None:
         typer.echo("Conductivity disabled; set [conductivity].enabled=true")
