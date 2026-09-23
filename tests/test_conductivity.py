@@ -756,16 +756,39 @@ def test_reference_only_rebuild_clears_stale_reference_warnings(tmp_path, monkey
     assert refreshed["warnings"] == ["unrelated warning"]
     assert refreshed["reference"]["status"] == "calculated"
 
-def test_default_comparison_is_5pct_sb_benchmark(tmp_path):
+def test_default_comparison_is_material_agnostic(tmp_path):
     raw = {
         "conductivity": {
-            "comparison": {"enabled": True},
+            "comparison": {
+                "enabled": True,
+                "reference_target": "host/reference",
+            },
         }
     }
     _, settings = c.parse_config(raw, tmp_path)
     comparison = settings["comparison"]
-    assert comparison["reference_target"] == "Sb5/*"
+    assert comparison["reference_target"] == "host/reference"
+    assert comparison["reference_label"] == "Reference"
+    assert comparison["reference_composition"] == ""
+    assert comparison["basis"] == "reference-benchmark"
+
+
+def test_legacy_ato_reference_metadata_is_migrated(tmp_path):
+    raw = {
+        "conductivity": {
+            "comparison": {
+                "enabled": True,
+                "reference_target": "Sb5/candidate_003",
+                "reference_label": "ATO 5% Sb",
+                "reference_sb_percent": 5.0,
+                "basis": "ato-5pct-sb-benchmark",
+            },
+        }
+    }
+    _, settings = c.parse_config(raw, tmp_path)
+    comparison = settings["comparison"]
     assert comparison["reference_label"] == "ATO 5% Sb"
+    assert comparison["reference_composition"] == "5% Sb"
     assert comparison["reference_sb_percent"] == pytest.approx(5.0)
     assert comparison["basis"] == "ato-5pct-sb-benchmark"
 
