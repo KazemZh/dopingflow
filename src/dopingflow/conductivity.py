@@ -713,9 +713,11 @@ def prepare_persistent_reference(raw, root, cfg, section, *, dry_run=False):
         record["persistent_reference_reused"] = True
         record["reference_store"] = str(store)
         record["reference_label"] = comparison.get("reference_label", "Reference")
-        record["reference_sb_percent"] = comparison.get("reference_sb_percent", 5.0)
+        record["reference_composition"] = comparison.get("reference_composition", "")
+        if comparison.get("reference_sb_percent") is not None:
+            record["reference_sb_percent"] = comparison.get("reference_sb_percent")
         record["comparison_basis"] = comparison.get(
-            "basis", "ato-5pct-sb-benchmark"
+            "basis", "reference-benchmark"
         )
         record["reference_fingerprint"] = fingerprint
         record["transport_settings_fingerprint"] = fingerprint_payload[
@@ -921,12 +923,14 @@ def rebuild_reference_comparison(raw, root):
         )
         reference_record = {
             "reference_label": comparison.get("reference_label", "Reference"),
-            "reference_sb_percent": comparison.get("reference_sb_percent", 5.0),
+            "reference_composition": comparison.get("reference_composition", ""),
             "comparison_basis": comparison.get("basis", "reference-benchmark"),
             "status": "unavailable",
             "error": message,
             "persistent_reference_reused": False,
         }
+        if comparison.get("reference_sb_percent") is not None:
+            reference_record["reference_sb_percent"] = comparison.get("reference_sb_percent")
         _json_write(reference_summary_path, reference_record)
         raise
 
@@ -957,7 +961,7 @@ def rebuild_reference_comparison(raw, root):
         existing_warnings = payload.get("warnings", []) or []
         # A successful reference-only rebuild supersedes reference-unavailable
         # diagnostics left behind by an earlier failed attempt. Preserve unrelated
-        # target warnings, but remove stale ATO-reference failures so the GUI reflects
+        # target warnings, but remove stale reference failures so the GUI reflects
         # the current calculated reference state.
         stale_reference_prefixes = (
             "Conductivity reference unavailable:",
