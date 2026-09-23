@@ -254,9 +254,9 @@ with st.expander("ATO reference comparison", expanded=True):
         value=str(comparison.get("reference_source_root", "")),
         disabled=not comparison_enabled,
         help=(
-            "Directory containing the pure ATO reference candidates. Leave empty to search "
-            "[structure].outdir first and then the conductivity source root. Set it explicitly "
-            "when the 5% Sb ATO reference lives in another structure tree."
+            "Normally this is the structure-tree root containing Sb5/. Leave empty to search "
+            "[structure].outdir first and then the conductivity source root. For convenience, "
+            "a candidate directory such as .../Sb5/candidate_003 or .../candidate_003/* is also accepted."
         ),
     )
     reference_target = st.text_input(
@@ -273,8 +273,9 @@ with st.expander("ATO reference comparison", expanded=True):
         value=str(comparison.get("reference_structure_path", "")),
         disabled=not comparison_enabled,
         help=(
-            "Optional direct POSCAR/CIF path. When supplied, this bypasses reference-target "
-            "discovery and is useful when the ATO structure lives outside a DopingFlow structure tree."
+            "Optional direct POSCAR/CIF path or candidate directory. Paths such as "
+            ".../Sb5/candidate_003, .../Sb5/candidate_003/*, and "
+            ".../Sb5/candidate_003/02_relax/POSCAR are accepted; the relaxed POSCAR is preferred automatically."
         ),
     )
 
@@ -593,8 +594,9 @@ if parsed_cfg is not None and validated is not None:
 contains_dft_execution = bool(dft.get("execute", False))
 if contains_dft_execution and not target_include:
     st.warning(
-        "DFT execution is enabled but no target selector is active. The calculation can run "
-        "for every discovered structure. For an expensive smoke test, select one exact target first."
+        "DFT execution is enabled but no target selector is active. A FULL conductivity run can "
+        "launch calculations for every discovered structure. The ATO comparison-only action below "
+        "does not rerun screened targets."
     )
 
 confirm_dft = True
@@ -609,7 +611,7 @@ if contains_dft_execution:
         value=False,
     )
 
-save_col, run_col = st.columns(2)
+save_col, reference_col, run_col = st.columns(3)
 with save_col:
     if st.button(
         "Save conductivity settings",
@@ -621,6 +623,42 @@ with save_col:
         st.success(f"Saved {config_path}")
 
 command = ["dopingflow", "conductivity", "-c", str(config_path)]
+reference_command = [*command, "--reference-only"]
+
+reference_disabled = (
+    (not enabled)
+    or (not comparison_enabled)
+    or validation_error is not None
+    or (contains_dft_execution and not confirm_dft)
+)
+with reference_col:
+    if st.button(
+        "Build/update ATO comparison only",
+        use_container_width=True,
+        disabled=reference_disabled,
+        help=(
+            "Calculate or reuse only the 5% Sb ATO reference and rebuild the comparison "
+            "from saved conductivity results. Existing co-dopant calculations are not rerun."
+        ),
+    ):
+        config_path.write_text(toml.dumps(resolved_cfg), encoding="utf-8")
+        with st.spinner("Preparing ATO reference and rebuilding comparison..."):
+            completed = subprocess.run(
+                reference_command,
+                cwd=str(project_root),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        st.session_state["conductivity_last_stdout"] = completed.stdout
+        st.session_state["conductivity_last_stderr"] = completed.stderr
+        st.session_state["conductivity_last_returncode"] = completed.returncode
+        if completed.returncode == 0:
+            st.success("ATO reference/comparison updated without rerunning screened targets.")
+        else:
+            st.error(
+                f"ATO reference/comparison exited with return code {completed.returncode}."
+            )
 
 with run_col:
     run_disabled = (
@@ -629,7 +667,7 @@ with run_col:
         or (contains_dft_execution and not confirm_dft)
     )
     if st.button(
-        "Run conductivity analysis",
+        "Run full conductivity analysis",
         use_container_width=True,
         disabled=run_disabled,
     ):
@@ -653,9 +691,14 @@ with run_col:
             )
 
 if not enabled:
-    st.caption("Enable **conductivity stage** above to activate Run conductivity analysis.")
+    st.caption("Enable **conductivity stage** above to activate the run actions.")
+elif not comparison_enabled:
+    st.caption("Enable the **ATO reference comparison** to activate the comparison-only action.")
 
+st.caption("Full analysis command:")
 st.code(" ".join(shlex.quote(token) for token in command), language="bash")
+st.caption("ATO comparison-only command (does not rerun screened targets):")
+st.code(" ".join(shlex.quote(token) for token in reference_command), language="bash")
 if "conductivity_last_returncode" in st.session_state:
     with st.expander("Last run output", expanded=True):
         if st.session_state.get("conductivity_last_stdout"):
