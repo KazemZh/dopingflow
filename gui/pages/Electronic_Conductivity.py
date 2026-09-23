@@ -1020,13 +1020,13 @@ if transport_csv.exists():
     )
 if comparison_csv.exists():
     st.download_button(
-        "Download ATO comparison CSV",
+        "Download reference comparison CSV",
         comparison_csv.read_bytes(),
         file_name=comparison_csv.name,
     )
 if comparison_json.exists():
     st.download_button(
-        "Download ATO comparison JSON",
+        "Download reference comparison JSON",
         comparison_json.read_bytes(),
         file_name=comparison_json.name,
     )
