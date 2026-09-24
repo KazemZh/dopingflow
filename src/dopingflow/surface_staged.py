@@ -16,6 +16,11 @@ from pymatgen.core.surface import SlabGenerator, get_symmetrically_distinct_mill
 from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.io.vasp import Poscar
 
+from dopingflow.oxidation import (
+    StructureTarget,
+    discover_oxidation_targets,
+    parse_oxidation_config,
+)
 from dopingflow.ml_backends import (
     build_ase_calculator,
     check_backend_dependency,
@@ -47,23 +52,36 @@ _VALID_ZONES = {"surface", "subsurface", "bulk"}
 
 
 def run_surface_scan_from_toml(config_path: Path) -> Path | None:
+    config_path = Path(config_path).expanduser().resolve()
     with open(config_path, "rb") as handle:
-        return run_surface_scan(tomllib.load(handle))
+        return run_surface_scan(
+            tomllib.load(handle),
+            project_root=config_path.parent,
+        )
 
 
 def run_surface_refine_from_toml(config_path: Path) -> Path | None:
+    config_path = Path(config_path).expanduser().resolve()
     with open(config_path, "rb") as handle:
-        return run_surface_refine(tomllib.load(handle))
+        return run_surface_refine(
+            tomllib.load(handle),
+            project_root=config_path.parent,
+        )
 
 
 def run_surface_workflow_from_toml(config_path: Path) -> Path | None:
+    config_path = Path(config_path).expanduser().resolve()
     with open(config_path, "rb") as handle:
         config = tomllib.load(handle)
-    out = run_surface_scan(config)
+    out = run_surface_scan(config, project_root=config_path.parent)
     if out is None:
         return None
     cfg = _parse_config(config)
-    return run_surface_refine(config) if cfg["refine"]["enabled"] else out
+    return (
+        run_surface_refine(config, project_root=config_path.parent)
+        if cfg["refine"]["enabled"]
+        else out
+    )
 
 
 def _calculator_cfg(
@@ -98,7 +116,21 @@ def _calculator_cfg(
 
 def _parse_config(config: Mapping[str, Any]) -> Dict[str, Any]:
     surface = dict(config.get("surface", {}) or {})
+    structure_section = dict(config.get("structure", {}) or {})
+    oxidation_section = dict(config.get("oxidation", {}) or {})
+    conductivity_section = dict(config.get("conductivity", {}) or {})
+    source_root_default = (
+        str(surface.get("source_root", "")).strip()
+        or str(conductivity_section.get("source_root", "")).strip()
+        or str(oxidation_section.get("source_root", "")).strip()
+        or str(structure_section.get("outdir", "random_structures")).strip()
+    )
     defaults = {
+        "source_root": source_root_default,
+        "include_vacancy_free": True,
+        "include_oxygen_vacancies": False,
+        "target_include": [],
+        "mapping_tolerance": 1.2,
         "enabled": False,
         "source_summary": "results_database.csv",
         "composition_tag": None,
@@ -210,6 +242,24 @@ def _parse_config(config: Mapping[str, Any]) -> Dict[str, Any]:
     surface["miller_list"] = [
         tuple(int(x) for x in miller) for miller in surface["miller_list"]
     ]
+    target_include = surface.get("target_include", [])
+    if isinstance(target_include, str):
+        target_include = [
+            item.strip() for item in target_include.split(",") if item.strip()
+        ]
+    elif isinstance(target_include, (list, tuple)):
+        target_include = [
+            str(item).strip() for item in target_include if str(item).strip()
+        ]
+    else:
+        raise ValueError("[surface].target_include must be an array or comma-separated string")
+    surface["target_include"] = list(dict.fromkeys(target_include))
+    if not bool(surface["include_vacancy_free"]) and not bool(
+        surface["include_oxygen_vacancies"]
+    ):
+        raise ValueError(
+            "[surface] Enable at least one of include_vacancy_free or include_oxygen_vacancies"
+        )
     return surface
 
 
@@ -218,21 +268,75 @@ def parse_surface_config(config: Mapping[str, Any]) -> Dict[str, Any]:
     return _parse_config(config)
 
 
+def _resolve_project_path(project_root: Path | str, value: str | Path) -> Path:
+    root = Path(project_root).expanduser().resolve()
+    path = Path(value).expanduser()
+    return path.resolve() if path.is_absolute() else (root / path).resolve()
+
+
+def _surface_target_row(target: StructureTarget) -> Dict[str, Any]:
+    parent_parts = target.parent_id.replace("\\", "/").split("/")
+    composition = str(target.metadata.get("composition", "")).strip()
+    candidate = str(target.metadata.get("candidate", "")).strip()
+    if not composition and parent_parts:
+        composition = parent_parts[0]
+    if not candidate and len(parent_parts) > 1:
+        candidate = parent_parts[1]
+    return {
+        "target_id": target.target_id,
+        "safe_target_id": target.safe_id,
+        "parent_id": target.parent_id,
+        "structure_kind": target.kind,
+        "n_oxygen_vacancies": (
+            target.n_vacancies if target.vacancy_species == "O" else 0
+        ),
+        "vacancy_species": target.vacancy_species or "",
+        "structure_path": str(target.structure_path),
+        "composition_tag": composition or target.parent_id,
+        "candidate": candidate or target.safe_id,
+        "candidate_path": str(
+            target.metadata.get("source_candidate_dir", target.structure_path.parent)
+        ),
+        "configuration_id": str(target.metadata.get("configuration_id", "")),
+    }
+
+
+def discover_surface_targets(
+    config: Mapping[str, Any],
+    project_root: Path | str = Path("."),
+) -> tuple[list[StructureTarget], list[str]]:
+    """Discover surface source structures with conductivity-style semantics."""
+    cfg = _parse_config(config)
+    root = Path(project_root).expanduser().resolve()
+    selection = {
+        "enabled": True,
+        "strategy": "structural",
+        "source_root": cfg["source_root"],
+        "output_dir": ".surface_target_preview",
+        "include_vacancy_free": bool(cfg["include_vacancy_free"]),
+        "include_oxygen_vacancies": bool(cfg["include_oxygen_vacancies"]),
+        "target_include": list(cfg["target_include"]),
+        "mapping_tolerance": float(cfg["mapping_tolerance"]),
+    }
+    oxidation_cfg = parse_oxidation_config(
+        {
+            "structure": dict(config.get("structure", {}) or {}),
+            "oxidation": selection,
+        },
+        root,
+    )
+    return discover_oxidation_targets(oxidation_cfg)
+
+
 def preview_surface_candidates(
     config: Mapping[str, Any],
     project_root: Path | str = Path("."),
 ) -> pd.DataFrame:
-    """Return the bulk database rows selected by the surface configuration."""
-    cfg = _parse_config(config)
-    root = Path(project_root).expanduser().resolve()
-    summary = Path(str(cfg["source_summary"])).expanduser()
-    if not summary.is_absolute():
-        summary = (root / summary).resolve()
-    if not summary.exists():
-        raise FileNotFoundError(f"[surface] Summary file not found: {summary}")
-    database = pd.read_csv(summary)
-    _validate_database_columns(database)
-    return _select_candidates(database, cfg).copy()
+    """Return conductivity-style discovered targets as a preview table."""
+    targets, warnings = discover_surface_targets(config, project_root)
+    frame = pd.DataFrame([_surface_target_row(target) for target in targets])
+    frame.attrs["warnings"] = warnings
+    return frame
 
 
 def _millers(
@@ -649,10 +753,21 @@ def _base_record(
             )
         )
     )
+    target_id = str(
+        row.get("target_id")
+        or f"{row.get('composition_tag', '')}/{row.get('candidate', '')}"
+    ).strip("/")
+    parent_id = str(row.get("parent_id") or target_id)
     return {
-        "composition_tag": str(row["composition_tag"]),
-        "candidate": str(row["candidate"]),
-        "candidate_path": str(row["candidate_path"]),
+        "target_id": target_id,
+        "parent_id": parent_id,
+        "structure_kind": str(row.get("structure_kind", "vacancy-free")),
+        "n_oxygen_vacancies": int(row.get("n_oxygen_vacancies", 0) or 0),
+        "vacancy_species": str(row.get("vacancy_species", "") or ""),
+        "composition_tag": str(row.get("composition_tag", "")),
+        "candidate": str(row.get("candidate", "")),
+        "candidate_path": str(row.get("candidate_path", "")),
+        "source_structure_path": str(bulk_path),
         "bulk_structure_path": str(bulk_path),
         "E_form_norm": row.get("E_form_norm"),
         "bandgap_eV": row.get("bandgap_eV"),
@@ -689,9 +804,23 @@ def _run_candidate(
     calculator: Any,
     outdir: Path,
 ) -> List[Dict[str, Any]]:
-    bulk_path = _resolve_bulk_structure_path(Path(str(row["candidate_path"])))
+    structure_path = str(row.get("structure_path", "") or "").strip()
+    if structure_path:
+        bulk_path = Path(structure_path).expanduser().resolve()
+    else:
+        bulk_path = _resolve_bulk_structure_path(Path(str(row["candidate_path"])))
     bulk = Structure.from_file(bulk_path)
-    candidate_dir = outdir / str(row["composition_tag"]) / str(row["candidate"])
+    target_id = str(
+        row.get("target_id")
+        or f"{row.get('composition_tag', '')}/{row.get('candidate', '')}"
+    ).strip("/")
+    safe_target_id = str(row.get("safe_target_id", "") or "").strip()
+    if not safe_target_id:
+        safe_target_id = target_id.replace("\\", "__").replace("/", "__")
+        safe_target_id = "".join(
+            ch if ch.isalnum() or ch in "._-" else "_" for ch in safe_target_id
+        )
+    candidate_dir = outdir / "targets" / safe_target_id
 
     bulk_energy = _bulk_energy(
         bulk,
@@ -806,6 +935,12 @@ def _run_candidate(
     return records
 
 
+def _target_group_columns(df: pd.DataFrame) -> list[str]:
+    if "target_id" in df.columns:
+        return ["target_id"]
+    return ["composition_tag", "candidate"]
+
+
 def _all_bulk_like_zones(value: Any) -> bool:
     try:
         zones = json.loads(str(value or "{}"))
@@ -840,8 +975,7 @@ def _add_segregation_metrics(df: pd.DataFrame, prefix: str) -> pd.DataFrame:
         return out
 
     group_cols = [
-        "composition_tag",
-        "candidate",
+        *_target_group_columns(out),
         "miller_h",
         "miller_k",
         "miller_l",
@@ -888,7 +1022,8 @@ def _rank(df: pd.DataFrame, prefix: str) -> pd.DataFrame:
     out[f"{prefix}_rank_overall"] = pd.NA
     out[f"{prefix}_rank_within_hkl"] = pd.NA
 
-    for _, group in out.groupby(["composition_tag", "candidate"], sort=False):
+    target_group_cols = _target_group_columns(out)
+    for _, group in out.groupby(target_group_cols, sort=False):
         good = group[group[f"{prefix}_rankable"]].sort_values(gamma)
         out.loc[good.index, f"{prefix}_rank_overall"] = range(
             1,
@@ -897,8 +1032,7 @@ def _rank(df: pd.DataFrame, prefix: str) -> pd.DataFrame:
 
     for _, group in out.groupby(
         [
-            "composition_tag",
-            "candidate",
+            *_target_group_columns(out),
             "miller_h",
             "miller_k",
             "miller_l",
@@ -920,7 +1054,7 @@ def _topk(
     top_k: int,
 ) -> pd.DataFrame:
     rows = []
-    for _, group in df.groupby(["composition_tag", "candidate"], sort=False):
+    for _, group in df.groupby(_target_group_columns(df), sort=False):
         good = group[group[f"{prefix}_rankable"].fillna(False)].copy()
         if not good.empty:
             rows.append(
@@ -950,8 +1084,7 @@ def _screen_shortlist_with_segregation_references(
 
     chosen = set(selected.index.tolist())
     group_cols = [
-        "composition_tag",
-        "candidate",
+        *_target_group_columns(df),
         "miller_h",
         "miller_k",
         "miller_l",
@@ -983,31 +1116,29 @@ def _screen_shortlist_with_segregation_references(
     rank_values = pd.to_numeric(out.get("screen_rank_overall"), errors="coerce")
     out["__sort_rank"] = rank_values.fillna(float("inf"))
     out = out.sort_values(
-        ["composition_tag", "candidate", "__sort_rank", "screen_selection_reason"],
+        [*_target_group_columns(out), "__sort_rank", "screen_selection_reason"],
         kind="stable",
     ).drop(columns=["__sort_rank"])
     return out
 
 
-def run_surface_scan(config: Mapping[str, Any]) -> Path | None:
+def run_surface_scan(
+    config: Mapping[str, Any],
+    project_root: Path | str = Path("."),
+) -> Path | None:
     cfg = _parse_config(config)
     if not cfg["enabled"]:
         print("[surface] Stage disabled. Skipping.")
         return None
 
-    summary_path = Path(cfg["source_summary"])
-    if not summary_path.exists():
-        raise FileNotFoundError(
-            f"[surface] Summary file not found: {summary_path}"
-        )
-
-    database = pd.read_csv(summary_path)
-    _validate_database_columns(database)
-    selected = _select_candidates(database, cfg)
+    targets, warnings = discover_surface_targets(config, project_root)
+    for warning in warnings:
+        print(f"[surface] Warning: {warning}")
+    selected = pd.DataFrame([_surface_target_row(target) for target in targets])
     if selected.empty:
-        raise RuntimeError("[surface] No bulk candidates selected")
+        raise RuntimeError("[surface] No source structures selected")
 
-    outdir = Path(cfg["outdir"])
+    outdir = _resolve_project_path(project_root, str(cfg["outdir"]))
     outdir.mkdir(parents=True, exist_ok=True)
     calculator = _prepare_calculator(cfg["screen"], "Surface screen")
 
@@ -1041,13 +1172,16 @@ def run_surface_scan(config: Mapping[str, Any]) -> Path | None:
     return summary
 
 
-def run_surface_refine(config: Mapping[str, Any]) -> Path | None:
+def run_surface_refine(
+    config: Mapping[str, Any],
+    project_root: Path | str = Path("."),
+) -> Path | None:
     cfg = _parse_config(config)
     if not cfg["enabled"] or not cfg["refine"]["enabled"]:
         print("[surface] Refinement disabled. Skipping.")
         return None
 
-    outdir = Path(cfg["outdir"])
+    outdir = _resolve_project_path(project_root, str(cfg["outdir"]))
     selected_path = outdir / str(cfg["screen_selected_csv"])
     if not selected_path.exists():
         raise FileNotFoundError(
@@ -1056,12 +1190,15 @@ def run_surface_refine(config: Mapping[str, Any]) -> Path | None:
 
     selected = pd.read_csv(selected_path)
     calculator = _prepare_calculator(cfg["refine"], "Surface refine")
-    bulk_cache: Dict[Tuple[str, str], float | None] = {}
+    bulk_cache: Dict[str, float | None] = {}
     records: List[Dict[str, Any]] = []
 
     for _, row in selected.iterrows():
         rec = row.to_dict()
-        key = (str(row["composition_tag"]), str(row["candidate"]))
+        key = str(
+            row.get("target_id")
+            or f"{row.get('composition_tag', '')}/{row.get('candidate', '')}"
+        )
         bulk_path = Path(str(row["bulk_structure_path"]))
         bulk = Structure.from_file(bulk_path)
 
@@ -1150,6 +1287,7 @@ def run_surface_refine(config: Mapping[str, Any]) -> Path | None:
 __all__ = [
     "DEFAULT_MILLERS",
     "parse_surface_config",
+    "discover_surface_targets",
     "preview_surface_candidates",
     "run_surface_scan",
     "run_surface_scan_from_toml",
