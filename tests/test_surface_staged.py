@@ -20,6 +20,10 @@ def test_surface_defaults_use_low_index_sno2_facets_and_mace_r2scan_refine() -> 
     cfg = _parse_config({"surface": {"enabled": True}})
 
     assert cfg["miller_list"] == DEFAULT_MILLERS
+    assert cfg["source_root"] == "random_structures"
+    assert cfg["include_vacancy_free"] is True
+    assert cfg["include_oxygen_vacancies"] is False
+    assert cfg["target_include"] == []
     assert cfg["screen"]["backend"] == "grace"
     assert cfg["screen"]["model"] == "GRACE-1L-OMAT"
     assert cfg["refine"]["backend"] == "mace"
@@ -256,3 +260,48 @@ def test_screen_shortlist_keeps_bulk_like_segregation_reference() -> None:
     reasons = dict(zip(selected["variant_label"], selected["screen_selection_reason"]))
     assert reasons["Sb-surface__Ti-bulk"] == "top_k"
     assert reasons["Sb-bulk__Ti-bulk"] == "segregation_reference"
+
+
+
+def test_surface_requires_at_least_one_structure_kind() -> None:
+    with pytest.raises(ValueError, match="include_vacancy_free"):
+        _parse_config(
+            {
+                "surface": {
+                    "enabled": True,
+                    "include_vacancy_free": False,
+                    "include_oxygen_vacancies": False,
+                }
+            }
+        )
+
+
+def test_surface_ranking_is_independent_for_each_source_target() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "target_id": "Sb5_Ti5/candidate_001",
+                "composition_tag": "Sb5_Ti5",
+                "candidate": "candidate_001",
+                "miller_h": 1,
+                "miller_k": 1,
+                "miller_l": 0,
+                "screen_surface_energy_status": "ok",
+                "screen_surface_energy_J_m2": 1.2,
+            },
+            {
+                "target_id": "Sb5_Ti5/candidate_001/V_O_01/config_0001",
+                "composition_tag": "Sb5_Ti5",
+                "candidate": "candidate_001",
+                "miller_h": 1,
+                "miller_k": 1,
+                "miller_l": 0,
+                "screen_surface_energy_status": "ok",
+                "screen_surface_energy_J_m2": 0.7,
+            },
+        ]
+    )
+
+    ranked = _rank(df, "screen")
+
+    assert ranked["screen_rank_overall"].tolist() == [1, 1]
