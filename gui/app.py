@@ -3226,669 +3226,21 @@ if tab == "Input Builder":
     # SURFACE
     # -----------------------------
     with st.expander("Surface", expanded=False):
-        st.subheader("Surface generation and optional relaxation")
-
-        st.caption(
-            "Generates slabs from selected relaxed bulk candidates in results_database.csv. "
-            "You can choose the composition, candidate selection mode, surface orientations, "
-            "fixed layers, and optional slab relaxation."
+        st.subheader("Surface screening and refinement")
+        st.info(
+            "Surface configuration has moved to its dedicated **Surface Screening** page. "
+            "That page contains bulk-candidate selection, Miller facets and terminations, "
+            "co-dopant depth/segregation scanning, fast MLFF screening, higher-fidelity "
+            "refinement, separate-environment execution, and the results explorer."
         )
-
-        cfg_edit.setdefault("surface", {})
-
-        # -----------------------------
-        # Candidate selection
-        # -----------------------------
-        st.divider()
-        st.subheader("Candidate selection")
-
-        colS1, colS2, colS3 = st.columns(3, vertical_alignment="bottom")
-
-        with colS1:
-            cfg_edit["surface"]["enabled"] = st.checkbox(
-                "Enable surface stage",
-                value=bool(cfg_edit["surface"].get("enabled", False)),
-                help="Enable surface generation and optional slab relaxation.",
-            )
-
-        with colS2:
-            cfg_edit["surface"]["source_summary"] = st.text_input(
-                "Source summary CSV",
-                value=str(cfg_edit["surface"].get("source_summary", "results_database.csv")),
-                help="CSV database used to select bulk candidates for slab generation.",
-            )
-
-        with colS3:
-            cfg_edit["surface"]["outdir"] = st.text_input(
-                "Surface output directory",
-                value=str(cfg_edit["surface"].get("outdir", "generated_surfaces")),
-                help="Root folder where generated surface slabs will be written.",
-            )
-
-        colS4, colS5, colS6 = st.columns(3, vertical_alignment="bottom")
-
-        with colS4:
-            cfg_edit["surface"]["composition_tag"] = st.text_input(
-                "composition_tag",
-                value=str(cfg_edit["surface"].get("composition_tag", "")),
-                help='Restrict to one composition tag, e.g. "Sb50".',
-            )
-
-        with colS5:
-            selection_mode_choices = ["id", "ids", "rank_range", "top_n", "filters"]
-            current_sel_mode = str(cfg_edit["surface"].get("selection_mode", "filters")).strip().lower()
-            if current_sel_mode not in selection_mode_choices:
-                current_sel_mode = "filters"
-
-            cfg_edit["surface"]["selection_mode"] = st.selectbox(
-                "selection_mode",
-                options=selection_mode_choices,
-                index=selection_mode_choices.index(current_sel_mode),
-                help="Selection mode applied inside the chosen composition subset.",
-                key="surface_selection_mode",
-            )
-
-        with colS6:
-            cfg_edit["surface"]["candidate_id"] = int(
-                st.number_input(
-                    "candidate_id",
-                    min_value=1,
-                    value=int(cfg_edit["surface"].get("candidate_id", 1)),
-                    step=1,
-                    help="Used when selection_mode = 'id'. candidate_id=1 means candidate_001.",
-                    key="surface_candidate_id",
-                )
-            )
-
-        surf_mode = cfg_edit["surface"]["selection_mode"]
-
-        if surf_mode == "ids":
-            ids_default = cfg_edit["surface"].get("candidate_ids", [])
-            ids_text = st.text_input(
-                "candidate_ids (comma-separated)",
-                value=",".join(str(x) for x in ids_default),
-                help="Used when selection_mode = 'ids'. Example: 1,2,3",
-                key="surface_candidate_ids",
-            )
-            try:
-                cfg_edit["surface"]["candidate_ids"] = [
-                    int(x.strip()) for x in ids_text.split(",") if x.strip()
-                ]
-            except Exception:
-                st.error("candidate_ids must be a comma-separated list of integers.")
-
-        elif surf_mode == "rank_range":
-            colR1, colR2 = st.columns(2)
-            with colR1:
-                cfg_edit["surface"]["rank_start"] = int(
-                    st.number_input(
-                        "rank_start",
-                        min_value=1,
-                        value=int(cfg_edit["surface"].get("rank_start", 1)),
-                        step=1,
-                        key="surface_rank_start",
-                    )
-                )
-            with colR2:
-                cfg_edit["surface"]["rank_end"] = int(
-                    st.number_input(
-                        "rank_end",
-                        min_value=1,
-                        value=int(cfg_edit["surface"].get("rank_end", 10)),
-                        step=1,
-                        key="surface_rank_end",
-                    )
-                )
-
-        elif surf_mode == "top_n":
-            cfg_edit["surface"]["top_n"] = int(
-                st.number_input(
-                    "top_n",
-                    min_value=1,
-                    value=int(cfg_edit["surface"].get("top_n", 5)),
-                    step=1,
-                    key="surface_top_n",
-                )
-            )
-
-        elif surf_mode == "filters":
-            colF1, colF2, colF3, colF4 = st.columns(4)
-            with colF1:
-                cfg_edit["surface"]["formation_energy_min"] = st.number_input(
-                    "formation_energy_min",
-                    value=float(cfg_edit["surface"].get("formation_energy_min", -1.0e9)),
-                    step=1.0,
-                    key="surface_form_min",
-                )
-            with colF2:
-                cfg_edit["surface"]["formation_energy_max"] = st.number_input(
-                    "formation_energy_max",
-                    value=float(cfg_edit["surface"].get("formation_energy_max", 1.0e9)),
-                    step=1.0,
-                    key="surface_form_max",
-                )
-            with colF3:
-                cfg_edit["surface"]["bandgap_min"] = st.number_input(
-                    "bandgap_min",
-                    value=float(cfg_edit["surface"].get("bandgap_min", -1.0e9)),
-                    step=0.1,
-                    key="surface_bg_min",
-                )
-            with colF4:
-                cfg_edit["surface"]["bandgap_max"] = st.number_input(
-                    "bandgap_max",
-                    value=float(cfg_edit["surface"].get("bandgap_max", 1.0e9)),
-                    step=0.1,
-                    key="surface_bg_max",
-                )
-
-        colS7, colS8 = st.columns(2)
-        with colS7:
-            cfg_edit["surface"]["max_candidates"] = int(
-                st.number_input(
-                    "max_candidates",
-                    min_value=1,
-                    value=int(cfg_edit["surface"].get("max_candidates", 20)),
-                    step=1,
-                    key="surface_max_candidates",
-                )
-            )
-        with colS8:
-            cfg_edit["surface"]["max_total_surfaces"] = int(
-                st.number_input(
-                    "max_total_surfaces",
-                    min_value=1,
-                    value=int(cfg_edit["surface"].get("max_total_surfaces", 200)),
-                    step=1,
-                    key="surface_max_total_surfaces",
-                )
-            )
-
-        # -----------------------------
-        # Orientation and slab construction
-        # -----------------------------
-        st.divider()
-        st.subheader("Surface orientations and slab construction")
-
-        colO1, colO2 = st.columns(2, vertical_alignment="bottom")
-
-        with colO1:
-            orientation_mode_choices = ["explicit", "automatic"]
-            current_orientation_mode = str(
-                cfg_edit["surface"].get("orientation_mode", "explicit")
-            ).strip().lower()
-            if current_orientation_mode not in orientation_mode_choices:
-                current_orientation_mode = "explicit"
-
-            cfg_edit["surface"]["orientation_mode"] = st.selectbox(
-                "orientation_mode",
-                options=orientation_mode_choices,
-                index=orientation_mode_choices.index(current_orientation_mode),
-                key="surface_orientation_mode",
-            )
-
-        with colO2:
-            termination_mode_choices = ["all", "first"]
-            current_term_mode = str(
-                cfg_edit["surface"].get("termination_mode", "all")
-            ).strip().lower()
-            if current_term_mode not in termination_mode_choices:
-                current_term_mode = "all"
-
-            cfg_edit["surface"]["termination_mode"] = st.selectbox(
-                "termination_mode",
-                options=termination_mode_choices,
-                index=termination_mode_choices.index(current_term_mode),
-                key="surface_termination_mode",
-            )
-
-        if cfg_edit["surface"]["orientation_mode"] == "explicit":
-            miller_default = cfg_edit["surface"].get("miller_list", [[1, 0, 0]])
-            miller_default_str = "; ".join(
-                ",".join(str(v) for v in triplet) for triplet in miller_default
-            )
-            miller_text = st.text_input(
-                "miller_list",
-                value=miller_default_str,
-                help='Enter Miller indices separated by ";" and values separated by commas. Example: 1,0,0; 1,1,0; 1,1,1',
-                key="surface_miller_list",
-            )
-
-            parsed_millers = []
-            try:
-                for part in miller_text.split(";"):
-                    part = part.strip()
-                    if not part:
-                        continue
-                    nums = [int(x.strip()) for x in part.split(",")]
-                    if len(nums) != 3:
-                        raise ValueError
-                    parsed_millers.append(nums)
-                if not parsed_millers:
-                    parsed_millers = [[1, 0, 0]]
-                cfg_edit["surface"]["miller_list"] = parsed_millers
-            except Exception:
-                st.error("miller_list must look like: 1,0,0; 1,1,0; 1,1,1")
-
-        else:
-            colA1, colA2 = st.columns(2)
-            with colA1:
-                cfg_edit["surface"]["max_miller"] = int(
-                    st.number_input(
-                        "max_miller",
-                        min_value=1,
-                        value=int(cfg_edit["surface"].get("max_miller", 1)),
-                        step=1,
-                        key="surface_max_miller",
-                    )
-                )
-            with colA2:
-                cfg_edit["surface"]["max_orientations"] = int(
-                    st.number_input(
-                        "max_orientations",
-                        min_value=1,
-                        value=int(cfg_edit["surface"].get("max_orientations", 6)),
-                        step=1,
-                        key="surface_max_orientations",
-                    )
-                )
-
-        colSC1, colSC2, colSC3 = st.columns(3)
-        with colSC1:
-            cfg_edit["surface"]["min_slab_size"] = st.number_input(
-                "min_slab_size",
-                min_value=0.1,
-                value=float(cfg_edit["surface"].get("min_slab_size", 12.0)),
-                step=0.5,
-                key="surface_min_slab",
-            )
-        with colSC2:
-            cfg_edit["surface"]["min_vacuum_size"] = st.number_input(
-                "min_vacuum_size",
-                min_value=0.1,
-                value=float(cfg_edit["surface"].get("min_vacuum_size", 15.0)),
-                step=0.5,
-                key="surface_min_vacuum",
-            )
-        with colSC3:
-            cfg_edit["surface"]["max_terminations_per_orientation"] = int(
-                st.number_input(
-                    "max_terminations_per_orientation",
-                    min_value=1,
-                    value=int(cfg_edit["surface"].get("max_terminations_per_orientation", 20)),
-                    step=1,
-                    key="surface_max_terms",
-                )
-            )
-
-        colSC4, colSC5, colSC6, colSC7, colSC8 = st.columns(5)
-        with colSC4:
-            cfg_edit["surface"]["center_slab"] = st.checkbox(
-                "center_slab",
-                value=bool(cfg_edit["surface"].get("center_slab", True)),
-                key="surface_center_slab",
-            )
-        with colSC5:
-            cfg_edit["surface"]["in_unit_planes"] = st.checkbox(
-                "in_unit_planes",
-                value=bool(cfg_edit["surface"].get("in_unit_planes", False)),
-                key="surface_in_unit_planes",
-            )
-        with colSC6:
-            cfg_edit["surface"]["lll_reduce"] = st.checkbox(
-                "lll_reduce",
-                value=bool(cfg_edit["surface"].get("lll_reduce", False)),
-                key="surface_lll_reduce",
-            )
-        with colSC7:
-            cfg_edit["surface"]["primitive"] = st.checkbox(
-                "primitive",
-                value=bool(cfg_edit["surface"].get("primitive", False)),
-                key="surface_primitive",
-            )
-        with colSC8:
-            cfg_edit["surface"]["reorient_lattice"] = st.checkbox(
-                "reorient_lattice",
-                value=bool(cfg_edit["surface"].get("reorient_lattice", True)),
-                key="surface_reorient",
-            )
-
-        cfg_edit["surface"]["orthogonal_c"] = st.checkbox(
-            "orthogonal_c",
-            value=bool(cfg_edit["surface"].get("orthogonal_c", True)),
-            help="Enforce c perpendicular to the surface plane.",
-            key="surface_orthogonal_c",
+        st.page_link(
+            "pages/Surface_Screening.py",
+            label="Open Surface Screening",
+            icon="🧱",
         )
-
-        # -----------------------------
-        # Fixed atoms
-        # -----------------------------
-        st.divider()
-        st.subheader("Fixed atoms")
-
-        colFX1, colFX2, colFX3 = st.columns(3)
-
-        with colFX1:
-            cfg_edit["surface"]["fix_atoms"] = st.checkbox(
-                "fix_atoms",
-                value=bool(cfg_edit["surface"].get("fix_atoms", False)),
-                key="surface_fix_atoms",
-            )
-
-        with colFX2:
-            fix_region_choices = ["bottom", "middle"]
-            current_fix_region = str(cfg_edit["surface"].get("fix_region", "bottom")).lower()
-            if current_fix_region not in fix_region_choices:
-                current_fix_region = "bottom"
-
-            cfg_edit["surface"]["fix_region"] = st.selectbox(
-                "fix_region",
-                options=fix_region_choices,
-                index=fix_region_choices.index(current_fix_region),
-                key="surface_fix_region",
-            )
-
-        with colFX3:
-            fix_method_choices = ["layers", "thickness"]
-            current_fix_method = str(cfg_edit["surface"].get("fix_method", "layers")).lower()
-            if current_fix_method not in fix_method_choices:
-                current_fix_method = "layers"
-
-            cfg_edit["surface"]["fix_method"] = st.selectbox(
-                "fix_method",
-                options=fix_method_choices,
-                index=fix_method_choices.index(current_fix_method),
-                key="surface_fix_method",
-            )
-
-        if cfg_edit["surface"]["fix_method"] == "layers":
-            colFL1, colFL2 = st.columns(2)
-            with colFL1:
-                cfg_edit["surface"]["fix_n_layers"] = int(
-                    st.number_input(
-                        "fix_n_layers",
-                        min_value=0,
-                        value=int(cfg_edit["surface"].get("fix_n_layers", 2)),
-                        step=1,
-                        key="surface_fix_n_layers",
-                    )
-                )
-            with colFL2:
-                cfg_edit["surface"]["fix_layer_tolerance_A"] = st.number_input(
-                    "fix_layer_tolerance_A",
-                    min_value=0.01,
-                    value=float(cfg_edit["surface"].get("fix_layer_tolerance_A", 0.6)),
-                    step=0.05,
-                    key="surface_fix_layer_tol",
-                )
-        else:
-            cfg_edit["surface"]["fix_thickness_A"] = st.number_input(
-                "fix_thickness_A",
-                min_value=0.0,
-                value=float(cfg_edit["surface"].get("fix_thickness_A", 4.0)),
-                step=0.1,
-                key="surface_fix_thickness",
-            )
-
-        # -----------------------------
-        # Surface relaxation
-        # -----------------------------
-        st.divider()
-        st.subheader("Surface relaxation")
-
-        cfg_edit["surface"]["relax_surface"] = st.checkbox(
-            "relax_surface",
-            value=bool(cfg_edit["surface"].get("relax_surface", False)),
-            help="Relax generated slabs after writing the initial POSCAR.",
-            key="surface_relax_surface",
-        )
-
-        if cfg_edit["surface"]["relax_surface"]:
-            surface_backend_choices = ["m3gnet", "uma", "mace", "grace"]
-            current_surface_backend = str(
-                cfg_edit["surface"].get("surface_backend", "m3gnet")
-            ).strip().lower()
-            if current_surface_backend not in surface_backend_choices:
-                current_surface_backend = "m3gnet"
-
-            colRB1, colRB2 = st.columns(2)
-            with colRB1:
-                cfg_edit["surface"]["surface_backend"] = st.selectbox(
-                    "surface_backend",
-                    options=surface_backend_choices,
-                    index=surface_backend_choices.index(current_surface_backend),
-                    key="surface_backend",
-                )
-
-            surface_backend = cfg_edit["surface"]["surface_backend"]
-
-            uma_model_choices = ["uma-s-1p2", "uma-s-1p1", "uma-m-1p1"]
-            uma_task_choices = ["omat", "oc20", "oc22", "oc25", "omol", "odac", "omc"]
-            grace_model_choices = [
-                "GRACE-1L-OMAT",
-                "GRACE-1L-OMAT-M-base",
-                "GRACE-1L-OMAT-M",
-                "GRACE-1L-OMAT-L-base",
-                "GRACE-1L-OMAT-L",
-                "GRACE-2L-OMAT",
-                "GRACE-2L-OMAT-M-base",
-                "GRACE-2L-OMAT-M",
-                "GRACE-2L-OMAT-L-base",
-                "GRACE-2L-OMAT-L",
-                "GRACE-1L-OAM",
-                "GRACE-1L-OAM-M",
-                "GRACE-1L-OAM-L",
-                "GRACE-2L-OAM",
-                "GRACE-2L-OAM-M",
-                "GRACE-2L-OAM-L",
-                "GRACE-1L-SMAX-L",
-                "GRACE-1L-SMAX-OMAT-L",
-                "GRACE-2L-SMAX-M",
-                "GRACE-2L-SMAX-L",
-                "GRACE-2L-SMAX-OMAT-M",
-                "GRACE-2L-SMAX-OMAT-L",
-            ]
-
-            colRB3, colRB4 = st.columns(2)
-
-            with colRB3:
-                if surface_backend == "m3gnet":
-                    cfg_edit["surface"]["surface_model"] = "default"
-                    st.text_input(
-                        "surface_model",
-                        value="default",
-                        disabled=True,
-                        key="surface_model_m3gnet_display",
-                    )
-                elif surface_backend == "uma":
-                    current_model = str(cfg_edit["surface"].get("surface_model", "uma-s-1p2")).strip()
-                    if current_model not in uma_model_choices:
-                        current_model = "uma-s-1p2"
-                    cfg_edit["surface"]["surface_model"] = st.selectbox(
-                        "surface_model",
-                        options=uma_model_choices,
-                        index=uma_model_choices.index(current_model),
-                        key="surface_model_uma",
-                    )
-                elif surface_backend == "mace":
-                    cfg_edit["surface"]["surface_model"] = mace_model_input(
-                        "surface_model",
-                        cfg_edit["surface"].get("surface_model", "small"),
-                        key="surface_model_mace",
-                    )
-                else:
-                    current_model = str(cfg_edit["surface"].get("surface_model", "GRACE-1L-OMAT")).strip()
-                    if current_model not in grace_model_choices:
-                        current_model = "GRACE-1L-OMAT"
-                    cfg_edit["surface"]["surface_model"] = st.selectbox(
-                        "surface_model",
-                        options=grace_model_choices,
-                        index=grace_model_choices.index(current_model),
-                        key="surface_model_grace",
-                    )
-
-            with colRB4:
-                if surface_backend == "uma":
-                    current_task = str(cfg_edit["surface"].get("surface_task", "omat")).strip()
-                    if current_task not in uma_task_choices:
-                        current_task = "omat"
-                    cfg_edit["surface"]["surface_task"] = st.selectbox(
-                        "surface_task",
-                        options=uma_task_choices,
-                        index=uma_task_choices.index(current_task),
-                        key="surface_task_uma",
-                    )
-                elif surface_backend == "mace":
-                    cfg_edit["surface"]["surface_task"] = mace_head_input(
-                        "MACE head (optional)",
-                        cfg_edit["surface"].get("surface_task", ""),
-                        key="surface_task_mace",
-                    )
-                else:
-                    cfg_edit["surface"]["surface_task"] = ""
-                    st.text_input(
-                        "surface_task",
-                        value="not used for this backend",
-                        disabled=True,
-                        key="surface_task_unused_display",
-                    )
-
-            optimizer_choices = ["bfgs", "lbfgs", "fire", "mdmin", "quasinewton"]
-            current_surface_optimizer = str(
-                cfg_edit["surface"].get("surface_optimizer", "bfgs")
-            ).strip().lower()
-            if current_surface_optimizer not in optimizer_choices:
-                current_surface_optimizer = "bfgs"
-
-            colRO1, colRO2, colRO3 = st.columns(3)
-            with colRO1:
-                cfg_edit["surface"]["surface_optimizer"] = st.selectbox(
-                    "surface_optimizer",
-                    options=optimizer_choices,
-                    index=optimizer_choices.index(current_surface_optimizer),
-                    key="surface_optimizer",
-                )
-            with colRO2:
-                cfg_edit["surface"]["surface_fmax"] = st.number_input(
-                    "surface_fmax",
-                    min_value=0.0,
-                    value=float(cfg_edit["surface"].get("surface_fmax", 0.05)),
-                    step=0.01,
-                    key="surface_fmax",
-                )
-            with colRO3:
-                cfg_edit["surface"]["surface_max_steps"] = int(
-                    st.number_input(
-                        "surface_max_steps",
-                        min_value=1,
-                        value=int(cfg_edit["surface"].get("surface_max_steps", 300)),
-                        step=10,
-                        key="surface_max_steps",
-                    )
-                )
-
-            colRD1, colRD2, colRD3, colRD4 = st.columns(4)
-            with colRD1:
-                surface_device_choices = ["cpu", "cuda"]
-                current_surface_device = str(
-                    cfg_edit["surface"].get("surface_device", "cpu")
-                ).lower()
-                if current_surface_device not in surface_device_choices:
-                    current_surface_device = "cpu"
-                cfg_edit["surface"]["surface_device"] = st.selectbox(
-                    "surface_device",
-                    options=surface_device_choices,
-                    index=surface_device_choices.index(current_surface_device),
-                    key="surface_device",
-                )
-            with colRD2:
-                cfg_edit["surface"]["surface_gpu_id"] = int(
-                    st.number_input(
-                        "surface_gpu_id",
-                        min_value=0,
-                        value=int(cfg_edit["surface"].get("surface_gpu_id", 0)),
-                        step=1,
-                        key="surface_gpu_id",
-                    )
-                )
-            with colRD3:
-                cfg_edit["surface"]["surface_tf_threads"] = int(
-                    st.number_input(
-                        "surface_tf_threads",
-                        min_value=1,
-                        value=int(cfg_edit["surface"].get("surface_tf_threads", 1)),
-                        step=1,
-                        key="surface_tf_threads",
-                    )
-                )
-            with colRD4:
-                cfg_edit["surface"]["surface_omp_threads"] = int(
-                    st.number_input(
-                        "surface_omp_threads",
-                        min_value=1,
-                        value=int(cfg_edit["surface"].get("surface_omp_threads", 1)),
-                        step=1,
-                        key="surface_omp_threads",
-                    )
-                )
-
-            colRF1, colRF2, colRF3, colRF4 = st.columns(4)
-            with colRF1:
-                cfg_edit["surface"]["surface_relaxed_filename"] = st.text_input(
-                    "surface_relaxed_filename",
-                    value=str(cfg_edit["surface"].get("surface_relaxed_filename", "CONTCAR")),
-                    key="surface_relaxed_filename",
-                )
-            with colRF2:
-                cfg_edit["surface"]["surface_relax_log_filename"] = st.text_input(
-                    "surface_relax_log_filename",
-                    value=str(cfg_edit["surface"].get("surface_relax_log_filename", "surface_relax.log")),
-                    key="surface_relax_log_filename",
-                )
-            with colRF3:
-                cfg_edit["surface"]["surface_relax_traj_filename"] = st.text_input(
-                    "surface_relax_traj_filename",
-                    value=str(cfg_edit["surface"].get("surface_relax_traj_filename", "surface_relax.traj")),
-                    key="surface_relax_traj_filename",
-                )
-            with colRF4:
-                cfg_edit["surface"]["surface_relax_meta_filename"] = st.text_input(
-                    "surface_relax_meta_filename",
-                    value=str(cfg_edit["surface"].get("surface_relax_meta_filename", "surface_relax.json")),
-                    key="surface_relax_meta_filename",
-                )
-
-        # -----------------------------
-        # Output switches
-        # -----------------------------
-        st.divider()
-        st.subheader("Output switches")
-
-        colSW1, colSW2, colSW3 = st.columns(3)
-        with colSW1:
-            cfg_edit["surface"]["write_poscar"] = st.checkbox(
-                "write_poscar",
-                value=bool(cfg_edit["surface"].get("write_poscar", True)),
-                key="surface_write_poscar",
-            )
-        with colSW2:
-            cfg_edit["surface"]["write_cif"] = st.checkbox(
-                "write_cif",
-                value=bool(cfg_edit["surface"].get("write_cif", False)),
-                key="surface_write_cif",
-            )
-        with colSW3:
-            cfg_edit["surface"]["write_metadata_json"] = st.checkbox(
-                "write_metadata_json",
-                value=bool(cfg_edit["surface"].get("write_metadata_json", True)),
-                key="surface_write_metadata_json",
-            )
-
-        cfg_edit["surface"]["summary_csv"] = st.text_input(
-            "summary_csv",
-            value=str(cfg_edit["surface"].get("summary_csv", "surface_summary.csv")),
-            key="surface_summary_csv",
-        )
+        if cfg_edit.get("surface"):
+            with st.expander("Current [surface] section (read-only preview)", expanded=False):
+                st.code(toml.dumps({"surface": cfg_edit["surface"]}), language="toml")
 
 
     # -------------------------
@@ -3931,9 +3283,24 @@ elif tab == "Run":
 **Config file:** `{input_toml_path}`
 """)
 
-    # Surface is a separate CLI command, not part of run-all
-    BULK_STEP_KEYS = ["refs", "corrections", "generate", "scan", "relax", "filter", "bandgap", "formation", "collect", "alloy-hull", "phase-diagram", "vacancies"]
-    STEP_KEYS = BULK_STEP_KEYS + ["surface"]
+    STEP_KEYS = [
+        "refs",
+        "corrections",
+        "generate",
+        "scan",
+        "relax",
+        "filter",
+        "bandgap",
+        "formation",
+        "collect",
+        "alloy-hull",
+        "phase-diagram",
+        "vacancies",
+        "site-preference",
+        "oxidation",
+        "conductivity",
+        "surface",
+    ]
 
     st.divider()
 
@@ -3995,7 +3362,6 @@ elif tab == "Run":
                 "End stage", options=STEP_KEYS, index=STEP_KEYS.index("phase-diagram")
             )
 
-        # Allow "surface" to appear only as a conceptual end stage in the UI
         idx_from = STEP_KEYS.index(step_from)
         idx_until = STEP_KEYS.index(step_until)
 
@@ -4057,28 +3423,22 @@ elif tab == "Run":
                 options=STEP_KEYS,
                 default=[],
                 help=(
-                    "If set, only these stages are run. "
-                    "If 'surface' is included, it will run as a separate command after the bulk stages."
+                    "If set, only these stages are run through the normal run-all pipeline."
                 ),
             )
             if extra_only:
                 only_steps = extra_only
 
     # -------------------------
-    # Build command(s)
+    # Build command
     # -------------------------
-    run_surface_after = False
-    surface_cmd: list[str] | None = None
-
     if run_mode == "Sequential workflow":
-
         cmd = [
             "dopingflow",
             "sequential-run",
             "-c",
             str(input_toml_path),
         ]
-
         if verbose:
             cmd += ["--verbose"]
 
@@ -4088,43 +3448,24 @@ elif tab == "Run":
             cmd += ["--verbose"]
 
     elif run_mode == "Single stage" and only_steps == ["surface"]:
-
         cmd = ["dopingflow", "surface", "-c", str(input_toml_path)]
-
         if verbose:
             cmd += ["--verbose"]
 
     else:
-        requested_only = only_steps[:] if only_steps else []
-
-        # If surface is requested alongside bulk stages, run it afterward
-        if "surface" in requested_only:
-            run_surface_after = True
-            requested_only = [s for s in requested_only if s != "surface"]
-
-        # Handle range mode if user selected surface as from/until
-        if step_from == "surface" or step_until == "surface":
-            st.warning(
-                "The surface stage is executed separately from run-all. "
-                "Bulk stages will run first, then the surface stage can run afterward."
-            )
-
-        # Keep run-all limited to bulk stages
-        effective_from = step_from if step_from in BULK_STEP_KEYS else "refs"
-        effective_until = step_until if step_until in BULK_STEP_KEYS else "collect"
-
         cmd = [
-            "dopingflow", "run-all",
-            "-c", str(input_toml_path),
-            "--from", effective_from,
-            "--until", effective_until,
+            "dopingflow",
+            "run-all",
+            "-c",
+            str(input_toml_path),
+            "--from",
+            step_from,
+            "--until",
+            step_until,
         ]
 
-        if requested_only:
-            # Only pass bulk stages to --only
-            requested_only_bulk = [s for s in requested_only if s in BULK_STEP_KEYS]
-            if requested_only_bulk:
-                cmd += ["--only", ",".join(requested_only_bulk)]
+        if only_steps:
+            cmd += ["--only", ",".join(only_steps)]
 
         if dry_run:
             cmd += ["--dry-run"]
@@ -4140,28 +3481,13 @@ elif tab == "Run":
         if topn > 0:
             cmd += ["--topn", str(int(topn))]
 
-        if run_surface_after:
-            surface_cmd = ["dopingflow", "surface", "-c", str(input_toml_path)]
-            if verbose:
-                surface_cmd += ["--verbose"]
-
-        # Special handling: if stage range is only "surface" conceptually
-        if run_mode == "Stage range" and step_from == "surface" and step_until == "surface":
-            cmd = ["dopingflow", "surface", "-c", str(input_toml_path)]
-            if verbose:
-                cmd += ["--verbose"]
-            run_surface_after = False
-            surface_cmd = None
 
     # -------------------------
     # Command preview
     # -------------------------
     st.subheader("Command preview")
 
-    if surface_cmd is not None and cmd[1] != "surface":
-        st.code(" ".join(cmd) + "\n" + " ".join(surface_cmd))
-    else:
-        st.code(" ".join(cmd))
+    st.code(" ".join(cmd))
 
     # -------------------------
     # Run + Log
@@ -4174,10 +3500,6 @@ elif tab == "Run":
         if st.button("▶ Run", use_container_width=True):
             with st.spinner("Running workflow..."):
                 rc = run_command(cmd, cwd=project_root, log_path=log_path)
-
-                # Run surface afterward only if bulk run succeeded, not a dry-run, and surface was requested
-                if rc == 0 and run_surface_after and surface_cmd is not None and not dry_run:
-                    rc = run_command(surface_cmd, cwd=project_root, log_path=log_path)
 
             if rc == 0:
                 st.success("Workflow finished successfully.")
