@@ -300,7 +300,7 @@ def _calculator_editor(
     p1, p2, p3 = st.columns(3)
     top_k = int(
         p1.number_input(
-            "Top-k per bulk candidate",
+            "Top-k per source structure",
             min_value=1,
             value=int(saved.get("top_k_per_candidate", topk_default)),
             step=1,
