@@ -227,44 +227,6 @@ oxygen-reference calibration path.
 
 ---
 
-## Development and tests
-
-Relevant files are:
-
-```text
-gui/
-├── app.py
-├── gui_config.py
-├── vacancy_staged.py
-├── phase_diagram_plots.py
-├── vacancy_thermo_plots.py
-├── pages/
-│   ├── Vacancy_MC_Staged.py
-│   ├── Vacancy_Energy_Correction.py
-│   └── Phase_Diagram.py
-├── io_project.py
-└── view_structure.py
-```
-
-Focused tests cover parsing of staged vacancy controls and construction of the
-separate GRACE/MACE commands. The targeted CI workflow also compiles the staged
-GUI modules and builds the Sphinx documentation.
-
----
-
-## Notes
-
-- The GUI reads/writes the same `input.toml` as the CLI.
-- Large workflows should normally be launched from CLI/HPC after validating the
-  configuration in the GUI.
-- The staged GUI does not require GRACE and MACE to be importable in the same
-  Python process; it uses separate environment commands.
-- Phase-diagram conclusions are only as complete as the competing phases
-  supplied to the calculation.
-
-© 2026 Kazem Zhour
----
-
 ## Surface Screening page
 
 `gui/pages/Surface_Screening.py` is the dedicated interface for the staged
@@ -306,3 +268,45 @@ E_seg = E_variant - E_all-bulk-like
 
 Negative values indicate that the requested surface/subsurface dopant placement
 is favored relative to the generated all-bulk-like placement.
+
+---
+
+
+## Development and tests
+
+Relevant files are:
+
+```text
+gui/
+├── app.py
+├── gui_config.py
+├── vacancy_staged.py
+├── phase_diagram_plots.py
+├── vacancy_thermo_plots.py
+├── pages/
+│   ├── Surface_Screening.py
+│   ├── Vacancy_MC_Staged.py
+│   ├── Vacancy_Energy_Correction.py
+│   └── Phase_Diagram.py
+├── io_project.py
+└── view_structure.py
+```
+
+Focused tests cover the staged vacancy and surface workflows. The surface CI also
+compiles the main app and dedicated Surface Screening page, while the documentation
+workflows keep the Sphinx guides synchronized.
+
+---
+
+## Notes
+
+- The GUI reads/writes the same `input.toml` as the CLI.
+- Large workflows should normally be launched from CLI/HPC after validating the
+  configuration in the GUI.
+- The staged GUI does not require GRACE and MACE to be importable in the same
+  Python process; it uses separate environment commands.
+- Phase-diagram conclusions are only as complete as the competing phases
+  supplied to the calculation.
+
+© 2026 Kazem Zhour
+
