@@ -1,6 +1,6 @@
 # Staged surface screening example
 
-This example takes selected relaxed bulk candidates and performs:
+This example takes selected relaxed source structures (vacancy-free parents and, optionally, oxygen-vacancy structures) and performs:
 
 1. low-index slab generation;
 2. termination enumeration;
@@ -30,7 +30,7 @@ If both calculator dependencies are available in one environment, run both with:
 The default output directory is `08_surfaces/`.
 
 - `surface_screen_summary.csv`: every generated slab/termination/depth variant.
-- `surface_screen_selected.csv`: top screening candidates per bulk parent.
+- `surface_screen_selected.csv`: top screening candidates per selected source structure.
 - `surface_refine_summary.csv`: second-model results for the shortlist.
 - `surface_final_selected.csv`: final top-k after refinement.
 
@@ -43,3 +43,20 @@ The current co-dopant-depth scan relocates one representative atom of each selec
 dopant species while preserving the total composition. It is a controlled screening
 of depth preferences, not an exhaustive enumeration of every same-species dopant
 permutation.
+
+## Structure selection
+
+Surface screening uses the same target-selection convention as Electronic Conductivity
+and Oxidation States:
+
+```toml
+[surface]
+source_root = "vacancy-selected"
+include_vacancy_free = true
+include_oxygen_vacancies = false
+target_include = []
+```
+
+Set `include_oxygen_vacancies = true` to also expose relaxed O-vacancy
+structures listed in `vacancies_database.json`. Use `target_include` for exact
+IDs or wildcards when only selected parents/vacancy structures should be scanned.
