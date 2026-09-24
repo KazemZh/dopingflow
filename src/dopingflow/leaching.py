@@ -501,6 +501,18 @@ def _load_completed_site_checkpoint(
     if any(str(saved.get(k, "")) != str(cfg[k]) for k in ("backend", "model", "task")):
         return None, "calculator-mismatch"
 
+    saved_source = str(saved.get("surface_structure_path") or "").strip()
+    current_source = str(base.get("surface_structure_path") or "").strip()
+    if saved_source and current_source:
+        try:
+            if _path(Path(cfg["project_root"]), saved_source) != _path(
+                Path(cfg["project_root"]), current_source
+            ):
+                return None, "surface-structure-mismatch"
+        except Exception:
+            if saved_source != current_source:
+                return None, "surface-structure-mismatch"
+
     current_fp = _site_calculation_fingerprint(
         source_path,
         int(base["site_index"]),
