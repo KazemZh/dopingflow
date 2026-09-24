@@ -274,6 +274,28 @@ def _resolve_project_path(project_root: Path | str, value: str | Path) -> Path:
     return path.resolve() if path.is_absolute() else (root / path).resolve()
 
 
+def resolve_surface_output_dir(
+    config: Mapping[str, Any],
+    surface_cfg: Mapping[str, Any] | None = None,
+    project_root: Path | str = Path("."),
+) -> Path:
+    """Resolve the surface output directory.
+
+    Relative [surface].outdir paths are created under the user-selected
+    [surface].source_root, matching oxidation/site-preference semantics.
+    Absolute outdir paths remain absolute.
+    """
+    cfg = dict(surface_cfg or _parse_config(config))
+    out = Path(str(cfg["outdir"])).expanduser()
+    if out.is_absolute():
+        return out.resolve()
+
+    source = Path(str(cfg["source_root"])).expanduser()
+    root = Path(project_root).expanduser().resolve()
+    source_root = source.resolve() if source.is_absolute() else (root / source).resolve()
+    return (source_root / out).resolve()
+
+
 def _surface_target_row(target: StructureTarget) -> Dict[str, Any]:
     parent_parts = target.parent_id.replace("\\", "/").split("/")
     composition = str(target.metadata.get("composition", "")).strip()
@@ -1138,7 +1160,7 @@ def run_surface_scan(
     if selected.empty:
         raise RuntimeError("[surface] No source structures selected")
 
-    outdir = _resolve_project_path(project_root, str(cfg["outdir"]))
+    outdir = resolve_surface_output_dir(config, cfg, project_root)
     outdir.mkdir(parents=True, exist_ok=True)
     calculator = _prepare_calculator(cfg["screen"], "Surface screen")
 
@@ -1181,7 +1203,7 @@ def run_surface_refine(
         print("[surface] Refinement disabled. Skipping.")
         return None
 
-    outdir = _resolve_project_path(project_root, str(cfg["outdir"]))
+    outdir = resolve_surface_output_dir(config, cfg, project_root)
     selected_path = outdir / str(cfg["screen_selected_csv"])
     if not selected_path.exists():
         raise FileNotFoundError(
@@ -1289,6 +1311,7 @@ __all__ = [
     "parse_surface_config",
     "discover_surface_targets",
     "preview_surface_candidates",
+    "resolve_surface_output_dir",
     "run_surface_scan",
     "run_surface_scan_from_toml",
     "run_surface_refine",
