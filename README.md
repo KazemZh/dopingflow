@@ -903,4 +903,7 @@ to the parent bulk. Non-stoichiometric terminations are retained with an explici
 non-computable status rather than ranked using raw total energies.
 
 See examples/surfaces/input.toml and docs/source/methods/surfaces.rst for the
-complete configuration and interpretation notes.
+complete configuration and interpretation notes. The Streamlit **Surface Screening**
+page provides the same staged controls, separate-environment execution, surface-energy
+and segregation-energy plots, and per-surface structure browsing. The old Surface
+editor in the main Input Builder now links to this dedicated page.
