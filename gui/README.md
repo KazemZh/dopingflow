@@ -49,6 +49,19 @@ streamlit run gui/app.py
 
 Streamlit also discovers the dedicated pages under `gui/pages/`.
 
+The sidebar order follows the scientific workflow rather than alphabetical filename order:
+
+1. Phase Diagram
+2. Vacancy MC Staged
+3. Vacancy Energy Correction
+4. Dopant Site Preference
+5. Oxidation States
+6. Electronic Conductivity
+7. Surface Screening
+8. Dopant Leaching
+
+Numeric filename prefixes are used only to control Streamlit ordering; they are not shown in the page labels.
+
 ---
 
 ## Main app pages
@@ -88,7 +101,7 @@ structures.
 
 ## Staged Vacancy MC page
 
-`gui/pages/Vacancy_MC_Staged.py` is the dedicated interface for the current
+`gui/pages/2_Vacancy_MC_Staged.py` is the dedicated interface for the current
 large-supercell GRACE-search/MACE-finalization workflow.
 
 It exposes the staged controls that are intentionally not overloaded into the
@@ -202,7 +215,7 @@ large production campaign.
 
 ## Phase Diagram page
 
-`gui/pages/Phase_Diagram.py` is the dedicated phase-stability interface. It can
+`gui/pages/1_Phase_Diagram.py` is the dedicated phase-stability interface. It can
 read the ordinary phase-diagram outputs and `vacancy_energy_above_hull.csv`,
 switch between raw/corrected hulls when available, and plot vacancy-resolved
 closed-system energy above hull.
@@ -216,7 +229,7 @@ grand-potential hull.
 
 ## Vacancy energy-correction page
 
-`gui/pages/Vacancy_Energy_Correction.py` controls whether an already fitted,
+`gui/pages/3_Vacancy_Energy_Correction.py` controls whether an already fitted,
 backend-compatible solid-energy correction is reused inside vacancy
 thermodynamics. It preserves raw values and validates provenance.
 
@@ -229,7 +242,7 @@ oxygen-reference calibration path.
 
 ## Surface Screening page
 
-`gui/pages/Surface_Screening.py` is the dedicated interface for the staged
+`gui/pages/7_Surface_Screening.py` is the dedicated interface for the staged
 surface workflow. Surface controls are intentionally no longer duplicated in
 the main Input Builder; its Surface expander now links to this page and preserves
 the existing `[surface]` section unchanged.
@@ -273,7 +286,7 @@ is favored relative to the generated all-bulk-like placement.
 
 ## Dopant Leaching page
 
-`gui/pages/Dopant_Leaching.py` consumes the selected surface tables and exposes:
+`gui/pages/8_Dopant_Leaching.py` consumes the selected surface tables and exposes:
 
 - exact surface/target filtering and surface/subsurface/bulk site selection;
 - a dry-run table of every dopant atom that will be removed;
