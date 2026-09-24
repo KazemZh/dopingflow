@@ -3234,7 +3234,7 @@ if tab == "Input Builder":
             "refinement, separate-environment execution, and the results explorer."
         )
         st.page_link(
-            "pages/Surface_Screening.py",
+            "pages/7_Surface_Screening.py",
             label="Open Surface Screening",
             icon="🧱",
         )
