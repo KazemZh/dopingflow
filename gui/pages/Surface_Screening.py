@@ -731,18 +731,10 @@ with st.expander("Configuration & run controls", expanded=False):
     resolved_surface.update(
         {
             "enabled": bool(enabled),
-            "source_summary": source_summary,
-            "selection_mode": selection_mode,
-            "candidate_id": candidate_id,
-            "candidate_ids": candidate_ids,
-            "rank_start": rank_start,
-            "rank_end": rank_end,
-            "top_n": top_n,
-            "formation_energy_min": formation_min,
-            "formation_energy_max": formation_max,
-            "bandgap_min": bandgap_min,
-            "bandgap_max": bandgap_max,
-            "max_candidates": max_candidates,
+            "source_root": source_root,
+            "include_vacancy_free": bool(include_vacancy_free),
+            "include_oxygen_vacancies": bool(include_oxygen_vacancies),
+            "target_include": target_include,
             "orientation_mode": orientation_mode,
             "miller_list": miller_list,
             "max_miller": max_miller,
@@ -781,12 +773,23 @@ with st.expander("Configuration & run controls", expanded=False):
             "refine": refine,
         }
     )
-    resolved_surface.pop("composition_tag", None)
-    resolved_surface["composition_tags"] = composition_tags
-
     # Once saved through the dedicated page, retire the former flat
     # surface-relaxation controls so there is one authoritative configuration.
     for legacy_key in (
+        "source_summary",
+        "composition_tag",
+        "composition_tags",
+        "selection_mode",
+        "candidate_id",
+        "candidate_ids",
+        "rank_start",
+        "rank_end",
+        "top_n",
+        "formation_energy_min",
+        "formation_energy_max",
+        "bandgap_min",
+        "bandgap_max",
+        "max_candidates",
         "relax_surface",
         "surface_backend",
         "surface_model",
@@ -829,7 +832,7 @@ with st.expander("Configuration & run controls", expanded=False):
         st.error(validation_error)
 
     if parsed_surface is not None:
-        with st.expander("Preview selected bulk structures", expanded=False):
+        with st.expander("Preview selected structures", expanded=False):
             try:
                 preview = preview_surface_candidates(resolved_cfg, project_root)
             except Exception as exc:
@@ -838,13 +841,12 @@ with st.expander("Configuration & run controls", expanded=False):
                 preview_cols = [
                     col
                     for col in (
+                        "target_id",
+                        "structure_kind",
+                        "n_oxygen_vacancies",
                         "composition_tag",
                         "candidate",
-                        "rank_relax_filtered",
-                        "E_relaxed_eV",
-                        "E_form_norm",
-                        "bandgap_eV",
-                        "candidate_path",
+                        "structure_path",
                     )
                     if col in preview.columns
                 ]
@@ -853,6 +855,8 @@ with st.expander("Configuration & run controls", expanded=False):
                     use_container_width=True,
                     hide_index=True,
                 )
+                for warning in preview.attrs.get("warnings", []):
+                    st.warning(str(warning))
                 if len(preview):
                     estimated_upper = (
                         len(preview)
@@ -872,7 +876,6 @@ with st.expander("Configuration & run controls", expanded=False):
                         "Conservative pre-deduplication ceiling from the current caps: "
                         f"{estimated_upper:,} slab variants. Actual generation can be much smaller."
                     )
-
     expensive_confirm = st.checkbox(
         "I confirm that running the selected MLFF surface calculations may be computationally expensive",
         value=False,
