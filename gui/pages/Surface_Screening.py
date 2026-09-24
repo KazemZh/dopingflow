@@ -18,7 +18,7 @@ from dopingflow.surface_staged import (
     parse_surface_config,
     preview_surface_candidates,
 )
-from gui.gui_config import (
+from gui_config import (
     BACKEND_CHOICES,
     DEVICE_CHOICES,
     GRACE_MODEL_CHOICES,
@@ -26,7 +26,7 @@ from gui.gui_config import (
     UMA_MODEL_CHOICES,
     UMA_TASK_CHOICES,
 )
-from gui.view_structure import show_structure
+from view_structure import show_structure
 
 
 st.set_page_config(page_title="Surface screening", layout="wide")
