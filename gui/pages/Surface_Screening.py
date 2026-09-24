@@ -1017,7 +1017,13 @@ m1, m2, m3, m4 = st.columns(4)
 m1.metric("Screened variants", len(screen_df))
 m2.metric(
     "Screen-rankable",
-    int(screen_df.get("screen_rankable", pd.Series(dtype=bool)).fillna(False).astype(bool).sum())
+    int(
+        screen_df.get("screen_rankable", pd.Series(dtype=object))
+        .astype(str)
+        .str.lower()
+        .eq("true")
+        .sum()
+    )
     if not screen_df.empty
     else 0,
 )
@@ -1249,12 +1255,18 @@ with structure_tab:
         st.warning("The selected structure file is not available at the recorded path.")
 
     with st.expander("Selected structure metadata", expanded=False):
-        st.json(
-            {
-                key: (None if pd.isna(value) else value)
-                for key, value in row.items()
-            }
-        )
+        clean_meta = {}
+        for key, value in row.items():
+            if isinstance(value, float) and pd.isna(value):
+                clean_meta[key] = None
+            elif hasattr(value, "item") and not isinstance(value, (str, bytes)):
+                try:
+                    clean_meta[key] = value.item()
+                except Exception:
+                    clean_meta[key] = value
+            else:
+                clean_meta[key] = value
+        st.json(clean_meta)
 
 with raw_tab:
     table_choice = st.selectbox(
