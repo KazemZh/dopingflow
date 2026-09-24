@@ -25,7 +25,7 @@ Vacancy Results → Optional M0/M1-corrected Vacancy Thermodynamics
 
 Vacancy Results → Vacancy-resolved Raw/Corrected Phase Diagram
 
-Database → Surface Scan → Higher-Fidelity Surface Refinement
+Database → Surface Scan → Higher-Fidelity Surface Refinement → Dopant Leaching
 
 The vacancy M0/M1 option reuses the already fitted backend-specific correction
 model. It does not refit a separate vacancy-specific model. The correction is
@@ -197,6 +197,15 @@ grand-potential hull.
    - Keep screening and refinement energies separated by calculator provenance
    - Preserve non-stoichiometric terminations without ranking them by raw total energy
 
+15. Dopant leaching from selected surfaces (optional)
+
+   - Reuse the selected staged-surface structures and compatible parent energies
+   - Remove exposed dopant atoms one site at a time and relax the dopant-vacancy slab
+   - Reference the extraction energy to the elemental metal chemical potential
+   - Reuse compatible global metal references or calculate/cache missing same-model references
+   - Optionally convert extraction energies to simple-ion dissolution potentials with user-supplied redox data
+   - Scan configured SHE/RHE operating potentials without inventing aqueous speciation
+
 Design Principles
 -----------------
 
@@ -219,6 +228,7 @@ Notes
 - The vacancy-resolved closed-system hull is only as complete as the competing
   phases supplied to the phase-diagram calculation.
 - Surface scanning can be run as one optional run-all stage or split into surface-scan and surface-refine commands when GRACE and MACE live in different environments.
+- Dopant leaching is a thermodynamic post-processing stage on the selected surfaces; electrochemical values require an explicitly chosen aqueous redox reference.
 
 Typical Usage
 -------------
@@ -273,3 +283,10 @@ A typical workflow consists of:
 
    If both calculator dependencies are available in the same environment,
    dopingflow surface -c input.toml runs both stages in sequence.
+
+7. Previewing and running dopant leaching on the selected surfaces:
+
+   ::
+
+      dopingflow leaching -c input.toml --dry-run
+      dopingflow leaching -c input.toml
