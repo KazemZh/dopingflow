@@ -870,9 +870,10 @@ utility remains available for advanced recovery/rebuild workflows:
 
 ## Staged surface screening and refinement
 
-After selecting the most stable co-doped bulk structures, DopingFlow can now scan
-surface orientation, termination, and representative dopant depth before the later
-catalyst-interface stages.
+After selecting relaxed source structures, DopingFlow can scan surface orientation,
+termination, and representative dopant depth before the later catalyst-interface stages.
+The surface stage uses the same `source_root`, vacancy-free/O-vacancy toggles, and
+optional `target_include` selectors as the oxidation/conductivity workflows.
 
 The current SnO2 starting set is (110), (100), (101), and (001), but the Miller
 list is fully configurable. The surface scan can move one representative atom of
