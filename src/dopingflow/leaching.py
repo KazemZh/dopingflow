@@ -770,6 +770,14 @@ def run_leaching(
             calculation_reused_from_checkpoint=result is not None and checkpoint_mode in {"fingerprint", "legacy-identity"},
             checkpoint_compatibility=checkpoint_mode,
         )
+        # Persist the expensive structural result immediately. If the process
+        # stops during reference/electrochemical post-processing, this site can
+        # still be resumed without repeating its relaxation.
+        checkpoint_path.write_text(
+            json.dumps(rec, indent=2, default=str),
+            encoding="utf-8",
+        )
+
         mu, mu_source = _metal_reference(dopant, cfg, calculator, outdir, metal_cache)
         rec.update(metal_reference_eV_atom=mu, metal_reference_source=mu_source, extraction_status="not-computable")
         extraction = None
