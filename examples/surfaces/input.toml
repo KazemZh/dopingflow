@@ -1,11 +1,10 @@
 [surface]
 enabled = true
-source_summary = "results_database.csv"
-
-# Select the most stable bulk candidates to expose as surfaces.
-selection_mode = "top_n"
-top_n = 3
-max_candidates = 3
+# Same structure-selection interface used by oxidation/conductivity.
+source_root = "vacancy-selected"
+include_vacancy_free = true
+include_oxygen_vacancies = false
+target_include = []
 
 # SnO2 low-index starting set. Change or extend for another host.
 orientation_mode = "explicit"
