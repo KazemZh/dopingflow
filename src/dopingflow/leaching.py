@@ -105,6 +105,7 @@ def parse_leaching_config(
         reuse_surface_energy=True,
         relax_parent_if_recomputed=True,
         relax_removed_surface=True,
+        resume_completed=True,
         outdir="09_leaching",
         summary_csv="leaching_summary.csv",
         aggregate_csv="leaching_surface_summary.csv",
@@ -433,6 +434,101 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _site_calculation_fingerprint(
+    source_path: Path,
+    site_index: int,
+    dopant: str,
+    cfg: Mapping[str, Any],
+    surface_cfg: Mapping[str, Any],
+) -> str:
+    """Fingerprint the expensive parent/removal calculation inputs."""
+    constraint_keys = (
+        "fix_atoms", "fix_region", "fix_method", "fix_n_layers",
+        "fix_thickness_A", "fix_layer_tolerance_A",
+    )
+    payload = {
+        "schema_version": 1,
+        "source_sha256": _sha256(source_path),
+        "site_index": int(site_index),
+        "dopant": str(dopant),
+        "calculator": _calculator_identity(cfg),
+        "relax_removed_surface": bool(cfg["relax_removed_surface"]),
+        "optimizer": str(cfg["optimizer"]),
+        "fmax": float(cfg["fmax"]),
+        "max_steps": int(cfg["max_steps"]),
+        "inherit_surface_fixed_atoms": bool(cfg["inherit_surface_fixed_atoms"]),
+        "surface_constraints": {
+            key: surface_cfg.get(key) for key in constraint_keys
+        },
+        "reuse_surface_energy": bool(cfg["reuse_surface_energy"]),
+        "relax_parent_if_recomputed": bool(cfg["relax_parent_if_recomputed"]),
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _load_completed_site_checkpoint(
+    checkpoint_path: Path,
+    base: Mapping[str, Any],
+    cfg: Mapping[str, Any],
+    source_path: Path,
+    surface_cfg: Mapping[str, Any],
+) -> tuple[dict[str, Any] | None, str]:
+    """Return a reusable structural result from a completed per-site checkpoint."""
+    if not bool(cfg.get("resume_completed", True)) or not checkpoint_path.exists():
+        return None, "disabled-or-missing"
+    try:
+        saved = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None, "unreadable"
+    if saved.get("status") != "ok":
+        return None, "not-complete"
+
+    try:
+        energy = float(saved["removed_surface_energy_eV"])
+    except (KeyError, TypeError, ValueError):
+        return None, "missing-energy"
+
+    for key in ("surface_id", "dopant"):
+        if str(saved.get(key, "")) != str(base.get(key, "")):
+            return None, f"{key}-mismatch"
+    try:
+        if int(saved.get("site_index")) != int(base.get("site_index")):
+            return None, "site-index-mismatch"
+    except (TypeError, ValueError):
+        return None, "site-index-invalid"
+
+    if any(str(saved.get(k, "")) != str(cfg[k]) for k in ("backend", "model", "task")):
+        return None, "calculator-mismatch"
+
+    current_fp = _site_calculation_fingerprint(
+        source_path,
+        int(base["site_index"]),
+        str(base["dopant"]),
+        cfg,
+        surface_cfg,
+    )
+    saved_fp = str(saved.get("calculation_fingerprint", "")).strip()
+    if saved_fp and saved_fp != current_fp:
+        return None, "fingerprint-mismatch"
+
+    # Checkpoints written before restart support did not contain a fingerprint.
+    # They are accepted only when the stable site/calculator identity matches.
+    if bool(cfg["relax_removed_surface"]):
+        relaxed = str(saved.get("removed_surface_relaxed_structure_path") or "").strip()
+        if relaxed and not Path(relaxed).exists():
+            return None, "relaxed-structure-missing"
+
+    return {
+        "status": "ok",
+        "energy_eV": energy,
+        "converged": saved.get("removed_surface_converged"),
+        "final_fmax_eV_per_A": saved.get("removed_surface_final_fmax_eV_per_A"),
+        "optimizer_steps": saved.get("removed_surface_optimizer_steps"),
+        "relaxed_structure_path": saved.get("removed_surface_relaxed_structure_path", ""),
+    }, ("fingerprint" if saved_fp else "legacy-identity")
+
+
 def _global_metal_reference(element: str, cfg: Mapping[str, Any]) -> tuple[float | None, str]:
     path = _path(Path(cfg["project_root"]), str(cfg["reference_energies_file"]))
     if not path.exists():
@@ -620,6 +716,7 @@ def run_leaching(
     metal_cache: dict[str, tuple[float | None, str]] = {}
     parent_cache: dict[str, tuple[float | None, Structure, str]] = {}
     records, potential_rows = [], []
+    n_reused, n_calculated = 0, 0
 
     for _, preview_row in preview.iterrows():
         base, sid = preview_row.to_dict(), str(preview_row["surface_id"])
@@ -643,11 +740,25 @@ def run_leaching(
             records.append(rec); continue
 
         site_dir = surface_dir / f"{dopant}_site_{idx:04d}"; site_dir.mkdir(parents=True, exist_ok=True)
-        removed = parent_structure.copy(); removed.remove_sites([idx])
-        Poscar(removed).write_file(str(site_dir / "POSCAR_removed_unrelaxed"))
-        fixed = _select_fixed_atom_indices(removed, dict(surface_cfg)) if cfg["inherit_surface_fixed_atoms"] else []
-        calc_cfg = dict(cfg); calc_cfg["relax"] = bool(cfg["relax_removed_surface"])
-        result = _evaluate(removed, fixed, calc_cfg, calculator, site_dir / "relax")
+        checkpoint_path = site_dir / "leaching_result.json"
+        fingerprint = _site_calculation_fingerprint(source_path, idx, dopant, cfg, surface_cfg)
+        result, checkpoint_mode = _load_completed_site_checkpoint(
+            checkpoint_path, base, cfg, source_path, surface_cfg
+        )
+        if result is not None:
+            n_reused += 1
+            print(
+                f"[leaching] RESUME {sid} {dopant} site {idx}: "
+                f"reusing completed checkpoint ({checkpoint_mode})"
+            )
+        else:
+            removed = parent_structure.copy(); removed.remove_sites([idx])
+            Poscar(removed).write_file(str(site_dir / "POSCAR_removed_unrelaxed"))
+            fixed = _select_fixed_atom_indices(removed, dict(surface_cfg)) if cfg["inherit_surface_fixed_atoms"] else []
+            calc_cfg = dict(cfg); calc_cfg["relax"] = bool(cfg["relax_removed_surface"])
+            result = _evaluate(removed, fixed, calc_cfg, calculator, site_dir / "relax")
+            n_calculated += 1
+
         rec.update(
             status="ok" if result.get("status") == "ok" else "calculation-failed",
             backend=cfg["backend"], model=cfg["model"], task=cfg["task"],
@@ -655,6 +766,9 @@ def run_leaching(
             removed_surface_energy_eV=result.get("energy_eV"), removed_surface_converged=result.get("converged"),
             removed_surface_final_fmax_eV_per_A=result.get("final_fmax_eV_per_A"), removed_surface_optimizer_steps=result.get("optimizer_steps"),
             removed_surface_relaxed_structure_path=result.get("relaxed_structure_path"), site_output_dir=str(site_dir),
+            calculation_fingerprint=fingerprint,
+            calculation_reused_from_checkpoint=result is not None and checkpoint_mode in {"fingerprint", "legacy-identity"},
+            checkpoint_compatibility=checkpoint_mode,
         )
         mu, mu_source = _metal_reference(dopant, cfg, calculator, outdir, metal_cache)
         rec.update(metal_reference_eV_atom=mu, metal_reference_source=mu_source, extraction_status="not-computable")
@@ -704,6 +818,9 @@ def run_leaching(
         thermodynamic_model="metal-referenced extraction + user-supplied M^z+/M redox reference",
         potential_scale=cfg["potential_scale"], temperature_K=cfg["temperature_K"], pH=cfg["pH"],
         potentials_V=cfg["potentials_V"],
+        resume_completed=bool(cfg["resume_completed"]),
+        n_reused_checkpoints=n_reused,
+        n_calculated_this_run=n_calculated,
         notes=[
             "Extraction energy: E(slab-M)+mu_M(metal)-E(slab+M).",
             "Electrochemical values are omitted unless oxidation state and standard reduction potential are supplied.",
@@ -711,7 +828,10 @@ def run_leaching(
         ], results=records,
     )
     (outdir / str(cfg["summary_json"])).write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
-    print(f"[leaching] Analyzed {len(results)} dopant-removal site(s) -> {summary}")
+    print(
+        f"[leaching] Analyzed {len(results)} dopant-removal site(s) "
+        f"({n_reused} reused, {n_calculated} calculated this run) -> {summary}"
+    )
     return summary
 
 
