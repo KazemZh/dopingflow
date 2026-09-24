@@ -5,6 +5,7 @@ from pymatgen.core import Lattice, Structure
 
 from dopingflow.surface_staged import (
     DEFAULT_MILLERS,
+    _add_segregation_metrics,
     _parse_config,
     _rank,
     _surface_energy,
@@ -143,3 +144,56 @@ def test_ranking_excludes_non_computable_terminations() -> None:
     assert ranked["screen_rankable"].tolist() == [True, True, False]
     assert len(selected) == 1
     assert selected.iloc[0]["screen_surface_energy_J_m2"] == 0.8
+
+
+
+def test_segregation_energy_uses_all_bulk_like_variant_as_reference() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "composition_tag": "Sb5_Ti5",
+                "candidate": "candidate_001",
+                "miller_h": 1,
+                "miller_k": 1,
+                "miller_l": 0,
+                "termination_id": 1,
+                "variant_label": "Sb-bulk__Ti-bulk",
+                "target_zones_json": '{"Sb": "bulk", "Ti": "bulk"}',
+                "screen_energy_eV": -100.0,
+            },
+            {
+                "composition_tag": "Sb5_Ti5",
+                "candidate": "candidate_001",
+                "miller_h": 1,
+                "miller_k": 1,
+                "miller_l": 0,
+                "termination_id": 1,
+                "variant_label": "Sb-surface__Ti-bulk",
+                "target_zones_json": '{"Sb": "surface", "Ti": "bulk"}',
+                "screen_energy_eV": -100.4,
+            },
+            {
+                "composition_tag": "Sb5_Ti5",
+                "candidate": "candidate_001",
+                "miller_h": 1,
+                "miller_k": 1,
+                "miller_l": 0,
+                "termination_id": 1,
+                "variant_label": "Sb-surface__Ti-surface",
+                "target_zones_json": '{"Sb": "surface", "Ti": "surface"}',
+                "screen_energy_eV": -99.8,
+            },
+        ]
+    )
+
+    out = _add_segregation_metrics(df, "screen")
+
+    assert set(out["screen_segregation_status"]) == {"ok"}
+    assert (
+        set(out["screen_segregation_reference_variant"])
+        == {"Sb-bulk__Ti-bulk"}
+    )
+    values = dict(zip(out["variant_label"], out["screen_segregation_energy_eV"]))
+    assert values["Sb-bulk__Ti-bulk"] == pytest.approx(0.0)
+    assert values["Sb-surface__Ti-bulk"] == pytest.approx(-0.4)
+    assert values["Sb-surface__Ti-surface"] == pytest.approx(0.2)
