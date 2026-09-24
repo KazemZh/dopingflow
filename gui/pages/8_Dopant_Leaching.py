@@ -541,7 +541,10 @@ else:
 
     with tabs[2]:
         if potential_path.exists():
-            scan = pd.read_csv(potential_path)
+            try:
+                scan = pd.read_csv(potential_path)
+            except pd.errors.EmptyDataError:
+                scan = pd.DataFrame()
             if scan.empty:
                 st.info("No electrochemical scan: complete redox data were not supplied.")
             else:
