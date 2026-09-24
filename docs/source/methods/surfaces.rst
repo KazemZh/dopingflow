@@ -1,447 +1,264 @@
-Surface Generation and Relaxation
-=================================
+Staged Surface Screening and Refinement
+=======================================
 
 Overview
 --------
 
-The surface stage extends the bulk workflow by constructing slab models from
-selected relaxed bulk candidates and optionally relaxing those slabs.
+The surface workflow converts selected relaxed source structures into slab
+models, scans orientations, terminations, and representative co-dopant depth
+arrangements, and optionally re-evaluates the shortlist with a second
+higher-fidelity ML calculator.
 
-This stage operates **after** bulk structure generation, filtering, bandgap
-prediction, and formation energy evaluation.
+The intended sequence is::
 
-The workflow consists of:
+   selected vacancy-free or O-vacancy source structure
+       -> facets
+       -> terminations
+       -> representative co-dopant depth variants
+       -> fast MLFF screen
+       -> top-k shortlist
+       -> optional higher-fidelity MLFF refinement
+       -> final surface shortlist
 
-1. Selecting candidate structures from a database
-2. Generating slab geometries for chosen surface orientations
-3. Enumerating surface terminations
-4. Optionally fixing part of the slab
-5. Optionally relaxing the slab using a machine-learning backend
-6. Writing structures and metadata
+Leaching and Ir/IrOx deposition are intentionally outside this stage.
 
-Input Data
-----------
+Commands
+--------
 
-The surface stage reads candidate data from a CSV database, typically:
+The workflow is split so different calculators can live in different Conda
+environments::
 
-::
+   dopingflow surface-scan -c input.toml
+   dopingflow surface-refine -c input.toml
 
-   results_database.csv
+If both calculator dependencies are available in one environment::
 
-Each row corresponds to a bulk candidate and contains:
+   dopingflow surface -c input.toml
 
-- ``composition_tag``
-- ``candidate`` (e.g. ``candidate_001``)
-- ``candidate_path``
-- ``E_form_norm``
-- ``bandgap_eV``
-
-The corresponding relaxed bulk structure is loaded from:
-
-::
-
-   candidate_path / 02_relax / POSCAR
-
-Candidate Selection
+Structure selection
 -------------------
 
-Selection is performed in two steps:
+Surface screening uses the same structure-discovery convention as oxidation-state
+and electronic-conductivity analysis. Configure::
 
-1. **Composition filtering**
+   source_root = "vacancy-selected"
+   include_vacancy_free = true
+   include_oxygen_vacancies = false
+   target_include = []
 
-   The dataset is first restricted using:
+``source_root`` contains the selected relaxed parent structures and, when
+oxygen-vacancy targets are requested, ``vacancies_database.json``.
 
-   - ``composition_tag``
-   - or ``composition_tags``
+``include_vacancy_free`` controls whether relaxed selected parents are scanned.
+``include_oxygen_vacancies`` independently controls whether relaxed O-vacancy
+structures are scanned. ``target_include`` is optional and accepts the same exact
+target IDs and shell-style wildcards used by oxidation/conductivity, for example::
 
-2. **Selection mode**
+   target_include = ["Sb5_Ti2p5/candidate_014", "Sb10_Nb5/*"]
 
-   Within the selected composition subset, candidates are filtered using:
+Leaving ``target_include`` empty uses every discovered structure allowed by the
+two vacancy toggles.
 
-   - ID selection (``candidate_id``)
-   - multiple IDs (``candidate_ids``)
-   - ranking-based selection
-   - numeric filters (formation energy and bandgap)
+For an oxygen-vacancy target, the corresponding periodic oxygen-deficient
+structure is the reference structure for that target's slab generation and
+same-calculator surface-energy expression. Vacancy-free and vacancy-containing
+targets are ranked independently rather than being mixed into one ranking.
 
-This two-step strategy ensures that comparisons are always made within the same
-chemical composition.
-
-Slab Generation
----------------
-
-For each selected bulk structure, slabs are generated using
-``pymatgen.core.surface.SlabGenerator``.
-
-The user can choose between two modes:
-
-Explicit orientation
-^^^^^^^^^^^^^^^^^^^^
-
-The Miller indices are directly provided:
-
-::
-
-   miller_list = [[1, 0, 0], [1, 1, 0], [1, 1, 1]]
-
-Automatic orientation
-^^^^^^^^^^^^^^^^^^^^^
-
-All Miller indices up to ``max_miller`` are generated, and the first
-``max_orientations`` are kept.
-
-Slab construction
-^^^^^^^^^^^^^^^^^
-
-The slab is built according to:
-
-- minimum slab thickness
-- minimum vacuum thickness
-- optional lattice reduction
-- optional primitive reduction
-- optional lattice reorientation
-
-Important:
-
-If ``in_unit_planes = false``, both slab and vacuum thickness are interpreted
-in Ångström.
-
-Orthogonalization
-^^^^^^^^^^^^^^^^^
-
-If ``orthogonal_c = true``, the slab is transformed so that:
-
-- the ``c`` vector is perpendicular to the surface plane
-- ``a`` and ``b`` span the surface
-
-This is recommended for:
-
-- clean POSCAR output
-- stable relaxation behavior
-- easier interpretation of slab thickness
-
-Surface Terminations
+Surface orientations
 --------------------
 
-Each orientation can produce multiple terminations.
+For the current rutile SnO2 project the default explicit starting set is
+(110), (100), (101), and (001). The list is configurable with miller_list.
+Setting orientation_mode = "automatic" uses pymatgen's symmetrically distinct
+Miller indices up to max_miller and then applies max_orientations.
 
-The workflow uses:
+Terminations
+------------
 
-::
+Each orientation is passed to pymatgen.core.surface.SlabGenerator.
+termination_mode = "all" preserves generated terminations up to
+max_terminations_per_orientation; "first" keeps only the first.
 
-   slabs = SlabGenerator(...).get_slabs()
+Slab thickness, vacuum, centering, lattice reorientation, orthogonal-c
+conversion, and optional symmetrization are controlled in the surface section.
 
-Each slab corresponds to a different termination of the same surface.
+Representative co-dopant depth scan
+-----------------------------------
 
-The user controls:
+With dopant_variant_mode = "co-dopant-depth", the workflow identifies a host
+cation and selected dopant species and constructs representative variants in
+surface, subsurface, and bulk-like cation layers.
 
-- whether to keep all terminations
-- or only the first one
-- the maximum number of terminations per orientation
+For each selected dopant species, one representative dopant atom is swapped
+with a host site in the requested zone. Total composition is unchanged. Other
+same-species dopants retain their parent ordering.
 
-No symmetry-based deduplication is applied by default, ensuring that all
-physically distinct terminations are preserved.
+This is deliberately a controlled screening of depth preference rather than an
+exhaustive enumeration of every possible same-species dopant permutation. The
+max_dopant_variants_per_termination setting prevents combinatorial growth.
 
-Atom Ordering
--------------
+For the ATO/co-doped SnO2 use case an explicit setup may be::
 
-Before writing structures, atoms are reordered according to:
+   host_species = "Sn"
+   dopant_species = ["Sb", "Ti"]
+   anion_species = ["O"]
+   depth_zones = ["surface", "subsurface", "bulk"]
 
-::
+If dopant_species is omitted, all non-host, non-anion species are inferred as
+dopants.
 
-   [generate].poscar_order
+Screen calculator
+-----------------
 
-Within each species, atoms are sorted by:
+The surface.screen section defines the fast calculator used on every generated
+slab variant. It uses the same ML backend abstraction as the bulk workflow and
+supports M3GNet, UMA, MACE, and GRACE.
 
-1. fractional z
-2. fractional y
-3. fractional x
+Example::
 
-This ensures:
+   [surface.screen]
+   backend = "grace"
+   model = "GRACE-1L-OMAT"
+   device = "cuda"
+   relax = true
+   fmax = 0.05
+   max_steps = 300
+   top_k_per_candidate = 10
 
-- clean and consistent POSCAR files
-- compatibility with VASP and post-processing tools
+Refinement calculator
+---------------------
 
-Fixed Atoms (Selective Dynamics)
---------------------------------
+The surface.refine section is independent of the screening calculator and
+re-evaluates only surface_screen_selected.csv.
 
-The surface stage supports fixing part of the slab.
+Example::
 
-Two strategies are available:
+   [surface.refine]
+   enabled = true
+   backend = "mace"
+   model = "mh-1"
+   task = "matpes_r2scan"
+   device = "cuda"
+   relax = true
+   fmax = 0.03
+   max_steps = 500
+   top_k_per_candidate = 5
 
-Layer-based fixing
-^^^^^^^^^^^^^^^^^^
+Any model accepted by the existing backend abstraction may be chosen,
+including a supported MACE alias or custom checkpoint path. Refinement therefore
+does not mean DFT.
 
-Atoms are grouped into layers based on their Cartesian z-coordinate.
+Calculator-consistent source references
+-------------------------------------
 
-Grouping is controlled by a tolerance:
+Surface and source-reference energies are never silently mixed across calculators.
 
-::
+For every selected source structure, the screening calculator evaluates that
+periodic source and uses its energy only for screening surface energies. The
+refinement calculator independently evaluates the same source structure and
+uses that energy only for refinement surface energies.
 
-   fix_layer_tolerance_A
+The current implementation uses a same-calculator single-point energy on the
+already-relaxed periodic source geometry. This gives an internally consistent
+ranking within one source target. Absolute publication-quality surface energies should
+still be converged with respect to bulk geometry, slab thickness, vacuum,
+constraints, and calculator settings.
 
-The user selects:
+Surface energy and ranking
+--------------------------
 
-- bottom layers
-- or middle layers
+For a slab whose composition is proportional to its periodic source structure, the workflow
+uses::
 
-Thickness-based fixing
-^^^^^^^^^^^^^^^^^^^^^^
+   gamma = (E_slab - n E_bulk) / (2 A)
 
-Atoms are selected based on their z-position:
+where A is the area of one slab face and n is the bulk-equivalent composition
+factor.
 
-- bottom region: atoms within a thickness from the minimum z
-- middle region: atoms around the slab center
+Important interpretation:
 
-Output behavior
-^^^^^^^^^^^^^^^
+- the expression is a two-surface average unless the two faces are equivalent;
+- only proportional/stoichiometric slabs receive this simple surface energy;
+- non-stoichiometric terminations remain in the output with an explicit
+  not_computable status and are excluded from ranking;
+- raw slab energies are never used to rank structures with different atom
+  counts.
 
-Fixed atoms are written in the same ``POSCAR`` file using VASP selective dynamics:
-
-- fixed atoms: ``F F F``
-- free atoms: ``T T T``
-
-Important:
-
-These flags are not only written to file but are also enforced during relaxation
-using ASE constraints.
-
-Surface Relaxation
-------------------
-
-If enabled, slabs are relaxed using the same abstraction layer as bulk relaxation.
-
-Workflow
-^^^^^^^^
-
-1. Convert the slab to ASE atoms
-2. Attach the ML calculator
-3. Apply ``FixAtoms`` constraint (if needed)
-4. Run ASE optimizer
-5. Convert back to pymatgen structure
-
-Backends
-^^^^^^^^
-
-The relaxation uses the same backend system as the bulk stage:
-
-- M3GNet
-- ALIGNN (if available)
-- other supported ML potentials
-
-Runtime configuration includes:
-
-- device (CPU or CUDA)
-- GPU ID
-- threading settings
-
-Optimizer
-^^^^^^^^^
-
-Supported optimizers:
-
-- BFGS
-- LBFGS
-- FIRE
-- MDMin
-- QuasiNewton
-
-The optimizer runs until:
-
-- maximum force < ``surface_fmax``
-- or maximum steps reached
+A chemical-potential treatment for non-stoichiometric terminations is a
+separate future extension.
 
 Constraints
-^^^^^^^^^^^
+-----------
 
-Fixed atoms are enforced using:
-
-::
-
-   ase.constraints.FixAtoms
-
-This ensures:
-
-- atoms marked as fixed do not move during relaxation
-- constraints are physically enforced, not only written in POSCAR
-
-Surface Energy
---------------
-
-The surface stage can evaluate the surface energy of each slab when a slab
-energy is available (typically after surface relaxation).
-
-Definition
-^^^^^^^^^^
-
-The surface energy is computed using the symmetric slab expression:
-
-::
-
-   :math:`\gamma = \frac{E_{\mathrm{slab}} - n E_{\mathrm{bulk}}}{2A}`
-
-where:
-
-- ``E_slab`` is the slab total energy
-- ``E_bulk`` is the relaxed bulk energy of the parent candidate
-- ``n`` is the number of bulk-equivalent units contained in the slab
-- ``A`` is the surface area
-- the factor of 2 accounts for the two exposed surfaces
-
-Bulk reference
-^^^^^^^^^^^^^^
-
-The bulk energy is taken from the relaxed candidate structure selected
-from the workflow database.
-
-This ensures consistency between bulk and surface calculations for the
-same doped composition.
-
-Slab energy
-^^^^^^^^^^^
-
-Surface energy is computed only when a slab energy is available.
-
-In the current implementation, this corresponds to:
-
-- relaxed slab energy when ``relax_surface = true``
-
-If no slab energy is available, surface energy is not computed.
-
-Bulk equivalence factor
-^^^^^^^^^^^^^^^^^^^^^^^
-
-The factor ``n`` is determined automatically from the composition of the slab
-and the parent bulk.
-
-For each species, the ratio:
-
-::
-
-   N_slab / N_bulk
-
-is computed.
-
-If all species share the same ratio within numerical tolerance, the slab is
-considered proportional to the bulk composition and this value defines ``n``.
-
-If the ratios differ between species, the slab is not considered proportional
-and surface energy is not assigned.
-
-Stoichiometry requirement
-^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Surface energy is only computed for slabs whose composition is proportional
-to the bulk.
-
-This includes:
-
-- stoichiometric slabs
-- symmetric cleavage surfaces
-
-Surface energy is not computed for:
-
-- non-stoichiometric terminations
-- slabs missing bulk species
-- slabs containing additional species
-
-Status reporting
-^^^^^^^^^^^^^^^^
-
-Each slab is assigned a status flag:
-
-- ``ok`` — surface energy successfully computed
-- ``missing_slab_energy`` — slab energy not available
-- ``missing_bulk_energy`` — bulk energy not available
-- ``not_computable_not_proportional`` — composition mismatch
-- ``not_computable_missing_species``
-- ``not_computable_extra_species``
-- ``failed`` — numerical or runtime failure
-
-Units
-^^^^^
-
-Surface energy is reported in:
-
-- eV/Å²
-- J/m²
-
-The conversion used is:
-
-::
-
-   1 eV/Å² = 16.02176634 J/m²
+fix_atoms can constrain middle or bottom layers using a layer count or Cartesian
+thickness. The same fixed atoms are enforced during ASE relaxation.
 
 Outputs
 -------
 
-Each slab produces a directory:
+The default output directory is 08_surfaces.
 
-::
+surface_screen_summary.csv
+   Every generated orientation, termination, and dopant-depth variant.
 
-   composition_tag / candidate / hkl / termination
+surface_screen_selected.csv
+   Top-k rankable variants per selected source structure after the screen calculator.
 
-Example:
+surface_refine_summary.csv
+   Higher-fidelity results for the screening shortlist.
 
-::
+surface_final_selected.csv
+   Final top-k variants after refinement.
 
-   Sb50/candidate_001/hkl_1_0_0/term_001/
+Each variant directory also stores the generated POSCAR, stage-specific
+result.json, optional relaxed POSCAR, optimizer log/trajectory, and meta.json.
 
-Files
-^^^^^
+A typical path is::
 
-``POSCAR``
-   Generated slab (with optional selective dynamics)
+   08_surfaces/
+     targets/
+       Sb5_Ti5__candidate_001/
+         bulk_reference/
+           screen/
+           refine/
+         hkl_1_1_0/
+           term_001/
+             variant_001_original/
+               POSCAR
+               screen/
+               refine/
 
-``CONTCAR``
-   Relaxed slab structure (if relaxation is enabled)
+Backward compatibility
+----------------------
 
-``surface_relax.log``
-   Optimizer log
+Older flat surface relaxation keys such as surface_backend, surface_model,
+surface_task, surface_device, surface_fmax, and surface_max_steps are mapped to
+surface.screen when the nested screen section is not supplied. New studies
+should use the staged nested sections.
 
-``surface_relax.traj``
-   ASE trajectory
+Graphical interface
+-------------------
 
-``surface_relax.json``
-   Relaxation metadata
+The Streamlit ``Surface Screening`` page owns the complete surface-stage
+configuration. The old Surface editor in the main Input Builder has been
+replaced by a link to this page so that the same settings are not maintained in
+two places.
 
-``meta.json``
-   General slab metadata
+The page mirrors the staged CLI design:
 
-Metadata
---------
+- configure and preview vacancy-free and/or O-vacancy source structures;
+- edit slab, termination, co-dopant-depth, and constraint settings;
+- configure the independent screen and refinement calculators;
+- run the screen and refinement either in the current environment or through
+  separate named Conda environments;
+- inspect surface-energy rankings one selected source structure at a time;
+- inspect same-termination segregation energies relative to the all-bulk-like
+  variant;
+- browse the selected slab geometry interactively;
+- inspect the raw screen/refinement tables.
 
-Each slab has a ``meta.json`` file containing:
-
-- composition and candidate information
-- Miller index and termination ID
-- number of atoms
-- surface area
-- slab and vacuum thickness estimates
-- fixing parameters
-- relaxation settings and results
-- surface energy (when available)
-- surface energy status flag
-- bulk-equivalent scaling factor
-
-This metadata is also aggregated into:
-
-::
-
-   surface_summary.csv
-
-Design Considerations
----------------------
-
-The surface stage is designed to:
-
-- remain fully decoupled from bulk workflow stages
-- allow flexible selection of candidates
-- preserve all physically meaningful terminations
-- support reproducible slab generation
-- reuse the same backend abstraction for relaxation
-
-This ensures consistency between:
-
-- bulk relaxation
-- surface relaxation
-- downstream surface simulations
+The results explorer keeps surface-energy ranking and dopant segregation as
+separate quantities. A low surface energy identifies a thermodynamically
+favorable exposed slab within the implemented model, whereas a negative
+segregation energy indicates that the selected dopant placement is favored
+relative to the corresponding bulk-like placement.

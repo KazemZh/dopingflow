@@ -1,0 +1,36 @@
+name: Surface staged tests
+
+on:
+  pull_request:
+    paths:
+      - "src/dopingflow/surface.py"
+      - "src/dopingflow/surface_staged.py"
+      - "src/dopingflow/cli.py"
+      - "gui/app.py"
+      - "gui/pages/Surface_Screening.py"
+      - "gui/README.md"
+      - "tests/test_surface_staged.py"
+      - "examples/surfaces/**"
+      - "docs/source/methods/surfaces.rst"
+      - "docs/source/workflow_overview.rst"
+  push:
+    branches:
+      - "feature/surface-screen-refine"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install "ase>=3.22"
+          pip install -e ".[dev]"
+      - name: Run surface tests
+        run: |
+          python -m py_compile gui/app.py gui/pages/Surface_Screening.py
+          pytest -q tests/test_surface_staged.py tests/test_cli_help.py

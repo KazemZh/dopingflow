@@ -18,6 +18,11 @@ from dopingflow.logging import setup_logging
 from dopingflow.oxidation import run_oxidation_from_toml
 from dopingflow.conductivity import rebuild_reference_comparison_from_toml, run_conductivity_from_toml
 from dopingflow.site_preference import run_site_preference_from_toml
+from dopingflow.surface_staged import (
+    run_surface_refine_from_toml,
+    run_surface_scan_from_toml,
+    run_surface_workflow_from_toml,
+)
 from dopingflow.phase_diagram_convergence_extensions import run_phase_diagram_from_toml
 from dopingflow.refs_oxygen_extensions import run_refs_build_from_toml
 from dopingflow.relax import run_relax_from_toml
@@ -271,6 +276,48 @@ def conductivity_cmd(
             raise typer.Exit(code=1)
 
 
+@app.command("surface-scan")
+def surface_scan_cmd(
+    config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
+    verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
+) -> None:
+    """Step 14a: Generate, relax, and rank surface orientations/terminations."""
+    _init(config, verbose)
+    output = run_surface_scan_from_toml(config)
+    if output is None:
+        typer.echo("Surface stage disabled; set [surface].enabled=true")
+        return
+    typer.echo(f"\nWrote surface screen summary: {output}")
+
+
+@app.command("surface-refine")
+def surface_refine_cmd(
+    config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
+    verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
+) -> None:
+    """Step 14b: Re-evaluate the surface shortlist with a higher-fidelity MLFF."""
+    _init(config, verbose)
+    output = run_surface_refine_from_toml(config)
+    if output is None:
+        typer.echo("Surface refinement disabled; set [surface.refine].enabled=true")
+        return
+    typer.echo(f"\nWrote refined surface summary: {output}")
+
+
+@app.command("surface")
+def surface_cmd(
+    config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
+    verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
+) -> None:
+    """Step 14: Run surface screening and optional higher-fidelity refinement."""
+    _init(config, verbose)
+    output = run_surface_workflow_from_toml(config)
+    if output is None:
+        typer.echo("Surface stage disabled; set [surface].enabled=true")
+        return
+    typer.echo(f"\nWrote surface workflow summary: {output}")
+
+
 @app.command("run-all")
 def run_all_cmd(
     config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
@@ -279,7 +326,7 @@ def run_all_cmd(
         "--from",
         help=(
             "Start step key (refs, corrections, generate, scan, relax, filter, "
-            "bandgap, formation, collect, alloy-hull, phase-diagram, vacancies, site-preference, oxidation, conductivity)"
+            "bandgap, formation, collect, alloy-hull, phase-diagram, vacancies, site-preference, oxidation, conductivity, surface)"
         ),
     ),
     stop: str = typer.Option("phase-diagram", "--until", help="Stop step key (inclusive)"),
@@ -301,7 +348,7 @@ def run_all_cmd(
     Step keys:
       refs -> corrections -> generate -> scan -> relax -> filter -> bandgap
       -> formation -> collect -> alloy-hull -> phase-diagram -> vacancies
-      -> site-preference -> oxidation -> conductivity
+      -> site-preference -> oxidation -> conductivity -> surface
     """
     _init(config, verbose)
 
@@ -327,6 +374,7 @@ def run_all_cmd(
         ("site-preference", "11 site-preference", lambda: run_site_preference_from_toml(config)),
         ("oxidation", "12 oxidation", lambda: run_oxidation_from_toml(config)),
         ("conductivity", "13 conductivity", lambda: run_conductivity_from_toml(config)),
+        ("surface", "14 surface scan/refine", lambda: run_surface_workflow_from_toml(config)),
     ]
 
     key_to_idx = {k: i for i, (k, _, _) in enumerate(steps)}
@@ -366,7 +414,7 @@ def run_all_cmd(
         typer.echo(f"\n=== {title} ({k}) ===")
         res = fn()
 
-        if k in {"collect", "alloy-hull", "phase-diagram", "vacancies", "site-preference", "oxidation"} and isinstance(res, Path):
+        if k in {"collect", "alloy-hull", "phase-diagram", "vacancies", "site-preference", "oxidation", "surface"} and isinstance(res, Path):
             typer.echo(f"\nWrote output: {res}")
 
 

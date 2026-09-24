@@ -15,6 +15,25 @@ The format loosely follows semantic versioning.
 
 ## [Unreleased]
 ### Added
+- Surface target selection now mirrors Electronic Conductivity/Oxidation States:
+  `source_root`, independent vacancy-free/O-vacancy toggles, and optional exact/glob
+  `target_include` selectors drive both GUI preview and backend execution. Vacancy-free
+  and O-vacancy source structures are ranked independently.
+- Dedicated Streamlit **Surface Screening** page with candidate/facet/termination
+  configuration, representative co-dopant depth controls, independent GRACE/MACE-style
+  screen/refine calculators, separate-environment execution, surface/segregation plots,
+  3D slab browsing, and raw result tables. The duplicate Surface editor in the main
+  Input Builder now links to this page.
+- Explicit same-termination co-dopant segregation energies referenced to the generated
+  all-bulk-like placement, with negative values indicating favorable surface/subsurface
+  enrichment.
+- Staged surface screening and refinement with separate fast and higher-fidelity
+  MLFF calculators, configurable Miller orientations and terminations,
+  representative surface/subsurface/bulk co-dopant placements, calculator-specific
+  bulk references, top-k handoff, and explicit exclusion of non-proportional slabs
+  from the simple surface-energy ranking.
+- New surface-scan, surface-refine, and surface CLI commands, plus a GRACE-to-MACE
+  example configuration using MACE MH-1 / matpes_r2scan refinement.
 - A staged Monte Carlo vacancy workflow for incompatible ML environments:
   ``dopingflow vacancies-mc-search`` runs only the ``mc_*`` search calculator,
   while ``dopingflow vacancies-finalize`` runs only the ordinary final vacancy

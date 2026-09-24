@@ -864,3 +864,47 @@ The normal Streamlit page keeps the same **Save settings / Run analysis** layout
 as oxidation-state and dopant site-preference analysis. A reference-only CLI
 utility remains available for advanced recovery/rebuild workflows:
 `dopingflow conductivity -c input.toml --reference-only`.
+
+
+---
+
+## Staged surface screening and refinement
+
+After selecting relaxed source structures, DopingFlow can scan surface orientation,
+termination, and representative dopant depth before the later catalyst-interface stages.
+The surface stage uses the same `source_root`, vacancy-free/O-vacancy toggles, and
+optional `target_include` selectors as the oxidation/conductivity workflows.
+
+The current SnO2 starting set is (110), (100), (101), and (001), but the Miller
+list is fully configurable. The surface scan can move one representative atom of
+each selected dopant species among surface, subsurface, and bulk-like cation layers
+while preserving total composition.
+
+A fast calculator and a higher-fidelity calculator are configured independently.
+For example, use GRACE for the broad screen and MACE MH-1 with the matpes_r2scan
+head for refinement. Any M3GNet, UMA, MACE, or GRACE calculator accepted by the
+existing ML backend abstraction can be selected.
+
+Run the stages in separate environments when needed:
+
+    conda activate dopingflow-grace
+    dopingflow surface-scan -c input.toml
+
+    conda activate dopingflow-mace
+    dopingflow surface-refine -c input.toml
+
+Or, if both dependencies are available together:
+
+    dopingflow surface -c input.toml
+
+Each calculator evaluates its own periodic source reference. Screening and refinement
+surface energies therefore never mix energies from different models. The simple
+surface-energy ranking is applied only when the slab composition is proportional
+to the selected source structure. Non-stoichiometric terminations are retained with an explicit
+non-computable status rather than ranked using raw total energies.
+
+See examples/surfaces/input.toml and docs/source/methods/surfaces.rst for the
+complete configuration and interpretation notes. The Streamlit **Surface Screening**
+page provides the same staged controls, separate-environment execution, surface-energy
+and segregation-energy plots, and per-surface structure browsing. The old Surface
+editor in the main Input Builder now links to this dedicated page.

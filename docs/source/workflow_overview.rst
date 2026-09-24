@@ -25,7 +25,7 @@ Vacancy Results → Optional M0/M1-corrected Vacancy Thermodynamics
 
 Vacancy Results → Vacancy-resolved Raw/Corrected Phase Diagram
 
-Database → Surface Generation → Surface Relaxation
+Database → Surface Scan → Higher-Fidelity Surface Refinement
 
 The vacancy M0/M1 option reuses the already fitted backend-specific correction
 model. It does not refit a separate vacancy-specific model. The correction is
@@ -172,18 +172,30 @@ vacancy count means movement closer to that composition's hull, not necessarily
 favorable oxygen removal. It is also not yet an oxygen-open competing-phase
 grand-potential hull.
 
-11. Surface generation (optional)
+11. Dopant site-preference analysis (optional)
 
-   - Select candidates from the database
-   - Generate slab structures for chosen Miller indices
-   - Enumerate surface terminations
-   - Optionally fix atoms in the slab
+   - Analyze dopant-pair geometry, ordering, and local environments
+   - Reuse selected relaxed bulk and vacancy structures
 
-12. Surface relaxation (optional)
+12. Oxidation-state analysis (optional)
 
-   - Relax slab structures using ML interatomic potentials
-   - Apply atom constraints (e.g. fixed bottom layers)
-   - Use the same backend abstraction as bulk relaxation
+   - Apply structural, ML, or DFT-backed oxidation descriptors
+   - Reuse compatible electronic-structure calculations when available
+
+13. Electronic conductivity screening (optional)
+
+   - Evaluate band-transport conductivity/tau for selected structures
+   - Reuse compatible GPAW calculations and compare against a chosen reference
+
+14. Staged surface screening and refinement (optional)
+
+   - Select the most stable bulk candidates
+   - Generate configurable Miller-index slabs and surface terminations
+   - Scan representative Sb/co-dopant surface, subsurface, and bulk-like placements
+   - Relax and rank all rankable slabs with a fast configurable MLFF
+   - Re-evaluate only the top-k shortlist with an independent higher-fidelity MLFF
+   - Keep screening and refinement energies separated by calculator provenance
+   - Preserve non-stoichiometric terminations without ranking them by raw total energy
 
 Design Principles
 -----------------
@@ -206,7 +218,7 @@ Notes
   chemistry-specific experimental oxygen calibration.
 - The vacancy-resolved closed-system hull is only as complete as the competing
   phases supplied to the phase-diagram calculation.
-- Surface generation is intentionally decoupled from the main pipeline and is executed separately.
+- Surface scanning can be run as one optional run-all stage or split into surface-scan and surface-refine commands when GRACE and MACE live in different environments.
 
 Typical Usage
 -------------
@@ -247,8 +259,17 @@ A typical workflow consists of:
 4. Inspecting the vacancy correction controls and raw/corrected phase stability
    in the Streamlit ``Vacancy M0/M1 Energy Correction`` and ``Phase Diagram`` pages.
 
-5. Generating and optionally relaxing surfaces:
+5. Screening surfaces in the fast-model environment:
 
    ::
 
-      dopingflow surface -c input.toml
+      dopingflow surface-scan -c input.toml
+
+6. Refining the surface shortlist in a second MLFF environment if enabled:
+
+   ::
+
+      dopingflow surface-refine -c input.toml
+
+   If both calculator dependencies are available in the same environment,
+   dopingflow surface -c input.toml runs both stages in sequence.

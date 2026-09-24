@@ -227,6 +227,51 @@ oxygen-reference calibration path.
 
 ---
 
+## Surface Screening page
+
+`gui/pages/Surface_Screening.py` is the dedicated interface for the staged
+surface workflow. Surface controls are intentionally no longer duplicated in
+the main Input Builder; its Surface expander now links to this page and preserves
+the existing `[surface]` section unchanged.
+
+The page provides:
+
+- conductivity-style `source_root`, vacancy-free/O-vacancy toggles, and optional target selectors;
+- explicit low-index facets or automatic symmetrically distinct Miller indices;
+- termination and slab-size/vacuum controls;
+- representative surface/subsurface/bulk co-dopant placement scans;
+- fixed middle/bottom slab regions during relaxation;
+- independent fast-screen and higher-fidelity refinement calculators;
+- direct execution in the current environment or separate named Conda environments;
+- screening/refinement TOML preview and selected-structure preview;
+- surface-energy and segregation-energy plots;
+- per-surface structure browsing with the 3D structure viewer;
+- raw screen, shortlist, refinement, and final-shortlist tables.
+
+A common split-environment setup is:
+
+```bash
+conda activate dopingflow-grace
+streamlit run gui/app.py
+```
+
+Then select **Current environment** on the Surface Screening page to run
+`surface-scan`. For refinement, either launch the GUI from the MACE environment
+or select **Named Conda environments** and provide the MACE environment name.
+
+The segregation plot uses the same orientation, termination, composition, and
+calculator for all compared variants:
+
+```text
+E_seg = E_variant - E_all-bulk-like
+```
+
+Negative values indicate that the requested surface/subsurface dopant placement
+is favored relative to the generated all-bulk-like placement.
+
+---
+
+
 ## Development and tests
 
 Relevant files are:
@@ -239,6 +284,7 @@ gui/
 ├── phase_diagram_plots.py
 ├── vacancy_thermo_plots.py
 ├── pages/
+│   ├── Surface_Screening.py
 │   ├── Vacancy_MC_Staged.py
 │   ├── Vacancy_Energy_Correction.py
 │   └── Phase_Diagram.py
@@ -246,9 +292,9 @@ gui/
 └── view_structure.py
 ```
 
-Focused tests cover parsing of staged vacancy controls and construction of the
-separate GRACE/MACE commands. The targeted CI workflow also compiles the staged
-GUI modules and builds the Sphinx documentation.
+Focused tests cover the staged vacancy and surface workflows. The surface CI also
+compiles the main app and dedicated Surface Screening page, while the documentation
+workflows keep the Sphinx guides synchronized.
 
 ---
 
@@ -263,3 +309,4 @@ GUI modules and builds the Sphinx documentation.
   supplied to the calculation.
 
 © 2026 Kazem Zhour
+
