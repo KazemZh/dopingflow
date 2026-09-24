@@ -376,6 +376,29 @@ def _read_csv(path: Path) -> pd.DataFrame:
         st.warning(f"Could not read {path.name}: {exc}")
         return pd.DataFrame()
 
+def _ensure_target_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    if frame.empty:
+        return frame
+    out = frame.copy()
+    if "target_id" not in out.columns:
+        composition = out.get("composition_tag", pd.Series("", index=out.index)).astype(str)
+        candidate = out.get("candidate", pd.Series("", index=out.index)).astype(str)
+        out["target_id"] = composition.str.rstrip("/") + "/" + candidate.str.lstrip("/")
+    if "structure_kind" not in out.columns:
+        out["structure_kind"] = "vacancy-free"
+    if "n_oxygen_vacancies" not in out.columns:
+        out["n_oxygen_vacancies"] = 0
+    return out
+
+
+def _target_label(row: pd.Series | dict[str, Any]) -> str:
+    kind = str(row.get("structure_kind", "vacancy-free"))
+    target_id = str(row.get("target_id", ""))
+    n_vac = int(row.get("n_oxygen_vacancies", 0) or 0)
+    if kind == "oxygen-vacancy":
+        return f"O-vacancy ({n_vac}) — {target_id}"
+    return f"Vacancy-free — {target_id}"
+
 
 with st.expander("Configuration & run controls", expanded=False):
     st.caption(
@@ -1008,10 +1031,10 @@ final_selected_name = str(
     )
 )
 
-screen_df = _read_csv(results_root / screen_summary_name)
-screen_selected_df = _read_csv(results_root / screen_selected_name)
-refine_df = _read_csv(results_root / refine_summary_name)
-final_df = _read_csv(results_root / final_selected_name)
+screen_df = _ensure_target_columns(_read_csv(results_root / screen_summary_name))
+screen_selected_df = _ensure_target_columns(_read_csv(results_root / screen_selected_name))
+refine_df = _ensure_target_columns(_read_csv(results_root / refine_summary_name))
+final_df = _ensure_target_columns(_read_csv(results_root / final_selected_name))
 
 if screen_df.empty and refine_df.empty:
     st.info(
