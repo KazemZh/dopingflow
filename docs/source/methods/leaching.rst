@@ -134,6 +134,7 @@ Minimal extraction-only configuration:
    relax_parent_if_recomputed = true
    relax_removed_surface = true
    inherit_surface_fixed_atoms = true
+   resume_completed = true
 
    reference_energies_file = "reference_structures/reference_energies.json"
    metals_dir = "reference_structures/metals"
@@ -192,6 +193,13 @@ Run the calculation:
 .. code-block:: bash
 
    dopingflow leaching -c input.toml
+
+With ``resume_completed = true`` (the default), a restarted run checks each
+per-site ``leaching_result.json`` checkpoint. Compatible completed sites are
+reused, while incomplete, failed, or incompatible sites are recalculated. The
+final CSV/JSON summaries are rebuilt from the full current site selection.
+If a process is interrupted during one site's relaxation, that individual site
+starts again; previously completed sites are not repeated.
 
 The stage is also available as step 15 of `run-all`.
 
