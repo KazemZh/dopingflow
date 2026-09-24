@@ -897,10 +897,10 @@ Or, if both dependencies are available together:
 
     dopingflow surface -c input.toml
 
-Each calculator evaluates its own parent bulk reference. Screening and refinement
+Each calculator evaluates its own periodic source reference. Screening and refinement
 surface energies therefore never mix energies from different models. The simple
 surface-energy ranking is applied only when the slab composition is proportional
-to the parent bulk. Non-stoichiometric terminations are retained with an explicit
+to the selected source structure. Non-stoichiometric terminations are retained with an explicit
 non-computable status rather than ranked using raw total energies.
 
 See examples/surfaces/input.toml and docs/source/methods/surfaces.rst for the
