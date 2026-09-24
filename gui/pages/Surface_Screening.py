@@ -32,7 +32,7 @@ from view_structure import show_structure
 st.set_page_config(page_title="Surface screening", layout="wide")
 st.title("Surface screening")
 st.caption(
-    "Generate low-index slabs from selected stable bulk structures, enumerate terminations, "
+    "Generate low-index slabs from selected vacancy-free or oxygen-vacancy structures, enumerate terminations, "
     "scan representative co-dopant depth placements, rank them with a fast MLFF, and "
     "optionally refine the shortlist with a second higher-fidelity MLFF."
 )
@@ -74,6 +74,9 @@ if not screen_saved:
 refine_saved = dict(surface.get("refine", {}) or {})
 doping = dict(cfg.get("doping", {}) or {})
 scan_cfg = dict(cfg.get("scan", {}) or {})
+structure_cfg = dict(cfg.get("structure", {}) or {})
+oxidation_cfg = dict(cfg.get("oxidation", {}) or {})
+conductivity_cfg = dict(cfg.get("conductivity", {}) or {})
 
 
 def _csv_text(value: Any) -> str:
@@ -380,106 +383,65 @@ with st.expander("Configuration & run controls", expanded=False):
         "only links here so the surface workflow is not duplicated in two places."
     )
 
-    st.subheader("Bulk candidate selection")
-    a1, a2, a3 = st.columns(3)
-    enabled = a1.checkbox(
+    st.subheader("Stage and structures")
+    stage_left, stage_right = st.columns(2)
+    enabled = stage_left.checkbox(
         "Enable surface stage",
         value=bool(surface.get("enabled", False)),
     )
-    source_summary = a2.text_input(
-        "Bulk results database",
-        value=str(surface.get("source_summary", "results_database.csv")),
-        help="Usually results_database.csv from the collect stage.",
-    )
-    outdir = a3.text_input(
+    outdir = stage_right.text_input(
         "Surface output directory",
         value=str(surface.get("outdir", "08_surfaces")),
     )
 
-    composition_values = list(surface.get("composition_tags", []) or [])
-    if surface.get("composition_tag"):
-        composition_values.insert(0, str(surface["composition_tag"]))
-    composition_text = st.text_input(
-        "Composition filter(s), optional",
-        value=", ".join(dict.fromkeys(str(x) for x in composition_values)),
-        help="Leave empty to allow all compositions in the selected bulk database.",
+    source_default = (
+        str(surface.get("source_root", "")).strip()
+        or str(conductivity_cfg.get("source_root", "")).strip()
+        or str(oxidation_cfg.get("source_root", "")).strip()
+        or str(structure_cfg.get("outdir", "random_structures")).strip()
     )
-    composition_tags = _parse_csv(composition_text)
 
-    selection_options = ["top_n", "id", "ids", "rank_range", "filters"]
-    s1, s2, s3 = st.columns(3)
-    selection_mode = s1.selectbox(
-        "Selection mode",
-        selection_options,
-        index=_choice_index(
-            selection_options,
-            str(surface.get("selection_mode", "top_n")),
-            "top_n",
+    include_left, include_right = st.columns(2)
+    include_vacancy_free = include_left.checkbox(
+        "Vacancy-free parents",
+        value=bool(surface.get("include_vacancy_free", True)),
+        help="Include the selected relaxed parent structures found under Source root.",
+    )
+    include_oxygen_vacancies = include_right.checkbox(
+        "O-vacancy structures",
+        value=bool(surface.get("include_oxygen_vacancies", False)),
+        help=(
+            "Include relaxed oxygen-vacancy structures listed in "
+            "vacancies_database.json under Source root."
         ),
     )
 
-    candidate_id = int(surface.get("candidate_id", 1))
-    candidate_ids = list(surface.get("candidate_ids", []) or [])
-    rank_start = int(surface.get("rank_start", 1))
-    rank_end = int(surface.get("rank_end", 10))
-    top_n = int(surface.get("top_n", 3))
-    formation_min = float(surface.get("formation_energy_min", -1e9))
-    formation_max = float(surface.get("formation_energy_max", 1e9))
-    bandgap_min = float(surface.get("bandgap_min", -1e9))
-    bandgap_max = float(surface.get("bandgap_max", 1e9))
-
-    if selection_mode == "top_n":
-        top_n = int(
-            s2.number_input(
-                "Top bulk candidates",
-                min_value=1,
-                value=top_n,
-                step=1,
-            )
-        )
-    elif selection_mode == "id":
-        candidate_id = int(
-            s2.number_input(
-                "Candidate ID",
-                min_value=1,
-                value=candidate_id,
-                step=1,
-            )
-        )
-    elif selection_mode == "ids":
-        ids_text = s2.text_input(
-            "Candidate IDs",
-            value=", ".join(str(v) for v in candidate_ids),
-            placeholder="1, 3, 7",
-        )
-        try:
-            candidate_ids = [int(x) for x in _parse_csv(ids_text)]
-        except ValueError:
-            st.error("Candidate IDs must be comma-separated integers.")
-            candidate_ids = []
-    elif selection_mode == "rank_range":
-        rank_start = int(
-            s2.number_input("Rank start", min_value=1, value=rank_start, step=1)
-        )
-        rank_end = int(
-            s3.number_input("Rank end", min_value=1, value=rank_end, step=1)
-        )
-    else:
-        f1, f2, f3, f4 = st.columns(4)
-        formation_min = float(f1.number_input("Formation energy min", value=formation_min))
-        formation_max = float(f2.number_input("Formation energy max", value=formation_max))
-        bandgap_min = float(f3.number_input("Band gap min (eV)", value=bandgap_min))
-        bandgap_max = float(f4.number_input("Band gap max (eV)", value=bandgap_max))
-
-    max_candidates = int(
-        s3.number_input(
-            "Maximum bulk candidates",
-            min_value=1,
-            value=int(surface.get("max_candidates", 20)),
-            step=1,
-            disabled=selection_mode == "rank_range",
-        )
+    source_root = st.text_input(
+        "Source root",
+        value=source_default,
+        help=(
+            "Uses the same structure-discovery convention as Electronic Conductivity "
+            "and Oxidation States. The directory normally contains composition folders "
+            "with selected_candidates.txt and, when requested, vacancies_database.json."
+        ),
     )
+
+    saved_target_include = surface.get("target_include", [])
+    target_include_text = st.text_input(
+        "Target selector(s) (optional)",
+        value=_csv_text(saved_target_include),
+        help=(
+            "Leave empty to use every discovered structure allowed by the vacancy toggles. "
+            "Use exact IDs or wildcards, e.g. Sb5_Ti2p5/candidate_014, "
+            "Sb5_Ti2p5/*, or a specific V_O target."
+        ),
+    )
+    target_include = _parse_csv(target_include_text)
+    if target_include:
+        st.info(
+            f"Target filtering is active: only structures matching {target_include} "
+            "will be surface-screened."
+        )
 
     with st.expander("Surface orientations and slab construction", expanded=True):
         o1, o2, o3 = st.columns(3)
