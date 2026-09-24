@@ -908,3 +908,36 @@ complete configuration and interpretation notes. The Streamlit **Surface Screeni
 page provides the same staged controls, separate-environment execution, surface-energy
 and segregation-energy plots, and per-surface structure browsing. The old Surface
 editor in the main Input Builder now links to this dedicated page.
+
+---
+
+## Dopant leaching from selected surfaces
+
+After the staged surface workflow, DopingFlow can remove exposed dopants one
+site at a time and relax the resulting cation-vacancy slab:
+
+    dopingflow leaching -c input.toml --dry-run
+    dopingflow leaching -c input.toml
+
+The primary structural descriptor is
+
+    E_extract = E(slab-M) + mu_M(metal) - E(slab+M)
+
+using a same-calculator elemental-metal reference. Compatible values from
+`reference_structures/reference_energies.json` are reused; otherwise a missing
+metal POSCAR can be evaluated and cached by the leaching stage.
+
+An optional electrochemical extension combines `E_extract` with a
+**user-supplied** `M^z+/M` standard reduction potential, ion activity, pH, and
+SHE/RHE potential. DopingFlow intentionally does not hard-code aqueous species
+or oxidation states because oxide dopants may dissolve as different
+oxo/hydroxo/charge-state species.
+
+Outputs under `09_leaching/` include the exact site preview,
+`leaching_summary.csv`, a per-surface/per-dopant summary,
+`leaching_potential_scan.csv`, and machine-readable JSON. The Streamlit
+**Dopant Leaching** page provides the same configuration, dry-run preview,
+execution, and result plots.
+
+See `examples/leaching/input_snippet.toml` and
+`docs/source/methods/leaching.rst` for the model assumptions and configuration.
