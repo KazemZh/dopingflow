@@ -435,10 +435,32 @@ with st.expander("Configuration & run controls", expanded=True):
     with st.expander("Preview [leaching] TOML", expanded=False):
         st.code(toml.dumps({"leaching": resolved}), language="toml")
 
-    b1, b2, b3 = st.columns(3)
-    save = b1.button("Save configuration", disabled=validation_error is not None)
-    dry = b2.button("Save + dry-run", disabled=validation_error is not None)
-    run = b3.button("Save + run", type="primary", disabled=validation_error is not None)
+    save_col, dry_col, run_col = st.columns(3)
+    with save_col:
+        save = st.button(
+            "Save leaching settings",
+            type="primary",
+            use_container_width=True,
+            disabled=validation_error is not None,
+        )
+    with dry_col:
+        dry = st.button(
+            "Run leaching dry-run",
+            use_container_width=True,
+            disabled=(not enabled) or validation_error is not None,
+        )
+    with run_col:
+        run = st.button(
+            "Run leaching",
+            use_container_width=True,
+            disabled=(not enabled) or validation_error is not None,
+        )
+
+    if not enabled:
+        st.caption(
+            "Enable **leaching stage** to activate the dry-run and leaching run actions."
+        )
+
     if save or dry or run:
         cfg["leaching"] = resolved
         config_path.write_text(toml.dumps(cfg), encoding="utf-8")
