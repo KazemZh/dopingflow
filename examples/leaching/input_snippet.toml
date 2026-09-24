@@ -1,11 +1,13 @@
 # Run after `dopingflow surface`.
 [leaching]
 enabled = true
+# Optional override; otherwise inherits [surface].source_root.
+source_root = "vacancy-selected/structures-analysis"
 source_mode = "auto"
 zones = ["surface"]
 dopant_species = []                 # infer from surface metadata
 surface_include = []                # optional target/surface wildcards
-outdir = "09_leaching"
+outdir = "09_leaching"                  # -> <source_root>/09_leaching
 
 # Normally inherit the enabled [surface.refine] calculator.
 backend = "mace"
