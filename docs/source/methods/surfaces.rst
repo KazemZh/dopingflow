@@ -217,17 +217,17 @@ A typical path is::
 
    <source_root>/
      08_surfaces/
-     targets/
-       Sb5_Ti5__candidate_001/
-         bulk_reference/
-           screen/
-           refine/
-         hkl_1_1_0/
-           term_001/
-             variant_001_original/
-               POSCAR
-               screen/
-               refine/
+       targets/
+         Sb5_Ti5__candidate_001/
+           bulk_reference/
+             screen/
+             refine/
+           hkl_1_1_0/
+             term_001/
+               variant_001_original/
+                 POSCAR
+                 screen/
+                 refine/
 
 Backward compatibility
 ----------------------
