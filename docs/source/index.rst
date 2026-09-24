@@ -76,6 +76,7 @@ Each stage can be executed independently and uses its own configuration block.
    methods/oxidation_states
    methods/conductivity
    methods/surfaces
+   methods/leaching
 
 
 Examples
