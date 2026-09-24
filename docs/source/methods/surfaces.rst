@@ -35,12 +35,34 @@ If both calculator dependencies are available in one environment::
 
    dopingflow surface -c input.toml
 
-Candidate selection
+Structure selection
 -------------------
 
-The surface section reuses the existing results-database selection model. The
-input is normally results_database.csv and can be restricted by composition,
-candidate ID, rank range, top-N, formation energy, and band gap.
+Surface screening uses the same structure-discovery convention as oxidation-state
+and electronic-conductivity analysis. Configure::
+
+   source_root = "vacancy-selected"
+   include_vacancy_free = true
+   include_oxygen_vacancies = false
+   target_include = []
+
+``source_root`` contains the selected relaxed parent structures and, when
+oxygen-vacancy targets are requested, ``vacancies_database.json``.
+
+``include_vacancy_free`` controls whether relaxed selected parents are scanned.
+``include_oxygen_vacancies`` independently controls whether relaxed O-vacancy
+structures are scanned. ``target_include`` is optional and accepts the same exact
+target IDs and shell-style wildcards used by oxidation/conductivity, for example::
+
+   target_include = ["Sb5_Ti2p5/candidate_014", "Sb10_Nb5/*"]
+
+Leaving ``target_include`` empty uses every discovered structure allowed by the
+two vacancy toggles.
+
+For an oxygen-vacancy target, the corresponding periodic oxygen-deficient
+structure is the reference structure for that target's slab generation and
+same-calculator surface-energy expression. Vacancy-free and vacancy-containing
+targets are ranked independently rather than being mixed into one ranking.
 
 Surface orientations
 --------------------
@@ -129,7 +151,7 @@ does not mean DFT.
 Calculator-consistent bulk references
 -------------------------------------
 
-Surface and bulk energies are never silently mixed across calculators.
+Surface and source-reference energies are never silently mixed across calculators.
 
 For every selected parent, the screening calculator evaluates the bulk
 structure and that energy is used only for screening surface energies. The
@@ -224,12 +246,12 @@ two places.
 
 The page mirrors the staged CLI design:
 
-- configure and preview selected bulk parents;
+- configure and preview vacancy-free and/or O-vacancy source structures;
 - edit slab, termination, co-dopant-depth, and constraint settings;
 - configure the independent screen and refinement calculators;
 - run the screen and refinement either in the current environment or through
   separate named Conda environments;
-- inspect surface-energy rankings one parent at a time;
+- inspect surface-energy rankings one selected source structure at a time;
 - inspect same-termination segregation energies relative to the all-bulk-like
   variant;
 - browse the selected slab geometry interactively;
