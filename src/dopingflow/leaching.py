@@ -30,6 +30,19 @@ except ModuleNotFoundError:  # pragma: no cover
 KB_EV_K = 8.617333262145e-5
 LN10 = math.log(10.0)
 _VALID_ZONES = {"surface", "subsurface", "bulk"}
+_POTENTIAL_SCAN_COLUMNS = [
+    "surface_id",
+    "target_id",
+    "dopant",
+    "site_index",
+    "detected_zone",
+    "initial_dopant_zone",
+    "initial_depth_from_selected_surface_A",
+    "applied_potential_V",
+    "potential_scale",
+    "deltaG_leach_eV",
+    "leaching_thermodynamically_favorable",
+]
 
 
 def _list(value: Any) -> list[str]:
@@ -680,6 +693,11 @@ def _parent(
     return float(result["energy_eV"]), final, "recomputed", result
 
 
+def _potential_scan_frame(rows: Sequence[Mapping[str, Any]]) -> pd.DataFrame:
+    """Return a stable-schema potential-scan table, even when no rows exist."""
+    return pd.DataFrame(list(rows), columns=_POTENTIAL_SCAN_COLUMNS)
+
+
 def _aggregate(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty: return df.copy()
     cols = ["surface_id", "target_id", "composition_tag", "candidate", "miller_h", "miller_k", "miller_l", "termination_id", "variant_id", "variant_label", "dopant", "initial_dopant_zone"]
@@ -832,7 +850,10 @@ def run_leaching(
     summary = outdir / str(cfg["summary_csv"])
     results.to_csv(summary, index=False)
     _aggregate(results).to_csv(outdir / str(cfg["aggregate_csv"]), index=False)
-    pd.DataFrame(potential_rows).to_csv(outdir / str(cfg["potential_scan_csv"]), index=False)
+    _potential_scan_frame(potential_rows).to_csv(
+        outdir / str(cfg["potential_scan_csv"]),
+        index=False,
+    )
     payload = dict(
         schema_version=1, source_summary=str(source), calculator=_calculator_identity(cfg),
         thermodynamic_model="metal-referenced extraction + user-supplied M^z+/M redox reference",
