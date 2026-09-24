@@ -42,7 +42,7 @@ fix_method = "layers"
 fix_n_layers = 2
 fix_layer_tolerance_A = 0.6
 
-outdir = "08_surfaces"
+outdir = "08_surfaces"  # relative -> <source_root>/08_surfaces
 max_total_surfaces = 1000
 
 [surface.screen]
