@@ -247,7 +247,10 @@ def _json(value: Any, default: Any) -> Any:
 
 def _cation_layers(structure: Structure, species: Iterable[str], tol: float) -> list[list[int]]:
     allowed = set(species)
-    rows = sorted((i, float(s.coords[2])) for i, s in enumerate(structure) if s.specie.symbol in allowed)
+    rows = sorted(
+        ((i, float(s.coords[2])) for i, s in enumerate(structure) if s.specie.symbol in allowed),
+        key=lambda item: item[1],
+    )
     if not rows:
         return []
     layers, current, z0 = [], [rows[0][0]], rows[0][1]
