@@ -806,6 +806,16 @@ def _run_candidate(
     return records
 
 
+def _all_bulk_like_zones(value: Any) -> bool:
+    try:
+        zones = json.loads(str(value or "{}"))
+    except (json.JSONDecodeError, TypeError):
+        return False
+    return bool(zones) and all(
+        str(zone).lower() == "bulk" for zone in zones.values()
+    )
+
+
 def _add_segregation_metrics(df: pd.DataFrame, prefix: str) -> pd.DataFrame:
     """Add same-termination co-dopant segregation energies.
 
@@ -840,11 +850,7 @@ def _add_segregation_metrics(df: pd.DataFrame, prefix: str) -> pd.DataFrame:
     for _, group in out.groupby(group_cols, sort=False):
         reference_rows = []
         for idx, row in group.iterrows():
-            try:
-                zones = json.loads(str(row.get("target_zones_json", "{}") or "{}"))
-            except json.JSONDecodeError:
-                zones = {}
-            if zones and all(str(zone).lower() == "bulk" for zone in zones.values()):
+            if _all_bulk_like_zones(row.get("target_zones_json", "{}")):
                 energy = pd.to_numeric(
                     pd.Series([row.get(energy_col)]), errors="coerce"
                 ).iloc[0]
@@ -927,6 +933,62 @@ def _topk(
     )
 
 
+def _screen_shortlist_with_segregation_references(
+    df: pd.DataFrame,
+    top_k: int,
+) -> pd.DataFrame:
+    """Select top surface candidates plus bulk-like segregation references.
+
+    The nominal top-k is applied per bulk parent. For every selected
+    orientation/termination, its generated all-bulk-like dopant variant is also
+    carried into the refinement handoff when available. These extra rows are
+    reference calculations and do not consume the nominal top-k.
+    """
+    selected = _topk(df, "screen", top_k)
+    if selected.empty:
+        return selected
+
+    chosen = set(selected.index.tolist())
+    group_cols = [
+        "composition_tag",
+        "candidate",
+        "miller_h",
+        "miller_k",
+        "miller_l",
+        "termination_id",
+    ]
+    for _, row in selected.iterrows():
+        mask = pd.Series(True, index=df.index)
+        for column in group_cols:
+            mask &= df[column].astype(str).eq(str(row[column]))
+        group = df[mask]
+        refs = group[
+            group["target_zones_json"].map(_all_bulk_like_zones)
+        ].copy()
+        if refs.empty:
+            continue
+        refs["__energy"] = pd.to_numeric(
+            refs.get("screen_energy_eV"), errors="coerce"
+        )
+        refs = refs[refs["__energy"].notna()]
+        if not refs.empty:
+            chosen.add(refs.sort_values("__energy").index[0])
+
+    out = df.loc[sorted(chosen)].copy()
+    top_index = set(selected.index.tolist())
+    out["screen_selection_reason"] = [
+        "top_k" if idx in top_index else "segregation_reference"
+        for idx in out.index
+    ]
+    rank_values = pd.to_numeric(out.get("screen_rank_overall"), errors="coerce")
+    out["__sort_rank"] = rank_values.fillna(float("inf"))
+    out = out.sort_values(
+        ["composition_tag", "candidate", "__sort_rank", "screen_selection_reason"],
+        kind="stable",
+    ).drop(columns=["__sort_rank"])
+    return out
+
+
 def run_surface_scan(config: Mapping[str, Any]) -> Path | None:
     cfg = _parse_config(config)
     if not cfg["enabled"]:
@@ -970,9 +1032,8 @@ def run_surface_scan(config: Mapping[str, Any]) -> Path | None:
     summary = outdir / str(cfg["screen_summary_csv"])
     selected_path = outdir / str(cfg["screen_selected_csv"])
     dataframe.to_csv(summary, index=False)
-    _topk(
+    _screen_shortlist_with_segregation_references(
         dataframe,
-        "screen",
         int(cfg["screen"]["top_k_per_candidate"]),
     ).to_csv(selected_path, index=False)
 
