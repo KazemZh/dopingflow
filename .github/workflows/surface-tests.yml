@@ -6,6 +6,9 @@ on:
       - "src/dopingflow/surface.py"
       - "src/dopingflow/surface_staged.py"
       - "src/dopingflow/cli.py"
+      - "gui/app.py"
+      - "gui/pages/Surface_Screening.py"
+      - "gui/README.md"
       - "tests/test_surface_staged.py"
       - "examples/surfaces/**"
       - "docs/source/methods/surfaces.rst"
@@ -29,4 +32,5 @@ jobs:
           pip install -e ".[dev]"
       - name: Run surface tests
         run: |
+          python -m py_compile gui/app.py gui/pages/Surface_Screening.py
           pytest -q tests/test_surface_staged.py tests/test_cli_help.py
