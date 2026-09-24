@@ -12,7 +12,11 @@ import plotly.express as px
 import streamlit as st
 import toml
 
-from dopingflow.leaching import parse_leaching_config, preview_leaching_sites
+from dopingflow.leaching import (
+    parse_leaching_config,
+    preview_leaching_sites,
+    resolve_leaching_output_dir,
+)
 from gui_config import BACKEND_CHOICES, DEVICE_CHOICES, OPTIMIZER_CHOICES
 
 
@@ -104,19 +108,44 @@ def _run(args: list[str]) -> None:
 with st.expander("Configuration & run controls", expanded=True):
     enabled = st.checkbox("Enable leaching stage", value=bool(saved.get("enabled", False)))
 
-    st.subheader("Surface source")
-    c1, c2, c3 = st.columns(3)
+    st.subheader("Surface source and output")
     source_modes = ["auto", "final-selected", "screen-selected", "refine-summary", "screen-summary"]
     current_mode = str(saved.get("source_mode", "auto"))
     if current_mode not in source_modes:
         current_mode = "auto"
-    source_mode = c1.selectbox("Surface table", source_modes, index=source_modes.index(current_mode))
-    source_summary = c2.text_input(
+
+    inherited_source_root = (
+        str(saved.get("source_root", "")).strip()
+        or str(surface.get("source_root", "")).strip()
+        or str((cfg.get("conductivity", {}) or {}).get("source_root", "")).strip()
+        or str((cfg.get("oxidation", {}) or {}).get("source_root", "")).strip()
+        or str((cfg.get("structure", {}) or {}).get("outdir", "random_structures")).strip()
+    )
+
+    c1, c2 = st.columns(2)
+    source_root = c1.text_input(
+        "Parent / source root",
+        value=inherited_source_root,
+        help=(
+            "Relative leaching output is created inside this directory. "
+            "By default it inherits the same source root used by the surface workflow."
+        ),
+    ).strip()
+    source_mode = c2.selectbox("Surface table", source_modes, index=source_modes.index(current_mode))
+
+    c3, c4 = st.columns(2)
+    source_summary = c3.text_input(
         "Explicit surface CSV (optional)",
         value=str(saved.get("source_summary", "")),
-        help="Overrides Surface table when set.",
+        help=(
+            "Overrides Surface table when set. Relative paths are resolved inside Parent / source root."
+        ),
     ).strip()
-    outdir = c3.text_input("Output directory", value=str(saved.get("outdir", "09_leaching"))).strip()
+    outdir = c4.text_input(
+        "Output directory",
+        value=str(saved.get("outdir", "09_leaching")),
+        help="Relative paths are created inside Parent / source root; absolute paths are used exactly as entered.",
+    ).strip()
 
     surface_include = _items(
         st.text_input(
@@ -337,6 +366,7 @@ with st.expander("Configuration & run controls", expanded=True):
     resolved = dict(saved)
     resolved.update(
         enabled=bool(enabled),
+        source_root=source_root,
         source_mode=source_mode,
         source_summary=source_summary,
         surface_include=surface_include,
@@ -431,11 +461,19 @@ st.divider()
 st.subheader("Results")
 try:
     parsed = parse_leaching_config(cfg, project_root)
-    result_dir = Path(parsed["outdir"]).expanduser()
+    result_dir = resolve_leaching_output_dir(cfg, parsed, project_root)
 except Exception:
+    fallback_source = (
+        str(saved.get("source_root", "")).strip()
+        or str(surface.get("source_root", "")).strip()
+        or str((cfg.get("structure", {}) or {}).get("outdir", "random_structures")).strip()
+    )
+    source_path = Path(fallback_source).expanduser()
+    if not source_path.is_absolute():
+        source_path = (project_root / source_path).resolve()
     result_dir = Path(saved.get("outdir", "09_leaching")).expanduser()
-if not result_dir.is_absolute():
-    result_dir = (project_root / result_dir).resolve()
+    if not result_dir.is_absolute():
+        result_dir = (source_path / result_dir).resolve()
 
 summary_path = result_dir / "leaching_summary.csv"
 aggregate_path = result_dir / "leaching_surface_summary.csv"
@@ -458,7 +496,8 @@ else:
                     plot,
                     x="dopant",
                     y="extraction_energy_eV",
-                    hover_data=[c for c in ("target_id", "variant_label", "site_index", "detected_zone") if c in plot.columns],
+                    color="initial_dopant_zone" if "initial_dopant_zone" in plot.columns else None,
+                    hover_data=[c for c in ("target_id", "variant_label", "site_index", "initial_dopant_zone", "surface_variant_declared_zone", "initial_depth_from_selected_surface_A") if c in plot.columns],
                     title="Metal-referenced dopant extraction energy",
                 )
                 st.plotly_chart(fig, use_container_width=True)
@@ -491,6 +530,7 @@ else:
 
     with tabs[3]:
         st.markdown(
+            "Every row keeps the dopant's **initial relaxed-surface zone and coordinates** before removal. "
             "**Lower extraction energy** means weaker retention relative to the elemental-metal "
             "reference. With a valid aqueous redox reference, **lower dissolution potential** "
             "means dissolution becomes thermodynamically favorable at a lower electrode potential."
