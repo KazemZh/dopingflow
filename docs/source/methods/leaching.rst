@@ -112,6 +112,8 @@ Minimal extraction-only configuration:
 
    [leaching]
    enabled = true
+   # Optional: inherits [surface].source_root when omitted.
+   source_root = "vacancy-selected/structures-analysis"
    source_mode = "auto"
    zones = ["surface"]
    dopant_species = []        # infer from surface metadata
@@ -172,8 +174,9 @@ Other accepted modes are `final-selected`, `screen-selected`,
 
 `surface_include` accepts exact IDs or shell-style wildcards.
 `zones` defaults to `["surface"]`; add `subsurface` or `bulk` for
-controlled depth comparisons. The surface-stage layer classification is
-inherited by default.
+controlled depth comparisons.
+
+Every removal record preserves the dopant's **initial position before leaching**. The output includes ``initial_dopant_zone`` determined from the relaxed surface geometry, ``surface_variant_declared_zone`` inherited from the surface-generation request, the original atom index, Cartesian and fractional coordinates, and ``initial_depth_from_selected_surface_A``. This allows surface, subsurface, and bulk-like extraction energies to be compared without mixing their initial environments.
 
 Commands
 --------
@@ -195,11 +198,10 @@ The stage is also available as step 15 of `run-all`.
 Outputs
 -------
 
-The default directory is `09_leaching/`:
+The default relative directory is ``09_leaching`` inside the selected/inherited ``source_root``. For example, ``source_root = "vacancy-selected/structures-analysis"`` produces ``vacancy-selected/structures-analysis/09_leaching``. Absolute ``outdir`` paths remain absolute.
 
 `leaching_preview.csv`
-   Exact dopant atoms selected before calculation, with coordinates, depth zone,
-   local O coordination, facet, termination, and parent target.
+   Exact dopant atoms selected before calculation, including the explicit initial dopant zone, declared surface-variant zone, original atom index, coordinates, depth from the selected surface, local O coordination, facet, termination, and parent target.
 
 `leaching_summary.csv`
    One row per removed dopant site with parent and defective energies, metal
@@ -207,7 +209,7 @@ The default directory is `09_leaching/`:
    and convergence information.
 
 `leaching_surface_summary.csv`
-   Per-surface/per-dopant minima and the most vulnerable tested site.
+   Per-surface/per-dopant/**initial-zone** minima and the most vulnerable tested site, so surface and subsurface removals are not silently pooled.
 
 `leaching_potential_scan.csv`
    `Delta G_leach` at every configured potential and a boolean
