@@ -15,6 +15,10 @@ The format loosely follows semantic versioning.
 
 ## [Unreleased]
 ### Added
+- Surface target selection now mirrors Electronic Conductivity/Oxidation States:
+  `source_root`, independent vacancy-free/O-vacancy toggles, and optional exact/glob
+  `target_include` selectors drive both GUI preview and backend execution. Vacancy-free
+  and O-vacancy source structures are ranked independently.
 - Dedicated Streamlit **Surface Screening** page with candidate/facet/termination
   configuration, representative co-dopant depth controls, independent GRACE/MACE-style
   screen/refine calculators, separate-environment execution, surface/segregation plots,
