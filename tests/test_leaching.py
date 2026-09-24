@@ -14,6 +14,8 @@ from dopingflow.leaching import (
     enumerate_leaching_sites,
     leaching_delta_g_eV,
     parse_leaching_config,
+    _load_completed_site_checkpoint,
+    _site_calculation_fingerprint,
     preview_leaching_sites,
     resolve_leaching_output_dir,
     resolve_surface_summary,
@@ -39,6 +41,7 @@ def test_leaching_inherits_enabled_surface_refine_calculator() -> None:
     assert cfg["model"] == "mh-1"
     assert cfg["task"] == "matpes_r2scan"
     assert cfg["zones"] == ["surface"]
+    assert cfg["resume_completed"] is True
 
 
 def test_dissolution_potential_zero_crossing_she() -> None:
@@ -161,6 +164,116 @@ def test_site_enumeration_defaults_to_surface_zone() -> None:
     assert all(site["initial_dopant_zone"] == "surface" for site in sites)
     assert all(site["surface_variant_declared_zone"] == "surface" for site in sites)
     assert all(site["initial_depth_from_selected_surface_A"] >= 0.0 for site in sites)
+
+
+
+
+def test_completed_site_checkpoint_is_reused_and_stale_one_is_rejected(tmp_path) -> None:
+    source_path = tmp_path / "surface.POSCAR"
+    Poscar(_surface_slab()).write_file(str(source_path))
+    cfg = parse_leaching_config(
+        {
+            "surface": {
+                "fix_atoms": True,
+                "fix_region": "middle",
+                "fix_method": "layers",
+                "fix_n_layers": 2,
+                "fix_layer_tolerance_A": 0.6,
+            },
+            "leaching": {
+                "enabled": True,
+                "backend": "mace",
+                "model": "mh-1",
+                "task": "matpes_r2scan",
+                "resume_completed": True,
+                "relax_removed_surface": True,
+                "optimizer": "bfgs",
+                "fmax": 0.03,
+                "max_steps": 500,
+            },
+        },
+        tmp_path,
+    )
+    surface_cfg = {
+        "fix_atoms": True,
+        "fix_region": "middle",
+        "fix_method": "layers",
+        "fix_n_layers": 2,
+        "fix_thickness_A": 4.0,
+        "fix_layer_tolerance_A": 0.6,
+    }
+    base = {
+        "surface_id": "Sb5/candidate_001/hkl_1_1_0/term_001/variant_001_Sb-surface",
+        "dopant": "Sb",
+        "site_index": 3,
+    }
+    fingerprint = _site_calculation_fingerprint(
+        source_path, 3, "Sb", cfg, surface_cfg
+    )
+    relaxed_path = tmp_path / "POSCAR_relaxed"
+    Poscar(_surface_slab()).write_file(str(relaxed_path))
+    checkpoint = tmp_path / "leaching_result.json"
+    checkpoint.write_text(
+        json.dumps(
+            {
+                **base,
+                "status": "ok",
+                "backend": "mace",
+                "model": "mh-1",
+                "task": "matpes_r2scan",
+                "removed_surface_energy_eV": -98.5,
+                "removed_surface_converged": True,
+                "removed_surface_final_fmax_eV_per_A": 0.02,
+                "removed_surface_optimizer_steps": 42,
+                "removed_surface_relaxed_structure_path": str(relaxed_path),
+                "calculation_fingerprint": fingerprint,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result, mode = _load_completed_site_checkpoint(
+        checkpoint, base, cfg, source_path, surface_cfg
+    )
+    assert mode == "fingerprint"
+    assert result is not None
+    assert result["energy_eV"] == pytest.approx(-98.5)
+
+    stale_cfg = dict(cfg)
+    stale_cfg["fmax"] = 0.01
+    result, mode = _load_completed_site_checkpoint(
+        checkpoint, base, stale_cfg, source_path, surface_cfg
+    )
+    assert result is None
+    assert mode == "fingerprint-mismatch"
+
+
+def test_failed_site_checkpoint_is_not_reused(tmp_path) -> None:
+    source_path = tmp_path / "surface.POSCAR"
+    Poscar(_surface_slab()).write_file(str(source_path))
+    cfg = parse_leaching_config(
+        {"leaching": {"enabled": True, "resume_completed": True}},
+        tmp_path,
+    )
+    base = {"surface_id": "x", "dopant": "Sb", "site_index": 3}
+    checkpoint = tmp_path / "leaching_result.json"
+    checkpoint.write_text(
+        json.dumps(
+            {
+                **base,
+                "status": "calculation-failed",
+                "backend": cfg["backend"],
+                "model": cfg["model"],
+                "task": cfg["task"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    result, mode = _load_completed_site_checkpoint(
+        checkpoint, base, cfg, source_path, {}
+    )
+    assert result is None
+    assert mode == "not-complete"
 
 
 def test_relative_leaching_outdir_is_below_user_source_root(tmp_path) -> None:
