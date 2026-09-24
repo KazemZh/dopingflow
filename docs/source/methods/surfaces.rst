@@ -4,14 +4,14 @@ Staged Surface Screening and Refinement
 Overview
 --------
 
-The surface workflow converts selected low-energy bulk candidates into slab
+The surface workflow converts selected relaxed source structures into slab
 models, scans orientations, terminations, and representative co-dopant depth
 arrangements, and optionally re-evaluates the shortlist with a second
 higher-fidelity ML calculator.
 
 The intended sequence is::
 
-   selected bulk candidate
+   selected vacancy-free or O-vacancy source structure
        -> facets
        -> terminations
        -> representative co-dopant depth variants
@@ -148,26 +148,26 @@ Any model accepted by the existing backend abstraction may be chosen,
 including a supported MACE alias or custom checkpoint path. Refinement therefore
 does not mean DFT.
 
-Calculator-consistent bulk references
+Calculator-consistent source references
 -------------------------------------
 
 Surface and source-reference energies are never silently mixed across calculators.
 
-For every selected parent, the screening calculator evaluates the bulk
-structure and that energy is used only for screening surface energies. The
-refinement calculator independently evaluates the same parent structure and
-that energy is used only for refinement surface energies.
+For every selected source structure, the screening calculator evaluates that
+periodic source and uses its energy only for screening surface energies. The
+refinement calculator independently evaluates the same source structure and
+uses that energy only for refinement surface energies.
 
 The current implementation uses a same-calculator single-point energy on the
-already-relaxed parent bulk geometry. This gives an internally consistent
-ranking within a parent. Absolute publication-quality surface energies should
+already-relaxed periodic source geometry. This gives an internally consistent
+ranking within one source target. Absolute publication-quality surface energies should
 still be converged with respect to bulk geometry, slab thickness, vacuum,
 constraints, and calculator settings.
 
 Surface energy and ranking
 --------------------------
 
-For a slab whose composition is proportional to its parent bulk, the workflow
+For a slab whose composition is proportional to its periodic source structure, the workflow
 uses::
 
    gamma = (E_slab - n E_bulk) / (2 A)
@@ -202,7 +202,7 @@ surface_screen_summary.csv
    Every generated orientation, termination, and dopant-depth variant.
 
 surface_screen_selected.csv
-   Top-k rankable variants per bulk candidate after the screen calculator.
+   Top-k rankable variants per selected source structure after the screen calculator.
 
 surface_refine_summary.csv
    Higher-fidelity results for the screening shortlist.
@@ -216,8 +216,8 @@ result.json, optional relaxed POSCAR, optimizer log/trajectory, and meta.json.
 A typical path is::
 
    08_surfaces/
-     Sb5_Ti5/
-       candidate_001/
+     targets/
+       Sb5_Ti5__candidate_001/
          bulk_reference/
            screen/
            refine/
