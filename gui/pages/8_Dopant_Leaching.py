@@ -270,7 +270,7 @@ with st.expander("Configuration & run controls", expanded=True):
         value=bool(saved.get("relax_removed_surface", True)),
     )
 
-    t1, t2, t3 = st.columns(3)
+    t1, t2, t3, t4 = st.columns(4)
     reuse_parent = t1.checkbox(
         "Reuse compatible surface energy",
         value=bool(saved.get("reuse_surface_energy", True)),
@@ -282,6 +282,14 @@ with st.expander("Configuration & run controls", expanded=True):
     inherit_fixed = t3.checkbox(
         "Reuse surface fixed-atom rule",
         value=bool(saved.get("inherit_surface_fixed_atoms", True)),
+    )
+    resume_completed = t4.checkbox(
+        "Resume completed sites",
+        value=bool(saved.get("resume_completed", True)),
+        help=(
+            "Reuse compatible completed per-site leaching checkpoints after an interrupted run. "
+            "Incomplete or failed sites are calculated again."
+        ),
     )
 
     st.subheader("Metal reference")
@@ -390,6 +398,7 @@ with st.expander("Configuration & run controls", expanded=True):
         relax_parent_if_recomputed=bool(relax_parent),
         relax_removed_surface=bool(relax_removed),
         inherit_surface_fixed_atoms=bool(inherit_fixed),
+        resume_completed=bool(resume_completed),
         reference_energies_file=reference_file,
         metals_dir=metals_dir,
         compute_missing_metal_references=bool(compute_missing),
