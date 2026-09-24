@@ -23,6 +23,7 @@ reuse_surface_energy = true
 relax_parent_if_recomputed = true
 relax_removed_surface = true
 inherit_surface_fixed_atoms = true
+resume_completed = true              # skip compatible completed sites on restart
 
 reference_energies_file = "reference_structures/reference_energies.json"
 metals_dir = "reference_structures/metals"
