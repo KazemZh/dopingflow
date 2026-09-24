@@ -15,6 +15,13 @@ The format loosely follows semantic versioning.
 
 ## [Unreleased]
 ### Added
+- Staged surface screening and refinement with separate fast and higher-fidelity
+  MLFF calculators, configurable Miller orientations and terminations,
+  representative surface/subsurface/bulk co-dopant placements, calculator-specific
+  bulk references, top-k handoff, and explicit exclusion of non-proportional slabs
+  from the simple surface-energy ranking.
+- New surface-scan, surface-refine, and surface CLI commands, plus a GRACE-to-MACE
+  example configuration using MACE MH-1 / matpes_r2scan refinement.
 - A staged Monte Carlo vacancy workflow for incompatible ML environments:
   ``dopingflow vacancies-mc-search`` runs only the ``mc_*`` search calculator,
   while ``dopingflow vacancies-finalize`` runs only the ordinary final vacancy
