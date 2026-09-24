@@ -1,0 +1,41 @@
+# Run after `dopingflow surface`.
+[leaching]
+enabled = true
+source_mode = "auto"
+zones = ["surface"]
+dopant_species = []                 # infer from surface metadata
+surface_include = []                # optional target/surface wildcards
+outdir = "09_leaching"
+
+# Normally inherit the enabled [surface.refine] calculator.
+backend = "mace"
+model = "mh-1"
+task = "matpes_r2scan"
+device = "cuda"
+gpu_id = 0
+optimizer = "bfgs"
+fmax = 0.03
+max_steps = 500
+
+reuse_surface_energy = true
+relax_parent_if_recomputed = true
+relax_removed_surface = true
+inherit_surface_fixed_atoms = true
+
+reference_energies_file = "reference_structures/reference_energies.json"
+metals_dir = "reference_structures/metals"
+compute_missing_metal_references = true
+relax_metal_reference = false
+
+# Extraction-energy screening works without aqueous redox data.
+# Add only chemically validated values for the species being modeled.
+# oxidation_states = { Sb = 3, Ti = 3 }
+# standard_reduction_potentials_V_SHE = { Sb = <validated>, Ti = <validated> }
+# aqueous_species = { Sb = "...", Ti = "..." }
+# ion_activities = { Sb = 1e-6, Ti = 1e-6 }
+
+default_ion_activity = 1e-6
+temperature_K = 298.15
+pH = 0.0
+potential_scale = "RHE"
+potentials_V = [1.23, 1.50, 1.70]
