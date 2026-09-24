@@ -1078,20 +1078,25 @@ with ranking_tab:
     prefix = "refine" if ranking_stage == "Refinement" else "screen"
 
     if not data.empty:
-        compositions = data["composition_tag"].dropna().astype(str).drop_duplicates().tolist()
-        selected_composition = st.selectbox(
-            "Composition",
-            compositions,
-            key="surface_result_composition",
+        target_rows = (
+            data.sort_values("target_id")
+            .drop_duplicates("target_id")
+            .set_index("target_id")
         )
-        subset = data[data["composition_tag"].astype(str) == selected_composition].copy()
-        candidates = subset["candidate"].dropna().astype(str).drop_duplicates().tolist()
-        selected_candidate = st.selectbox(
-            "Bulk parent",
-            candidates,
-            key="surface_result_candidate",
+        target_options = target_rows.index.astype(str).tolist()
+        selected_target = st.selectbox(
+            "Source structure",
+            target_options,
+            format_func=lambda target_id: _target_label(target_rows.loc[target_id]),
+            key="surface_result_target",
         )
-        subset = subset[subset["candidate"].astype(str) == selected_candidate].copy()
+        subset = data[data["target_id"].astype(str) == selected_target].copy()
+        selected_meta = target_rows.loc[selected_target]
+        st.caption(
+            f"Source: {selected_meta.get('structure_kind', 'vacancy-free')} | "
+            f"O vacancies: {int(selected_meta.get('n_oxygen_vacancies', 0) or 0)} | "
+            f"{selected_meta.get('source_structure_path', selected_meta.get('bulk_structure_path', ''))}"
+        )
 
         gamma_col = f"{prefix}_surface_energy_J_m2"
         status_col = f"{prefix}_surface_energy_status"
@@ -1110,7 +1115,7 @@ with ranking_tab:
 
         if rankable.empty:
             st.warning(
-                "No proportional/stoichiometric slabs are rankable for this bulk parent at "
+                "No proportional/stoichiometric slabs are rankable for this source structure at "
                 f"the {ranking_stage.lower()} energy level."
             )
         else:
@@ -1130,7 +1135,7 @@ with ranking_tab:
                     gamma_col: "Surface energy (J/m²)",
                     "variant_label": "Dopant-depth variant",
                 },
-                title=f"{ranking_stage} surface-energy ranking — {selected_composition} / {selected_candidate}",
+                title=f"{ranking_stage} surface-energy ranking — {selected_target}",
             )
             st.plotly_chart(fig, use_container_width=True)
 
@@ -1208,7 +1213,7 @@ with ranking_tab:
                     seg_fig.add_hline(y=0.0, line_dash="dash")
                     st.plotly_chart(seg_fig, use_container_width=True)
                     st.caption(
-                        "E_seg = E_variant − E_all-bulk-like for the same bulk parent, facet, "
+                        "E_seg = E_variant − E_all-bulk-like for the same source structure, facet, "
                         "termination, composition, and calculator. Negative values indicate "
                         "surface/subsurface enrichment relative to the bulk-like placement."
                     )
@@ -1229,14 +1234,19 @@ with structure_tab:
     _, structure_data, prefix = next(item for item in available if item[0] == structure_stage)
     browse = structure_data.copy()
 
-    b1, b2 = st.columns(2)
-    comp_options = browse["composition_tag"].dropna().astype(str).drop_duplicates().tolist()
-    comp = b1.selectbox("Composition", comp_options, key="surface_browser_comp")
-    browse = browse[browse["composition_tag"].astype(str) == comp]
-
-    cand_options = browse["candidate"].dropna().astype(str).drop_duplicates().tolist()
-    cand = b2.selectbox("Bulk parent", cand_options, key="surface_browser_candidate")
-    browse = browse[browse["candidate"].astype(str) == cand].copy()
+    browser_rows = (
+        browse.sort_values("target_id")
+        .drop_duplicates("target_id")
+        .set_index("target_id")
+    )
+    browser_targets = browser_rows.index.astype(str).tolist()
+    browser_target = st.selectbox(
+        "Source structure",
+        browser_targets,
+        format_func=lambda target_id: _target_label(browser_rows.loc[target_id]),
+        key="surface_browser_target",
+    )
+    browse = browse[browse["target_id"].astype(str) == browser_target].copy()
     browse["choice"] = browse.apply(
         lambda row: (
             f"({int(row['miller_h'])}{int(row['miller_k'])}{int(row['miller_l'])}) | "
