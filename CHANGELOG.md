@@ -15,6 +15,14 @@ The format loosely follows semantic versioning.
 
 ## [Unreleased]
 ### Added
+- Dedicated Streamlit **Surface Screening** page with candidate/facet/termination
+  configuration, representative co-dopant depth controls, independent GRACE/MACE-style
+  screen/refine calculators, separate-environment execution, surface/segregation plots,
+  3D slab browsing, and raw result tables. The duplicate Surface editor in the main
+  Input Builder now links to this page.
+- Explicit same-termination co-dopant segregation energies referenced to the generated
+  all-bulk-like placement, with negative values indicating favorable surface/subsurface
+  enrichment.
 - Staged surface screening and refinement with separate fast and higher-fidelity
   MLFF calculators, configurable Miller orientations and terminations,
   representative surface/subsurface/bulk co-dopant placements, calculator-specific
