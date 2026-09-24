@@ -271,6 +271,23 @@ is favored relative to the generated all-bulk-like placement.
 
 ---
 
+## Dopant Leaching page
+
+`gui/pages/Dopant_Leaching.py` consumes the selected surface tables and exposes:
+
+- exact surface/target filtering and surface/subsurface/bulk site selection;
+- a dry-run table of every dopant atom that will be removed;
+- reuse of compatible surface parent energies and metal-reference energies;
+- relaxation of the dopant-removed slab with the configured MLFF;
+- optional user-supplied aqueous oxidation state, species, standard potential,
+  activity, pH, and SHE/RHE operating potentials;
+- extraction-energy, per-surface summary, and potential-scan result views.
+
+The page deliberately leaves the electrochemical extension incomplete when no
+validated redox reference is supplied rather than inventing aqueous speciation.
+
+---
+
 
 ## Development and tests
 
@@ -285,6 +302,7 @@ gui/
 ├── vacancy_thermo_plots.py
 ├── pages/
 │   ├── Surface_Screening.py
+│   ├── Dopant_Leaching.py
 │   ├── Vacancy_MC_Staged.py
 │   ├── Vacancy_Energy_Correction.py
 │   └── Phase_Diagram.py
