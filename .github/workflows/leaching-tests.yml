@@ -4,8 +4,10 @@ on:
   pull_request:
     paths:
       - "src/dopingflow/leaching.py"
+      - "src/dopingflow/surface_staged.py"
       - "src/dopingflow/cli.py"
       - "tests/test_leaching.py"
+      - "tests/test_surface_staged.py"
       - "gui/pages/Dopant_Leaching.py"
       - "examples/leaching/**"
       - "docs/source/methods/leaching.rst"
@@ -32,4 +34,4 @@ jobs:
         run: |
           python -m py_compile src/dopingflow/leaching.py
           if [ -f gui/pages/Dopant_Leaching.py ]; then python -m py_compile gui/pages/Dopant_Leaching.py; fi
-          pytest -q tests/test_leaching.py tests/test_cli_help.py
+          pytest -q tests/test_leaching.py tests/test_surface_staged.py tests/test_cli_help.py
