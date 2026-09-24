@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 from pymatgen.core import Lattice, Structure
 
 from dopingflow.surface_staged import (
