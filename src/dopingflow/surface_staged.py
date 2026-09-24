@@ -213,6 +213,28 @@ def _parse_config(config: Mapping[str, Any]) -> Dict[str, Any]:
     return surface
 
 
+def parse_surface_config(config: Mapping[str, Any]) -> Dict[str, Any]:
+    """Public validation/normalization helper used by the CLI and GUI."""
+    return _parse_config(config)
+
+
+def preview_surface_candidates(
+    config: Mapping[str, Any],
+    project_root: Path | str = Path("."),
+) -> pd.DataFrame:
+    """Return the bulk database rows selected by the surface configuration."""
+    cfg = _parse_config(config)
+    root = Path(project_root).expanduser().resolve()
+    summary = Path(str(cfg["source_summary"])).expanduser()
+    if not summary.is_absolute():
+        summary = (root / summary).resolve()
+    if not summary.exists():
+        raise FileNotFoundError(f"[surface] Summary file not found: {summary}")
+    database = pd.read_csv(summary)
+    _validate_database_columns(database)
+    return _select_candidates(database, cfg).copy()
+
+
 def _millers(
     structure: Structure,
     cfg: Mapping[str, Any],
@@ -784,6 +806,73 @@ def _run_candidate(
     return records
 
 
+def _add_segregation_metrics(df: pd.DataFrame, prefix: str) -> pd.DataFrame:
+    """Add same-termination co-dopant segregation energies.
+
+    The reference is the generated variant in which every explicitly moved
+    dopant species targets a bulk-like cation layer. Because compared rows have
+    identical composition, orientation, termination, atom count, and calculator,
+    the difference in total energy is a well-defined segregation descriptor:
+
+        E_seg = E_variant - E_all_bulk_like
+
+    Negative values therefore mean that the requested surface/subsurface
+    placement is preferred over the corresponding all-bulk-like placement.
+    """
+    out = df.copy()
+    energy_col = f"{prefix}_energy_eV"
+    out[f"{prefix}_segregation_reference_variant"] = ""
+    out[f"{prefix}_segregation_reference_energy_eV"] = np.nan
+    out[f"{prefix}_segregation_energy_eV"] = np.nan
+    out[f"{prefix}_segregation_status"] = "missing_bulk_like_reference"
+
+    if energy_col not in out.columns or "target_zones_json" not in out.columns:
+        return out
+
+    group_cols = [
+        "composition_tag",
+        "candidate",
+        "miller_h",
+        "miller_k",
+        "miller_l",
+        "termination_id",
+    ]
+    for _, group in out.groupby(group_cols, sort=False):
+        reference_rows = []
+        for idx, row in group.iterrows():
+            try:
+                zones = json.loads(str(row.get("target_zones_json", "{}") or "{}"))
+            except json.JSONDecodeError:
+                zones = {}
+            if zones and all(str(zone).lower() == "bulk" for zone in zones.values()):
+                energy = pd.to_numeric(
+                    pd.Series([row.get(energy_col)]), errors="coerce"
+                ).iloc[0]
+                if pd.notna(energy):
+                    reference_rows.append((idx, float(energy)))
+
+        if not reference_rows:
+            continue
+
+        # There should normally be one all-bulk-like variant. If representative
+        # generation ever produces more than one, use the lowest-energy one and
+        # record the exact variant chosen.
+        ref_idx, ref_energy = min(reference_rows, key=lambda item: item[1])
+        ref_variant = str(out.loc[ref_idx].get("variant_label", ""))
+        energies = pd.to_numeric(out.loc[group.index, energy_col], errors="coerce")
+        valid = energies.notna()
+
+        out.loc[group.index, f"{prefix}_segregation_reference_variant"] = ref_variant
+        out.loc[group.index, f"{prefix}_segregation_reference_energy_eV"] = ref_energy
+        out.loc[group.index[valid], f"{prefix}_segregation_energy_eV"] = (
+            energies.loc[valid] - ref_energy
+        )
+        out.loc[group.index[valid], f"{prefix}_segregation_status"] = "ok"
+        out.loc[group.index[~valid], f"{prefix}_segregation_status"] = "missing_energy"
+
+    return out
+
+
 def _rank(df: pd.DataFrame, prefix: str) -> pd.DataFrame:
     out = df.copy()
     gamma = f"{prefix}_surface_energy_J_m2"
@@ -876,7 +965,8 @@ def run_surface_scan(config: Mapping[str, Any]) -> Path | None:
                 f"[surface] Exceeded max_total_surfaces={cfg['max_total_surfaces']}"
             )
 
-    dataframe = _rank(pd.DataFrame(records), "screen")
+    dataframe = _add_segregation_metrics(pd.DataFrame(records), "screen")
+    dataframe = _rank(dataframe, "screen")
     summary = outdir / str(cfg["screen_summary_csv"])
     selected_path = outdir / str(cfg["screen_selected_csv"])
     dataframe.to_csv(summary, index=False)
@@ -981,7 +1071,8 @@ def run_surface_refine(config: Mapping[str, Any]) -> Path | None:
         )
         records.append(rec)
 
-    dataframe = _rank(pd.DataFrame(records), "refine")
+    dataframe = _add_segregation_metrics(pd.DataFrame(records), "refine")
+    dataframe = _rank(dataframe, "refine")
     summary = outdir / str(cfg["refine_summary_csv"])
     final_path = outdir / str(cfg["refine_selected_csv"])
     dataframe.to_csv(summary, index=False)
@@ -997,6 +1088,8 @@ def run_surface_refine(config: Mapping[str, Any]) -> Path | None:
 
 __all__ = [
     "DEFAULT_MILLERS",
+    "parse_surface_config",
+    "preview_surface_candidates",
     "run_surface_scan",
     "run_surface_scan_from_toml",
     "run_surface_refine",
