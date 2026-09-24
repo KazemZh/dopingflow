@@ -15,6 +15,7 @@ from dopingflow.leaching import (
     leaching_delta_g_eV,
     parse_leaching_config,
     preview_leaching_sites,
+    resolve_leaching_output_dir,
     resolve_surface_summary,
 )
 
@@ -157,21 +158,40 @@ def test_site_enumeration_defaults_to_surface_zone() -> None:
     assert sites
     assert {site["dopant"] for site in sites} == {"Sb"}
     assert all(site["detected_zone"] == "surface" for site in sites)
+    assert all(site["initial_dopant_zone"] == "surface" for site in sites)
+    assert all(site["surface_variant_declared_zone"] == "surface" for site in sites)
+    assert all(site["initial_depth_from_selected_surface_A"] >= 0.0 for site in sites)
+
+
+def test_relative_leaching_outdir_is_below_user_source_root(tmp_path) -> None:
+    config = {
+        "surface": {"source_root": "vacancy-selected/structures-analysis"},
+        "leaching": {"enabled": True, "outdir": "09_leaching"},
+    }
+    cfg = parse_leaching_config(config, tmp_path)
+    assert resolve_leaching_output_dir(config, cfg, tmp_path) == (
+        tmp_path / "vacancy-selected" / "structures-analysis" / "09_leaching"
+    ).resolve()
 
 
 def test_auto_surface_source_prefers_final_selected(tmp_path) -> None:
-    outdir = tmp_path / "08_surfaces"
-    outdir.mkdir()
+    source_root = tmp_path / "structures-analysis"
+    outdir = source_root / "08_surfaces"
+    outdir.mkdir(parents=True)
     (outdir / "surface_screen_selected.csv").write_text("a\n1\n", encoding="utf-8")
     final = outdir / "surface_final_selected.csv"
     final.write_text("a\n2\n", encoding="utf-8")
-    config = {"surface": {"outdir": "08_surfaces"}, "leaching": {"enabled": True}}
+    config = {
+        "surface": {"source_root": "structures-analysis", "outdir": "08_surfaces"},
+        "leaching": {"enabled": True},
+    }
     cfg = parse_leaching_config(config, tmp_path)
     assert resolve_surface_summary(config, cfg) == final.resolve()
 
 
 def test_preview_reads_surface_csv_and_exposes_site_provenance(tmp_path) -> None:
-    outdir = tmp_path / "08_surfaces"
+    source_root = tmp_path / "structures-analysis"
+    outdir = source_root / "08_surfaces"
     variant = outdir / "targets" / "x" / "hkl_1_1_0" / "term_001" / "variant_001"
     variant.mkdir(parents=True)
     poscar = variant / "POSCAR_relaxed"
@@ -206,6 +226,7 @@ def test_preview_reads_surface_csv_and_exposes_site_provenance(tmp_path) -> None
 
     config = {
         "surface": {
+            "source_root": "structures-analysis",
             "outdir": "08_surfaces",
             "host_species": "Sn",
             "dopant_species": ["Sb", "Ti"],
@@ -231,3 +252,6 @@ def test_preview_reads_surface_csv_and_exposes_site_provenance(tmp_path) -> None
     assert row["dopant"] == "Sb"
     assert row["target_id"] == "Sb5_Ti5/candidate_001"
     assert row["surface_source_stage"] == "refine"
+    assert row["initial_dopant_zone"] == "surface"
+    assert row["surface_variant_declared_zone"] == "surface"
+    assert row["initial_site_index"] == row["site_index"]
