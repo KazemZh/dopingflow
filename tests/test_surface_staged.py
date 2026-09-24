@@ -17,6 +17,7 @@ from dopingflow.surface_staged import (
     _surface_energy,
     _topk,
     _variants,
+    resolve_surface_output_dir,
 )
 
 
@@ -33,6 +34,20 @@ def test_surface_defaults_use_low_index_sno2_facets_and_mace_r2scan_refine() -> 
     assert cfg["refine"]["backend"] == "mace"
     assert cfg["refine"]["model"] == "mh-1"
     assert cfg["refine"]["task"] == "matpes_r2scan"
+
+
+def test_surface_relative_outdir_is_below_user_source_root(tmp_path) -> None:
+    config = {
+        "surface": {
+            "enabled": True,
+            "source_root": "vacancy-selected/structures-analysis",
+            "outdir": "08_surfaces",
+        }
+    }
+    cfg = _parse_config(config)
+    assert resolve_surface_output_dir(config, cfg, tmp_path) == (
+        tmp_path / "vacancy-selected" / "structures-analysis" / "08_surfaces"
+    ).resolve()
 
 
 def _co_doped_slab() -> Structure:
