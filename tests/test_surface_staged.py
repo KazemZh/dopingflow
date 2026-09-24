@@ -8,6 +8,7 @@ from dopingflow.surface_staged import (
     _add_segregation_metrics,
     _parse_config,
     _rank,
+    _screen_shortlist_with_segregation_references,
     _surface_energy,
     _topk,
     _variants,
@@ -197,3 +198,60 @@ def test_segregation_energy_uses_all_bulk_like_variant_as_reference() -> None:
     assert values["Sb-bulk__Ti-bulk"] == pytest.approx(0.0)
     assert values["Sb-surface__Ti-bulk"] == pytest.approx(-0.4)
     assert values["Sb-surface__Ti-surface"] == pytest.approx(0.2)
+
+
+
+def test_screen_shortlist_keeps_bulk_like_segregation_reference() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "composition_tag": "Sb5_Ti5",
+                "candidate": "candidate_001",
+                "miller_h": 1,
+                "miller_k": 1,
+                "miller_l": 0,
+                "termination_id": 1,
+                "variant_label": "Sb-surface__Ti-bulk",
+                "target_zones_json": '{"Sb": "surface", "Ti": "bulk"}',
+                "screen_energy_eV": -101.0,
+                "screen_rankable": True,
+                "screen_rank_overall": 1,
+            },
+            {
+                "composition_tag": "Sb5_Ti5",
+                "candidate": "candidate_001",
+                "miller_h": 1,
+                "miller_k": 1,
+                "miller_l": 0,
+                "termination_id": 1,
+                "variant_label": "Sb-bulk__Ti-bulk",
+                "target_zones_json": '{"Sb": "bulk", "Ti": "bulk"}',
+                "screen_energy_eV": -100.0,
+                "screen_rankable": True,
+                "screen_rank_overall": 8,
+            },
+            {
+                "composition_tag": "Sb5_Ti5",
+                "candidate": "candidate_001",
+                "miller_h": 1,
+                "miller_k": 0,
+                "miller_l": 0,
+                "termination_id": 1,
+                "variant_label": "Sb-surface__Ti-surface",
+                "target_zones_json": '{"Sb": "surface", "Ti": "surface"}',
+                "screen_energy_eV": -99.5,
+                "screen_rankable": True,
+                "screen_rank_overall": 2,
+            },
+        ]
+    )
+
+    selected = _screen_shortlist_with_segregation_references(df, top_k=1)
+
+    assert set(selected["variant_label"]) == {
+        "Sb-surface__Ti-bulk",
+        "Sb-bulk__Ti-bulk",
+    }
+    reasons = dict(zip(selected["variant_label"], selected["screen_selection_reason"]))
+    assert reasons["Sb-surface__Ti-bulk"] == "top_k"
+    assert reasons["Sb-bulk__Ti-bulk"] == "segregation_reference"
