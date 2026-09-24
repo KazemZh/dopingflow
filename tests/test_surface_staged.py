@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import json
+
 import pandas as pd
 import pytest
 from pymatgen.core import Lattice, Structure
+from pymatgen.io.vasp import Poscar
 
 from dopingflow.surface_staged import (
     DEFAULT_MILLERS,
+    discover_surface_targets,
     _add_segregation_metrics,
     _parse_config,
     _rank,
@@ -305,3 +309,69 @@ def test_surface_ranking_is_independent_for_each_source_target() -> None:
     ranked = _rank(df, "screen")
 
     assert ranked["screen_rank_overall"].tolist() == [1, 1]
+
+
+
+def test_surface_discovers_vacancy_free_and_oxygen_vacancy_targets(tmp_path) -> None:
+    source = tmp_path / "vacancy-selected"
+    comp = source / "Sb5_Ti5"
+    candidate = comp / "candidate_001"
+    (candidate / "01_scan").mkdir(parents=True)
+    (candidate / "02_relax").mkdir(parents=True)
+    (comp / "selected_candidates.txt").write_text("candidate_001\n", encoding="utf-8")
+
+    parent = Structure(
+        Lattice.cubic(5.0),
+        ["Sn", "O", "O"],
+        [[0, 0, 0], [0.25, 0.25, 0.25], [0.75, 0.75, 0.75]],
+    )
+    Poscar(parent).write_file(str(candidate / "01_scan" / "POSCAR"))
+    Poscar(parent).write_file(str(candidate / "02_relax" / "POSCAR"))
+
+    vacancy_dir = source / "vacancy_structures" / "config_0001"
+    vacancy_dir.mkdir(parents=True)
+    vacancy = parent.copy()
+    vacancy.remove_sites([2])
+    vacancy_poscar = vacancy_dir / "POSCAR_relaxed"
+    Poscar(vacancy).write_file(str(vacancy_poscar))
+
+    (source / "vacancies_database.json").write_text(
+        json.dumps(
+            [
+                {
+                    "parent_id": "Sb5_Ti5/candidate_001",
+                    "n_vacancies": 1,
+                    "vacancy_species": "O",
+                    "configuration_id": "config_0001",
+                    "relaxed_poscar_path": str(vacancy_poscar),
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config = {
+        "surface": {
+            "enabled": True,
+            "source_root": str(source),
+            "include_vacancy_free": True,
+            "include_oxygen_vacancies": True,
+            "target_include": [],
+        }
+    }
+
+    targets, warnings = discover_surface_targets(config, tmp_path)
+
+    assert warnings == []
+    assert [target.kind for target in targets] == ["vacancy-free", "oxygen-vacancy"]
+    assert targets[0].target_id == "Sb5_Ti5/candidate_001"
+    assert targets[1].target_id == (
+        "Sb5_Ti5/candidate_001/V_O_01/config_0001"
+    )
+
+    config["surface"]["target_include"] = [
+        "Sb5_Ti5/candidate_001/V_O_01/*"
+    ]
+    filtered, _ = discover_surface_targets(config, tmp_path)
+    assert len(filtered) == 1
+    assert filtered[0].kind == "oxygen-vacancy"
