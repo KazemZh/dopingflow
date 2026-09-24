@@ -196,7 +196,7 @@ thickness. The same fixed atoms are enforced during ASE relaxation.
 Outputs
 -------
 
-The default output directory is 08_surfaces.
+The default relative output directory is ``08_surfaces`` **inside the selected ``source_root``**. For example, ``source_root = "vacancy-selected/structures-analysis"`` and ``outdir = "08_surfaces"`` resolve to ``vacancy-selected/structures-analysis/08_surfaces``. An absolute ``outdir`` is used exactly as given.
 
 surface_screen_summary.csv
    Every generated orientation, termination, and dopant-depth variant.
@@ -215,7 +215,8 @@ result.json, optional relaxed POSCAR, optimizer log/trajectory, and meta.json.
 
 A typical path is::
 
-   08_surfaces/
+   <source_root>/
+     08_surfaces/
      targets/
        Sb5_Ti5__candidate_001/
          bulk_reference/
