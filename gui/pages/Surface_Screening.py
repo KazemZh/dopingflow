@@ -53,6 +53,24 @@ if not config_path.exists():
 cfg = toml.load(str(config_path))
 surface = dict(cfg.get("surface", {}) or {})
 screen_saved = dict(surface.get("screen", {}) or {})
+if not screen_saved:
+    # Migrate the former Input Builder's flat surface-relaxation controls into
+    # the new staged screen editor without losing the user's existing choices.
+    screen_saved = {
+        "enabled": True,
+        "backend": surface.get("surface_backend", "grace"),
+        "model": surface.get("surface_model", "GRACE-1L-OMAT"),
+        "task": surface.get("surface_task", ""),
+        "device": surface.get("surface_device", "cpu"),
+        "gpu_id": surface.get("surface_gpu_id", 0),
+        "tf_threads": surface.get("surface_tf_threads", 1),
+        "omp_threads": surface.get("surface_omp_threads", 1),
+        "relax": surface.get("relax_surface", True),
+        "optimizer": surface.get("surface_optimizer", "bfgs"),
+        "fmax": surface.get("surface_fmax", 0.05),
+        "max_steps": surface.get("surface_max_steps", 300),
+        "top_k_per_candidate": 10,
+    }
 refine_saved = dict(surface.get("refine", {}) or {})
 doping = dict(cfg.get("doping", {}) or {})
 scan_cfg = dict(cfg.get("scan", {}) or {})
@@ -803,6 +821,30 @@ with st.expander("Configuration & run controls", expanded=False):
     )
     resolved_surface.pop("composition_tag", None)
     resolved_surface["composition_tags"] = composition_tags
+
+    # Once saved through the dedicated page, retire the former flat
+    # surface-relaxation controls so there is one authoritative configuration.
+    for legacy_key in (
+        "relax_surface",
+        "surface_backend",
+        "surface_model",
+        "surface_task",
+        "surface_optimizer",
+        "surface_device",
+        "surface_gpu_id",
+        "surface_tf_threads",
+        "surface_omp_threads",
+        "surface_fmax",
+        "surface_max_steps",
+        "surface_relaxed_filename",
+        "surface_relax_log_filename",
+        "surface_relax_traj_filename",
+        "surface_relax_meta_filename",
+        "write_poscar",
+        "write_metadata_json",
+        "summary_csv",
+    ):
+        resolved_surface.pop(legacy_key, None)
 
     resolved_cfg = dict(cfg)
     resolved_cfg["surface"] = resolved_surface
