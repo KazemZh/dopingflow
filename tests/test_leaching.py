@@ -16,6 +16,7 @@ from dopingflow.leaching import (
     parse_leaching_config,
     _load_completed_site_checkpoint,
     _site_calculation_fingerprint,
+    _potential_scan_frame,
     preview_leaching_sites,
     resolve_leaching_output_dir,
     resolve_surface_summary,
@@ -274,6 +275,19 @@ def test_failed_site_checkpoint_is_not_reused(tmp_path) -> None:
     )
     assert result is None
     assert mode == "not-complete"
+
+
+def test_empty_potential_scan_has_stable_columns(tmp_path) -> None:
+    scan = _potential_scan_frame([])
+    assert scan.empty
+    assert "applied_potential_V" in scan.columns
+    assert "deltaG_leach_eV" in scan.columns
+
+    path = tmp_path / "leaching_potential_scan.csv"
+    scan.to_csv(path, index=False)
+    loaded = pd.read_csv(path)
+    assert loaded.empty
+    assert list(loaded.columns) == list(scan.columns)
 
 
 def test_relative_leaching_outdir_is_below_user_source_root(tmp_path) -> None:
