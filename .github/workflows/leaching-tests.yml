@@ -8,7 +8,7 @@ on:
       - "src/dopingflow/cli.py"
       - "tests/test_leaching.py"
       - "tests/test_surface_staged.py"
-      - "gui/pages/Dopant_Leaching.py"
+      - "gui/pages/8_Dopant_Leaching.py"
       - "examples/leaching/**"
       - "docs/source/methods/leaching.rst"
       - "docs/source/index.rst"
@@ -33,5 +33,5 @@ jobs:
       - name: Run leaching tests
         run: |
           python -m py_compile src/dopingflow/leaching.py
-          if [ -f gui/pages/Dopant_Leaching.py ]; then python -m py_compile gui/pages/Dopant_Leaching.py; fi
+          if [ -f gui/pages/8_Dopant_Leaching.py ]; then python -m py_compile gui/pages/8_Dopant_Leaching.py; fi
           pytest -q tests/test_leaching.py tests/test_surface_staged.py tests/test_cli_help.py
