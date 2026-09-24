@@ -927,7 +927,7 @@ def _topk(
                 good.sort_values(f"{prefix}_rank_overall").head(top_k)
             )
     return (
-        pd.concat(rows, ignore_index=True)
+        pd.concat(rows).copy()
         if rows
         else df.head(0).copy()
     )
