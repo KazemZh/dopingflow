@@ -15,7 +15,12 @@ from pymatgen.io.vasp import Poscar
 
 from dopingflow.ml_backends import normalize_backend_config
 from dopingflow.surface import _select_fixed_atom_indices
-from dopingflow.surface_staged import _evaluate, _prepare_calculator, parse_surface_config
+from dopingflow.surface_staged import (
+    _evaluate,
+    _prepare_calculator,
+    parse_surface_config,
+    resolve_surface_output_dir,
+)
 
 try:
     import tomllib
@@ -71,9 +76,20 @@ def parse_leaching_config(
 ) -> dict[str, Any]:
     raw = dict(config.get("leaching", {}) or {})
     surface = dict(config.get("surface", {}) or {})
+    structure = dict(config.get("structure", {}) or {})
+    oxidation = dict(config.get("oxidation", {}) or {})
+    conductivity = dict(config.get("conductivity", {}) or {})
+    source_root_default = (
+        str(raw.get("source_root", "")).strip()
+        or str(surface.get("source_root", "")).strip()
+        or str(conductivity.get("source_root", "")).strip()
+        or str(oxidation.get("source_root", "")).strip()
+        or str(structure.get("outdir", "random_structures")).strip()
+    )
     calc = _calculator_defaults(config)
     defaults = dict(
         enabled=False,
+        source_root=source_root_default,
         source_summary="",
         source_mode="auto",
         surface_include=[],
@@ -180,20 +196,41 @@ def _path(root: Path, value: str | Path) -> Path:
     return p.resolve() if p.is_absolute() else (root / p).resolve()
 
 
+def resolve_leaching_output_dir(
+    config: Mapping[str, Any],
+    cfg: Mapping[str, Any] | None = None,
+    project_root: Path | str = Path("."),
+) -> Path:
+    """Resolve leaching output below the user-selected source/parent root."""
+    parsed = dict(cfg or parse_leaching_config(config, project_root))
+    out = Path(str(parsed["outdir"])).expanduser()
+    if out.is_absolute():
+        return out.resolve()
+
+    source = Path(str(parsed["source_root"])).expanduser()
+    root = Path(project_root).expanduser().resolve()
+    source_root = source.resolve() if source.is_absolute() else (root / source).resolve()
+    return (source_root / out).resolve()
+
+
 def resolve_surface_summary(config: Mapping[str, Any], cfg: Mapping[str, Any]) -> Path:
     root = Path(cfg["project_root"])
+    source_root = _path(root, str(cfg["source_root"]))
+
     if str(cfg.get("source_summary", "")).strip():
-        p = _path(root, str(cfg["source_summary"]))
+        value = Path(str(cfg["source_summary"])).expanduser()
+        p = value.resolve() if value.is_absolute() else (source_root / value).resolve()
         if not p.exists():
             raise FileNotFoundError(f"[leaching] Surface summary not found: {p}")
         return p
-    surface = dict(config.get("surface", {}) or {})
-    out = _path(root, str(surface.get("outdir", "08_surfaces")))
+
+    surface_cfg = parse_surface_config(config)
+    out = resolve_surface_output_dir(config, surface_cfg, root)
     choices = {
-        "final-selected": out / str(surface.get("refine_selected_csv", "surface_final_selected.csv")),
-        "screen-selected": out / str(surface.get("screen_selected_csv", "surface_screen_selected.csv")),
-        "refine-summary": out / str(surface.get("refine_summary_csv", "surface_refine_summary.csv")),
-        "screen-summary": out / str(surface.get("screen_summary_csv", "surface_screen_summary.csv")),
+        "final-selected": out / str(surface_cfg.get("refine_selected_csv", "surface_final_selected.csv")),
+        "screen-selected": out / str(surface_cfg.get("screen_selected_csv", "surface_screen_selected.csv")),
+        "refine-summary": out / str(surface_cfg.get("refine_summary_csv", "surface_refine_summary.csv")),
+        "screen-summary": out / str(surface_cfg.get("screen_summary_csv", "surface_screen_summary.csv")),
     }
     if cfg["source_mode"] != "auto":
         p = choices[str(cfg["source_mode"])]
@@ -204,7 +241,6 @@ def resolve_surface_summary(config: Mapping[str, Any], cfg: Mapping[str, Any]) -
         if choices[name].exists():
             return choices[name]
     raise FileNotFoundError("[leaching] Run `dopingflow surface` first or set source_summary")
-
 
 def _safe(value: str) -> str:
     return "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in value.replace("/", "__"))
@@ -311,11 +347,34 @@ def enumerate_leaching_sites(
             site = structure[idx]
             od = [float(structure.get_distance(idx, j)) for j, s in enumerate(structure) if s.specie.symbol in anions]
             cutoff = float(cfg["oxygen_neighbor_cutoff_A"])
+            cation_z = [float(s.coords[2]) for s in structure if s.specie.symbol in cations]
+            z = float(site.coords[2])
+            if cfg["placement_side"] == "top":
+                depth = max(cation_z) - z
+            elif cfg["placement_side"] == "bottom":
+                depth = z - min(cation_z)
+            else:
+                depth = min(max(cation_z) - z, z - min(cation_z))
+            initial_zone = detected.get(idx, "")
+            declared_zone = str(declared.get(dopant, ""))
             records.append(dict(
-                dopant=dopant, site_index=idx, site_ordinal=ordinal,
-                detected_zone=detected.get(idx, ""),
-                declared_target_zone=str(declared.get(dopant, "")),
-                site_cart_x_A=float(site.coords[0]), site_cart_y_A=float(site.coords[1]), site_cart_z_A=float(site.coords[2]),
+                dopant=dopant,
+                site_index=idx,
+                site_ordinal=ordinal,
+                detected_zone=initial_zone,
+                declared_target_zone=declared_zone,
+                initial_dopant_zone=initial_zone,
+                initial_dopant_zone_source="relaxed-surface-geometry",
+                surface_variant_declared_zone=declared_zone,
+                initial_site_index=idx,
+                initial_cart_x_A=float(site.coords[0]),
+                initial_cart_y_A=float(site.coords[1]),
+                initial_cart_z_A=z,
+                initial_frac_x=float(site.frac_coords[0]),
+                initial_frac_y=float(site.frac_coords[1]),
+                initial_frac_z=float(site.frac_coords[2]),
+                initial_depth_from_selected_surface_A=float(max(depth, 0.0)),
+                site_cart_x_A=float(site.coords[0]), site_cart_y_A=float(site.coords[1]), site_cart_z_A=z,
                 site_frac_x=float(site.frac_coords[0]), site_frac_y=float(site.frac_coords[1]), site_frac_z=float(site.frac_coords[2]),
                 oxygen_coordination_within_cutoff=sum(d <= cutoff for d in od),
                 nearest_oxygen_distance_A=min(od) if od else None,
@@ -515,7 +574,7 @@ def _parent(
 
 def _aggregate(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty: return df.copy()
-    cols = ["surface_id", "target_id", "composition_tag", "candidate", "miller_h", "miller_k", "miller_l", "termination_id", "variant_id", "variant_label", "dopant"]
+    cols = ["surface_id", "target_id", "composition_tag", "candidate", "miller_h", "miller_k", "miller_l", "termination_id", "variant_id", "variant_label", "dopant", "initial_dopant_zone"]
     rows = []
     for keys, group in df.groupby(cols, dropna=False, sort=False):
         rec = dict(zip(cols, keys))
@@ -529,7 +588,11 @@ def _aggregate(df: pd.DataFrame) -> pd.DataFrame:
         )
         if ext.notna().any():
             vulnerable = group.loc[ext.idxmin()]
-            rec.update(most_vulnerable_site_index=int(vulnerable["site_index"]), most_vulnerable_detected_zone=str(vulnerable["detected_zone"]))
+            rec.update(
+                most_vulnerable_site_index=int(vulnerable["site_index"]),
+                most_vulnerable_detected_zone=str(vulnerable["detected_zone"]),
+                most_vulnerable_initial_depth_A=float(vulnerable["initial_depth_from_selected_surface_A"]),
+            )
         rows.append(rec)
     return pd.DataFrame(rows)
 
@@ -542,7 +605,7 @@ def run_leaching(
         print("[leaching] Stage disabled. Skipping."); return None
     source = resolve_surface_summary(config, cfg)
     preview = preview_leaching_sites(config, project_root)
-    outdir = _path(Path(cfg["project_root"]), str(cfg["outdir"])); outdir.mkdir(parents=True, exist_ok=True)
+    outdir = resolve_leaching_output_dir(config, cfg, project_root); outdir.mkdir(parents=True, exist_ok=True)
     preview_path = outdir / str(cfg["preview_csv"]); preview.to_csv(preview_path, index=False)
     if dry_run:
         print(f"[leaching] Dry run: {len(preview)} site(s) -> {preview_path}"); return preview_path
@@ -615,7 +678,8 @@ def run_leaching(
                 dg = leaching_delta_g_eV(extraction, int(n), float(e0), potential, potential_scale=cfg["potential_scale"], ion_activity=activity, temperature_K=cfg["temperature_K"], pH=cfg["pH"])
                 potential_rows.append(dict(
                     surface_id=sid, target_id=rec["target_id"], dopant=dopant, site_index=idx,
-                    detected_zone=rec["detected_zone"], applied_potential_V=potential,
+                    detected_zone=rec["detected_zone"], initial_dopant_zone=rec["initial_dopant_zone"],
+                    initial_depth_from_selected_surface_A=rec["initial_depth_from_selected_surface_A"], applied_potential_V=potential,
                     potential_scale=cfg["potential_scale"], deltaG_leach_eV=dg,
                     leaching_thermodynamically_favorable=bool(dg < 0),
                 ))
@@ -627,6 +691,9 @@ def run_leaching(
         if col in results:
             results[col] = pd.to_numeric(results[col], errors="coerce")
             results[rank] = results.groupby(["target_id", "dopant"], dropna=False)[col].rank(method="min", ascending=True)
+            results[f"{rank}_within_initial_zone"] = results.groupby(
+                ["target_id", "dopant", "initial_dopant_zone"], dropna=False
+            )[col].rank(method="min", ascending=True)
 
     summary = outdir / str(cfg["summary_csv"])
     results.to_csv(summary, index=False)
@@ -657,6 +724,6 @@ def run_leaching_from_toml(config_path: Path, *, dry_run: bool = False) -> Path 
 
 __all__ = [
     "KB_EV_K", "parse_leaching_config", "resolve_surface_summary", "enumerate_leaching_sites",
-    "preview_leaching_sites", "load_redox_references", "electrochemical_metrics",
+    "preview_leaching_sites", "resolve_leaching_output_dir", "load_redox_references", "electrochemical_metrics",
     "leaching_delta_g_eV", "run_leaching", "run_leaching_from_toml",
 ]
