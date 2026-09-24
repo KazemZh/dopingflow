@@ -1,0 +1,145 @@
+from __future__ import annotations
+
+import pandas as pd
+from pymatgen.core import Lattice, Structure
+
+from dopingflow.surface_staged import (
+    DEFAULT_MILLERS,
+    _parse_config,
+    _rank,
+    _surface_energy,
+    _topk,
+    _variants,
+)
+
+
+def test_surface_defaults_use_low_index_sno2_facets_and_mace_r2scan_refine() -> None:
+    cfg = _parse_config({"surface": {"enabled": True}})
+
+    assert cfg["miller_list"] == DEFAULT_MILLERS
+    assert cfg["screen"]["backend"] == "grace"
+    assert cfg["screen"]["model"] == "GRACE-1L-OMAT"
+    assert cfg["refine"]["backend"] == "mace"
+    assert cfg["refine"]["model"] == "mh-1"
+    assert cfg["refine"]["task"] == "matpes_r2scan"
+
+
+def _co_doped_slab() -> Structure:
+    lattice = Lattice.tetragonal(5.0, 25.0)
+    species = [
+        "Sn", "Sn", "Sn", "Sn", "Sn", "Sn", "Sb", "Ti",
+        "O", "O", "O", "O", "O", "O", "O", "O",
+    ]
+    frac = [
+        [0.10, 0.10, 0.18],
+        [0.60, 0.10, 0.28],
+        [0.10, 0.60, 0.38],
+        [0.60, 0.60, 0.62],
+        [0.10, 0.10, 0.72],
+        [0.60, 0.10, 0.82],
+        [0.25, 0.25, 0.48],
+        [0.75, 0.75, 0.52],
+        [0.20, 0.20, 0.20],
+        [0.70, 0.20, 0.30],
+        [0.20, 0.70, 0.40],
+        [0.70, 0.70, 0.45],
+        [0.20, 0.20, 0.55],
+        [0.70, 0.20, 0.60],
+        [0.20, 0.70, 0.70],
+        [0.70, 0.70, 0.80],
+    ]
+    return Structure(lattice, species, frac)
+
+
+def test_codopant_depth_variants_preserve_composition() -> None:
+    slab = _co_doped_slab()
+    cfg = {
+        "dopant_variant_mode": "co-dopant-depth",
+        "host_species": "Sn",
+        "dopant_species": ["Sb", "Ti"],
+        "anion_species": ["O"],
+        "depth_zones": ["surface", "subsurface", "bulk"],
+        "placement_side": "top",
+        "cation_layer_tolerance_A": 3.0,
+        "layers_per_zone": 1,
+        "include_original_variant": True,
+        "max_dopant_variants_per_termination": 18,
+    }
+
+    variants = _variants(slab, cfg)
+
+    assert variants
+    assert variants[0][0] == "original"
+    assert len(variants) > 1
+    original_formula = slab.composition.get_el_amt_dict()
+    assert all(struct.composition.get_el_amt_dict() == original_formula for _, struct, _ in variants)
+    assert any("Sb-" in label and "Ti-" in label for label, _, _ in variants[1:])
+
+
+def test_surface_energy_requires_bulk_proportional_stoichiometry() -> None:
+    bulk = Structure(
+        Lattice.cubic(5.0),
+        ["Sn", "O", "O"],
+        [[0, 0, 0], [0.25, 0.25, 0.25], [0.75, 0.75, 0.75]],
+    )
+    slab = Structure(
+        Lattice.from_parameters(5.0, 5.0, 20.0, 90, 90, 90),
+        ["Sn", "Sn", "O", "O", "O", "O"],
+        [
+            [0.0, 0.0, 0.4],
+            [0.5, 0.5, 0.6],
+            [0.25, 0.25, 0.42],
+            [0.75, 0.75, 0.45],
+            [0.25, 0.75, 0.55],
+            [0.75, 0.25, 0.58],
+        ],
+    )
+    good = _surface_energy(bulk, slab, slab_energy=-18.0, bulk_energy=-10.0)
+    assert good["surface_energy_status"] == "ok"
+    assert good["surface_energy_J_m2"] > 0.0
+
+    nonstoich = slab.copy()
+    nonstoich.remove_sites([2])
+    bad = _surface_energy(bulk, nonstoich, slab_energy=-17.0, bulk_energy=-10.0)
+    assert bad["surface_energy_status"].startswith("not_computable_")
+
+
+def test_ranking_excludes_non_computable_terminations() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "composition_tag": "Sb5_Ti5",
+                "candidate": "candidate_001",
+                "miller_h": 1,
+                "miller_k": 1,
+                "miller_l": 0,
+                "screen_surface_energy_status": "ok",
+                "screen_surface_energy_J_m2": 1.2,
+            },
+            {
+                "composition_tag": "Sb5_Ti5",
+                "candidate": "candidate_001",
+                "miller_h": 1,
+                "miller_k": 0,
+                "miller_l": 0,
+                "screen_surface_energy_status": "ok",
+                "screen_surface_energy_J_m2": 0.8,
+            },
+            {
+                "composition_tag": "Sb5_Ti5",
+                "candidate": "candidate_001",
+                "miller_h": 1,
+                "miller_k": 0,
+                "miller_l": 1,
+                "screen_surface_energy_status": "not_computable_not_proportional",
+                "screen_surface_energy_J_m2": None,
+            },
+        ]
+    )
+
+    ranked = _rank(df, "screen")
+    selected = _topk(ranked, "screen", 1)
+
+    assert ranked["screen_rankable"].tolist() == [True, True, False]
+    assert len(selected) == 1
+    assert selected.iloc[0]["screen_surface_energy_J_m2"] == 0.8
