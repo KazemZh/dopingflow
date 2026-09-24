@@ -6,7 +6,7 @@ This example takes selected relaxed source structures (vacancy-free parents and,
 2. termination enumeration;
 3. representative Sb/co-dopant placement at surface, subsurface, and bulk-like cation layers;
 4. fast MLFF screening and relaxation;
-5. surface-energy ranking using a bulk reference evaluated with the **same calculator**;
+5. surface-energy ranking using the periodic source reference evaluated with the **same calculator**;
 6. optional refinement of the screening shortlist with a second MLFF.
 
 For the current SnO2/ATO study the default starting facets are (110), (100), (101), and (001). They are configurable and are not hard-coded into the workflow.
@@ -34,7 +34,7 @@ The default output directory is `08_surfaces/`.
 - `surface_refine_summary.csv`: second-model results for the shortlist.
 - `surface_final_selected.csv`: final top-k after refinement.
 
-Only slabs whose composition is proportional to their parent bulk receive the simple
+Only slabs whose composition is proportional to their periodic source structure receive the simple
 `(E_slab - n E_bulk)/(2A)` surface-energy ranking. Non-stoichiometric terminations are
 kept in the summary with an explicit non-computable status instead of being compared
 by raw total energy.
