@@ -17,6 +17,7 @@ from dopingflow.surface_staged import (
     DEFAULT_MILLERS,
     parse_surface_config,
     preview_surface_candidates,
+    resolve_surface_output_dir,
 )
 from gui_config import (
     BACKEND_CHOICES,
@@ -415,6 +416,7 @@ with st.expander("Configuration & run controls", expanded=False):
     outdir = stage_right.text_input(
         "Surface output directory",
         value=str(surface.get("outdir", "08_surfaces")),
+        help="Relative paths are created inside Source root; absolute paths are used exactly as entered.",
     )
 
     source_default = (
@@ -1005,9 +1007,17 @@ with st.expander("Configuration & run controls", expanded=False):
 
 st.divider()
 st.subheader("Results explorer")
-results_root = _resolved_path(str(surface.get("outdir", "08_surfaces")))
-if "resolved_surface" in locals():
-    results_root = _resolved_path(str(resolved_surface.get("outdir", "08_surfaces")))
+results_config = resolved_cfg if "resolved_cfg" in locals() else cfg
+results_surface = (
+    resolved_surface
+    if "resolved_surface" in locals()
+    else parse_surface_config(results_config)
+)
+results_root = resolve_surface_output_dir(
+    results_config,
+    results_surface,
+    project_root,
+)
 st.caption(f"Resolved surface output: `{results_root}`")
 
 screen_summary_name = str(
