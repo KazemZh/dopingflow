@@ -17,6 +17,7 @@ from dopingflow.generate import run_generate_from_toml
 from dopingflow.logging import setup_logging
 from dopingflow.oxidation import run_oxidation_from_toml
 from dopingflow.conductivity import rebuild_reference_comparison_from_toml, run_conductivity_from_toml
+from dopingflow.leaching import run_leaching_from_toml
 from dopingflow.site_preference import run_site_preference_from_toml
 from dopingflow.surface_staged import (
     run_surface_refine_from_toml,
@@ -318,6 +319,25 @@ def surface_cmd(
     typer.echo(f"\nWrote surface workflow summary: {output}")
 
 
+@app.command("leaching")
+def leaching_cmd(
+    config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Preview exact surface dopant-removal sites without running the calculator",
+    ),
+    verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
+) -> None:
+    """Step 15: Analyze thermodynamic dopant leaching from selected surfaces."""
+    _init(config, verbose)
+    output = run_leaching_from_toml(config, dry_run=dry_run)
+    if output is None:
+        typer.echo("Leaching stage disabled; set [leaching].enabled=true")
+        return
+    typer.echo(f"\nWrote leaching results: {output}")
+
+
 @app.command("run-all")
 def run_all_cmd(
     config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
@@ -326,7 +346,7 @@ def run_all_cmd(
         "--from",
         help=(
             "Start step key (refs, corrections, generate, scan, relax, filter, "
-            "bandgap, formation, collect, alloy-hull, phase-diagram, vacancies, site-preference, oxidation, conductivity, surface)"
+            "bandgap, formation, collect, alloy-hull, phase-diagram, vacancies, site-preference, oxidation, conductivity, surface, leaching)"
         ),
     ),
     stop: str = typer.Option("phase-diagram", "--until", help="Stop step key (inclusive)"),
@@ -348,7 +368,7 @@ def run_all_cmd(
     Step keys:
       refs -> corrections -> generate -> scan -> relax -> filter -> bandgap
       -> formation -> collect -> alloy-hull -> phase-diagram -> vacancies
-      -> site-preference -> oxidation -> conductivity -> surface
+      -> site-preference -> oxidation -> conductivity -> surface -> leaching
     """
     _init(config, verbose)
 
@@ -375,6 +395,7 @@ def run_all_cmd(
         ("oxidation", "12 oxidation", lambda: run_oxidation_from_toml(config)),
         ("conductivity", "13 conductivity", lambda: run_conductivity_from_toml(config)),
         ("surface", "14 surface scan/refine", lambda: run_surface_workflow_from_toml(config)),
+        ("leaching", "15 dopant leaching", lambda: run_leaching_from_toml(config)),
     ]
 
     key_to_idx = {k: i for i, (k, _, _) in enumerate(steps)}
@@ -414,7 +435,7 @@ def run_all_cmd(
         typer.echo(f"\n=== {title} ({k}) ===")
         res = fn()
 
-        if k in {"collect", "alloy-hull", "phase-diagram", "vacancies", "site-preference", "oxidation", "surface"} and isinstance(res, Path):
+        if k in {"collect", "alloy-hull", "phase-diagram", "vacancies", "site-preference", "oxidation", "surface", "leaching"} and isinstance(res, Path):
             typer.echo(f"\nWrote output: {res}")
 
 
