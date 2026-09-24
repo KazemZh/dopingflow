@@ -903,6 +903,8 @@ surface-energy ranking is applied only when the slab composition is proportional
 to the selected source structure. Non-stoichiometric terminations are retained with an explicit
 non-computable status rather than ranked using raw total energies.
 
+Relative surface output paths are created inside the selected `source_root`; for example, `source_root = "vacancy-selected/structures-analysis"` with `outdir = "08_surfaces"` writes to `vacancy-selected/structures-analysis/08_surfaces`. Absolute output paths are unchanged.
+
 See examples/surfaces/input.toml and docs/source/methods/surfaces.rst for the
 complete configuration and interpretation notes. The Streamlit **Surface Screening**
 page provides the same staged controls, separate-environment execution, surface-energy
@@ -933,7 +935,9 @@ SHE/RHE potential. DopingFlow intentionally does not hard-code aqueous species
 or oxidation states because oxide dopants may dissolve as different
 oxo/hydroxo/charge-state species.
 
-Outputs under `09_leaching/` include the exact site preview,
+Each result records the dopant's initial relaxed-surface zone (`surface`, `subsurface`, or `bulk`), the zone requested by the surface variant, its original atom index/coordinates, and its depth from the selected surface.
+
+A relative `outdir = "09_leaching"` is created inside the leaching/source parent root (inherited from `[surface].source_root` unless overridden). Outputs include the exact site preview,
 `leaching_summary.csv`, a per-surface/per-dopant summary,
 `leaching_potential_scan.csv`, and machine-readable JSON. The Streamlit
 **Dopant Leaching** page provides the same configuration, dry-run preview,
