@@ -213,3 +213,30 @@ Older flat surface relaxation keys such as surface_backend, surface_model,
 surface_task, surface_device, surface_fmax, and surface_max_steps are mapped to
 surface.screen when the nested screen section is not supplied. New studies
 should use the staged nested sections.
+
+Graphical interface
+-------------------
+
+The Streamlit ``Surface Screening`` page owns the complete surface-stage
+configuration. The old Surface editor in the main Input Builder has been
+replaced by a link to this page so that the same settings are not maintained in
+two places.
+
+The page mirrors the staged CLI design:
+
+- configure and preview selected bulk parents;
+- edit slab, termination, co-dopant-depth, and constraint settings;
+- configure the independent screen and refinement calculators;
+- run the screen and refinement either in the current environment or through
+  separate named Conda environments;
+- inspect surface-energy rankings one parent at a time;
+- inspect same-termination segregation energies relative to the all-bulk-like
+  variant;
+- browse the selected slab geometry interactively;
+- inspect the raw screen/refinement tables.
+
+The results explorer keeps surface-energy ranking and dopant segregation as
+separate quantities. A low surface energy identifies a thermodynamically
+favorable exposed slab within the implemented model, whereas a negative
+segregation energy indicates that the selected dopant placement is favored
+relative to the corresponding bulk-like placement.
