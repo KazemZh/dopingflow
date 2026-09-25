@@ -1131,12 +1131,23 @@ def _aggregate(df: pd.DataFrame) -> pd.DataFrame:
     for keys, group in df.groupby(cols, dropna=False, sort=False):
         rec = dict(zip(cols, keys))
         numeric = lambda col: pd.to_numeric(group[col], errors="coerce") if col in group else pd.Series(np.nan, index=group.index)
-        ext, she, rhe = numeric("extraction_energy_eV"), numeric("dissolution_potential_V_SHE"), numeric("dissolution_potential_V_RHE")
+        ext = numeric("extraction_energy_eV")
+        she = numeric("dissolution_potential_V_SHE")
+        rhe = numeric("dissolution_potential_V_RHE")
+        prot_she = numeric("protonation_adjusted_dissolution_potential_V_SHE")
+        prot_rhe = numeric("protonation_adjusted_dissolution_potential_V_RHE")
         rec.update(
-            n_leaching_sites=len(group), n_completed_sites=int(group["status"].eq("ok").sum()),
+            n_leaching_sites=len(group),
+            n_completed_sites=int(group["status"].eq("ok").sum()),
             minimum_extraction_energy_eV=float(ext.min()) if ext.notna().any() else np.nan,
             minimum_dissolution_potential_V_SHE=float(she.min()) if she.notna().any() else np.nan,
             minimum_dissolution_potential_V_RHE=float(rhe.min()) if rhe.notna().any() else np.nan,
+            minimum_protonation_adjusted_dissolution_potential_V_SHE=(
+                float(prot_she.min()) if prot_she.notna().any() else np.nan
+            ),
+            minimum_protonation_adjusted_dissolution_potential_V_RHE=(
+                float(prot_rhe.min()) if prot_rhe.notna().any() else np.nan
+            ),
         )
         if ext.notna().any():
             vulnerable = group.loc[ext.idxmin()]
