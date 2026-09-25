@@ -605,6 +605,332 @@ def _load_completed_site_checkpoint(
     }, ("fingerprint" if saved_fp else "legacy-identity")
 
 
+
+def _to_she_potential(
+    applied_potential_V: float,
+    *,
+    potential_scale: str,
+    temperature_K: float,
+    pH: float,
+) -> float:
+    thermal = KB_EV_K * float(temperature_K)
+    scale = str(potential_scale).upper()
+    if scale == "RHE":
+        return float(applied_potential_V) - thermal * LN10 * float(pH)
+    if scale == "SHE":
+        return float(applied_potential_V)
+    raise ValueError("potential_scale must be SHE or RHE")
+
+
+def protonation_delta_g_eV(
+    delta_e_zero_V_eV: float,
+    h_count: int,
+    applied_potential_V: float,
+    *,
+    potential_scale: str,
+    temperature_K: float,
+    pH: float,
+) -> float:
+    """CHE free energy for defect protonation relative to 1/2 H2 per H.
+
+    delta_e_zero_V_eV = E(defect+nH) - E(defect) - n/2 E(H2).
+    """
+    n_h = int(h_count)
+    u_she = _to_she_potential(
+        applied_potential_V,
+        potential_scale=potential_scale,
+        temperature_K=temperature_K,
+        pH=pH,
+    )
+    ph_term = KB_EV_K * float(temperature_K) * LN10 * float(pH)
+    return float(delta_e_zero_V_eV) + n_h * (u_she + ph_term)
+
+
+def protonation_adjusted_leaching_delta_g_eV(
+    extraction_base_eV: float,
+    h_count: int,
+    oxidation_state: int,
+    standard_reduction_potential_V_SHE: float,
+    applied_potential_V: float,
+    *,
+    potential_scale: str,
+    ion_activity: float,
+    temperature_K: float,
+    pH: float,
+) -> float:
+    """Leaching free energy for a protonated post-leaching surface state."""
+    z = int(oxidation_state)
+    n_h = int(h_count)
+    if z <= 0 or ion_activity <= 0:
+        raise ValueError("oxidation_state and ion_activity must be positive")
+    thermal = KB_EV_K * float(temperature_K)
+    u_she = _to_she_potential(
+        applied_potential_V,
+        potential_scale=potential_scale,
+        temperature_K=temperature_K,
+        pH=pH,
+    )
+    ph_term = thermal * LN10 * float(pH)
+    return (
+        float(extraction_base_eV)
+        + n_h * (u_she + ph_term)
+        + z * (float(standard_reduction_potential_V_SHE) - u_she)
+        + thermal * math.log(float(ion_activity))
+    )
+
+
+def protonation_dissolution_thresholds(
+    extraction_base_eV: float,
+    h_count: int,
+    oxidation_state: int,
+    standard_reduction_potential_V_SHE: float,
+    *,
+    ion_activity: float,
+    temperature_K: float,
+    pH: float,
+) -> dict[str, float] | None:
+    """Return the anodic zero-crossing for one protonated leaching pathway.
+
+    Only h_count < oxidation_state has a conventional high-potential onset.
+    """
+    z = int(oxidation_state)
+    n_h = int(h_count)
+    if z <= 0 or ion_activity <= 0:
+        raise ValueError("oxidation_state and ion_activity must be positive")
+    if n_h >= z:
+        return None
+    thermal = KB_EV_K * float(temperature_K)
+    ph_term = thermal * LN10 * float(pH)
+    numerator = (
+        float(extraction_base_eV)
+        + z * float(standard_reduction_potential_V_SHE)
+        + thermal * math.log(float(ion_activity))
+        + n_h * ph_term
+    )
+    u_she = numerator / (z - n_h)
+    return {
+        "dissolution_potential_V_SHE": u_she,
+        "dissolution_potential_V_RHE": u_she + ph_term,
+    }
+
+
+def _h2_reference(
+    cfg: Mapping[str, Any],
+    calculator: Any,
+    outdir: Path,
+) -> tuple[float | None, str]:
+    p = dict(cfg.get("protonation", {}) or {})
+    manual = p.get("manual_h2_energy_eV")
+    if manual is not None:
+        return float(manual), "manual"
+
+    if not bool(p.get("compute_h2_reference", True)):
+        return None, "h2-reference-disabled"
+
+    cache_path = outdir / "references" / "h2_reference.json"
+    identity = _calculator_identity(cfg)
+    reference_settings = {
+        "calculator": identity,
+        "relax": bool(p.get("relax_h2_reference", True)),
+        "bond_length_A": float(p.get("h2_bond_length_A", 0.74)),
+        "box_A": float(p.get("h2_box_A", 15.0)),
+        "optimizer": str(cfg["optimizer"]),
+        "fmax": float(cfg["fmax"]),
+        "max_steps": int(cfg["max_steps"]),
+    }
+    try:
+        cached = (
+            json.loads(cache_path.read_text(encoding="utf-8"))
+            if cache_path.exists()
+            else {}
+        )
+    except (OSError, json.JSONDecodeError):
+        cached = {}
+    if cached.get("settings") == reference_settings:
+        try:
+            return float(cached["E_H2_eV"]), "leaching-h2-reference-cache"
+        except (KeyError, TypeError, ValueError):
+            pass
+
+    box = float(p.get("h2_box_A", 15.0))
+    bond = float(p.get("h2_bond_length_A", 0.74))
+    lattice = Lattice.cubic(box)
+    center = np.array([box / 2.0, box / 2.0, box / 2.0])
+    h2 = Structure(
+        lattice,
+        ["H", "H"],
+        [
+            center + np.array([-bond / 2.0, 0.0, 0.0]),
+            center + np.array([bond / 2.0, 0.0, 0.0]),
+        ],
+        coords_are_cartesian=True,
+    )
+    h2_dir = outdir / "references" / "H2"
+    h2_dir.mkdir(parents=True, exist_ok=True)
+    Poscar(h2).write_file(str(h2_dir / "POSCAR_initial"))
+    calc_cfg = dict(cfg)
+    calc_cfg["relax"] = bool(p.get("relax_h2_reference", True))
+    result = _evaluate(h2, [], calc_cfg, calculator, h2_dir / "relax")
+    if result.get("status") != "ok" or result.get("energy_eV") is None:
+        return None, "h2-reference-calculation-failed"
+
+    energy = float(result["energy_eV"])
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "settings": reference_settings,
+                "E_H2_eV": energy,
+                "result": result,
+            },
+            indent=2,
+            default=str,
+        ),
+        encoding="utf-8",
+    )
+    return energy, "leaching-h2-reference-calculation"
+
+
+def _protonatable_oxygen_neighbors(
+    structure: Structure,
+    site_index: int,
+    cfg: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    p = dict(cfg.get("protonation", {}) or {})
+    cutoff = float(p.get("neighbor_cutoff_A", cfg["oxygen_neighbor_cutoff_A"]))
+    oh = float(p.get("oh_bond_length_A", 0.98))
+    anions = set(cfg.get("anion_species", ["O"]))
+    metal_site = structure[int(site_index)]
+    nearest: dict[int, dict[str, Any]] = {}
+
+    for neighbor in structure.get_neighbors(metal_site, cutoff):
+        symbol = neighbor.specie.symbol
+        if symbol not in anions:
+            continue
+        oxygen_index = int(neighbor.index)
+        distance = float(neighbor.nn_distance)
+        oxygen_cart = np.asarray(neighbor.coords, dtype=float)
+        direction = np.asarray(metal_site.coords, dtype=float) - oxygen_cart
+        norm = float(np.linalg.norm(direction))
+        if norm <= 1e-12:
+            continue
+        h_cart = oxygen_cart + oh * direction / norm
+        h_frac = structure.lattice.get_fractional_coords(h_cart)
+        h_frac = np.mod(h_frac, 1.0)
+        item = {
+            "oxygen_index": oxygen_index,
+            "distance_A": distance,
+            "h_frac": [float(x) for x in h_frac],
+        }
+        previous = nearest.get(oxygen_index)
+        if previous is None or distance < float(previous["distance_A"]):
+            nearest[oxygen_index] = item
+
+    return sorted(
+        nearest.values(),
+        key=lambda item: (float(item["distance_A"]), int(item["oxygen_index"])),
+    )
+
+
+def _protonation_arrangements(
+    structure: Structure,
+    site_index: int,
+    cfg: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    p = dict(cfg.get("protonation", {}) or {})
+    neighbors = _protonatable_oxygen_neighbors(structure, site_index, cfg)
+    cap = int(p.get("max_arrangements_per_h_count", 5))
+    arrangements: list[dict[str, Any]] = []
+    for h_count in p.get("h_counts", [0, 1, 2, 3]):
+        n_h = int(h_count)
+        if n_h <= 0 or n_h > len(neighbors):
+            continue
+        combos = list(combinations(neighbors, n_h))
+        combos.sort(
+            key=lambda combo: (
+                sum(float(item["distance_A"]) for item in combo),
+                tuple(int(item["oxygen_index"]) for item in combo),
+            )
+        )
+        for arrangement_id, combo in enumerate(combos[:cap], 1):
+            protonated = structure.copy()
+            protonated.remove_sites([int(site_index)])
+            for item in combo:
+                protonated.append("H", item["h_frac"])
+            arrangements.append(
+                {
+                    "h_count": n_h,
+                    "arrangement_id": arrangement_id,
+                    "oxygen_indices": [int(item["oxygen_index"]) for item in combo],
+                    "original_metal_oxygen_distances_A": [
+                        float(item["distance_A"]) for item in combo
+                    ],
+                    "structure": protonated,
+                }
+            )
+    return arrangements
+
+
+def _protonation_fingerprint(
+    source_path: Path,
+    site_index: int,
+    dopant: str,
+    oxygen_indices: Sequence[int],
+    cfg: Mapping[str, Any],
+    surface_cfg: Mapping[str, Any],
+) -> str:
+    p = dict(cfg.get("protonation", {}) or {})
+    payload = {
+        "schema_version": 1,
+        "site_calculation_fingerprint": _site_calculation_fingerprint(
+            source_path, site_index, dopant, cfg, surface_cfg
+        ),
+        "oxygen_indices": [int(x) for x in oxygen_indices],
+        "relax_protonated_surface": bool(p.get("relax_protonated_surface", True)),
+        "neighbor_cutoff_A": float(p.get("neighbor_cutoff_A", 2.8)),
+        "oh_bond_length_A": float(p.get("oh_bond_length_A", 0.98)),
+        "optimizer": str(cfg["optimizer"]),
+        "fmax": float(cfg["fmax"]),
+        "max_steps": int(cfg["max_steps"]),
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _load_protonation_checkpoint(
+    checkpoint_path: Path,
+    fingerprint: str,
+    cfg: Mapping[str, Any],
+) -> tuple[dict[str, Any] | None, str]:
+    if not bool(cfg.get("resume_completed", True)) or not checkpoint_path.exists():
+        return None, "disabled-or-missing"
+    try:
+        saved = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None, "unreadable"
+    if saved.get("status") != "ok":
+        return None, "not-complete"
+    if str(saved.get("protonation_fingerprint", "")) != str(fingerprint):
+        return None, "fingerprint-mismatch"
+    try:
+        energy = float(saved["energy_eV"])
+    except (KeyError, TypeError, ValueError):
+        return None, "missing-energy"
+    relaxed = str(saved.get("relaxed_structure_path") or "").strip()
+    if bool((cfg.get("protonation", {}) or {}).get("relax_protonated_surface", True)):
+        if relaxed and not Path(relaxed).exists():
+            return None, "relaxed-structure-missing"
+    return {
+        "status": "ok",
+        "energy_eV": energy,
+        "converged": saved.get("converged"),
+        "final_fmax_eV_per_A": saved.get("final_fmax_eV_per_A"),
+        "optimizer_steps": saved.get("optimizer_steps"),
+        "relaxed_structure_path": relaxed,
+    }, "fingerprint"
+
+
 def _global_metal_reference(element: str, cfg: Mapping[str, Any]) -> tuple[float | None, str]:
     path = _path(Path(cfg["project_root"]), str(cfg["reference_energies_file"]))
     if not path.exists():
