@@ -17,6 +17,11 @@ from dopingflow.leaching import (
     _load_completed_site_checkpoint,
     _site_calculation_fingerprint,
     _potential_scan_frame,
+    _protonatable_oxygen_neighbors,
+    _protonation_arrangements,
+    protonation_delta_g_eV,
+    protonation_adjusted_leaching_delta_g_eV,
+    protonation_dissolution_thresholds,
     preview_leaching_sites,
     resolve_leaching_output_dir,
     resolve_surface_summary,
@@ -43,6 +48,8 @@ def test_leaching_inherits_enabled_surface_refine_calculator() -> None:
     assert cfg["task"] == "matpes_r2scan"
     assert cfg["zones"] == ["surface"]
     assert cfg["resume_completed"] is True
+    assert cfg["protonation"]["enabled"] is False
+    assert cfg["protonation"]["h_counts"] == [0, 1, 2, 3]
 
 
 def test_dissolution_potential_zero_crossing_she() -> None:
@@ -288,6 +295,99 @@ def test_empty_potential_scan_has_stable_columns(tmp_path) -> None:
     loaded = pd.read_csv(path)
     assert loaded.empty
     assert list(loaded.columns) == list(scan.columns)
+
+
+def test_protonation_arrangements_target_neighboring_oxygen() -> None:
+    slab = _surface_slab()
+    cfg = parse_leaching_config(
+        {
+            "leaching": {
+                "enabled": True,
+                "anion_species": ["O"],
+                "protonation": {
+                    "enabled": True,
+                    "h_counts": [0, 1, 2],
+                    "neighbor_cutoff_A": 3.0,
+                    "oh_bond_length_A": 0.98,
+                    "max_arrangements_per_h_count": 5,
+                },
+            }
+        }
+    )
+    neighbors = _protonatable_oxygen_neighbors(slab, 3, cfg)
+    assert neighbors
+    assert all(slab[item["oxygen_index"]].specie.symbol == "O" for item in neighbors)
+
+    arrangements = _protonation_arrangements(slab, 3, cfg)
+    assert arrangements
+    assert {item["h_count"] for item in arrangements}.issuperset({1, 2})
+    one_h = next(item for item in arrangements if item["h_count"] == 1)
+    assert len(one_h["structure"]) == len(slab)
+    assert sum(site.specie.symbol == "H" for site in one_h["structure"]) == 1
+    assert "Sb" not in [
+        site.specie.symbol
+        for i, site in enumerate(one_h["structure"])
+        if i == 3
+    ]
+
+
+def test_protonation_che_correction_and_threshold() -> None:
+    # At pH 0 on the RHE scale, each consumed (H+ + e-) contributes +U.
+    dg_prot = protonation_delta_g_eV(
+        -2.0,
+        2,
+        1.50,
+        potential_scale="RHE",
+        temperature_K=298.15,
+        pH=0.0,
+    )
+    assert dg_prot == pytest.approx(1.0)
+
+    bare = leaching_delta_g_eV(
+        4.0,
+        5,
+        0.30,
+        1.50,
+        potential_scale="RHE",
+        ion_activity=1e-6,
+        temperature_K=298.15,
+        pH=0.0,
+    )
+    via_protonation_helper = protonation_adjusted_leaching_delta_g_eV(
+        4.0,
+        0,
+        5,
+        0.30,
+        1.50,
+        potential_scale="RHE",
+        ion_activity=1e-6,
+        temperature_K=298.15,
+        pH=0.0,
+    )
+    assert via_protonation_helper == pytest.approx(bare)
+
+    threshold = protonation_dissolution_thresholds(
+        3.2,
+        2,
+        5,
+        0.30,
+        ion_activity=1e-6,
+        temperature_K=298.15,
+        pH=0.0,
+    )
+    assert threshold is not None
+    dg_at_threshold = protonation_adjusted_leaching_delta_g_eV(
+        3.2,
+        2,
+        5,
+        0.30,
+        threshold["dissolution_potential_V_SHE"],
+        potential_scale="SHE",
+        ion_activity=1e-6,
+        temperature_K=298.15,
+        pH=0.0,
+    )
+    assert dg_at_threshold == pytest.approx(0.0, abs=1e-12)
 
 
 def test_relative_leaching_outdir_is_below_user_source_root(tmp_path) -> None:
