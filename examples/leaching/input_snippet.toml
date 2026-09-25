@@ -42,3 +42,21 @@ temperature_K = 298.15
 pH = 0.0
 potential_scale = "RHE"
 potentials_V = [1.23, 1.50, 1.70]
+
+
+# Optional: stabilize the dopant-vacancy surface by protonating O atoms that
+# were bonded to the removed dopant. The bare vacancy remains in the results.
+[leaching.protonation]
+enabled = false
+h_counts = [0, 1, 2, 3]
+neighbor_cutoff_A = 2.8
+oh_bond_length_A = 0.98
+max_arrangements_per_h_count = 5
+relax_protonated_surface = true
+
+# H2 is calculated with the same leaching MLFF and cached.
+compute_h2_reference = true
+relax_h2_reference = true
+h2_bond_length_A = 0.74
+h2_box_A = 15.0
+# manual_h2_energy_eV = -6.8   # optional override
