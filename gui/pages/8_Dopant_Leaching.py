@@ -1008,7 +1008,9 @@ else:
             "means dissolution becomes thermodynamically favorable at a lower electrode potential."
         )
         st.warning(
-            "The electrochemical extension is a simple M^z+/M thermodynamic model. It does not "
-            "include explicit solvent, charged slabs, potential-dependent hydroxylation, aqueous "
-            "complex formation, kinetic barriers, or multi-atom dissolution pathways."
+            "The electrochemical extension still uses the user-supplied simple M^z+/M redox "
+            "reference. When post-leaching protonation is enabled, local O-H termination is "
+            "included through an H2/CHE correction, but explicit solvent, charged or "
+            "constant-potential slabs, full aqueous speciation, kinetic barriers, and "
+            "multi-atom dissolution pathways are not included."
         )
