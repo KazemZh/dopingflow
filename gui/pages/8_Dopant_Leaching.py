@@ -38,6 +38,7 @@ if not config_path.exists():
 
 cfg = toml.load(str(config_path))
 saved = dict(cfg.get("leaching", {}) or {})
+saved_protonation = dict(saved.get("protonation", {}) or {})
 surface = dict(cfg.get("surface", {}) or {})
 refine = dict(surface.get("refine", {}) or {})
 screen = dict(surface.get("screen", {}) or {})
@@ -292,6 +293,124 @@ with st.expander("Configuration & run controls", expanded=True):
         ),
     )
 
+    st.subheader("Post-leaching protonation (CHE)")
+    st.caption(
+        "Optionally protonate O atoms that were bonded to the removed dopant, relax those "
+        "post-leaching structures, and reference the added H to H₂ using the computational "
+        "hydrogen electrode (CHE). Bare-vacancy results are always retained for comparison."
+    )
+    protonation_enabled = st.checkbox(
+        "Enable post-leaching protonation",
+        value=bool(saved_protonation.get("enabled", False)),
+    )
+
+    p1, p2, p3, p4 = st.columns(4)
+    saved_h_counts = [
+        int(x) for x in saved_protonation.get("h_counts", [0, 1, 2, 3])
+        if int(x) in range(0, 7)
+    ]
+    protonation_h_counts = p1.multiselect(
+        "H counts to test",
+        options=list(range(0, 7)),
+        default=saved_h_counts or [0, 1, 2, 3],
+        help="0 is the bare dopant-vacancy state. H atoms are added only to O neighbors of the removed dopant.",
+        disabled=not protonation_enabled,
+    )
+    if 0 not in protonation_h_counts:
+        protonation_h_counts = [0, *protonation_h_counts]
+
+    protonation_neighbor_cutoff = float(
+        p2.number_input(
+            "Protonatable O cutoff (Å)",
+            min_value=0.1,
+            value=float(
+                saved_protonation.get(
+                    "neighbor_cutoff_A",
+                    saved.get("oxygen_neighbor_cutoff_A", 2.8),
+                )
+            ),
+            step=0.1,
+            disabled=not protonation_enabled,
+        )
+    )
+    protonation_oh_length = float(
+        p3.number_input(
+            "Initial O–H length (Å)",
+            min_value=0.5,
+            value=float(saved_protonation.get("oh_bond_length_A", 0.98)),
+            step=0.01,
+            format="%.2f",
+            disabled=not protonation_enabled,
+        )
+    )
+    protonation_max_arrangements = int(
+        p4.number_input(
+            "Max arrangements / H count",
+            min_value=1,
+            value=int(saved_protonation.get("max_arrangements_per_h_count", 5)),
+            step=1,
+            disabled=not protonation_enabled,
+        )
+    )
+
+    pp1, pp2, pp3 = st.columns(3)
+    relax_protonated = pp1.checkbox(
+        "Relax protonated slabs",
+        value=bool(saved_protonation.get("relax_protonated_surface", True)),
+        disabled=not protonation_enabled,
+    )
+    compute_h2 = pp2.checkbox(
+        "Calculate H₂ reference",
+        value=bool(saved_protonation.get("compute_h2_reference", True)),
+        help="Uses the same leaching MLFF and caches the H₂ energy.",
+        disabled=not protonation_enabled,
+    )
+    relax_h2 = pp3.checkbox(
+        "Relax H₂ reference",
+        value=bool(saved_protonation.get("relax_h2_reference", True)),
+        disabled=(not protonation_enabled) or (not compute_h2),
+    )
+
+    with st.expander("Advanced H₂ reference settings", expanded=False):
+        hp1, hp2, hp3 = st.columns(3)
+        manual_h2_default = saved_protonation.get("manual_h2_energy_eV", "")
+        if manual_h2_default is None:
+            manual_h2_default = ""
+        manual_h2_text = hp1.text_input(
+            "Manual E(H₂) (eV, optional)",
+            value=str(manual_h2_default),
+            help="If supplied, this overrides the calculated H₂ reference.",
+            disabled=not protonation_enabled,
+        ).strip()
+        h2_bond_length = float(
+            hp2.number_input(
+                "Initial H–H length (Å)",
+                min_value=0.2,
+                value=float(saved_protonation.get("h2_bond_length_A", 0.74)),
+                step=0.01,
+                format="%.2f",
+                disabled=(not protonation_enabled) or bool(manual_h2_text),
+            )
+        )
+        h2_box = float(
+            hp3.number_input(
+                "H₂ box size (Å)",
+                min_value=5.0,
+                value=float(saved_protonation.get("h2_box_A", 15.0)),
+                step=1.0,
+                disabled=(not protonation_enabled) or bool(manual_h2_text),
+            )
+        )
+
+    manual_h2_error = None
+    manual_h2_value: float | str = ""
+    if manual_h2_text:
+        try:
+            manual_h2_value = float(manual_h2_text)
+        except ValueError:
+            manual_h2_error = "Manual E(H₂) must be a number or left empty."
+            st.error(manual_h2_error)
+
     st.subheader("Metal reference")
     a1, a2, a3 = st.columns(3)
     reference_file = a1.text_input(
@@ -399,6 +518,19 @@ with st.expander("Configuration & run controls", expanded=True):
         relax_removed_surface=bool(relax_removed),
         inherit_surface_fixed_atoms=bool(inherit_fixed),
         resume_completed=bool(resume_completed),
+        protonation={
+            "enabled": bool(protonation_enabled),
+            "h_counts": sorted(set(int(x) for x in protonation_h_counts) | {0}),
+            "neighbor_cutoff_A": protonation_neighbor_cutoff,
+            "oh_bond_length_A": protonation_oh_length,
+            "max_arrangements_per_h_count": protonation_max_arrangements,
+            "relax_protonated_surface": bool(relax_protonated),
+            "manual_h2_energy_eV": manual_h2_value,
+            "compute_h2_reference": bool(compute_h2),
+            "relax_h2_reference": bool(relax_h2),
+            "h2_bond_length_A": h2_bond_length,
+            "h2_box_A": h2_box,
+        },
         reference_energies_file=reference_file,
         metals_dir=metals_dir,
         compute_missing_metal_references=bool(compute_missing),
@@ -416,7 +548,7 @@ with st.expander("Configuration & run controls", expanded=True):
     resolved_cfg = dict(cfg)
     resolved_cfg["leaching"] = resolved
 
-    validation_error = redox_error
+    validation_error = redox_error or manual_h2_error
     if validation_error is None:
         try:
             parse_leaching_config(resolved_cfg, project_root)
