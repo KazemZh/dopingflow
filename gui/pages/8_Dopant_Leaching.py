@@ -812,7 +812,8 @@ else:
             st.caption(
                 "ΔE_protonation(0 V) = E(defect+nH) − E(defect) − n/2 E(H₂). "
                 "Negative values mean protonation stabilizes the dopant-vacancy surface "
-                "relative to the bare vacancy at 0 V vs SHE and pH 0."
+                "relative to the bare vacancy at 0 V vs SHE and pH 0. The plot uses the "
+                "lowest-energy arrangement for each H count; the table keeps all arrangements."
             )
             st.dataframe(
                 protonation_table,
@@ -839,6 +840,16 @@ else:
                     + structural["dopant"].astype(str)
                     + "::"
                     + structural["site_index"].astype(str)
+                )
+                # The table retains every generated arrangement. For the trend
+                # plot, show only the lowest-energy arrangement at each H count.
+                structural = (
+                    structural.sort_values("deltaE_protonation_zeroV_eV")
+                    .drop_duplicates(
+                        subset=["site_key", "h_count"],
+                        keep="first",
+                    )
+                    .sort_values(["site_key", "h_count"])
                 )
                 fig_prot = px.line(
                     structural,
