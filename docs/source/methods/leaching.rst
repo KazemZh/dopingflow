@@ -86,6 +86,80 @@ For RHE reporting/input,
 
 when energy is expressed in eV per electron.
 
+Optional post-leaching protonation (CHE)
+--------------------------------------------
+
+The bare dopant-vacancy slab can leave O atoms strongly under-coordinated.
+For acidic PEM-water-electrolysis screening, DopingFlow can therefore test
+local O-H termination after dopant removal without changing the existing
+simple-ion redox model.
+
+When ``[leaching.protonation].enabled = true``, the code identifies O atoms
+that were neighbors of the removed dopant, generates selected 1H/2H/3H (or
+user-selected) combinations, places each initial O-H bond toward the former
+dopant position, and relaxes every generated structure with the same leaching
+calculator. The number of tested combinations per H count is capped by
+``max_arrangements_per_h_count``.
+
+The zero-potential structural protonation energy is
+
+.. math::
+
+   \Delta E_\mathrm{prot}(n)
+   = E_{\mathrm{slab-M+nH}}
+   - E_{\mathrm{slab-M}}
+   - \frac{n}{2} E_{H_2}.
+
+A negative value means that the protonated defect is lower in energy than the
+bare vacancy plus ``n/2`` H2 at the 0-V reference.
+
+The computational hydrogen electrode (CHE) correction used at finite
+potential and pH is
+
+.. math::
+
+   \Delta G_\mathrm{prot}(n,U,\mathrm{pH})
+   = \Delta E_\mathrm{prot}(n)
+   + n\left[
+       U_\mathrm{SHE}
+       + k_B T\ln(10)\,\mathrm{pH}
+     \right].
+
+The protonation-adjusted leaching state uses
+
+.. math::
+
+   E_\mathrm{base}^{(nH)}
+   = E_{\mathrm{slab-M+nH}}
+   + \mu_M^\mathrm{metal}
+   - E_{\mathrm{slab+M}}
+   - \frac{n}{2}E_{H_2},
+
+followed by
+
+.. math::
+
+   \Delta G_\mathrm{leach}^{(nH)}
+   = E_\mathrm{base}^{(nH)}
+   + n\left[
+       U_\mathrm{SHE}
+       + k_B T\ln(10)\,\mathrm{pH}
+     \right]
+   + z(E^\circ-U_\mathrm{SHE})
+   + k_B T\ln a_M.
+
+For each requested operating potential, DopingFlow compares the bare state
+(``n=0``) with all successfully relaxed protonated states and reports the
+lowest free energy. It also reports the lowest anodic zero-crossing among
+states with ``n < z``. The H count is *not* inferred from the dopant oxidation
+state; it is a local surface-termination search controlled independently by
+``h_counts``.
+
+The H2 reference is computed and cached with the same MLFF by default. A
+manual ``manual_h2_energy_eV`` can be supplied when a separate consistent
+reference is preferred. This protonation treatment is still a screening
+approximation: it does not add explicit liquid water or a constant-potential
+electrode calculation.
 Why redox data are not hard-coded
 ---------------------------------
 
@@ -98,10 +172,11 @@ but misleading number.
 Without redox data the extraction-energy calculation still runs normally and
 the electrochemical fields are marked `missing-redox-reference`.
 
-The present simple-ion model does not include explicit water, charged slabs,
-potential-dependent surface hydroxylation, aqueous complex speciation, kinetic
-barriers, or multi-atom dissolution pathways. Those are appropriate later
-high-fidelity extensions for the most promising surfaces.
+The base simple-ion model does not include explicit water, charged slabs,
+aqueous complex speciation, kinetic barriers, or multi-atom dissolution
+pathways. Optional post-leaching O-H protonation can be included with the CHE
+extension described above, but it remains a local surface-termination
+approximation rather than a full solvated/constant-potential treatment.
 
 Configuration
 -------------
@@ -141,6 +216,25 @@ Minimal extraction-only configuration:
    compute_missing_metal_references = true
    relax_metal_reference = false
 
+To test local protonation of the dopant-vacancy surface, add:
+
+.. code-block:: toml
+
+   [leaching.protonation]
+   enabled = true
+   h_counts = [0, 1, 2, 3]
+   neighbor_cutoff_A = 2.8
+   oh_bond_length_A = 0.98
+   max_arrangements_per_h_count = 5
+   relax_protonated_surface = true
+
+   compute_h2_reference = true
+   relax_h2_reference = true
+   h2_bond_length_A = 0.74
+   h2_box_A = 15.0
+   # manual_h2_energy_eV = <optional compatible H2 energy>
+
+The ``0`` state is always retained as the bare vacancy reference.
 For the electrochemical extension, add only validated values for the chosen
 aqueous species:
 
@@ -223,6 +317,11 @@ The default relative directory is ``09_leaching`` inside the selected/inherited 
    `Delta G_leach` at every configured potential and a boolean
    thermodynamic-favorability flag.
 
+`leaching_protonation_summary.csv`
+   One row per bare/protonated post-leaching state, including H count, selected neighboring O atoms, relaxed energy, H2 reference, and zero-potential protonation stabilization.
+
+`leaching_protonation_potential_scan.csv`
+   At each operating potential, compares the bare vacancy with every evaluated protonated state and reports the lowest ``Delta G_leach``, selected H count, and change relative to the bare result.
 `leaching_results.json`
    Complete machine-readable results plus the model assumptions.
 
