@@ -1154,13 +1154,18 @@ def run_leaching(
 ) -> Path | None:
     cfg = parse_leaching_config(config, project_root)
     if not cfg["enabled"]:
-        print("[leaching] Stage disabled. Skipping."); return None
+        print("[leaching] Stage disabled. Skipping.")
+        return None
+
     source = resolve_surface_summary(config, cfg)
     preview = preview_leaching_sites(config, project_root)
-    outdir = resolve_leaching_output_dir(config, cfg, project_root); outdir.mkdir(parents=True, exist_ok=True)
-    preview_path = outdir / str(cfg["preview_csv"]); preview.to_csv(preview_path, index=False)
+    outdir = resolve_leaching_output_dir(config, cfg, project_root)
+    outdir.mkdir(parents=True, exist_ok=True)
+    preview_path = outdir / str(cfg["preview_csv"])
+    preview.to_csv(preview_path, index=False)
     if dry_run:
-        print(f"[leaching] Dry run: {len(preview)} site(s) -> {preview_path}"); return preview_path
+        print(f"[leaching] Dry run: {len(preview)} site(s) -> {preview_path}")
+        return preview_path
     if preview.empty:
         raise RuntimeError("[leaching] No dopant sites matched the selected surfaces/zones")
 
@@ -1169,135 +1174,601 @@ def run_leaching(
     calculator = _prepare_calculator(cfg, "Dopant leaching")
     surface_cfg = parse_surface_config(config)
     redox = load_redox_references(cfg)
+
+    proton_cfg = dict(cfg.get("protonation", {}) or {})
+    protonation_enabled = bool(proton_cfg.get("enabled", False))
+    h2_energy, h2_source = (None, "protonation-disabled")
+    if protonation_enabled:
+        h2_energy, h2_source = _h2_reference(cfg, calculator, outdir)
+        if h2_energy is None:
+            print(
+                "[leaching] WARNING: post-leaching protonation is enabled but the H2 "
+                "reference is unavailable. Protonated structures will still be relaxed, "
+                "but CHE/protonation free energies cannot be evaluated."
+            )
+
     metal_cache: dict[str, tuple[float | None, str]] = {}
     parent_cache: dict[str, tuple[float | None, Structure, str]] = {}
-    records, potential_rows = [], []
+    records: list[dict[str, Any]] = []
+    potential_rows: list[dict[str, Any]] = []
+    protonation_records: list[dict[str, Any]] = []
+    protonation_scan_rows: list[dict[str, Any]] = []
     n_reused, n_calculated = 0, 0
+    n_protonation_reused, n_protonation_calculated = 0, 0
 
     for _, preview_row in preview.iterrows():
         base, sid = preview_row.to_dict(), str(preview_row["surface_id"])
         row = rows[sid]
-        source_path = _path(Path(cfg["project_root"]), str(base["surface_structure_path"]))
+        source_path = _path(
+            Path(cfg["project_root"]), str(base["surface_structure_path"])
+        )
         surface_dir = outdir / "surfaces" / _safe(sid)
+
         if sid not in parent_cache:
-            energy, final, energy_source, result = _parent(
-                row, Structure.from_file(source_path), str(base["surface_source_stage"]),
-                cfg, calculator, surface_dir, surface_cfg,
+            energy, final, energy_source, parent_result = _parent(
+                row,
+                Structure.from_file(source_path),
+                str(base["surface_source_stage"]),
+                cfg,
+                calculator,
+                surface_dir,
+                surface_cfg,
             )
             parent_cache[sid] = (energy, final, energy_source)
-            if result is not None:
+            if parent_result is not None:
                 surface_dir.mkdir(parents=True, exist_ok=True)
-                (surface_dir / "parent_result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+                (surface_dir / "parent_result.json").write_text(
+                    json.dumps(parent_result, indent=2), encoding="utf-8"
+                )
+
         parent_energy, parent_structure, parent_energy_source = parent_cache[sid]
         idx, dopant = int(base["site_index"]), str(base["dopant"])
         rec = dict(base)
-        if idx >= len(parent_structure) or parent_structure[idx].specie.symbol != dopant:
-            rec.update(status="site-mapping-failed", parent_energy_eV=parent_energy, parent_energy_source=parent_energy_source)
-            records.append(rec); continue
 
-        site_dir = surface_dir / f"{dopant}_site_{idx:04d}"; site_dir.mkdir(parents=True, exist_ok=True)
+        if idx >= len(parent_structure) or parent_structure[idx].specie.symbol != dopant:
+            rec.update(
+                status="site-mapping-failed",
+                parent_energy_eV=parent_energy,
+                parent_energy_source=parent_energy_source,
+                protonation_status="not-run",
+            )
+            records.append(rec)
+            continue
+
+        site_dir = surface_dir / f"{dopant}_site_{idx:04d}"
+        site_dir.mkdir(parents=True, exist_ok=True)
         checkpoint_path = site_dir / "leaching_result.json"
-        fingerprint = _site_calculation_fingerprint(source_path, idx, dopant, cfg, surface_cfg)
+        fingerprint = _site_calculation_fingerprint(
+            source_path, idx, dopant, cfg, surface_cfg
+        )
         result, checkpoint_mode = _load_completed_site_checkpoint(
             checkpoint_path, base, cfg, source_path, surface_cfg
         )
-        if result is not None:
+        reused_bare = result is not None
+
+        if reused_bare:
             n_reused += 1
             print(
                 f"[leaching] RESUME {sid} {dopant} site {idx}: "
                 f"reusing completed checkpoint ({checkpoint_mode})"
             )
         else:
-            removed = parent_structure.copy(); removed.remove_sites([idx])
+            removed = parent_structure.copy()
+            removed.remove_sites([idx])
             Poscar(removed).write_file(str(site_dir / "POSCAR_removed_unrelaxed"))
-            fixed = _select_fixed_atom_indices(removed, dict(surface_cfg)) if cfg["inherit_surface_fixed_atoms"] else []
-            calc_cfg = dict(cfg); calc_cfg["relax"] = bool(cfg["relax_removed_surface"])
-            result = _evaluate(removed, fixed, calc_cfg, calculator, site_dir / "relax")
+            fixed = (
+                _select_fixed_atom_indices(removed, dict(surface_cfg))
+                if cfg["inherit_surface_fixed_atoms"]
+                else []
+            )
+            calc_cfg = dict(cfg)
+            calc_cfg["relax"] = bool(cfg["relax_removed_surface"])
+            result = _evaluate(
+                removed, fixed, calc_cfg, calculator, site_dir / "relax"
+            )
             n_calculated += 1
 
         rec.update(
             status="ok" if result.get("status") == "ok" else "calculation-failed",
-            backend=cfg["backend"], model=cfg["model"], task=cfg["task"],
-            parent_energy_eV=parent_energy, parent_energy_source=parent_energy_source,
-            removed_surface_energy_eV=result.get("energy_eV"), removed_surface_converged=result.get("converged"),
-            removed_surface_final_fmax_eV_per_A=result.get("final_fmax_eV_per_A"), removed_surface_optimizer_steps=result.get("optimizer_steps"),
-            removed_surface_relaxed_structure_path=result.get("relaxed_structure_path"), site_output_dir=str(site_dir),
+            backend=cfg["backend"],
+            model=cfg["model"],
+            task=cfg["task"],
+            parent_energy_eV=parent_energy,
+            parent_energy_source=parent_energy_source,
+            removed_surface_energy_eV=result.get("energy_eV"),
+            removed_surface_converged=result.get("converged"),
+            removed_surface_final_fmax_eV_per_A=result.get("final_fmax_eV_per_A"),
+            removed_surface_optimizer_steps=result.get("optimizer_steps"),
+            removed_surface_relaxed_structure_path=result.get("relaxed_structure_path"),
+            site_output_dir=str(site_dir),
             calculation_fingerprint=fingerprint,
-            calculation_reused_from_checkpoint=result is not None and checkpoint_mode in {"fingerprint", "legacy-identity"},
+            calculation_reused_from_checkpoint=bool(reused_bare),
             checkpoint_compatibility=checkpoint_mode,
         )
-        # Persist the expensive structural result immediately. If the process
-        # stops during reference/electrochemical post-processing, this site can
-        # still be resumed without repeating its relaxation.
+
+        # Persist the expensive bare structural result immediately.
         checkpoint_path.write_text(
             json.dumps(rec, indent=2, default=str),
             encoding="utf-8",
         )
 
-        mu, mu_source = _metal_reference(dopant, cfg, calculator, outdir, metal_cache)
-        rec.update(metal_reference_eV_atom=mu, metal_reference_source=mu_source, extraction_status="not-computable")
+        mu, mu_source = _metal_reference(
+            dopant, cfg, calculator, outdir, metal_cache
+        )
+        rec.update(
+            metal_reference_eV_atom=mu,
+            metal_reference_source=mu_source,
+            extraction_status="not-computable",
+        )
         extraction = None
-        if parent_energy is not None and result.get("status") == "ok" and result.get("energy_eV") is not None and mu is not None:
-            extraction = float(result["energy_eV"]) + float(mu) - float(parent_energy)
-            rec.update(extraction_energy_eV=extraction, extraction_status="ok")
+        if (
+            parent_energy is not None
+            and result.get("status") == "ok"
+            and result.get("energy_eV") is not None
+            and mu is not None
+        ):
+            extraction = (
+                float(result["energy_eV"])
+                + float(mu)
+                - float(parent_energy)
+            )
+            rec.update(
+                extraction_energy_eV=extraction,
+                extraction_status="ok",
+            )
+
+        # Optional post-leaching protonation of O atoms that lost the dopant bond.
+        site_protonation_states: list[dict[str, Any]] = []
+        if protonation_enabled and result.get("status") == "ok" and result.get("energy_eV") is not None:
+            neighbors = _protonatable_oxygen_neighbors(parent_structure, idx, cfg)
+            arrangements = _protonation_arrangements(parent_structure, idx, cfg)
+            rec.update(
+                protonation_neighbor_count=len(neighbors),
+                protonation_requested_h_counts_json=json.dumps(
+                    proton_cfg.get("h_counts", [0, 1, 2, 3])
+                ),
+                h2_reference_eV=h2_energy,
+                h2_reference_source=h2_source,
+            )
+
+            bare_state = {
+                "surface_id": sid,
+                "target_id": rec["target_id"],
+                "dopant": dopant,
+                "site_index": idx,
+                "initial_dopant_zone": rec["initial_dopant_zone"],
+                "h_count": 0,
+                "arrangement_id": 0,
+                "oxygen_indices_json": "[]",
+                "original_metal_oxygen_distances_A_json": "[]",
+                "status": "ok",
+                "energy_eV": float(result["energy_eV"]),
+                "converged": result.get("converged"),
+                "final_fmax_eV_per_A": result.get("final_fmax_eV_per_A"),
+                "optimizer_steps": result.get("optimizer_steps"),
+                "relaxed_structure_path": result.get("relaxed_structure_path"),
+                "checkpoint_reused": bool(reused_bare),
+                "checkpoint_compatibility": checkpoint_mode,
+                "h2_reference_eV": h2_energy,
+                "h2_reference_source": h2_source,
+                "deltaE_protonation_zeroV_eV": 0.0,
+                "extraction_base_eV": extraction,
+            }
+            site_protonation_states.append(bare_state)
+            protonation_records.append(bare_state)
+
+            for arrangement in arrangements:
+                n_h = int(arrangement["h_count"])
+                arrangement_id = int(arrangement["arrangement_id"])
+                oxygen_indices = list(arrangement["oxygen_indices"])
+                protonated = arrangement["structure"]
+                proton_dir = (
+                    site_dir
+                    / "protonation"
+                    / f"H{n_h}_arr_{arrangement_id:03d}"
+                )
+                proton_dir.mkdir(parents=True, exist_ok=True)
+                Poscar(protonated).write_file(
+                    str(proton_dir / "POSCAR_protonated_unrelaxed")
+                )
+
+                proton_fp = _protonation_fingerprint(
+                    source_path,
+                    idx,
+                    dopant,
+                    oxygen_indices,
+                    cfg,
+                    surface_cfg,
+                )
+                proton_checkpoint = proton_dir / "protonation_result.json"
+                proton_result, proton_checkpoint_mode = _load_protonation_checkpoint(
+                    proton_checkpoint, proton_fp, cfg
+                )
+                reused_proton = proton_result is not None
+
+                if reused_proton:
+                    n_protonation_reused += 1
+                else:
+                    fixed = (
+                        _select_fixed_atom_indices(protonated, dict(surface_cfg))
+                        if cfg["inherit_surface_fixed_atoms"]
+                        else []
+                    )
+                    # Newly added H atoms must remain mobile even if a geometric
+                    # fixed-region rule happens to include them.
+                    fixed = [
+                        i
+                        for i in fixed
+                        if protonated[i].specie.symbol != "H"
+                    ]
+                    proton_calc_cfg = dict(cfg)
+                    proton_calc_cfg["relax"] = bool(
+                        proton_cfg.get("relax_protonated_surface", True)
+                    )
+                    proton_result = _evaluate(
+                        protonated,
+                        fixed,
+                        proton_calc_cfg,
+                        calculator,
+                        proton_dir / "relax",
+                    )
+                    n_protonation_calculated += 1
+
+                p_rec = {
+                    "surface_id": sid,
+                    "target_id": rec["target_id"],
+                    "dopant": dopant,
+                    "site_index": idx,
+                    "initial_dopant_zone": rec["initial_dopant_zone"],
+                    "h_count": n_h,
+                    "arrangement_id": arrangement_id,
+                    "oxygen_indices_json": json.dumps(oxygen_indices),
+                    "original_metal_oxygen_distances_A_json": json.dumps(
+                        arrangement["original_metal_oxygen_distances_A"]
+                    ),
+                    "status": (
+                        "ok"
+                        if proton_result.get("status") == "ok"
+                        else "calculation-failed"
+                    ),
+                    "energy_eV": proton_result.get("energy_eV"),
+                    "converged": proton_result.get("converged"),
+                    "final_fmax_eV_per_A": proton_result.get(
+                        "final_fmax_eV_per_A"
+                    ),
+                    "optimizer_steps": proton_result.get("optimizer_steps"),
+                    "relaxed_structure_path": proton_result.get(
+                        "relaxed_structure_path"
+                    ),
+                    "checkpoint_reused": bool(reused_proton),
+                    "checkpoint_compatibility": proton_checkpoint_mode,
+                    "h2_reference_eV": h2_energy,
+                    "h2_reference_source": h2_source,
+                    "deltaE_protonation_zeroV_eV": None,
+                    "extraction_base_eV": None,
+                }
+
+                if (
+                    proton_result.get("status") == "ok"
+                    and proton_result.get("energy_eV") is not None
+                    and h2_energy is not None
+                ):
+                    p_rec["deltaE_protonation_zeroV_eV"] = (
+                        float(proton_result["energy_eV"])
+                        - float(result["energy_eV"])
+                        - 0.5 * n_h * float(h2_energy)
+                    )
+                    if parent_energy is not None and mu is not None:
+                        p_rec["extraction_base_eV"] = (
+                            float(proton_result["energy_eV"])
+                            + float(mu)
+                            - float(parent_energy)
+                            - 0.5 * n_h * float(h2_energy)
+                        )
+
+                proton_checkpoint.write_text(
+                    json.dumps(
+                        {
+                            **p_rec,
+                            "protonation_fingerprint": proton_fp,
+                        },
+                        indent=2,
+                        default=str,
+                    ),
+                    encoding="utf-8",
+                )
+                site_protonation_states.append(p_rec)
+                protonation_records.append(p_rec)
+
+            evaluable = [
+                state
+                for state in site_protonation_states
+                if state.get("deltaE_protonation_zeroV_eV") is not None
+            ]
+            if h2_energy is None:
+                rec["protonation_status"] = "h2-reference-missing"
+            elif len(neighbors) == 0:
+                rec["protonation_status"] = "no-protonatable-neighbors"
+            elif len(evaluable) <= 1:
+                rec["protonation_status"] = "no-protonated-state-converged"
+            else:
+                rec["protonation_status"] = "ok"
+
+            if evaluable:
+                best_structural = min(
+                    evaluable,
+                    key=lambda state: float(
+                        state["deltaE_protonation_zeroV_eV"]
+                    ),
+                )
+                rec.update(
+                    best_protonation_h_count_zeroV=int(
+                        best_structural["h_count"]
+                    ),
+                    best_protonation_arrangement_id_zeroV=int(
+                        best_structural["arrangement_id"]
+                    ),
+                    best_protonation_deltaE_zeroV_eV=float(
+                        best_structural["deltaE_protonation_zeroV_eV"]
+                    ),
+                )
+        else:
+            rec["protonation_status"] = (
+                "disabled" if not protonation_enabled else "bare-calculation-failed"
+            )
 
         ref = redox.get(dopant, {})
-        n, e0 = ref.get("oxidation_state"), ref.get("standard_reduction_potential_V_SHE")
-        activity = float(cfg["ion_activities"].get(dopant, cfg["default_ion_activity"]))
-        rec.update(
-            aqueous_species=str(ref.get("aqueous_species", f"{dopant} ion")), oxidation_state=n,
-            standard_reduction_potential_V_SHE=e0, redox_reference_source=str(ref.get("source", "user-config" if (n is not None or e0 is not None) else "")),
-            ion_activity=activity, temperature_K=cfg["temperature_K"], pH=cfg["pH"], electrochemical_status="missing-redox-reference",
+        n, e0 = (
+            ref.get("oxidation_state"),
+            ref.get("standard_reduction_potential_V_SHE"),
         )
+        activity = float(
+            cfg["ion_activities"].get(dopant, cfg["default_ion_activity"])
+        )
+        rec.update(
+            aqueous_species=str(
+                ref.get("aqueous_species", f"{dopant} ion")
+            ),
+            oxidation_state=n,
+            standard_reduction_potential_V_SHE=e0,
+            redox_reference_source=str(
+                ref.get(
+                    "source",
+                    "user-config"
+                    if (n is not None or e0 is not None)
+                    else "",
+                )
+            ),
+            ion_activity=activity,
+            temperature_K=cfg["temperature_K"],
+            pH=cfg["pH"],
+            electrochemical_status="missing-redox-reference",
+        )
+
         if extraction is not None and n is not None and e0 is not None:
-            rec.update(electrochemical_metrics(extraction, int(n), float(e0), ion_activity=activity, temperature_K=cfg["temperature_K"], pH=cfg["pH"]))
+            rec.update(
+                electrochemical_metrics(
+                    extraction,
+                    int(n),
+                    float(e0),
+                    ion_activity=activity,
+                    temperature_K=cfg["temperature_K"],
+                    pH=cfg["pH"],
+                )
+            )
             rec["electrochemical_status"] = "ok"
+
             for potential in cfg["potentials_V"]:
-                dg = leaching_delta_g_eV(extraction, int(n), float(e0), potential, potential_scale=cfg["potential_scale"], ion_activity=activity, temperature_K=cfg["temperature_K"], pH=cfg["pH"])
-                potential_rows.append(dict(
-                    surface_id=sid, target_id=rec["target_id"], dopant=dopant, site_index=idx,
-                    detected_zone=rec["detected_zone"], initial_dopant_zone=rec["initial_dopant_zone"],
-                    initial_depth_from_selected_surface_A=rec["initial_depth_from_selected_surface_A"], applied_potential_V=potential,
-                    potential_scale=cfg["potential_scale"], deltaG_leach_eV=dg,
-                    leaching_thermodynamically_favorable=bool(dg < 0),
-                ))
-        (site_dir / "leaching_result.json").write_text(json.dumps(rec, indent=2, default=str), encoding="utf-8")
+                dg = leaching_delta_g_eV(
+                    extraction,
+                    int(n),
+                    float(e0),
+                    potential,
+                    potential_scale=cfg["potential_scale"],
+                    ion_activity=activity,
+                    temperature_K=cfg["temperature_K"],
+                    pH=cfg["pH"],
+                )
+                potential_rows.append(
+                    {
+                        "surface_id": sid,
+                        "target_id": rec["target_id"],
+                        "dopant": dopant,
+                        "site_index": idx,
+                        "detected_zone": rec["detected_zone"],
+                        "initial_dopant_zone": rec["initial_dopant_zone"],
+                        "initial_depth_from_selected_surface_A": rec[
+                            "initial_depth_from_selected_surface_A"
+                        ],
+                        "applied_potential_V": potential,
+                        "potential_scale": cfg["potential_scale"],
+                        "deltaG_leach_eV": dg,
+                        "leaching_thermodynamically_favorable": bool(dg < 0),
+                    }
+                )
+
+            # Compare the bare state with every successfully evaluated
+            # protonated post-leaching state using the CHE correction.
+            if protonation_enabled and site_protonation_states:
+                threshold_candidates: list[dict[str, Any]] = []
+                for state in site_protonation_states:
+                    extraction_base = state.get("extraction_base_eV")
+                    if extraction_base is None:
+                        continue
+                    threshold = protonation_dissolution_thresholds(
+                        float(extraction_base),
+                        int(state["h_count"]),
+                        int(n),
+                        float(e0),
+                        ion_activity=activity,
+                        temperature_K=cfg["temperature_K"],
+                        pH=cfg["pH"],
+                    )
+                    if threshold is not None:
+                        threshold_candidates.append(
+                            {**state, **threshold}
+                        )
+
+                if threshold_candidates:
+                    best_threshold = min(
+                        threshold_candidates,
+                        key=lambda state: float(
+                            state["dissolution_potential_V_SHE"]
+                        ),
+                    )
+                    rec.update(
+                        protonation_adjusted_dissolution_potential_V_SHE=float(
+                            best_threshold["dissolution_potential_V_SHE"]
+                        ),
+                        protonation_adjusted_dissolution_potential_V_RHE=float(
+                            best_threshold["dissolution_potential_V_RHE"]
+                        ),
+                        protonation_adjusted_threshold_h_count=int(
+                            best_threshold["h_count"]
+                        ),
+                        protonation_adjusted_threshold_arrangement_id=int(
+                            best_threshold["arrangement_id"]
+                        ),
+                    )
+
+                for potential in cfg["potentials_V"]:
+                    state_dgs: list[tuple[dict[str, Any], float]] = []
+                    for state in site_protonation_states:
+                        extraction_base = state.get("extraction_base_eV")
+                        if extraction_base is None:
+                            continue
+                        dg_state = protonation_adjusted_leaching_delta_g_eV(
+                            float(extraction_base),
+                            int(state["h_count"]),
+                            int(n),
+                            float(e0),
+                            potential,
+                            potential_scale=cfg["potential_scale"],
+                            ion_activity=activity,
+                            temperature_K=cfg["temperature_K"],
+                            pH=cfg["pH"],
+                        )
+                        state_dgs.append((state, dg_state))
+
+                    if state_dgs:
+                        best_state, best_dg = min(
+                            state_dgs, key=lambda item: item[1]
+                        )
+                        bare_candidates = [
+                            dg
+                            for state, dg in state_dgs
+                            if int(state["h_count"]) == 0
+                        ]
+                        bare_dg = (
+                            float(bare_candidates[0])
+                            if bare_candidates
+                            else float("nan")
+                        )
+                        protonation_scan_rows.append(
+                            {
+                                "surface_id": sid,
+                                "target_id": rec["target_id"],
+                                "dopant": dopant,
+                                "site_index": idx,
+                                "initial_dopant_zone": rec[
+                                    "initial_dopant_zone"
+                                ],
+                                "applied_potential_V": potential,
+                                "potential_scale": cfg["potential_scale"],
+                                "bare_deltaG_leach_eV": bare_dg,
+                                "best_deltaG_leach_eV": float(best_dg),
+                                "best_h_count": int(best_state["h_count"]),
+                                "best_arrangement_id": int(
+                                    best_state["arrangement_id"]
+                                ),
+                                "deltaG_change_vs_bare_eV": (
+                                    float(best_dg) - bare_dg
+                                ),
+                                "protonation_thermodynamically_preferred": bool(
+                                    int(best_state["h_count"]) > 0
+                                ),
+                                "leaching_thermodynamically_favorable": bool(
+                                    best_dg < 0
+                                ),
+                            }
+                        )
+
+        checkpoint_path.write_text(
+            json.dumps(rec, indent=2, default=str), encoding="utf-8"
+        )
         records.append(rec)
 
     results = pd.DataFrame(records)
-    for col, rank in (("extraction_energy_eV", "extraction_vulnerability_rank"), ("dissolution_potential_V_SHE", "dissolution_vulnerability_rank")):
+    for col, rank in (
+        ("extraction_energy_eV", "extraction_vulnerability_rank"),
+        ("dissolution_potential_V_SHE", "dissolution_vulnerability_rank"),
+        (
+            "protonation_adjusted_dissolution_potential_V_SHE",
+            "protonation_adjusted_dissolution_vulnerability_rank",
+        ),
+    ):
         if col in results:
             results[col] = pd.to_numeric(results[col], errors="coerce")
-            results[rank] = results.groupby(["target_id", "dopant"], dropna=False)[col].rank(method="min", ascending=True)
+            results[rank] = results.groupby(
+                ["target_id", "dopant"], dropna=False
+            )[col].rank(method="min", ascending=True)
             results[f"{rank}_within_initial_zone"] = results.groupby(
                 ["target_id", "dopant", "initial_dopant_zone"], dropna=False
             )[col].rank(method="min", ascending=True)
 
     summary = outdir / str(cfg["summary_csv"])
     results.to_csv(summary, index=False)
-    _aggregate(results).to_csv(outdir / str(cfg["aggregate_csv"]), index=False)
+    _aggregate(results).to_csv(
+        outdir / str(cfg["aggregate_csv"]), index=False
+    )
     _potential_scan_frame(potential_rows).to_csv(
-        outdir / str(cfg["potential_scan_csv"]),
-        index=False,
+        outdir / str(cfg["potential_scan_csv"]), index=False
     )
-    payload = dict(
-        schema_version=1, source_summary=str(source), calculator=_calculator_identity(cfg),
-        thermodynamic_model="metal-referenced extraction + user-supplied M^z+/M redox reference",
-        potential_scale=cfg["potential_scale"], temperature_K=cfg["temperature_K"], pH=cfg["pH"],
-        potentials_V=cfg["potentials_V"],
-        resume_completed=bool(cfg["resume_completed"]),
-        n_reused_checkpoints=n_reused,
-        n_calculated_this_run=n_calculated,
-        notes=[
-            "Extraction energy: E(slab-M)+mu_M(metal)-E(slab+M).",
-            "Electrochemical values are omitted unless oxidation state and standard reduction potential are supplied.",
-            "Simple-ion model excludes explicit solvent, charged slabs, surface hydroxylation, aqueous complex speciation, kinetic barriers, and multi-atom pathways.",
-        ], results=records,
+    _protonation_summary_frame(protonation_records).to_csv(
+        outdir / str(cfg["protonation_summary_csv"]), index=False
     )
-    (outdir / str(cfg["summary_json"])).write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+    _protonation_scan_frame(protonation_scan_rows).to_csv(
+        outdir / str(cfg["protonation_potential_scan_csv"]), index=False
+    )
+
+    payload = {
+        "schema_version": 2,
+        "source_summary": str(source),
+        "calculator": _calculator_identity(cfg),
+        "thermodynamic_model": (
+            "metal-referenced extraction + user-supplied M^z+/M redox reference "
+            "+ optional post-leaching O-H protonation with CHE"
+        ),
+        "potential_scale": cfg["potential_scale"],
+        "temperature_K": cfg["temperature_K"],
+        "pH": cfg["pH"],
+        "potentials_V": cfg["potentials_V"],
+        "resume_completed": bool(cfg["resume_completed"]),
+        "protonation": proton_cfg,
+        "h2_reference_eV": h2_energy,
+        "h2_reference_source": h2_source,
+        "n_reused_checkpoints": n_reused,
+        "n_calculated_this_run": n_calculated,
+        "n_protonation_reused_checkpoints": n_protonation_reused,
+        "n_protonation_calculated_this_run": n_protonation_calculated,
+        "notes": [
+            "Bare extraction: E(slab-M)+mu_M(metal)-E(slab+M).",
+            "Optional protonation tests O atoms that were bonded to the removed dopant.",
+            "CHE protonation reference uses 1/2 E(H2) per added H and the selected potential/pH.",
+            "Electrochemical values still use the user-supplied simple-ion redox reference.",
+            "Explicit solvent, charged/constant-potential slabs, aqueous complex speciation, kinetic barriers, and multi-atom dissolution pathways are not included.",
+        ],
+        "results": records,
+        "protonation_results": protonation_records,
+    }
+    (outdir / str(cfg["summary_json"])).write_text(
+        json.dumps(payload, indent=2, default=str), encoding="utf-8"
+    )
     print(
         f"[leaching] Analyzed {len(results)} dopant-removal site(s) "
-        f"({n_reused} reused, {n_calculated} calculated this run) -> {summary}"
+        f"({n_reused} bare reused, {n_calculated} bare calculated; "
+        f"{n_protonation_reused} protonated reused, "
+        f"{n_protonation_calculated} protonated calculated) -> {summary}"
     )
     return summary
 
