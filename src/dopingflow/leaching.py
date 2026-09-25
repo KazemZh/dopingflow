@@ -1820,5 +1820,7 @@ def run_leaching_from_toml(config_path: Path, *, dry_run: bool = False) -> Path 
 __all__ = [
     "KB_EV_K", "parse_leaching_config", "resolve_surface_summary", "enumerate_leaching_sites",
     "preview_leaching_sites", "resolve_leaching_output_dir", "load_redox_references", "electrochemical_metrics",
-    "leaching_delta_g_eV", "run_leaching", "run_leaching_from_toml",
+    "leaching_delta_g_eV", "protonation_delta_g_eV",
+    "protonation_adjusted_leaching_delta_g_eV", "protonation_dissolution_thresholds",
+    "run_leaching", "run_leaching_from_toml",
 ]
