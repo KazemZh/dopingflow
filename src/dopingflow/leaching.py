@@ -504,13 +504,29 @@ def preview_leaching_sites(config: Mapping[str, Any], project_root: Path | str =
     cfg = parse_leaching_config(config, project_root)
     summary = resolve_surface_summary(config, cfg)
     root, records = Path(cfg["project_root"]), []
+    proton_cfg = dict(cfg.get("protonation", {}) or {})
     for _, series in pd.read_csv(summary).iterrows():
         row = series.to_dict()
         if not _selected(row, cfg["surface_include"]):
             continue
         path, stage = _structure_path(row, root)
         structure = Structure.from_file(path)
-        records.extend(_base(row, path, stage, site) for site in enumerate_leaching_sites(row, structure, cfg))
+        for site in enumerate_leaching_sites(row, structure, cfg):
+            rec = _base(row, path, stage, site)
+            if bool(proton_cfg.get("enabled", False)):
+                neighbors = _protonatable_oxygen_neighbors(
+                    structure, int(site["site_index"]), cfg
+                )
+                cap = int(proton_cfg.get("max_arrangements_per_h_count", 5))
+                jobs = 0
+                for h_count in proton_cfg.get("h_counts", [0, 1, 2, 3]):
+                    n_h = int(h_count)
+                    if n_h <= 0 or n_h > len(neighbors):
+                        continue
+                    jobs += min(math.comb(len(neighbors), n_h), cap)
+                rec["protonatable_oxygen_count"] = len(neighbors)
+                rec["protonation_jobs_estimated"] = jobs
+            records.append(rec)
     frame = pd.DataFrame(records)
     frame.attrs["source_summary"] = str(summary)
     return frame
@@ -1175,7 +1191,17 @@ def run_leaching(
     preview_path = outdir / str(cfg["preview_csv"])
     preview.to_csv(preview_path, index=False)
     if dry_run:
-        print(f"[leaching] Dry run: {len(preview)} site(s) -> {preview_path}")
+        extra = ""
+        if "protonation_jobs_estimated" in preview.columns:
+            estimated = int(
+                pd.to_numeric(
+                    preview["protonation_jobs_estimated"], errors="coerce"
+                ).fillna(0).sum()
+            )
+            extra = f"; {estimated} protonated relaxation job(s)"
+        print(
+            f"[leaching] Dry run: {len(preview)} leaching site(s){extra} -> {preview_path}"
+        )
         return preview_path
     if preview.empty:
         raise RuntimeError("[leaching] No dopant sites matched the selected surfaces/zones")
