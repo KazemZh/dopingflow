@@ -569,6 +569,7 @@ with st.expander("Configuration & run controls", expanded=True):
                         "target_id", "miller_h", "miller_k", "miller_l", "termination_id",
                         "variant_label", "dopant", "site_index", "detected_zone",
                         "oxygen_coordination_within_cutoff", "nearest_oxygen_distance_A",
+                        "protonatable_oxygen_count", "protonation_jobs_estimated",
                     ) if c in preview.columns
                 ]
                 st.dataframe(preview[columns], use_container_width=True, hide_index=True)
