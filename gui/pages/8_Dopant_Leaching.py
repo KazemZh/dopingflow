@@ -650,7 +650,7 @@ if not summary_path.exists():
 else:
     results = pd.read_csv(summary_path)
     tabs = st.tabs(
-        ["Site results", "Surface summary", "Potential scan", "Protonation", "Interpretation"]
+        ["Site results", "Surface summary", "Bare potential scan", "Protonation", "Interpretation"]
     )
 
     with tabs[0]:
@@ -693,7 +693,7 @@ else:
             )
             threshold = threshold[threshold[threshold_col].notna()]
             if not threshold.empty:
-                st.markdown("#### Dissolution threshold potential")
+                st.markdown("#### Bare-vacancy dissolution threshold potential")
                 st.caption(
                     "Lower threshold potential means that the modeled dopant dissolution "
                     "becomes thermodynamically favorable at a lower applied potential."
@@ -719,7 +719,7 @@ else:
                         )
                         if col in threshold.columns
                     ],
-                    title=f"Dopant dissolution threshold potential vs {selected_scale}",
+                    title=f"Bare-vacancy dissolution threshold vs {selected_scale}",
                     labels={
                         threshold_col: f"Dissolution potential (V vs {selected_scale})",
                         "dopant": "Dopant",
@@ -739,7 +739,7 @@ else:
                     "must be supplied for the dopant."
                 )
             else:
-                st.markdown("#### Leaching free energy at operating potentials")
+                st.markdown("#### Bare-vacancy leaching free energy at operating potentials")
                 st.caption(
                     "ΔG_leach < 0 means dissolution is thermodynamically favorable in "
                     "the current simple-ion model; ΔG_leach > 0 means it is unfavorable."
@@ -762,7 +762,7 @@ else:
                         )
                         if col in scan.columns
                     ],
-                    title=f"Leaching free energy vs applied potential ({selected_scale})",
+                    title=f"Bare-vacancy leaching free energy vs potential ({selected_scale})",
                     labels={
                         "applied_potential_V": f"Applied potential (V vs {selected_scale})",
                         "deltaG_leach_eV": "ΔG_leach (eV)",
