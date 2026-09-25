@@ -46,6 +46,47 @@ _POTENTIAL_SCAN_COLUMNS = [
 ]
 
 
+_PROTONATION_SUMMARY_COLUMNS = [
+    "surface_id",
+    "target_id",
+    "dopant",
+    "site_index",
+    "initial_dopant_zone",
+    "h_count",
+    "arrangement_id",
+    "oxygen_indices_json",
+    "original_metal_oxygen_distances_A_json",
+    "status",
+    "energy_eV",
+    "converged",
+    "final_fmax_eV_per_A",
+    "optimizer_steps",
+    "relaxed_structure_path",
+    "checkpoint_reused",
+    "checkpoint_compatibility",
+    "h2_reference_eV",
+    "h2_reference_source",
+    "deltaE_protonation_zeroV_eV",
+    "extraction_base_eV",
+]
+_PROTONATION_SCAN_COLUMNS = [
+    "surface_id",
+    "target_id",
+    "dopant",
+    "site_index",
+    "initial_dopant_zone",
+    "applied_potential_V",
+    "potential_scale",
+    "bare_deltaG_leach_eV",
+    "best_deltaG_leach_eV",
+    "best_h_count",
+    "best_arrangement_id",
+    "deltaG_change_vs_bare_eV",
+    "protonation_thermodynamically_preferred",
+    "leaching_thermodynamically_favorable",
+]
+
+
 def _list(value: Any) -> list[str]:
     if value is None:
         return []
@@ -1073,6 +1114,14 @@ def _parent(
 def _potential_scan_frame(rows: Sequence[Mapping[str, Any]]) -> pd.DataFrame:
     """Return a stable-schema potential-scan table, even when no rows exist."""
     return pd.DataFrame(list(rows), columns=_POTENTIAL_SCAN_COLUMNS)
+
+
+def _protonation_summary_frame(rows: Sequence[Mapping[str, Any]]) -> pd.DataFrame:
+    return pd.DataFrame(list(rows), columns=_PROTONATION_SUMMARY_COLUMNS)
+
+
+def _protonation_scan_frame(rows: Sequence[Mapping[str, Any]]) -> pd.DataFrame:
+    return pd.DataFrame(list(rows), columns=_PROTONATION_SCAN_COLUMNS)
 
 
 def _aggregate(df: pd.DataFrame) -> pd.DataFrame:
