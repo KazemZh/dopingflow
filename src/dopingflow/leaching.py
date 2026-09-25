@@ -5,12 +5,13 @@ import hashlib
 import json
 import math
 import time
+from itertools import combinations
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
-from pymatgen.core import Structure
+from pymatgen.core import Lattice, Structure
 from pymatgen.io.vasp import Poscar
 
 from dopingflow.ml_backends import normalize_backend_config
@@ -119,10 +120,13 @@ def parse_leaching_config(
         relax_parent_if_recomputed=True,
         relax_removed_surface=True,
         resume_completed=True,
+        protonation={},
         outdir="09_leaching",
         summary_csv="leaching_summary.csv",
         aggregate_csv="leaching_surface_summary.csv",
         potential_scan_csv="leaching_potential_scan.csv",
+        protonation_summary_csv="leaching_protonation_summary.csv",
+        protonation_potential_scan_csv="leaching_protonation_potential_scan.csv",
         summary_json="leaching_results.json",
         preview_csv="leaching_preview.csv",
         reference_energies_file="reference_structures/reference_energies.json",
@@ -201,6 +205,53 @@ def parse_leaching_config(
     raw["ion_activities"] = _map(raw.get("ion_activities"), float)
     if any(v <= 0 for v in raw["ion_activities"].values()):
         raise ValueError("[leaching].ion_activities must be positive")
+
+    protonation = dict(raw.get("protonation", {}) or {})
+    protonation_defaults = dict(
+        enabled=False,
+        h_counts=[0, 1, 2, 3],
+        neighbor_cutoff_A=float(raw["oxygen_neighbor_cutoff_A"]),
+        oh_bond_length_A=0.98,
+        max_arrangements_per_h_count=5,
+        relax_protonated_surface=True,
+        manual_h2_energy_eV="",
+        compute_h2_reference=True,
+        relax_h2_reference=True,
+        h2_bond_length_A=0.74,
+        h2_box_A=15.0,
+    )
+    for key, value in protonation_defaults.items():
+        protonation.setdefault(key, value)
+    if isinstance(protonation["h_counts"], str):
+        protonation["h_counts"] = [
+            int(x.strip()) for x in protonation["h_counts"].split(",") if x.strip()
+        ]
+    else:
+        protonation["h_counts"] = [int(x) for x in protonation["h_counts"]]
+    protonation["h_counts"] = sorted(set(protonation["h_counts"]) | {0})
+    if any(x < 0 for x in protonation["h_counts"]):
+        raise ValueError("[leaching.protonation].h_counts must be non-negative")
+    protonation["max_arrangements_per_h_count"] = int(
+        protonation["max_arrangements_per_h_count"]
+    )
+    for key in ("neighbor_cutoff_A", "oh_bond_length_A", "h2_bond_length_A", "h2_box_A"):
+        protonation[key] = float(protonation[key])
+    if protonation["max_arrangements_per_h_count"] <= 0:
+        raise ValueError("[leaching.protonation].max_arrangements_per_h_count must be positive")
+    if (
+        protonation["neighbor_cutoff_A"] <= 0
+        or protonation["oh_bond_length_A"] <= 0
+        or protonation["h2_bond_length_A"] <= 0
+        or protonation["h2_box_A"] <= 0
+    ):
+        raise ValueError("[leaching.protonation] distance settings must be positive")
+    manual_h2 = protonation.get("manual_h2_energy_eV", "")
+    if manual_h2 is None or str(manual_h2).strip() == "":
+        protonation["manual_h2_energy_eV"] = None
+    else:
+        protonation["manual_h2_energy_eV"] = float(manual_h2)
+    raw["protonation"] = protonation
+
     raw["project_root"] = Path(project_root).expanduser().resolve()
     return raw
 
