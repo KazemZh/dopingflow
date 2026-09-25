@@ -641,12 +641,16 @@ except Exception:
 summary_path = result_dir / "leaching_summary.csv"
 aggregate_path = result_dir / "leaching_surface_summary.csv"
 potential_path = result_dir / "leaching_potential_scan.csv"
+protonation_summary_path = result_dir / "leaching_protonation_summary.csv"
+protonation_scan_path = result_dir / "leaching_protonation_potential_scan.csv"
 
 if not summary_path.exists():
     st.info("No leaching_summary.csv exists yet.")
 else:
     results = pd.read_csv(summary_path)
-    tabs = st.tabs(["Site results", "Surface summary", "Potential scan", "Interpretation"])
+    tabs = st.tabs(
+        ["Site results", "Surface summary", "Potential scan", "Protonation", "Interpretation"]
+    )
 
     with tabs[0]:
         st.dataframe(results, use_container_width=True, hide_index=True)
@@ -672,7 +676,9 @@ else:
             st.info("No aggregate table found.")
 
     with tabs[2]:
-        selected_scale = str(saved.get("potential_scale", "RHE")).upper()
+        selected_scale = str(
+            (cfg.get("leaching", {}) or {}).get("potential_scale", "RHE")
+        ).upper()
         threshold_col = (
             "dissolution_potential_V_RHE"
             if selected_scale == "RHE"
@@ -773,6 +779,228 @@ else:
             st.info("No potential scan found.")
 
     with tabs[3]:
+        selected_scale = str(
+            (cfg.get("leaching", {}) or {}).get("potential_scale", "RHE")
+        ).upper()
+        adjusted_threshold_col = (
+            "protonation_adjusted_dissolution_potential_V_RHE"
+            if selected_scale == "RHE"
+            else "protonation_adjusted_dissolution_potential_V_SHE"
+        )
+        bare_threshold_col = (
+            "dissolution_potential_V_RHE"
+            if selected_scale == "RHE"
+            else "dissolution_potential_V_SHE"
+        )
+
+        if protonation_summary_path.exists():
+            try:
+                protonation_table = pd.read_csv(protonation_summary_path)
+            except pd.errors.EmptyDataError:
+                protonation_table = pd.DataFrame()
+        else:
+            protonation_table = pd.DataFrame()
+
+        if protonation_table.empty:
+            st.info(
+                "No post-leaching protonation results are available. Enable "
+                "**post-leaching protonation** and run the leaching stage."
+            )
+        else:
+            st.markdown("#### Protonated post-leaching structures")
+            st.caption(
+                "ΔE_protonation(0 V) = E(defect+nH) − E(defect) − n/2 E(H₂). "
+                "Negative values mean protonation stabilizes the dopant-vacancy surface "
+                "relative to the bare vacancy at 0 V vs SHE and pH 0."
+            )
+            st.dataframe(
+                protonation_table,
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            structural = protonation_table.copy()
+            structural["deltaE_protonation_zeroV_eV"] = pd.to_numeric(
+                structural.get("deltaE_protonation_zeroV_eV"),
+                errors="coerce",
+            )
+            structural["h_count"] = pd.to_numeric(
+                structural.get("h_count"), errors="coerce"
+            )
+            structural = structural[
+                structural["deltaE_protonation_zeroV_eV"].notna()
+                & structural["h_count"].notna()
+            ]
+            if not structural.empty:
+                structural["site_key"] = (
+                    structural["surface_id"].astype(str)
+                    + "::"
+                    + structural["dopant"].astype(str)
+                    + "::"
+                    + structural["site_index"].astype(str)
+                )
+                fig_prot = px.line(
+                    structural,
+                    x="h_count",
+                    y="deltaE_protonation_zeroV_eV",
+                    color="dopant",
+                    line_group="site_key",
+                    markers=True,
+                    hover_data=[
+                        col
+                        for col in (
+                            "surface_id",
+                            "site_index",
+                            "initial_dopant_zone",
+                            "arrangement_id",
+                            "oxygen_indices_json",
+                        )
+                        if col in structural.columns
+                    ],
+                    title="Post-leaching protonation stabilization",
+                    labels={
+                        "h_count": "Number of H atoms",
+                        "deltaE_protonation_zeroV_eV": "ΔE protonation at 0 V (eV)",
+                        "dopant": "Dopant",
+                    },
+                )
+                fig_prot.add_hline(
+                    y=0.0,
+                    line_dash="dash",
+                    annotation_text="Bare vacancy reference",
+                    annotation_position="top left",
+                )
+                st.plotly_chart(fig_prot, use_container_width=True)
+
+        if protonation_scan_path.exists():
+            try:
+                proton_scan = pd.read_csv(protonation_scan_path)
+            except pd.errors.EmptyDataError:
+                proton_scan = pd.DataFrame()
+        else:
+            proton_scan = pd.DataFrame()
+
+        if not proton_scan.empty:
+            st.markdown("#### Protonation-adjusted leaching free energy")
+            st.caption(
+                "At each operating potential, DopingFlow compares the bare vacancy with "
+                "all successfully relaxed protonated states and reports the lowest "
+                "ΔG_leach. The selected H count can therefore change with potential."
+            )
+            st.dataframe(proton_scan, use_container_width=True, hide_index=True)
+            proton_scan["site_key"] = (
+                proton_scan["surface_id"].astype(str)
+                + "::"
+                + proton_scan["dopant"].astype(str)
+                + "::"
+                + proton_scan["site_index"].astype(str)
+            )
+            fig_scan = px.line(
+                proton_scan,
+                x="applied_potential_V",
+                y="best_deltaG_leach_eV",
+                color="dopant",
+                line_group="site_key",
+                markers=True,
+                hover_data=[
+                    col
+                    for col in (
+                        "surface_id",
+                        "site_index",
+                        "initial_dopant_zone",
+                        "best_h_count",
+                        "best_arrangement_id",
+                        "bare_deltaG_leach_eV",
+                        "deltaG_change_vs_bare_eV",
+                    )
+                    if col in proton_scan.columns
+                ],
+                title=f"Best post-leaching state: ΔG_leach vs potential ({selected_scale})",
+                labels={
+                    "applied_potential_V": f"Applied potential (V vs {selected_scale})",
+                    "best_deltaG_leach_eV": "Best ΔG_leach (eV)",
+                    "dopant": "Dopant",
+                },
+            )
+            fig_scan.add_hline(
+                y=0.0,
+                line_dash="dash",
+                annotation_text="ΔG_leach = 0",
+                annotation_position="top left",
+            )
+            st.plotly_chart(fig_scan, use_container_width=True)
+
+        if (
+            bare_threshold_col in results.columns
+            and adjusted_threshold_col in results.columns
+        ):
+            threshold_compare = results[
+                [
+                    col
+                    for col in (
+                        "dopant",
+                        "site_index",
+                        "initial_dopant_zone",
+                        bare_threshold_col,
+                        adjusted_threshold_col,
+                    )
+                    if col in results.columns
+                ]
+            ].copy()
+            threshold_compare[bare_threshold_col] = pd.to_numeric(
+                threshold_compare[bare_threshold_col], errors="coerce"
+            )
+            threshold_compare[adjusted_threshold_col] = pd.to_numeric(
+                threshold_compare[adjusted_threshold_col], errors="coerce"
+            )
+            threshold_compare = threshold_compare.dropna(
+                subset=[bare_threshold_col, adjusted_threshold_col],
+                how="all",
+            )
+            if not threshold_compare.empty:
+                melted = threshold_compare.melt(
+                    id_vars=[
+                        col
+                        for col in ("dopant", "site_index", "initial_dopant_zone")
+                        if col in threshold_compare.columns
+                    ],
+                    value_vars=[bare_threshold_col, adjusted_threshold_col],
+                    var_name="surface_state_model",
+                    value_name="dissolution_potential_V",
+                ).dropna(subset=["dissolution_potential_V"])
+                melted["surface_state_model"] = melted[
+                    "surface_state_model"
+                ].map(
+                    {
+                        bare_threshold_col: "Bare vacancy",
+                        adjusted_threshold_col: "Best protonated state",
+                    }
+                )
+                fig_threshold_compare = px.scatter(
+                    melted,
+                    x="dopant",
+                    y="dissolution_potential_V",
+                    color="surface_state_model",
+                    symbol=(
+                        "initial_dopant_zone"
+                        if "initial_dopant_zone" in melted.columns
+                        else None
+                    ),
+                    hover_data=[
+                        col
+                        for col in ("site_index", "initial_dopant_zone")
+                        if col in melted.columns
+                    ],
+                    title=f"Bare vs protonation-adjusted dissolution threshold ({selected_scale})",
+                    labels={
+                        "dissolution_potential_V": f"Dissolution potential (V vs {selected_scale})",
+                        "surface_state_model": "Post-leaching state",
+                        "dopant": "Dopant",
+                    },
+                )
+                st.plotly_chart(fig_threshold_compare, use_container_width=True)
+
+    with tabs[4]:
         st.markdown(
             "Every row keeps the dopant's **initial relaxed-surface zone and coordinates** before removal. "
             "**Lower extraction energy** means weaker retention relative to the elemental-metal "
