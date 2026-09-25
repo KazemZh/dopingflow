@@ -540,14 +540,71 @@ else:
             st.info("No aggregate table found.")
 
     with tabs[2]:
+        selected_scale = str(saved.get("potential_scale", "RHE")).upper()
+        threshold_col = (
+            "dissolution_potential_V_RHE"
+            if selected_scale == "RHE"
+            else "dissolution_potential_V_SHE"
+        )
+
+        if threshold_col in results.columns:
+            threshold = results.copy()
+            threshold[threshold_col] = pd.to_numeric(
+                threshold[threshold_col], errors="coerce"
+            )
+            threshold = threshold[threshold[threshold_col].notna()]
+            if not threshold.empty:
+                st.markdown("#### Dissolution threshold potential")
+                st.caption(
+                    "Lower threshold potential means that the modeled dopant dissolution "
+                    "becomes thermodynamically favorable at a lower applied potential."
+                )
+                fig_threshold = px.scatter(
+                    threshold,
+                    x="dopant",
+                    y=threshold_col,
+                    color=(
+                        "initial_dopant_zone"
+                        if "initial_dopant_zone" in threshold.columns
+                        else None
+                    ),
+                    hover_data=[
+                        col
+                        for col in (
+                            "target_id",
+                            "variant_label",
+                            "site_index",
+                            "initial_dopant_zone",
+                            "initial_depth_from_selected_surface_A",
+                            "extraction_energy_eV",
+                        )
+                        if col in threshold.columns
+                    ],
+                    title=f"Dopant dissolution threshold potential vs {selected_scale}",
+                    labels={
+                        threshold_col: f"Dissolution potential (V vs {selected_scale})",
+                        "dopant": "Dopant",
+                    },
+                )
+                st.plotly_chart(fig_threshold, use_container_width=True)
+
         if potential_path.exists():
             try:
                 scan = pd.read_csv(potential_path)
             except pd.errors.EmptyDataError:
                 scan = pd.DataFrame()
             if scan.empty:
-                st.info("No electrochemical scan: complete redox data were not supplied.")
+                st.info(
+                    "No electrochemical ΔG_leach scan is available. Complete redox data "
+                    "(oxidation state/electron count and standard reduction potential) "
+                    "must be supplied for the dopant."
+                )
             else:
+                st.markdown("#### Leaching free energy at operating potentials")
+                st.caption(
+                    "ΔG_leach < 0 means dissolution is thermodynamically favorable in "
+                    "the current simple-ion model; ΔG_leach > 0 means it is unfavorable."
+                )
                 st.dataframe(scan, use_container_width=True, hide_index=True)
                 fig = px.line(
                     scan,
@@ -556,7 +613,28 @@ else:
                     color="dopant",
                     line_group="surface_id",
                     markers=True,
-                    title="Leaching free energy vs applied potential",
+                    hover_data=[
+                        col
+                        for col in (
+                            "target_id",
+                            "site_index",
+                            "initial_dopant_zone",
+                            "initial_depth_from_selected_surface_A",
+                        )
+                        if col in scan.columns
+                    ],
+                    title=f"Leaching free energy vs applied potential ({selected_scale})",
+                    labels={
+                        "applied_potential_V": f"Applied potential (V vs {selected_scale})",
+                        "deltaG_leach_eV": "ΔG_leach (eV)",
+                        "dopant": "Dopant",
+                    },
+                )
+                fig.add_hline(
+                    y=0.0,
+                    line_dash="dash",
+                    annotation_text="ΔG_leach = 0",
+                    annotation_position="top left",
                 )
                 st.plotly_chart(fig, use_container_width=True)
         else:
