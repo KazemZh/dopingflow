@@ -327,11 +327,24 @@ def leaching_cmd(
         "--dry-run",
         help="Preview exact surface dopant-removal sites without running the calculator",
     ),
+    stop_after_site: str = typer.Option(
+        "",
+        "--stop-after-site",
+        help=(
+            "Recovery mode: stop normally after one exact site and write partial "
+            "summary outputs. Accepts e.g. 'In_site_0078' or "
+            "'<safe-surface-id>/In_site_0078'. Completed checkpoints are reused."
+        ),
+    ),
     verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
 ) -> None:
     """Step 15: Analyze thermodynamic dopant leaching from selected surfaces."""
     _init(config, verbose)
-    output = run_leaching_from_toml(config, dry_run=dry_run)
+    output = run_leaching_from_toml(
+        config,
+        dry_run=dry_run,
+        stop_after_site=stop_after_site,
+    )
     if output is None:
         typer.echo("Leaching stage disabled; set [leaching].enabled=true")
         return
