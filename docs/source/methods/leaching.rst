@@ -289,14 +289,53 @@ Run the calculation:
    dopingflow leaching -c input.toml
 
 With ``resume_completed = true`` (the default), a restarted run checks each
-per-site ``leaching_result.json`` checkpoint. Compatible completed sites are
-reused, while incomplete, failed, or incompatible sites are recalculated. The
-final CSV/JSON summaries are rebuilt from the full current site selection.
-If a process is interrupted during one site's relaxation, that individual site
-starts again; previously completed sites are not repeated.
+per-site ``leaching_result.json`` checkpoint and, when protonation is enabled,
+each per-arrangement ``protonation_result.json`` checkpoint. Compatible
+completed work is reused, while incomplete, failed, or incompatible work is
+recalculated. A normal restart rebuilds the final CSV/JSON summaries from the
+full current site selection. Use the recovery mode below when you want to
+finish only one selected site and then intentionally stop.
 
 The stage is also available as step 15 of `run-all`.
 
+Interrupted-run recovery and partial results
+--------------------------------------------
+
+Leaching and protonation calculations are restartable when
+``resume_completed = true`` (the default). Completed bare-site
+``leaching_result.json`` checkpoints and completed per-arrangement
+``protonation_result.json`` checkpoints are reused.
+
+For a normal restart, run the leaching stage again and all compatible
+completed work is skipped.
+
+For the special case where only the current interrupted site should be
+finished and later sites should *not* be started, use recovery mode. The
+CLI form is:
+
+.. code-block:: bash
+
+   dopingflow leaching -c input.toml --stop-after-site "<surface-id>/<dopant>_site_XXXX"
+
+DopingFlow reuses compatible checkpoints, finishes all remaining work for
+the selected site (including unfinished protonation arrangements), stops
+before the next site, and then writes the normal CSV/JSON output files.
+``leaching_results.json`` records ``partial_run = true`` and the selected
+``stopped_after_site``.
+
+The Streamlit leaching page exposes the same behavior in
+**Recovery / partial-result mode**. It scans the existing output tree,
+shows the number of completed bare/protonation checkpoints, highlights
+already-started incomplete sites, and preselects the first detected
+incomplete site. Keep **Resume completed sites** enabled, enable recovery
+mode, select the target site, then click **Run recovery to selected site**.
+Normal **Run leaching** is disabled while recovery mode is active to avoid
+accidentally continuing the full remaining queue.
+
+An interruption *inside* an individual relaxation does not resume the
+optimizer from its last ionic step; that one unfinished bare/protonated
+calculation restarts from its prepared input structure. Earlier completed
+checkpoints are still reused.
 Outputs
 -------
 
