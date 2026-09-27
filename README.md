@@ -161,6 +161,25 @@ dopingflow oxidation -c input.toml
 dopingflow surface -c input.toml
 ```
 
+### Dopant leaching and interrupted-run recovery
+
+The leaching stage can remove selected surface dopants, evaluate the
+metal-referenced extraction descriptor, optionally add electrochemical
+dissolution thermodynamics, and test post-leaching O-H protonation with
+an H2/CHE reference. See
+[`docs/source/methods/leaching.rst`](docs/source/methods/leaching.rst) for
+the model, configuration, outputs, and limitations.
+
+Completed bare-site and protonation-arrangement checkpoints are restartable.
+If a run is interrupted and only the current site should be completed before
+stopping, use the Streamlit leaching page's **Recovery / partial-result mode**.
+It detects incomplete started sites, reuses completed checkpoints, finishes
+the selected site, writes partial CSV/JSON summaries, and does not start later
+sites. The equivalent CLI option is:
+
+```bash
+dopingflow leaching -c input.toml --stop-after-site "<surface-id>/<dopant>_site_XXXX"
+```
 The ordinary pipeline can be run with:
 
 ```bash
