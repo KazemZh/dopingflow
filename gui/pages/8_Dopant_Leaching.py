@@ -54,6 +54,59 @@ def _items(value: str) -> list[str]:
     return list(dict.fromkeys(x.strip() for x in value.split(",") if x.strip()))
 
 
+def _safe_surface_id(value: str) -> str:
+    return "".join(
+        ch if ch.isalnum() or ch in "._-" else "_"
+        for ch in str(value).replace("/", "__")
+    )
+
+
+def _checkpoint_ok(path: Path) -> bool:
+    if not path.exists():
+        return False
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return data.get("status") == "ok"
+
+
+def _site_selector(surface_id: str, dopant: str, site_index: int) -> str:
+    return f"{_safe_surface_id(surface_id)}/{dopant}_site_{int(site_index):04d}"
+
+
+def _recovery_candidates(result_dir: Path) -> tuple[dict[str, list[str]], int, int]:
+    """Find already-started site jobs that do not have complete checkpoints."""
+    surfaces_dir = result_dir / "surfaces"
+    candidates: dict[str, list[str]] = {}
+    n_bare_ok = 0
+    n_protonation_ok = 0
+    if not surfaces_dir.exists():
+        return candidates, n_bare_ok, n_protonation_ok
+
+    for site_dir in surfaces_dir.glob("*/*_site_*"):
+        if not site_dir.is_dir():
+            continue
+        selector = f"{site_dir.parent.name}/{site_dir.name}"
+        bare_checkpoint = site_dir / "leaching_result.json"
+        if _checkpoint_ok(bare_checkpoint):
+            n_bare_ok += 1
+        elif (site_dir / "relax").exists() or bare_checkpoint.exists():
+            candidates.setdefault(selector, []).append("bare leaching site incomplete")
+
+        protonation_dir = site_dir / "protonation"
+        if protonation_dir.exists():
+            for arrangement_dir in sorted(protonation_dir.glob("H*_arr_*")):
+                checkpoint = arrangement_dir / "protonation_result.json"
+                if _checkpoint_ok(checkpoint):
+                    n_protonation_ok += 1
+                else:
+                    candidates.setdefault(selector, []).append(
+                        f"{arrangement_dir.name} incomplete"
+                    )
+    return candidates, n_bare_ok, n_protonation_ok
+
+
 def _json_map(label: str, value: Any, help_text: str) -> tuple[dict[str, Any], str | None]:
     text = st.text_area(
         label,
@@ -556,6 +609,7 @@ with st.expander("Configuration & run controls", expanded=True):
             validation_error = str(exc)
             st.error(validation_error)
 
+    preview = pd.DataFrame()
     with st.expander("Preview exact dopant-removal sites", expanded=False):
         if validation_error is None:
             try:
@@ -574,10 +628,94 @@ with st.expander("Configuration & run controls", expanded=True):
                 ]
                 st.dataframe(preview[columns], use_container_width=True, hide_index=True)
 
+    recovery_mode = False
+    recovery_selector = ""
+    try:
+        recovery_result_dir = resolve_leaching_output_dir(
+            resolved_cfg,
+            parse_leaching_config(resolved_cfg, project_root),
+            project_root,
+        )
+    except Exception:
+        recovery_result_dir = None
+
+    with st.expander("Recovery / partial-result mode", expanded=False):
+        st.caption(
+            "Use this after an interrupted run when you want to finish one selected "
+            "leaching site, stop cleanly there, and rebuild the CSV/JSON results only "
+            "from sites completed up to that point."
+        )
+        detected: dict[str, list[str]] = {}
+        bare_ok = proton_ok = 0
+        if recovery_result_dir is not None:
+            detected, bare_ok, proton_ok = _recovery_candidates(recovery_result_dir)
+            st.write(
+                f"Detected checkpoints: **{bare_ok} completed bare sites** and "
+                f"**{proton_ok} completed protonation arrangements**."
+            )
+            if detected:
+                for selector, reasons in detected.items():
+                    st.warning(
+                        f"Interrupted/incomplete site detected: `{selector}` — "
+                        + ", ".join(reasons)
+                    )
+            else:
+                st.info("No already-started incomplete site was detected in the output tree.")
+
+        recovery_mode = st.checkbox(
+            "Enable recovery / stop-after-site mode",
+            value=False,
+            help=(
+                "Normal completed checkpoints are reused. The selected site is completed, "
+                "then DopingFlow stops before starting any later site and writes partial summaries."
+            ),
+        )
+
+        site_options: list[str] = []
+        if not preview.empty:
+            site_options = [
+                _site_selector(
+                    str(row["surface_id"]),
+                    str(row["dopant"]),
+                    int(row["site_index"]),
+                )
+                for _, row in preview.iterrows()
+            ]
+        for selector in detected:
+            if selector not in site_options:
+                site_options.append(selector)
+
+        default_index = 0
+        if detected and site_options:
+            first_detected = next(iter(detected))
+            if first_detected in site_options:
+                default_index = site_options.index(first_detected)
+
+        if site_options:
+            recovery_selector = st.selectbox(
+                "Finish through this site, then stop",
+                site_options,
+                index=default_index,
+                disabled=not recovery_mode,
+                help=(
+                    "Use the full surface/site identifier. For an interrupted protonation "
+                    "job, selecting its parent site finishes all remaining arrangements for "
+                    "that site and then stops."
+                ),
+            )
+        else:
+            st.caption("No selected leaching sites are available for recovery.")
+
+        if recovery_mode:
+            st.info(
+                "Normal **Run leaching** is disabled while recovery mode is active. "
+                "Use **Run recovery to selected site** below."
+            )
+
     with st.expander("Preview [leaching] TOML", expanded=False):
         st.code(toml.dumps({"leaching": resolved}), language="toml")
 
-    save_col, dry_col, run_col = st.columns(3)
+    save_col, dry_col, run_col, recovery_col = st.columns(4)
     with save_col:
         save = st.button(
             "Save leaching settings",
@@ -595,15 +733,36 @@ with st.expander("Configuration & run controls", expanded=True):
         run = st.button(
             "Run leaching",
             use_container_width=True,
-            disabled=(not enabled) or validation_error is not None,
+            disabled=(not enabled) or validation_error is not None or recovery_mode,
+        )
+    with recovery_col:
+        recovery_run = st.button(
+            "Run recovery to selected site",
+            use_container_width=True,
+            disabled=(
+                (not enabled)
+                or validation_error is not None
+                or (not recovery_mode)
+                or (not recovery_selector)
+                or (not resume_completed)
+            ),
+            help=(
+                "Requires Resume completed sites. Reuses compatible checkpoints, "
+                "finishes the selected site, writes partial outputs, and stops."
+            ),
         )
 
     if not enabled:
         st.caption(
             "Enable **leaching stage** to activate the dry-run and leaching run actions."
         )
+    if recovery_mode and not resume_completed:
+        st.error(
+            "Recovery mode requires **Resume completed sites** to remain enabled; "
+            "otherwise completed jobs would be recalculated."
+        )
 
-    if save or dry or run:
+    if save or dry or run or recovery_run:
         cfg["leaching"] = resolved
         config_path.write_text(toml.dumps(cfg), encoding="utf-8")
         st.success(f"Saved {config_path}")
@@ -611,6 +770,17 @@ with st.expander("Configuration & run controls", expanded=True):
             _run(["dopingflow", "leaching", "-c", str(config_path), "--dry-run"])
         elif run:
             _run(["dopingflow", "leaching", "-c", str(config_path)])
+        elif recovery_run:
+            _run(
+                [
+                    "dopingflow",
+                    "leaching",
+                    "-c",
+                    str(config_path),
+                    "--stop-after-site",
+                    recovery_selector,
+                ]
+            )
 
 
 if "leaching_stdout" in st.session_state:
@@ -640,6 +810,7 @@ except Exception:
         result_dir = (source_path / result_dir).resolve()
 
 summary_path = result_dir / "leaching_summary.csv"
+summary_json_path = result_dir / "leaching_results.json"
 aggregate_path = result_dir / "leaching_surface_summary.csv"
 potential_path = result_dir / "leaching_potential_scan.csv"
 protonation_summary_path = result_dir / "leaching_protonation_summary.csv"
@@ -648,6 +819,17 @@ protonation_scan_path = result_dir / "leaching_protonation_potential_scan.csv"
 if not summary_path.exists():
     st.info("No leaching_summary.csv exists yet.")
 else:
+    if summary_json_path.exists():
+        try:
+            result_meta = json.loads(summary_json_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            result_meta = {}
+        if bool(result_meta.get("partial_run", False)):
+            stopped = str(result_meta.get("stopped_after_site", "")).strip()
+            st.info(
+                "These are **partial recovery results**. DopingFlow stopped cleanly "
+                + (f"after `{stopped}`." if stopped else "at the requested recovery site.")
+            )
     results = pd.read_csv(summary_path)
     tabs = st.tabs(
         ["Site results", "Surface summary", "Bare potential scan", "Protonation", "Interpretation"]
