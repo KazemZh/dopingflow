@@ -1177,7 +1177,11 @@ def _aggregate(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def run_leaching(
-    config: Mapping[str, Any], project_root: Path | str = Path("."), *, dry_run: bool = False
+    config: Mapping[str, Any],
+    project_root: Path | str = Path("."),
+    *,
+    dry_run: bool = False,
+    stop_after_site: str = "",
 ) -> Path | None:
     cfg = parse_leaching_config(config, project_root)
     if not cfg["enabled"]:
@@ -1205,6 +1209,36 @@ def run_leaching(
         return preview_path
     if preview.empty:
         raise RuntimeError("[leaching] No dopant sites matched the selected surfaces/zones")
+
+    stop_selector = str(stop_after_site or "").strip()
+    stop_match_keys: set[str] = set()
+    if stop_selector:
+        for _, prow in preview.iterrows():
+            psid = str(prow["surface_id"])
+            pdopant = str(prow["dopant"])
+            pidx = int(prow["site_index"])
+            site_key = f"{_safe(psid)}/{pdopant}_site_{pidx:04d}"
+            if (
+                fnmatch.fnmatchcase(site_key, stop_selector)
+                or fnmatch.fnmatchcase(psid, stop_selector)
+                or site_key.endswith(stop_selector)
+                or f"{pdopant}_site_{pidx:04d}" == stop_selector
+            ):
+                stop_match_keys.add(site_key)
+        if not stop_match_keys:
+            raise ValueError(
+                "[leaching] --stop-after-site did not match any selected site: "
+                f"{stop_selector!r}"
+            )
+        if len(stop_match_keys) > 1:
+            raise ValueError(
+                "[leaching] --stop-after-site must identify exactly one site; "
+                f"{stop_selector!r} matched {len(stop_match_keys)} sites"
+            )
+        print(
+            "[leaching] Recovery mode: will stop cleanly after "
+            f"{next(iter(stop_match_keys))}"
+        )
 
     source_df = pd.read_csv(source)
     rows = {_surface_id(r.to_dict()): r.to_dict() for _, r in source_df.iterrows()}
@@ -1735,6 +1769,16 @@ def run_leaching(
         )
         records.append(rec)
 
+        if stop_match_keys:
+            current_site_key = f"{_safe(sid)}/{dopant}_site_{idx:04d}"
+            if current_site_key in stop_match_keys:
+                print(
+                    "[leaching] Reached requested recovery stop site "
+                    f"{current_site_key}; finalizing partial results without "
+                    "starting later sites."
+                )
+                break
+
     results = pd.DataFrame(records)
     for col, rank in (
         ("extraction_energy_eV", "extraction_vulnerability_rank"),
@@ -1781,6 +1825,8 @@ def run_leaching(
         "pH": cfg["pH"],
         "potentials_V": cfg["potentials_V"],
         "resume_completed": bool(cfg["resume_completed"]),
+        "partial_run": bool(stop_match_keys),
+        "stopped_after_site": next(iter(stop_match_keys), ""),
         "protonation": proton_cfg,
         "h2_reference_eV": h2_energy,
         "h2_reference_source": h2_source,
@@ -1802,7 +1848,8 @@ def run_leaching(
         json.dumps(payload, indent=2, default=str), encoding="utf-8"
     )
     print(
-        f"[leaching] Analyzed {len(results)} dopant-removal site(s) "
+        f"[leaching] {'Partial recovery finalized' if stop_match_keys else 'Analyzed'} "
+        f"{len(results)} dopant-removal site(s) "
         f"({n_reused} bare reused, {n_calculated} bare calculated; "
         f"{n_protonation_reused} protonated reused, "
         f"{n_protonation_calculated} protonated calculated) -> {summary}"
@@ -1810,11 +1857,21 @@ def run_leaching(
     return summary
 
 
-def run_leaching_from_toml(config_path: Path, *, dry_run: bool = False) -> Path | None:
+def run_leaching_from_toml(
+    config_path: Path,
+    *,
+    dry_run: bool = False,
+    stop_after_site: str = "",
+) -> Path | None:
     config_path = Path(config_path).expanduser().resolve()
     with open(config_path, "rb") as handle:
         config = tomllib.load(handle)
-    return run_leaching(config, config_path.parent, dry_run=dry_run)
+    return run_leaching(
+        config,
+        config_path.parent,
+        dry_run=dry_run,
+        stop_after_site=stop_after_site,
+    )
 
 
 __all__ = [
