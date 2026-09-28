@@ -1605,6 +1605,8 @@ else:
                         "the potential or pH step so each axis has at most 300 points."
                     )
                 else:
+                    # Focus grid: used only by the U-pH landscape, 3D surface,
+                    # diagnostics, and grid export.
                     full_grid = build_thermodynamic_grid(
                         states,
                         z_value,
@@ -1616,118 +1618,212 @@ else:
                         temperature_K=explorer_temperature,
                         selected_h_count=selected_h_count,
                     )
-                    u_slice_grid = build_thermodynamic_grid(
-                        states,
-                        z_value,
-                        e0_value,
-                        u_values,
-                        selected_ph_slices,
-                        potential_scale=explorer_scale,
-                        ion_activity=explorer_activity,
-                        temperature_K=explorer_temperature,
-                        selected_h_count=selected_h_count,
+
+                    # Comparison grids: overlay any selected structures/dopants and
+                    # any selected H-state definitions on the same 2D plots.
+                    comparison_u_frames: list[pd.DataFrame] = []
+                    comparison_ph_frames: list[pd.DataFrame] = []
+                    skipped_comparisons: list[str] = []
+
+                    for comparison_label in comparison_labels:
+                        comparison_row = explorer_rows.loc[
+                            site_labels[comparison_label]
+                        ]
+                        comparison_states = _states_for_explorer_row(comparison_row)
+                        comparison_dopant = str(comparison_row["dopant"])
+                        comparison_site_index = int(comparison_row["site_index"])
+                        comparison_z = int(comparison_row["oxidation_state"])
+                        comparison_e0 = float(
+                            comparison_row["standard_reduction_potential_V_SHE"]
+                        )
+                        comparison_activity = float(
+                            activity_by_dopant.get(
+                                comparison_dopant, explorer_default_activity
+                            )
+                        )
+                        available_counts = {
+                            int(state["h_count"]) for state in comparison_states
+                        }
+
+                        comparison_hkl = ""
+                        if all(
+                            key in comparison_row
+                            for key in ("miller_h", "miller_k", "miller_l")
+                        ):
+                            comparison_hkl = (
+                                f"({int(comparison_row['miller_h'])}"
+                                f"{int(comparison_row['miller_k'])}"
+                                f"{int(comparison_row['miller_l'])})"
+                            )
+                        comparison_zone = str(
+                            comparison_row.get("initial_dopant_zone", "")
+                        )
+
+                        for h_mode in comparison_h_modes:
+                            h_count = _h_mode_to_count(h_mode)
+                            if h_count is not None and h_count not in available_counts:
+                                skipped_comparisons.append(
+                                    f"{comparison_dopant} site {comparison_site_index}: {h_mode} unavailable"
+                                )
+                                continue
+
+                            series_parts = [
+                                f"{comparison_dopant} site {comparison_site_index}"
+                            ]
+                            if comparison_hkl:
+                                series_parts.append(comparison_hkl)
+                            if comparison_zone:
+                                series_parts.append(comparison_zone)
+                            series_parts.append(h_mode)
+                            series_label = " | ".join(series_parts)
+
+                            grid_u = build_thermodynamic_grid(
+                                comparison_states,
+                                comparison_z,
+                                comparison_e0,
+                                u_values,
+                                selected_ph_slices,
+                                potential_scale=explorer_scale,
+                                ion_activity=comparison_activity,
+                                temperature_K=explorer_temperature,
+                                selected_h_count=h_count,
+                            )
+                            grid_ph = build_thermodynamic_grid(
+                                comparison_states,
+                                comparison_z,
+                                comparison_e0,
+                                selected_u_slices,
+                                ph_values,
+                                potential_scale=explorer_scale,
+                                ion_activity=comparison_activity,
+                                temperature_K=explorer_temperature,
+                                selected_h_count=h_count,
+                            )
+
+                            for grid in (grid_u, grid_ph):
+                                if grid.empty:
+                                    continue
+                                grid["dopant"] = comparison_dopant
+                                grid["site_index"] = comparison_site_index
+                                grid["surface_id"] = str(comparison_row["surface_id"])
+                                grid["requested_h_state"] = h_mode
+                                grid["series_label"] = series_label
+                                grid["ion_activity"] = comparison_activity
+
+                            if not grid_u.empty:
+                                comparison_u_frames.append(grid_u)
+                            if not grid_ph.empty:
+                                comparison_ph_frames.append(grid_ph)
+
+                    comparison_u_grid = (
+                        pd.concat(comparison_u_frames, ignore_index=True)
+                        if comparison_u_frames
+                        else pd.DataFrame()
                     )
-                    ph_slice_grid = build_thermodynamic_grid(
-                        states,
-                        z_value,
-                        e0_value,
-                        selected_u_slices,
-                        ph_values,
-                        potential_scale=explorer_scale,
-                        ion_activity=explorer_activity,
-                        temperature_K=explorer_temperature,
-                        selected_h_count=selected_h_count,
+                    comparison_ph_grid = (
+                        pd.concat(comparison_ph_frames, ignore_index=True)
+                        if comparison_ph_frames
+                        else pd.DataFrame()
                     )
 
-                    st.markdown("#### 2D slices")
+                    if skipped_comparisons:
+                        with st.expander(
+                            f"Skipped unavailable H-state combinations ({len(skipped_comparisons)})",
+                            expanded=False,
+                        ):
+                            st.write("\n".join(f"- {item}" for item in skipped_comparisons))
+
+                    st.markdown("#### 2D comparison slices")
+                    st.caption(
+                        "Each line combines one selected structure/site with one requested H state. "
+                        "Best means the minimum-ΔG H state can change along the curve."
+                    )
                     left, right = st.columns(2)
+
                     with left:
-                        line_u = u_slice_grid.copy().sort_values(
-                            ["pH", "applied_potential_V"]
-                        )
-                        if len(selected_ph_slices) == 1:
-                            current_ph = float(selected_ph_slices[0])
-                            st.caption(f"Current slice: **pH = {current_ph:g}**")
-                            fig_u = px.line(
-                                line_u,
-                                x="applied_potential_V",
-                                y="deltaG_leach_eV",
-                                markers=False,
-                                hover_data=[
-                                    "best_h_count",
-                                    "net_electrons",
-                                    "best_arrangement_id",
-                                ],
-                                title=f"ΔG_leach vs potential — {selected_dopant} site {selected_site_index}",
-                                labels={
-                                    "applied_potential_V": f"Potential (V vs {explorer_scale})",
-                                    "deltaG_leach_eV": "ΔG_leach (eV)",
-                                },
-                            )
+                        if comparison_u_grid.empty:
+                            st.info("No valid structure/H-state combination is available for ΔG vs potential.")
                         else:
-                            line_u["pH curve"] = line_u["pH"].map(lambda x: f"pH {x:g}")
-                            fig_u = px.line(
-                                line_u,
+                            line_u = comparison_u_grid.copy().sort_values(
+                                ["series_label", "pH", "applied_potential_V"]
+                            )
+                            line_u["pH slice"] = line_u["pH"].map(
+                                lambda value: f"pH {value:g}"
+                            )
+                            if len(selected_ph_slices) == 1:
+                                st.caption(
+                                    f"Current slice: **pH = {float(selected_ph_slices[0]):g}**"
+                                )
+                            line_kwargs: dict[str, Any] = dict(
+                                data_frame=line_u,
                                 x="applied_potential_V",
                                 y="deltaG_leach_eV",
-                                color="pH curve",
+                                color="series_label",
                                 markers=False,
                                 hover_data=[
+                                    "dopant",
+                                    "site_index",
+                                    "requested_h_state",
                                     "best_h_count",
                                     "net_electrons",
                                     "best_arrangement_id",
+                                    "ion_activity",
                                 ],
-                                title=f"ΔG_leach vs potential — {selected_dopant} site {selected_site_index}",
+                                title="ΔG_leach vs potential — selected structures/H states",
                                 labels={
                                     "applied_potential_V": f"Potential (V vs {explorer_scale})",
                                     "deltaG_leach_eV": "ΔG_leach (eV)",
+                                    "series_label": "Structure / H state",
+                                    "pH slice": "pH",
                                 },
                             )
-                        fig_u.add_hline(y=0.0, line_dash="dash")
-                        st.plotly_chart(fig_u, use_container_width=True)
+                            if line_u["pH"].nunique() > 1:
+                                line_kwargs["line_dash"] = "pH slice"
+                            fig_u = px.line(**line_kwargs)
+                            fig_u.add_hline(y=0.0, line_dash="dash")
+                            st.plotly_chart(fig_u, use_container_width=True)
 
                     with right:
-                        line_ph = ph_slice_grid.copy().sort_values(
-                            ["applied_potential_V", "pH"]
-                        )
-                        if len(selected_u_slices) == 1:
-                            current_u = float(selected_u_slices[0])
-                            st.caption(
-                                f"Current slice: **U = {current_u:g} V vs {explorer_scale}**"
-                            )
-                            fig_ph = px.line(
-                                line_ph,
-                                x="pH",
-                                y="deltaG_leach_eV",
-                                markers=False,
-                                hover_data=[
-                                    "best_h_count",
-                                    "net_electrons",
-                                    "best_arrangement_id",
-                                ],
-                                title=f"ΔG_leach vs pH — {selected_dopant} site {selected_site_index}",
-                                labels={"deltaG_leach_eV": "ΔG_leach (eV)"},
-                            )
+                        if comparison_ph_grid.empty:
+                            st.info("No valid structure/H-state combination is available for ΔG vs pH.")
                         else:
-                            line_ph["Potential curve"] = line_ph["applied_potential_V"].map(
-                                lambda x: f"{x:g} V"
+                            line_ph = comparison_ph_grid.copy().sort_values(
+                                ["series_label", "applied_potential_V", "pH"]
                             )
-                            fig_ph = px.line(
-                                line_ph,
+                            line_ph["Potential slice"] = line_ph[
+                                "applied_potential_V"
+                            ].map(lambda value: f"{value:g} V")
+                            if len(selected_u_slices) == 1:
+                                st.caption(
+                                    f"Current slice: **U = {float(selected_u_slices[0]):g} V vs {explorer_scale}**"
+                                )
+                            ph_kwargs: dict[str, Any] = dict(
+                                data_frame=line_ph,
                                 x="pH",
                                 y="deltaG_leach_eV",
-                                color="Potential curve",
+                                color="series_label",
                                 markers=False,
                                 hover_data=[
+                                    "dopant",
+                                    "site_index",
+                                    "requested_h_state",
                                     "best_h_count",
                                     "net_electrons",
                                     "best_arrangement_id",
+                                    "ion_activity",
                                 ],
-                                title=f"ΔG_leach vs pH — {selected_dopant} site {selected_site_index}",
-                                labels={"deltaG_leach_eV": "ΔG_leach (eV)"},
+                                title="ΔG_leach vs pH — selected structures/H states",
+                                labels={
+                                    "deltaG_leach_eV": "ΔG_leach (eV)",
+                                    "series_label": "Structure / H state",
+                                    "Potential slice": "Potential",
+                                },
                             )
-                        fig_ph.add_hline(y=0.0, line_dash="dash")
-                        st.plotly_chart(fig_ph, use_container_width=True)
+                            if line_ph["applied_potential_V"].nunique() > 1:
+                                ph_kwargs["line_dash"] = "Potential slice"
+                            fig_ph = px.line(**ph_kwargs)
+                            fig_ph.add_hline(y=0.0, line_dash="dash")
+                            st.plotly_chart(fig_ph, use_container_width=True)
 
                     pivot_dg = full_grid.pivot(
                         index="pH", columns="applied_potential_V", values="deltaG_leach_eV"
