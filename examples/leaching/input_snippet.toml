@@ -31,17 +31,26 @@ compute_missing_metal_references = true
 relax_metal_reference = false
 
 # Extraction-energy screening works without aqueous redox data.
-# Add only chemically validated values for the species being modeled.
-# oxidation_states = { Sb = 3, Ti = 3 }
-# standard_reduction_potentials_V_SHE = { Sb = <validated>, Ti = <validated> }
-# aqueous_species = { Sb = "...", Ti = "..." }
-# ion_activities = { Sb = 1e-6, Ti = 1e-6 }
+# Add only chemically validated model-definition data here.
+# oxidation_states = { Sb = 5, In = 3 }
+# standard_reduction_potentials_V_SHE = { Sb = 0.369, In = -0.3382 }
+# aqueous_species = { Sb = "effective Sb(V) oxide/Sb 5e couple", In = "In3+(aq)" }
 
-default_ion_activity = 1e-6
+# Post-processing defaults used by the Results -> Thermodynamic explorer.
+# Changing these values does not invalidate structural/protonation checkpoints.
+[leaching.analysis_defaults]
 temperature_K = 298.15
-pH = 0.0
+default_ion_activity = 1e-6
+ion_activities = {}
 potential_scale = "RHE"
-potentials_V = [1.23, 1.50, 1.70]
+potential_min_V = 1.0
+potential_max_V = 2.0
+potential_step_V = 0.02
+pH_min = 0.0
+pH_max = 3.0
+pH_step = 0.1
+selected_pH_values = [0.0, 1.0, 2.0]
+selected_potential_values = [1.23, 1.50, 1.70]
 
 
 # Optional: stabilize the dopant-vacancy surface by protonating O atoms that
