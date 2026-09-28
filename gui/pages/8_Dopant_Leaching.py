@@ -1232,6 +1232,481 @@ else:
                 )
                 st.plotly_chart(fig_threshold_compare, use_container_width=True)
 
+    with tabs[4]:
+        st.markdown("### Interactive thermodynamic explorer")
+        st.caption(
+            "These controls are pure post-processing. Changing temperature, activity, pH, "
+            "potential range, or SHE/RHE does **not** rerun MLFF relaxations or invalidate "
+            "the stored bare/protonated structures."
+        )
+
+        explorer_rows = results.copy()
+        for col in ("oxidation_state", "standard_reduction_potential_V_SHE", "extraction_energy_eV"):
+            if col in explorer_rows.columns:
+                explorer_rows[col] = pd.to_numeric(explorer_rows[col], errors="coerce")
+        required = [
+            col
+            for col in ("oxidation_state", "standard_reduction_potential_V_SHE", "extraction_energy_eV")
+            if col in explorer_rows.columns
+        ]
+        if len(required) < 3:
+            explorer_rows = pd.DataFrame()
+        else:
+            explorer_rows = explorer_rows.dropna(subset=required)
+
+        if explorer_rows.empty:
+            st.info(
+                "No completed site with extraction energy, oxidation state, and standard "
+                "reduction potential is available for interactive thermodynamic analysis."
+            )
+        else:
+            site_labels: dict[str, int] = {}
+            for ridx, row in explorer_rows.iterrows():
+                hkl = ""
+                if all(k in row for k in ("miller_h", "miller_k", "miller_l")):
+                    hkl = f"({int(row['miller_h'])}{int(row['miller_k'])}{int(row['miller_l'])})"
+                zone = str(row.get("initial_dopant_zone", ""))
+                label = (
+                    f"{row['dopant']} site {int(row['site_index'])} | {hkl} | "
+                    f"{zone} | {row.get('target_id', row.get('surface_id', ''))}"
+                )
+                site_labels[label] = ridx
+
+            selected_label = st.selectbox(
+                "Site to explore",
+                list(site_labels.keys()),
+                help="Heatmaps and 3D surfaces are shown for one site at a time for clarity.",
+            )
+            selected_row = explorer_rows.loc[site_labels[selected_label]]
+            selected_surface = str(selected_row["surface_id"])
+            selected_dopant = str(selected_row["dopant"])
+            selected_site_index = int(selected_row["site_index"])
+            z_value = int(selected_row["oxidation_state"])
+            e0_value = float(selected_row["standard_reduction_potential_V_SHE"])
+
+            states: list[dict[str, Any]] = []
+            if not protonation_table_all.empty:
+                site_states = protonation_table_all[
+                    (protonation_table_all["surface_id"].astype(str) == selected_surface)
+                    & (protonation_table_all["dopant"].astype(str) == selected_dopant)
+                    & (pd.to_numeric(protonation_table_all["site_index"], errors="coerce") == selected_site_index)
+                ].copy()
+                if "extraction_base_eV" in site_states.columns:
+                    site_states["extraction_base_eV"] = pd.to_numeric(
+                        site_states["extraction_base_eV"], errors="coerce"
+                    )
+                    site_states["h_count"] = pd.to_numeric(
+                        site_states.get("h_count"), errors="coerce"
+                    )
+                    site_states = site_states.dropna(
+                        subset=["extraction_base_eV", "h_count"]
+                    )
+                    states = site_states.to_dict("records")
+
+            if not states:
+                states = [
+                    {
+                        "h_count": 0,
+                        "arrangement_id": 0,
+                        "extraction_base_eV": float(selected_row["extraction_energy_eV"]),
+                    }
+                ]
+
+            available_h = sorted({int(state["h_count"]) for state in states})
+            state_options = ["Best post-leaching state"] + [
+                ("Bare vacancy (0H)" if h == 0 else f"{h}H only")
+                for h in available_h
+            ]
+
+            activity_map = dict(analysis_cfg.get("ion_activities", {}) or {})
+            default_activity = float(
+                activity_map.get(
+                    selected_dopant,
+                    analysis_cfg.get("default_ion_activity", 1e-6),
+                )
+            )
+            default_scale = str(analysis_cfg.get("potential_scale", "RHE")).upper()
+            if default_scale not in {"RHE", "SHE"}:
+                default_scale = "RHE"
+
+            c1, c2, c3, c4 = st.columns(4)
+            explorer_temperature = float(
+                c1.number_input(
+                    "Temperature (K)",
+                    min_value=1.0,
+                    value=float(analysis_cfg.get("temperature_K", 298.15)),
+                    step=5.0,
+                    key="leaching_explorer_temperature",
+                )
+            )
+            explorer_activity = float(
+                c2.number_input(
+                    f"{selected_dopant} ion activity",
+                    min_value=1e-20,
+                    value=default_activity,
+                    format="%.3e",
+                    key=f"leaching_explorer_activity_{selected_dopant}",
+                )
+            )
+            explorer_scale = c3.selectbox(
+                "Potential scale",
+                ["RHE", "SHE"],
+                index=0 if default_scale == "RHE" else 1,
+                key="leaching_explorer_scale",
+            )
+            state_mode = c4.selectbox(
+                "Post-leaching state",
+                state_options,
+                key="leaching_explorer_state_mode",
+            )
+            selected_h_count = None
+            if state_mode != "Best post-leaching state":
+                selected_h_count = 0 if state_mode.startswith("Bare") else int(state_mode.split("H")[0])
+
+            r1, r2, r3 = st.columns(3)
+            u_min = float(
+                r1.number_input(
+                    "Potential min (V)",
+                    value=float(analysis_cfg.get("potential_min_V", 1.0)),
+                    step=0.05,
+                    key="leaching_explorer_umin",
+                )
+            )
+            u_max = float(
+                r2.number_input(
+                    "Potential max (V)",
+                    value=float(analysis_cfg.get("potential_max_V", 2.0)),
+                    step=0.05,
+                    key="leaching_explorer_umax",
+                )
+            )
+            u_step = float(
+                r3.number_input(
+                    "Potential step (V)",
+                    min_value=0.001,
+                    value=float(analysis_cfg.get("potential_step_V", 0.02)),
+                    step=0.005,
+                    format="%.3f",
+                    key="leaching_explorer_ustep",
+                )
+            )
+
+            r4, r5, r6 = st.columns(3)
+            ph_min = float(
+                r4.number_input(
+                    "pH min",
+                    value=float(analysis_cfg.get("pH_min", 0.0)),
+                    step=0.25,
+                    key="leaching_explorer_phmin",
+                )
+            )
+            ph_max = float(
+                r5.number_input(
+                    "pH max",
+                    value=float(analysis_cfg.get("pH_max", 3.0)),
+                    step=0.25,
+                    key="leaching_explorer_phmax",
+                )
+            )
+            ph_step = float(
+                r6.number_input(
+                    "pH step",
+                    min_value=0.01,
+                    value=float(analysis_cfg.get("pH_step", 0.1)),
+                    step=0.05,
+                    format="%.2f",
+                    key="leaching_explorer_phstep",
+                )
+            )
+
+            saved_ph_slices = analysis_cfg.get("selected_pH_values", [0.0, 1.0, 2.0])
+            saved_u_slices = analysis_cfg.get(
+                "selected_potential_values", [1.23, 1.50, 1.70]
+            )
+            s1, s2 = st.columns(2)
+            ph_slice_text = s1.text_input(
+                "pH values for ΔG vs potential",
+                value=", ".join(str(float(x)) for x in saved_ph_slices),
+                key="leaching_explorer_ph_slices",
+            )
+            u_slice_text = s2.text_input(
+                f"Potential values (V vs {explorer_scale}) for ΔG vs pH",
+                value=", ".join(str(float(x)) for x in saved_u_slices),
+                key="leaching_explorer_u_slices",
+            )
+
+            try:
+                selected_ph_slices = [float(x.strip()) for x in ph_slice_text.split(",") if x.strip()]
+                selected_u_slices = [float(x.strip()) for x in u_slice_text.split(",") if x.strip()]
+            except ValueError:
+                st.error("Slice values must be comma-separated numbers.")
+                selected_ph_slices = []
+                selected_u_slices = []
+
+            grid_ok = u_max > u_min and ph_max > ph_min and selected_ph_slices and selected_u_slices
+            if not grid_ok:
+                st.error("Use increasing U/pH ranges and provide at least one pH and potential slice.")
+            else:
+                u_values = np.arange(u_min, u_max + 0.5 * u_step, u_step)
+                ph_values = np.arange(ph_min, ph_max + 0.5 * ph_step, ph_step)
+                if len(u_values) > 300 or len(ph_values) > 300:
+                    st.error(
+                        "The requested grid is too dense for interactive plotting. Increase "
+                        "the potential or pH step so each axis has at most 300 points."
+                    )
+                else:
+                    full_grid = build_thermodynamic_grid(
+                        states,
+                        z_value,
+                        e0_value,
+                        u_values,
+                        ph_values,
+                        potential_scale=explorer_scale,
+                        ion_activity=explorer_activity,
+                        temperature_K=explorer_temperature,
+                        selected_h_count=selected_h_count,
+                    )
+                    u_slice_grid = build_thermodynamic_grid(
+                        states,
+                        z_value,
+                        e0_value,
+                        u_values,
+                        selected_ph_slices,
+                        potential_scale=explorer_scale,
+                        ion_activity=explorer_activity,
+                        temperature_K=explorer_temperature,
+                        selected_h_count=selected_h_count,
+                    )
+                    ph_slice_grid = build_thermodynamic_grid(
+                        states,
+                        z_value,
+                        e0_value,
+                        selected_u_slices,
+                        ph_values,
+                        potential_scale=explorer_scale,
+                        ion_activity=explorer_activity,
+                        temperature_K=explorer_temperature,
+                        selected_h_count=selected_h_count,
+                    )
+
+                    st.markdown("#### 2D slices")
+                    left, right = st.columns(2)
+                    with left:
+                        line_u = u_slice_grid.copy()
+                        line_u["pH curve"] = line_u["pH"].map(lambda x: f"pH {x:g}")
+                        fig_u = px.line(
+                            line_u,
+                            x="applied_potential_V",
+                            y="deltaG_leach_eV",
+                            color="pH curve",
+                            markers=False,
+                            hover_data=["best_h_count", "net_electrons", "best_arrangement_id"],
+                            title=f"ΔG_leach vs potential — {selected_dopant} site {selected_site_index}",
+                            labels={
+                                "applied_potential_V": f"Potential (V vs {explorer_scale})",
+                                "deltaG_leach_eV": "ΔG_leach (eV)",
+                            },
+                        )
+                        fig_u.add_hline(y=0.0, line_dash="dash")
+                        st.plotly_chart(fig_u, use_container_width=True)
+                    with right:
+                        line_ph = ph_slice_grid.copy()
+                        line_ph["Potential curve"] = line_ph["applied_potential_V"].map(
+                            lambda x: f"{x:g} V"
+                        )
+                        fig_ph = px.line(
+                            line_ph,
+                            x="pH",
+                            y="deltaG_leach_eV",
+                            color="Potential curve",
+                            markers=False,
+                            hover_data=["best_h_count", "net_electrons", "best_arrangement_id"],
+                            title=f"ΔG_leach vs pH — {selected_dopant} site {selected_site_index}",
+                            labels={"deltaG_leach_eV": "ΔG_leach (eV)"},
+                        )
+                        fig_ph.add_hline(y=0.0, line_dash="dash")
+                        st.plotly_chart(fig_ph, use_container_width=True)
+
+                    pivot_dg = full_grid.pivot(
+                        index="pH", columns="applied_potential_V", values="deltaG_leach_eV"
+                    ).sort_index()
+                    pivot_h = full_grid.pivot(
+                        index="pH", columns="applied_potential_V", values="best_h_count"
+                    ).sort_index()
+
+                    st.markdown("#### U–pH landscape")
+                    map_left, map_right = st.columns(2)
+                    with map_left:
+                        heat = go.Figure(
+                            data=go.Contour(
+                                x=pivot_dg.columns.to_numpy(),
+                                y=pivot_dg.index.to_numpy(),
+                                z=pivot_dg.to_numpy(),
+                                colorbar=dict(title="ΔG (eV)"),
+                                contours=dict(showlines=True),
+                                hovertemplate=(
+                                    "U=%{x:.3f} V<br>pH=%{y:.2f}<br>ΔG=%{z:.3f} eV<extra></extra>"
+                                ),
+                            )
+                        )
+                        heat.add_trace(
+                            go.Contour(
+                                x=pivot_dg.columns.to_numpy(),
+                                y=pivot_dg.index.to_numpy(),
+                                z=pivot_dg.to_numpy(),
+                                contours=dict(start=0.0, end=0.0, size=1.0, coloring="lines"),
+                                line=dict(width=4),
+                                showscale=False,
+                                hoverinfo="skip",
+                            )
+                        )
+                        heat.update_layout(
+                            title="ΔG_leach(U, pH) with ΔG=0 boundary",
+                            xaxis_title=f"Potential (V vs {explorer_scale})",
+                            yaxis_title="pH",
+                        )
+                        st.plotly_chart(heat, use_container_width=True)
+                    with map_right:
+                        hmap = go.Figure(
+                            data=go.Heatmap(
+                                x=pivot_h.columns.to_numpy(),
+                                y=pivot_h.index.to_numpy(),
+                                z=pivot_h.to_numpy(),
+                                colorbar=dict(title="best nH"),
+                                hovertemplate=(
+                                    "U=%{x:.3f} V<br>pH=%{y:.2f}<br>best nH=%{z:.0f}<extra></extra>"
+                                ),
+                            )
+                        )
+                        hmap.update_layout(
+                            title="Preferred post-leaching H count",
+                            xaxis_title=f"Potential (V vs {explorer_scale})",
+                            yaxis_title="pH",
+                        )
+                        st.plotly_chart(hmap, use_container_width=True)
+
+                    surface_fig = go.Figure(
+                        data=[
+                            go.Surface(
+                                x=pivot_dg.columns.to_numpy(),
+                                y=pivot_dg.index.to_numpy(),
+                                z=pivot_dg.to_numpy(),
+                                colorbar=dict(title="ΔG (eV)"),
+                                hovertemplate=(
+                                    "U=%{x:.3f} V<br>pH=%{y:.2f}<br>ΔG=%{z:.3f} eV<extra></extra>"
+                                ),
+                            )
+                        ]
+                    )
+                    surface_fig.update_layout(
+                        title="3D thermodynamic surface",
+                        scene=dict(
+                            xaxis_title=f"Potential (V vs {explorer_scale})",
+                            yaxis_title="pH",
+                            zaxis_title="ΔG_leach (eV)",
+                        ),
+                    )
+                    st.plotly_chart(surface_fig, use_container_width=True)
+
+                    st.markdown("#### State diagnostics")
+                    d1, d2 = st.columns(2)
+                    diagnostic_u = float(
+                        d1.number_input(
+                            f"Diagnostic potential (V vs {explorer_scale})",
+                            value=float(selected_u_slices[0]),
+                            step=0.05,
+                            key="leaching_explorer_diag_u",
+                        )
+                    )
+                    diagnostic_ph = float(
+                        d2.number_input(
+                            "Diagnostic pH",
+                            value=float(selected_ph_slices[0]),
+                            step=0.25,
+                            key="leaching_explorer_diag_ph",
+                        )
+                    )
+                    diagnostic = build_thermodynamic_grid(
+                        states,
+                        z_value,
+                        e0_value,
+                        [diagnostic_u],
+                        [diagnostic_ph],
+                        potential_scale=explorer_scale,
+                        ion_activity=explorer_activity,
+                        temperature_K=explorer_temperature,
+                        selected_h_count=selected_h_count,
+                    )
+                    if not diagnostic.empty:
+                        point = diagnostic.iloc[0]
+                        m1, m2, m3, m4 = st.columns(4)
+                        m1.metric("Oxidation-state electrons z", f"{z_value}")
+                        m2.metric("Preferred H count", f"{int(point['best_h_count'])}")
+                        m3.metric("Net electrons z − nH", f"{int(point['net_electrons'])}")
+                        m4.metric("ΔG_leach", f"{float(point['deltaG_leach_eV']):.3f} eV")
+                        if int(point["net_electrons"]) == 0:
+                            st.info(
+                                "At this selected state, z = nH, so the implemented model has "
+                                "zero ΔG slope with applied potential at fixed pH. This is the "
+                                "same cancellation that produced the flat In curves."
+                            )
+
+                    export_grid = full_grid.copy()
+                    export_grid.insert(0, "dopant", selected_dopant)
+                    export_grid.insert(1, "site_index", selected_site_index)
+                    export_grid.insert(2, "surface_id", selected_surface)
+                    export_grid["oxidation_state"] = z_value
+                    export_grid["standard_reduction_potential_V_SHE"] = e0_value
+                    export_grid["ion_activity"] = explorer_activity
+                    export_grid["temperature_K"] = explorer_temperature
+                    dl_col, save_col = st.columns(2)
+                    dl_col.download_button(
+                        "Export current U–pH grid CSV",
+                        data=export_grid.to_csv(index=False).encode("utf-8"),
+                        file_name=f"leaching_thermodynamic_grid_{selected_dopant}_site_{selected_site_index}.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                    )
+
+                    if save_col.button(
+                        "Save current analysis defaults",
+                        use_container_width=True,
+                        help="Saves only visualization/post-processing defaults; no MLFF calculation is launched.",
+                    ):
+                        updated_activity_map = dict(analysis_cfg.get("ion_activities", {}) or {})
+                        updated_activity_map[selected_dopant] = explorer_activity
+                        new_defaults = {
+                            "temperature_K": explorer_temperature,
+                            "default_ion_activity": float(
+                                analysis_cfg.get("default_ion_activity", 1e-6)
+                            ),
+                            "ion_activities": updated_activity_map,
+                            "potential_scale": explorer_scale,
+                            "potential_min_V": u_min,
+                            "potential_max_V": u_max,
+                            "potential_step_V": u_step,
+                            "pH_min": ph_min,
+                            "pH_max": ph_max,
+                            "pH_step": ph_step,
+                            "selected_pH_values": selected_ph_slices,
+                            "selected_potential_values": selected_u_slices,
+                        }
+                        save_cfg = toml.load(str(config_path))
+                        save_cfg.setdefault("leaching", {})["analysis_defaults"] = new_defaults
+                        # Keep legacy aliases synchronized for older scripts/outputs.
+                        save_cfg["leaching"]["temperature_K"] = explorer_temperature
+                        save_cfg["leaching"]["default_ion_activity"] = new_defaults[
+                            "default_ion_activity"
+                        ]
+                        save_cfg["leaching"]["ion_activities"] = updated_activity_map
+                        save_cfg["leaching"]["potential_scale"] = explorer_scale
+                        save_cfg["leaching"]["pH"] = float(selected_ph_slices[0])
+                        save_cfg["leaching"]["potentials_V"] = selected_u_slices
+                        config_path.write_text(toml.dumps(save_cfg), encoding="utf-8")
+                        st.success(
+                            "Saved analysis defaults. No structural or protonation calculation was rerun."
+                        )
+
     with tabs[5]:
         st.markdown(
             "Every row keeps the dopant's **initial relaxed-surface zone and coordinates** before removal. "
