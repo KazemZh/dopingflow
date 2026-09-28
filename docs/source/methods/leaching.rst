@@ -235,27 +235,45 @@ To test local protonation of the dopant-vacancy surface, add:
    # manual_h2_energy_eV = <optional compatible H2 energy>
 
 The ``0`` state is always retained as the bare vacancy reference.
-For the electrochemical extension, add only validated values for the chosen
-aqueous species:
+For the electrochemical model definition, add only chemically validated redox
+data for the chosen aqueous species:
 
 .. code-block:: toml
 
    [leaching]
    # ...settings above...
 
-   oxidation_states = { Sb = 3, Ti = 3 }
-   # standard_reduction_potentials_V_SHE = { Sb = <validated>, Ti = <validated> }
-   aqueous_species = { Sb = "chosen Sb species", Ti = "chosen Ti species" }
-   ion_activities = { Sb = 1e-6, Ti = 1e-6 }
+   oxidation_states = { Sb = 5, In = 3 }
+   # standard_reduction_potentials_V_SHE = { Sb = <validated>, In = <validated> }
+   aqueous_species = { Sb = "chosen Sb species", In = "In3+(aq)" }
 
-   default_ion_activity = 1e-6
-   temperature_K = 298.15
-   pH = 0.0
-   potential_scale = "RHE"
-   potentials_V = [1.23, 1.50, 1.70]
-
-A JSON file can also be selected with `redox_reference_file`. Inline TOML
+A JSON file can also be selected with ``redox_reference_file``. Inline TOML
 values override matching JSON fields.
+
+Temperature, ion activity, pH, applied-potential range, and SHE/RHE selection
+are **post-processing variables** rather than structural-calculation inputs.
+They are stored separately as reproducible analysis defaults:
+
+.. code-block:: toml
+
+   [leaching.analysis_defaults]
+   temperature_K = 298.15
+   default_ion_activity = 1e-6
+   ion_activities = {}
+   potential_scale = "RHE"
+   potential_min_V = 1.0
+   potential_max_V = 2.0
+   potential_step_V = 0.02
+   pH_min = 0.0
+   pH_max = 3.0
+   pH_step = 0.1
+   selected_pH_values = [0.0, 1.0, 2.0]
+   selected_potential_values = [1.23, 1.50, 1.70]
+
+Changing ``[leaching.analysis_defaults]`` does not invalidate the bare-site or
+protonation structural checkpoints. Legacy top-level ``temperature_K``,
+``pH``, ``potential_scale``, ``potentials_V``, and activity fields remain
+accepted for backward compatibility and are migrated into analysis defaults.
 
 Surface selection
 -----------------
@@ -367,6 +385,33 @@ The default relative directory is ``09_leaching`` inside the selected/inherited 
 Each site also has a directory containing `POSCAR_removed_unrelaxed`, the
 relaxation output, and `leaching_result.json`.
 
+Interactive thermodynamic explorer
+----------------------------------
+
+The Streamlit Results page includes a **Thermodynamic explorer** that rebuilds
+electrochemical free energies directly from the stored extraction/protonation
+energies. It does not launch MLFF calculations.
+
+For one selected dopant site, the explorer provides:
+
+* ``Delta G_leach`` versus applied potential for user-selected pH slices;
+* ``Delta G_leach`` versus pH for user-selected potential slices;
+* a two-dimensional ``U``-pH contour/heatmap with the ``Delta G = 0`` boundary;
+* a map of the thermodynamically preferred post-leaching H count;
+* a three-dimensional ``Delta G_leach(U,pH)`` surface;
+* state diagnostics including oxidation-state electron count ``z``, preferred
+  ``n_H``, and net electron count ``z - n_H``;
+* CSV export of the current thermodynamic grid.
+
+The post-leaching-state selector can show the overall minimum or restrict the
+analysis to the bare vacancy or a specific H count. For a fixed pH, the
+potential slope of one state follows ``n_H - z`` in the implemented model;
+therefore ``z = n_H`` produces a potential-independent branch. This diagnostic
+is displayed explicitly in the GUI.
+
+The **Save current analysis defaults** control stores only visualization and
+post-processing defaults in ``[leaching.analysis_defaults]``. It does not rerun
+or invalidate structural calculations.
 Interpretation
 --------------
 
