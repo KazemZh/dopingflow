@@ -1920,6 +1920,203 @@ else:
                         selected_h_count=selected_h_count,
                     )
 
+                    # Build a common Delta-G range over the selected comparison
+                    # structures using the same H-state definition as the focus map.
+                    # This lets separately exported heatmaps/3D plots remain directly
+                    # comparable on the same numerical color/z scale.
+                    shared_dg_values: list[np.ndarray] = []
+                    shared_scale_used: list[str] = []
+                    shared_scale_skipped: list[str] = []
+                    for scale_label in comparison_labels:
+                        scale_row = explorer_rows.loc[site_labels[scale_label]]
+                        scale_states = _states_for_explorer_row(scale_row)
+                        scale_dopant = str(scale_row["dopant"])
+                        scale_site_index = int(scale_row["site_index"])
+                        scale_available_h = {
+                            int(state["h_count"]) for state in scale_states
+                        }
+                        if (
+                            selected_h_count is not None
+                            and selected_h_count not in scale_available_h
+                        ):
+                            shared_scale_skipped.append(
+                                f"{scale_dopant} site {scale_site_index}"
+                            )
+                            continue
+
+                        scale_grid = build_thermodynamic_grid(
+                            scale_states,
+                            int(scale_row["oxidation_state"]),
+                            float(
+                                scale_row[
+                                    "standard_reduction_potential_V_SHE"
+                                ]
+                            ),
+                            u_values,
+                            ph_values,
+                            potential_scale=explorer_scale,
+                            ion_activity=float(
+                                activity_by_dopant.get(
+                                    scale_dopant,
+                                    explorer_default_activity,
+                                )
+                            ),
+                            temperature_K=explorer_temperature,
+                            selected_h_count=selected_h_count,
+                        )
+                        if scale_grid.empty:
+                            shared_scale_skipped.append(
+                                f"{scale_dopant} site {scale_site_index}"
+                            )
+                            continue
+
+                        finite_values = pd.to_numeric(
+                            scale_grid["deltaG_leach_eV"], errors="coerce"
+                        ).to_numpy(dtype=float)
+                        finite_values = finite_values[np.isfinite(finite_values)]
+                        if finite_values.size:
+                            shared_dg_values.append(finite_values)
+                            shared_scale_used.append(
+                                f"{scale_dopant} site {scale_site_index}"
+                            )
+
+                    current_dg_values = pd.to_numeric(
+                        full_grid["deltaG_leach_eV"], errors="coerce"
+                    ).to_numpy(dtype=float)
+                    current_dg_values = current_dg_values[
+                        np.isfinite(current_dg_values)
+                    ]
+                    if current_dg_values.size:
+                        current_dg_min = float(np.min(current_dg_values))
+                        current_dg_max = float(np.max(current_dg_values))
+                    else:
+                        current_dg_min, current_dg_max = -1.0, 1.0
+
+                    if shared_dg_values:
+                        all_shared_dg = np.concatenate(shared_dg_values)
+                        shared_dg_min = float(np.min(all_shared_dg))
+                        shared_dg_max = float(np.max(all_shared_dg))
+                    else:
+                        shared_dg_min = current_dg_min
+                        shared_dg_max = current_dg_max
+
+                    def _expand_equal_dg_limits(
+                        lower: float, upper: float
+                    ) -> tuple[float, float]:
+                        if upper > lower:
+                            return lower, upper
+                        pad = max(0.5, abs(lower) * 0.05)
+                        return lower - pad, upper + pad
+
+                    shared_dg_min, shared_dg_max = _expand_equal_dg_limits(
+                        shared_dg_min, shared_dg_max
+                    )
+                    current_dg_min, current_dg_max = _expand_equal_dg_limits(
+                        current_dg_min, current_dg_max
+                    )
+
+                    scale_mode_labels = {
+                        "shared_selected": "Shared across selected structures",
+                        "current_auto": "Auto for current structure",
+                        "manual": "Manual fixed range",
+                    }
+                    saved_scale_mode = str(
+                        analysis_cfg.get(
+                            "deltaG_color_scale_mode", "shared_selected"
+                        )
+                    )
+                    if saved_scale_mode not in scale_mode_labels:
+                        saved_scale_mode = "shared_selected"
+
+                    st.markdown("##### ΔG scale for heatmap and 3D")
+                    scale_col1, scale_col2, scale_col3 = st.columns(3)
+                    scale_mode = scale_col1.selectbox(
+                        "ΔG color/z scale",
+                        list(scale_mode_labels.keys()),
+                        index=list(scale_mode_labels.keys()).index(
+                            saved_scale_mode
+                        ),
+                        format_func=lambda value: scale_mode_labels[value],
+                        key="leaching_explorer_dg_scale_mode",
+                        help=(
+                            "Shared uses identical ΔG limits for every currently "
+                            "selected structure/dopant, which is recommended when "
+                            "exporting separate panels for side-by-side comparison."
+                        ),
+                    )
+
+                    if scale_mode == "shared_selected":
+                        dg_scale_min = shared_dg_min
+                        dg_scale_max = shared_dg_max
+                        scale_col2.metric(
+                            "Shared ΔG min", f"{dg_scale_min:.3f} eV"
+                        )
+                        scale_col3.metric(
+                            "Shared ΔG max", f"{dg_scale_max:.3f} eV"
+                        )
+                        st.caption(
+                            f"Common scale calculated from "
+                            f"{len(shared_scale_used)}/{len(comparison_labels)} "
+                            f"selected structures using **{focus_h_mode}**: "
+                            f"{dg_scale_min:.3f} to {dg_scale_max:.3f} eV."
+                        )
+                        if shared_scale_skipped:
+                            st.caption(
+                                "Not included in the shared scale because the "
+                                f"requested H state is unavailable: "
+                                + ", ".join(shared_scale_skipped)
+                            )
+                    elif scale_mode == "current_auto":
+                        dg_scale_min = current_dg_min
+                        dg_scale_max = current_dg_max
+                        scale_col2.metric(
+                            "Current ΔG min", f"{dg_scale_min:.3f} eV"
+                        )
+                        scale_col3.metric(
+                            "Current ΔG max", f"{dg_scale_max:.3f} eV"
+                        )
+                    else:
+                        manual_default_min = float(
+                            analysis_cfg.get(
+                                "deltaG_color_min_eV", shared_dg_min
+                            )
+                        )
+                        manual_default_max = float(
+                            analysis_cfg.get(
+                                "deltaG_color_max_eV", shared_dg_max
+                            )
+                        )
+                        dg_scale_min = float(
+                            scale_col2.number_input(
+                                "ΔG min (eV)",
+                                value=manual_default_min,
+                                step=0.25,
+                                key="leaching_explorer_dg_manual_min",
+                            )
+                        )
+                        dg_scale_max = float(
+                            scale_col3.number_input(
+                                "ΔG max (eV)",
+                                value=manual_default_max,
+                                step=0.25,
+                                key="leaching_explorer_dg_manual_max",
+                            )
+                        )
+                        if dg_scale_max <= dg_scale_min:
+                            st.error(
+                                "Manual ΔG maximum must be larger than the minimum."
+                            )
+                            dg_scale_min = shared_dg_min
+                            dg_scale_max = shared_dg_max
+                        elif (
+                            current_dg_min < dg_scale_min
+                            or current_dg_max > dg_scale_max
+                        ):
+                            st.caption(
+                                "The manual range does not contain all current "
+                                "ΔG values; values outside it will be clipped."
+                            )
+
                     pivot_dg = full_grid.pivot(
                         index="pH",
                         columns="applied_potential_V",
@@ -1939,6 +2136,8 @@ else:
                                 x=pivot_dg.columns.to_numpy(),
                                 y=pivot_dg.index.to_numpy(),
                                 z=pivot_dg.to_numpy(),
+                                zmin=dg_scale_min,
+                                zmax=dg_scale_max,
                                 zsmooth="best",
                                 colorbar=dict(title="ΔG (eV)"),
                                 hovertemplate=(
@@ -2038,6 +2237,8 @@ else:
                                 x=pivot_dg.columns.to_numpy(),
                                 y=pivot_dg.index.to_numpy(),
                                 z=pivot_dg.to_numpy(),
+                                cmin=dg_scale_min,
+                                cmax=dg_scale_max,
                                 colorbar=dict(title="ΔG (eV)"),
                                 hovertemplate=(
                                     "U=%{x:.3f} V<br>pH=%{y:.2f}<br>ΔG=%{z:.3f} eV<extra></extra>"
@@ -2053,7 +2254,10 @@ else:
                         scene=dict(
                             xaxis_title=f"Potential (V vs {explorer_scale})",
                             yaxis_title="pH",
-                            zaxis_title="ΔG_leach (eV)",
+                            zaxis=dict(
+                                title="ΔG_leach (eV)",
+                                range=[dg_scale_min, dg_scale_max],
+                            ),
                         ),
                     )
                     st.plotly_chart(surface_fig, use_container_width=True)
@@ -2110,6 +2314,9 @@ else:
                     export_grid["ion_activity"] = explorer_activity
                     export_grid["temperature_K"] = explorer_temperature
                     export_grid["requested_h_state"] = focus_h_mode
+                    export_grid["deltaG_scale_mode"] = scale_mode
+                    export_grid["deltaG_scale_min_eV"] = dg_scale_min
+                    export_grid["deltaG_scale_max_eV"] = dg_scale_max
                     dl_col, save_col = st.columns(2)
                     dl_col.download_button(
                         "Export current U–pH grid CSV",
@@ -2139,6 +2346,9 @@ else:
                             "pH_step": ph_step,
                             "selected_pH_values": selected_ph_slices,
                             "selected_potential_values": selected_u_slices,
+                            "deltaG_color_scale_mode": scale_mode,
+                            "deltaG_color_min_eV": dg_scale_min,
+                            "deltaG_color_max_eV": dg_scale_max,
                         }
                         save_cfg = toml.load(str(config_path))
                         save_cfg.setdefault("leaching", {})["analysis_defaults"] = new_defaults
