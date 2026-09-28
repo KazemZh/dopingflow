@@ -43,10 +43,10 @@ def show_site_environment(
     if idx < 0 or idx >= len(structure):
         raise IndexError(f"site_index {idx} outside structure with {len(structure)} atoms")
 
-    xyz = f"{len(structure)}\\n{title}\\n"
+    xyz = f"{len(structure)}\n{title}\n"
     for site in structure:
         x, y, z = site.coords
-        xyz += f"{site.specie.symbol} {x:.6f} {y:.6f} {z:.6f}\\n"
+        xyz += f"{site.specie.symbol} {x:.6f} {y:.6f} {z:.6f}\n"
 
     view = py3Dmol.view(width=width, height=height)
     view.addModel(xyz, "xyz")
