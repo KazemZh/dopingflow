@@ -18,6 +18,7 @@ from dopingflow.leaching import (
     parse_leaching_config,
     _load_completed_site_checkpoint,
     _site_calculation_fingerprint,
+    _site_selected,
     _potential_scan_frame,
     _protonatable_oxygen_neighbors,
     _protonation_arrangements,
@@ -52,6 +53,34 @@ def test_leaching_inherits_enabled_surface_refine_calculator() -> None:
     assert cfg["resume_completed"] is True
     assert cfg["protonation"]["enabled"] is False
     assert cfg["protonation"]["h_counts"] == [0, 1, 2, 3]
+
+
+def test_exact_site_filter_matches_only_requested_leaching_sites() -> None:
+    cfg = parse_leaching_config(
+        {
+            "leaching": {
+                "enabled": True,
+                "site_include": [
+                    "target__hkl_1_0_0__term_001__variant_002_test/Sb_site_0076"
+                ],
+            }
+        }
+    )
+    assert cfg["site_include"] == [
+        "target__hkl_1_0_0__term_001__variant_002_test/Sb_site_0076"
+    ]
+
+    sb76 = {
+        "surface_id": "target/hkl_1_0_0/term_001/variant_002_test",
+        "dopant": "Sb",
+        "site_index": 76,
+    }
+    sb77 = {**sb76, "site_index": 77}
+    in78 = {**sb76, "dopant": "In", "site_index": 78}
+
+    assert _site_selected(sb76, cfg["site_include"]) is True
+    assert _site_selected(sb77, cfg["site_include"]) is False
+    assert _site_selected(in78, cfg["site_include"]) is False
 
 
 def test_analysis_defaults_are_separate_postprocessing_settings() -> None:
