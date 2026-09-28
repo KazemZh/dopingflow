@@ -1685,23 +1685,62 @@ else:
                         )
                         st.plotly_chart(heat, use_container_width=True)
                     with map_right:
-                        hmap = go.Figure(
-                            data=go.Heatmap(
-                                x=pivot_h.columns.to_numpy(),
-                                y=pivot_h.index.to_numpy(),
-                                z=pivot_h.to_numpy(),
-                                colorbar=dict(title="best nH"),
-                                hovertemplate=(
-                                    "U=%{x:.3f} V<br>pH=%{y:.2f}<br>best nH=%{z:.0f}<extra></extra>"
-                                ),
+                        h_values = sorted(
+                            {
+                                int(x)
+                                for x in pd.to_numeric(
+                                    full_grid["best_h_count"], errors="coerce"
+                                ).dropna()
+                            }
+                        )
+                        if h_values:
+                            h_min = min(h_values)
+                            h_max = max(h_values)
+                            if h_min == h_max:
+                                h_zmin = h_min - 0.5
+                                h_zmax = h_max + 0.5
+                                h_colorscale = [[0.0, "#636EFA"], [1.0, "#636EFA"]]
+                            else:
+                                h_zmin = h_min - 0.5
+                                h_zmax = h_max + 0.5
+                                palette = px.colors.qualitative.Plotly
+                                h_colorscale = []
+                                span = h_zmax - h_zmin
+                                for color_index, h_value in enumerate(h_values):
+                                    left_edge = (h_value - 0.5 - h_zmin) / span
+                                    right_edge = (h_value + 0.5 - h_zmin) / span
+                                    color = palette[color_index % len(palette)]
+                                    h_colorscale.extend(
+                                        [
+                                            [max(0.0, left_edge), color],
+                                            [min(1.0, right_edge), color],
+                                        ]
+                                    )
+                            hmap = go.Figure(
+                                data=go.Heatmap(
+                                    x=pivot_h.columns.to_numpy(),
+                                    y=pivot_h.index.to_numpy(),
+                                    z=pivot_h.to_numpy(),
+                                    zmin=h_zmin,
+                                    zmax=h_zmax,
+                                    colorscale=h_colorscale,
+                                    colorbar=dict(
+                                        title="best nH",
+                                        tickmode="array",
+                                        tickvals=h_values,
+                                        ticktext=[f"{h}H" for h in h_values],
+                                    ),
+                                    hovertemplate=(
+                                        "U=%{x:.3f} V<br>pH=%{y:.2f}<br>best nH=%{z:.0f}<extra></extra>"
+                                    ),
+                                )
                             )
-                        )
-                        hmap.update_layout(
-                            title="Preferred post-leaching H count",
-                            xaxis_title=f"Potential (V vs {explorer_scale})",
-                            yaxis_title="pH",
-                        )
-                        st.plotly_chart(hmap, use_container_width=True)
+                            hmap.update_layout(
+                                title="Preferred post-leaching H count (discrete states)",
+                                xaxis_title=f"Potential (V vs {explorer_scale})",
+                                yaxis_title="pH",
+                            )
+                            st.plotly_chart(hmap, use_container_width=True)
 
                     surface_fig = go.Figure(
                         data=[
