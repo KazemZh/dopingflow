@@ -209,11 +209,13 @@ for high-resolution PNG output (3x scale).
 
 Each plot also has an on-demand PDF export control. The PDF is rendered only
 after the user requests it so interactive slider changes do not repeatedly
-launch Kaleido. DopingFlow first renders the exact Plotly figure as SVG and then
-converts that SVG to PDF with CairoSVG. Ordinary 2D lines, markers, axes, text,
-and annotations therefore retain their colors and vector geometry. Heatmap or
-WebGL layers may still be embedded as raster content by Plotly, but their
-on-screen colors are preserved.
+launch Kaleido. DopingFlow renders the exact current Plotly figure to a
+high-resolution color PNG and embeds that image in the PDF. This route is used
+specifically to preserve the same categorical colors, line styles, markers,
+heatmaps, and 3D appearance seen on screen. The PDF is therefore a high-resolution
+appearance-faithful figure rather than a fully vector export. PDF bytes are
+regenerated from the current figure on every request and are only offered for
+download while they still match that exact current figure.
 The environment table and the selected-site neighbor list can both be exported
 as CSV files. These descriptors are structural correlations, not proof of a
 causal leaching mechanism; differences can also arise from longer-range
