@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
 import importlib
-from io import BytesIO
 import json
 import subprocess
 from pathlib import Path
 from typing import Any
 
+import cairosvg
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -17,7 +16,6 @@ import plotly.graph_objects as go
 import plotly.io as pio
 import streamlit as st
 import toml
-from PIL import Image
 from pymatgen.core import Structure
 
 from dopingflow.leaching import (
@@ -197,34 +195,20 @@ def _render_plotly_pdf(
     width: int,
     height: int,
 ) -> bytes:
-    """Render a color PDF that matches the on-screen Plotly appearance."""
+    """Render the exact Plotly figure as SVG, then convert that SVG to PDF."""
     figure = pio.from_json(figure_json)
 
-    # Render the same Plotly figure to a high-resolution PNG first. This avoids
-    # backend-specific PDF/vector color changes and preserves the exact palette,
-    # line styles, markers, heatmaps, and 3D appearance seen on screen.
-    png_bytes = figure.to_image(
-        format="png",
+    # Plotly/Kaleido SVG keeps ordinary 2D lines, markers, text, axes, and
+    # annotations as vector objects with their original colors. Heatmap/WebGL
+    # layers may be embedded as raster images, but their on-screen colors are
+    # preserved. Converting the SVG to PDF avoids the direct-PDF renderer path.
+    svg_bytes = figure.to_image(
+        format="svg",
         width=int(width),
         height=int(height),
-        scale=2,
+        scale=1,
     )
-    image = Image.open(BytesIO(png_bytes))
-    if image.mode in {"RGBA", "LA"}:
-        background = Image.new("RGB", image.size, "white")
-        alpha = image.getchannel("A")
-        background.paste(image.convert("RGB"), mask=alpha)
-        image = background
-    elif image.mode != "RGB":
-        image = image.convert("RGB")
-
-    pdf_buffer = BytesIO()
-    image.save(
-        pdf_buffer,
-        format="PDF",
-        resolution=300.0,
-    )
-    return pdf_buffer.getvalue()
+    return cairosvg.svg2pdf(bytestring=svg_bytes)
 
 
 def _plot_export_slug(value: str) -> str:
@@ -254,50 +238,58 @@ def _show_publication_plot(
     )
     slug = _plot_export_slug(export_name or title_text)
     figure_json = fig.to_json()
-    fingerprint = hashlib.sha256(
-        figure_json.encode("utf-8")
-    ).hexdigest()[:12]
-    pdf_state_key = f"leaching_pdf_{slug}_{fingerprint}"
-    prepare_key = f"prepare_{pdf_state_key}"
-    download_key = f"download_{pdf_state_key}"
 
-    export_left, export_right = st.columns([5.5, 1.5])
-    with export_right:
+    # Use one state slot per visible plot. It is replaced every time the user
+    # requests a PDF, so an older figure can never be reused for another plot.
+    pdf_state_key = f"leaching_pdf_bytes_{slug}"
+    pdf_source_key = f"leaching_pdf_source_{slug}"
+    prepare_key = f"prepare_leaching_pdf_{slug}"
+    download_key = f"download_leaching_pdf_{slug}"
+
+    button_col, download_col = st.columns([1.0, 1.0])
+    with button_col:
         if st.button(
-            "Prepare color PDF",
+            "Generate PDF",
             key=prepare_key,
             width="stretch",
             help=(
-                "Create a high-resolution color PDF that matches this exact "
-                "on-screen Plotly figure, including its colors and styling."
+                "Render this exact current Plotly figure through SVG and convert "
+                "it to PDF. Ordinary 2D lines, markers, axes, and text remain "
+                "vector and keep the same colors as the plot on screen."
             ),
         ):
             try:
-                with st.spinner("Rendering PDF…"):
-                    st.session_state[pdf_state_key] = _render_plotly_pdf(
+                with st.spinner("Rendering this plot to PDF…"):
+                    pdf_bytes = _render_plotly_pdf(
                         figure_json,
                         1200,
                         height,
                     )
+                st.session_state[pdf_state_key] = pdf_bytes
+                st.session_state[pdf_source_key] = figure_json
             except Exception as exc:
+                st.session_state.pop(pdf_state_key, None)
+                st.session_state.pop(pdf_source_key, None)
                 st.error(
-                    "Could not create the PDF. Plotly/Kaleido reported: "
-                    f"{exc}"
+                    "Could not create the PDF from the current plot. "
+                    f"SVG/PDF renderer reported: {exc}"
                 )
 
-        pdf_bytes = st.session_state.get(pdf_state_key)
-        if pdf_bytes:
+    current_pdf = st.session_state.get(pdf_state_key)
+    current_source = st.session_state.get(pdf_source_key)
+    with download_col:
+        if current_pdf is not None and current_source == figure_json:
             st.download_button(
                 "Download PDF",
-                data=pdf_bytes,
+                data=current_pdf,
                 file_name=f"{slug}.pdf",
                 mime="application/pdf",
                 key=download_key,
                 width="stretch",
-                help=(
-                    "High-resolution color PDF matching the on-screen figure."
-                ),
             )
+        else:
+            st.caption("Generate the PDF for the current plot first.")
+
 
 
 def _csv(value: Any) -> str:
