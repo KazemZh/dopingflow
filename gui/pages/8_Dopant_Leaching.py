@@ -13,14 +13,17 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 import toml
+from pymatgen.core import Structure
 
 from dopingflow.leaching import (
+    analyze_site_environment,
     build_thermodynamic_grid,
     parse_leaching_config,
     preview_leaching_sites,
     resolve_leaching_output_dir,
 )
 from gui_config import BACKEND_CHOICES, DEVICE_CHOICES, OPTIMIZER_CHOICES
+from view_structure import show_site_environment
 
 
 st.set_page_config(page_title="Dopant leaching", layout="wide")
@@ -77,6 +80,11 @@ def _checkpoint_ok(path: Path) -> bool:
 
 def _site_selector(surface_id: str, dopant: str, site_index: int) -> str:
     return f"{_safe_surface_id(surface_id)}/{dopant}_site_{int(site_index):04d}"
+
+
+def _result_structure_path(value: Any, root: Path) -> Path:
+    path = Path(str(value or "")).expanduser()
+    return path.resolve() if path.is_absolute() else (root / path).resolve()
 
 
 def _recovery_candidates(result_dir: Path) -> tuple[dict[str, list[str]], int, int]:
@@ -869,6 +877,7 @@ else:
             "Saved bare scan",
             "Protonation states",
             "Thermodynamic explorer",
+            "Site environment",
             "Interpretation",
         ]
     )
@@ -2367,6 +2376,476 @@ else:
                         )
 
     with tabs[5]:
+        st.markdown("### Site environment / local structure")
+        st.caption(
+            "This analysis uses the **relaxed parent surface before dopant removal**. "
+            "It is geometry-only post-processing: changing these cutoffs does not rerun "
+            "GRACE/MACE or any leaching/protonation calculation."
+        )
+
+        env_control1, env_control2 = st.columns(2)
+        default_coordination_cutoff = float(
+            parsed_for_results.get("oxygen_neighbor_cutoff_A", 2.8)
+            if "parsed_for_results" in locals()
+            else 2.8
+        )
+        coordination_cutoff = float(
+            env_control1.number_input(
+                "O coordination cutoff (Å)",
+                min_value=0.5,
+                value=default_coordination_cutoff,
+                step=0.05,
+                format="%.2f",
+                key="leaching_environment_coordination_cutoff",
+                help=(
+                    "O atoms within this distance define the first anion coordination "
+                    "shell and its bond-length/angle descriptors."
+                ),
+            )
+        )
+        neighbor_cutoff = float(
+            env_control2.number_input(
+                "Local environment radius (Å)",
+                min_value=coordination_cutoff,
+                value=max(4.0, coordination_cutoff),
+                step=0.1,
+                format="%.2f",
+                key="leaching_environment_neighbor_cutoff",
+                help=(
+                    "All atoms within this radius are included in the local-neighbor "
+                    "description and can be shown in the 3D viewer."
+                ),
+            )
+        )
+
+        environment_rows: list[dict[str, Any]] = []
+        environment_neighbors: dict[tuple[str, str, int], pd.DataFrame] = {}
+        environment_paths: dict[tuple[str, str, int], Path] = {}
+        environment_errors: list[str] = []
+        structure_cache: dict[str, Structure] = {}
+
+        anion_species = list(
+            parsed_for_results.get("anion_species", ["O"])
+            if "parsed_for_results" in locals()
+            else ["O"]
+        )
+        dopant_species_all = sorted(
+            {
+                str(value)
+                for value in results.get("dopant", pd.Series(dtype=str))
+                .dropna()
+                .astype(str)
+            }
+        )
+
+        if "surface_structure_path" not in results.columns:
+            st.warning(
+                "The current leaching summary does not contain surface_structure_path, "
+                "so the original local structures cannot be reconstructed from this result set."
+            )
+        else:
+            for _, env_row in results.iterrows():
+                try:
+                    surface_id = str(env_row.get("surface_id", ""))
+                    dopant = str(env_row.get("dopant", ""))
+                    site_index = int(env_row.get("site_index"))
+                    raw_path = str(env_row.get("surface_structure_path", "")).strip()
+                    if not raw_path or raw_path.lower() == "nan":
+                        raise FileNotFoundError("surface_structure_path is missing")
+                    structure_path = _result_structure_path(raw_path, project_root)
+                    if not structure_path.exists():
+                        raise FileNotFoundError(str(structure_path))
+
+                    cache_key = str(structure_path)
+                    if cache_key not in structure_cache:
+                        structure_cache[cache_key] = Structure.from_file(structure_path)
+                    structure = structure_cache[cache_key]
+
+                    env_summary, neighbor_table = analyze_site_environment(
+                        structure,
+                        site_index,
+                        anion_species=anion_species,
+                        dopant_species=dopant_species_all,
+                        neighbor_cutoff_A=neighbor_cutoff,
+                        coordination_cutoff_A=coordination_cutoff,
+                    )
+                    key = (surface_id, dopant, site_index)
+                    environment_neighbors[key] = neighbor_table
+                    environment_paths[key] = structure_path
+
+                    record = {
+                        "surface_id": surface_id,
+                        "target_id": str(env_row.get("target_id", "")),
+                        "dopant": dopant,
+                        "site_index": site_index,
+                        "initial_dopant_zone": str(
+                            env_row.get("initial_dopant_zone", "")
+                        ),
+                        "miller_h": env_row.get("miller_h"),
+                        "miller_k": env_row.get("miller_k"),
+                        "miller_l": env_row.get("miller_l"),
+                        "variant_label": str(env_row.get("variant_label", "")),
+                        "initial_depth_from_selected_surface_A": env_row.get(
+                            "initial_depth_from_selected_surface_A"
+                        ),
+                        "n_oxygen_vacancies": env_row.get("n_oxygen_vacancies"),
+                        "extraction_energy_eV": env_row.get("extraction_energy_eV"),
+                        "dissolution_potential_V_SHE": env_row.get(
+                            "dissolution_potential_V_SHE"
+                        ),
+                        "dissolution_potential_V_RHE": env_row.get(
+                            "dissolution_potential_V_RHE"
+                        ),
+                        "protonation_adjusted_dissolution_potential_V_SHE": env_row.get(
+                            "protonation_adjusted_dissolution_potential_V_SHE"
+                        ),
+                        "protonation_adjusted_dissolution_potential_V_RHE": env_row.get(
+                            "protonation_adjusted_dissolution_potential_V_RHE"
+                        ),
+                        **env_summary,
+                    }
+                    environment_rows.append(record)
+                except Exception as exc:
+                    environment_errors.append(
+                        f"{env_row.get('dopant', '?')} site "
+                        f"{env_row.get('site_index', '?')}: {exc}"
+                    )
+
+            environment_df = pd.DataFrame(environment_rows)
+
+            if environment_errors:
+                with st.expander(
+                    f"Local environments that could not be reconstructed "
+                    f"({len(environment_errors)})",
+                    expanded=False,
+                ):
+                    st.write(
+                        "\n".join(f"- {message}" for message in environment_errors)
+                    )
+
+            if environment_df.empty:
+                st.info("No site environment could be reconstructed.")
+            else:
+                st.markdown("#### Compare environments across leaching sites")
+                table_columns = [
+                    column
+                    for column in (
+                        "dopant",
+                        "site_index",
+                        "initial_dopant_zone",
+                        "miller_h",
+                        "miller_k",
+                        "miller_l",
+                        "anion_coordination_number",
+                        "mean_coordination_anion_distance_A",
+                        "coordination_anion_distance_std_A",
+                        "coordination_anion_distance_range_A",
+                        "mean_coordination_angle_deg",
+                        "coordination_angle_std_deg",
+                        "neighbors_within_cutoff",
+                        "cation_neighbors_within_cutoff",
+                        "dopant_neighbors_within_cutoff",
+                        "nearest_anion_distance_A",
+                        "nearest_cation_distance_A",
+                        "nearest_dopant_distance_A",
+                        "local_environment_signature",
+                        "initial_depth_from_selected_surface_A",
+                        "n_oxygen_vacancies",
+                        "extraction_energy_eV",
+                        "dissolution_potential_V_SHE",
+                        "dissolution_potential_V_RHE",
+                        "protonation_adjusted_dissolution_potential_V_SHE",
+                        "protonation_adjusted_dissolution_potential_V_RHE",
+                        "target_id",
+                    )
+                    if column in environment_df.columns
+                ]
+                st.dataframe(
+                    environment_df[table_columns],
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+                st.download_button(
+                    "Export site-environment comparison CSV",
+                    data=environment_df.to_csv(index=False).encode("utf-8"),
+                    file_name="leaching_site_environment.csv",
+                    mime="text/csv",
+                    key="leaching_environment_export",
+                )
+
+                numeric_descriptor_choices = [
+                    column
+                    for column in (
+                        "anion_coordination_number",
+                        "mean_coordination_anion_distance_A",
+                        "coordination_anion_distance_std_A",
+                        "coordination_anion_distance_range_A",
+                        "mean_coordination_angle_deg",
+                        "coordination_angle_std_deg",
+                        "neighbors_within_cutoff",
+                        "cation_neighbors_within_cutoff",
+                        "dopant_neighbors_within_cutoff",
+                        "nearest_anion_distance_A",
+                        "nearest_cation_distance_A",
+                        "nearest_dopant_distance_A",
+                        "initial_depth_from_selected_surface_A",
+                    )
+                    if column in environment_df.columns
+                ]
+                response_choices = [
+                    column
+                    for column in (
+                        "extraction_energy_eV",
+                        "dissolution_potential_V_SHE",
+                        "dissolution_potential_V_RHE",
+                        "protonation_adjusted_dissolution_potential_V_SHE",
+                        "protonation_adjusted_dissolution_potential_V_RHE",
+                    )
+                    if column in environment_df.columns
+                    and pd.to_numeric(
+                        environment_df[column], errors="coerce"
+                    ).notna().any()
+                ]
+                if numeric_descriptor_choices and response_choices:
+                    rel1, rel2 = st.columns(2)
+                    descriptor_x = rel1.selectbox(
+                        "Structural descriptor",
+                        numeric_descriptor_choices,
+                        key="leaching_environment_descriptor_x",
+                    )
+                    response_y = rel2.selectbox(
+                        "Leaching metric",
+                        response_choices,
+                        key="leaching_environment_response_y",
+                    )
+                    relationship = environment_df.copy()
+                    relationship[descriptor_x] = pd.to_numeric(
+                        relationship[descriptor_x], errors="coerce"
+                    )
+                    relationship[response_y] = pd.to_numeric(
+                        relationship[response_y], errors="coerce"
+                    )
+                    relationship = relationship.dropna(
+                        subset=[descriptor_x, response_y]
+                    )
+                    if not relationship.empty:
+                        fig_env = px.scatter(
+                            relationship,
+                            x=descriptor_x,
+                            y=response_y,
+                            color="dopant",
+                            symbol=(
+                                "initial_dopant_zone"
+                                if "initial_dopant_zone"
+                                in relationship.columns
+                                else None
+                            ),
+                            hover_data=[
+                                column
+                                for column in (
+                                    "site_index",
+                                    "target_id",
+                                    "local_environment_signature",
+                                    "anion_coordination_number",
+                                    "mean_coordination_anion_distance_A",
+                                    "nearest_dopant_distance_A",
+                                )
+                                if column in relationship.columns
+                            ],
+                            title=(
+                                f"{response_y} vs local structural environment"
+                            ),
+                        )
+                        st.plotly_chart(fig_env, use_container_width=True)
+
+                st.markdown("#### Inspect one site")
+                site_option_map: dict[str, tuple[str, str, int]] = {}
+                for _, item in environment_df.iterrows():
+                    hkl = ""
+                    try:
+                        hkl = (
+                            f"({int(item['miller_h'])}{int(item['miller_k'])}"
+                            f"{int(item['miller_l'])})"
+                        )
+                    except (KeyError, TypeError, ValueError):
+                        pass
+                    label = (
+                        f"{item['dopant']} site {int(item['site_index'])} | "
+                        f"{item.get('initial_dopant_zone', '')} | {hkl} | "
+                        f"{item.get('target_id', '')}"
+                    )
+                    site_option_map[label] = (
+                        str(item["surface_id"]),
+                        str(item["dopant"]),
+                        int(item["site_index"]),
+                    )
+
+                selected_environment_label = st.selectbox(
+                    "Site to inspect",
+                    list(site_option_map.keys()),
+                    key="leaching_environment_site_selector",
+                )
+                selected_environment_key = site_option_map[
+                    selected_environment_label
+                ]
+                selected_environment_row = environment_df[
+                    (environment_df["surface_id"].astype(str)
+                     == selected_environment_key[0])
+                    & (environment_df["dopant"].astype(str)
+                       == selected_environment_key[1])
+                    & (pd.to_numeric(
+                        environment_df["site_index"], errors="coerce"
+                    ) == selected_environment_key[2])
+                ].iloc[0]
+                selected_neighbors = environment_neighbors[
+                    selected_environment_key
+                ]
+                selected_structure_path = environment_paths[
+                    selected_environment_key
+                ]
+
+                detail_left, detail_right = st.columns([1.35, 1.0])
+                with detail_left:
+                    show_all_neighbors = st.checkbox(
+                        "Show all neighbors within local radius",
+                        value=True,
+                        key="leaching_environment_show_all_neighbors",
+                    )
+                    label_neighbors = st.checkbox(
+                        "Label neighbor atoms and distances",
+                        value=False,
+                        key="leaching_environment_label_neighbors",
+                    )
+                    displayed_neighbors = selected_neighbors
+                    if not show_all_neighbors and not selected_neighbors.empty:
+                        displayed_neighbors = selected_neighbors[
+                            selected_neighbors["within_coordination_cutoff"]
+                            | selected_neighbors["neighbor_class"].eq("dopant")
+                        ].copy()
+                    st.caption(
+                        "3D legend: **red** = target dopant; **gold** = coordinating "
+                        "anion; **blue** = nearby dopant; **green** = other local cation/atom."
+                    )
+                    try:
+                        show_site_environment(
+                            selected_structure_path,
+                            selected_environment_key[2],
+                            displayed_neighbors,
+                            title=selected_environment_label,
+                            label_neighbors=label_neighbors,
+                        )
+                    except Exception as exc:
+                        st.error(f"Could not render the 3D site environment: {exc}")
+
+                with detail_right:
+                    metric1, metric2 = st.columns(2)
+                    metric1.metric(
+                        "O coordination",
+                        str(
+                            int(
+                                selected_environment_row[
+                                    "anion_coordination_number"
+                                ]
+                            )
+                        ),
+                    )
+                    mean_bond = selected_environment_row.get(
+                        "mean_coordination_anion_distance_A"
+                    )
+                    metric2.metric(
+                        "Mean M–O",
+                        (
+                            f"{float(mean_bond):.3f} Å"
+                            if pd.notna(mean_bond)
+                            else "n/a"
+                        ),
+                    )
+                    metric3, metric4 = st.columns(2)
+                    bond_std = selected_environment_row.get(
+                        "coordination_anion_distance_std_A"
+                    )
+                    metric3.metric(
+                        "M–O bond std.",
+                        (
+                            f"{float(bond_std):.3f} Å"
+                            if pd.notna(bond_std)
+                            else "n/a"
+                        ),
+                    )
+                    nearest_dopant = selected_environment_row.get(
+                        "nearest_dopant_distance_A"
+                    )
+                    metric4.metric(
+                        "Nearest dopant",
+                        (
+                            f"{float(nearest_dopant):.3f} Å"
+                            if pd.notna(nearest_dopant)
+                            else "none in shell"
+                        ),
+                    )
+                    st.markdown(
+                        f"**Local shell:** "
+                        f"{selected_environment_row.get('local_environment_signature', '')}"
+                    )
+                    st.markdown(
+                        f"**Zone:** "
+                        f"{selected_environment_row.get('initial_dopant_zone', '')}  "
+                        f"\n**Depth from selected surface:** "
+                        f"{float(selected_environment_row.get('initial_depth_from_selected_surface_A', 0.0)):.3f} Å"
+                    )
+                    extraction_value = pd.to_numeric(
+                        pd.Series(
+                            [selected_environment_row.get("extraction_energy_eV")]
+                        ),
+                        errors="coerce",
+                    ).iloc[0]
+                    if pd.notna(extraction_value):
+                        st.markdown(
+                            f"**Extraction energy:** {float(extraction_value):.3f} eV"
+                        )
+                    st.markdown(
+                        "**Interpretive descriptors:** coordination number describes "
+                        "under-/over-coordination; M–O bond spread and O–M–O angle spread "
+                        "describe local distortion; nearest-dopant distance and local-shell "
+                        "composition expose dopant–dopant/environment effects."
+                    )
+
+                st.markdown("##### Neighbor list for selected site")
+                neighbor_columns = [
+                    column
+                    for column in (
+                        "neighbor_index",
+                        "species",
+                        "neighbor_class",
+                        "distance_A",
+                        "within_coordination_cutoff",
+                        "periodic_image_a",
+                        "periodic_image_b",
+                        "periodic_image_c",
+                        "dx_A",
+                        "dy_A",
+                        "dz_A",
+                    )
+                    if column in selected_neighbors.columns
+                ]
+                st.dataframe(
+                    selected_neighbors[neighbor_columns],
+                    use_container_width=True,
+                    hide_index=True,
+                )
+                st.download_button(
+                    "Export selected-site neighbor list CSV",
+                    data=selected_neighbors.to_csv(index=False).encode("utf-8"),
+                    file_name=(
+                        f"site_environment_{selected_environment_key[1]}_"
+                        f"{selected_environment_key[2]}.csv"
+                    ),
+                    mime="text/csv",
+                    key="leaching_environment_neighbor_export",
+                )
+
+    with tabs[6]:
         st.markdown(
             "Every row keeps the dopant's **initial relaxed-surface zone and coordinates** before removal. "
             "**Lower extraction energy** means weaker retention relative to the elemental-metal "
