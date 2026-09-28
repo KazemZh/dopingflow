@@ -185,7 +185,8 @@ reconstructs each dopant site's pre-leaching local geometry, reports coordinatio
 bond-length/angle distortion and nearby-dopant descriptors, relates them to leaching
 metrics, and provides an interactive highlighted 3D structure plus CSV export. The
 viewer supports per-element colors and hover labels with the DopingFlow atom/site
-index. The focus structure/H-state
+index; the selected site keeps its element color and is only modestly enlarged/labeled.
+The focus structure/H-state
 controls sit directly above the U-pH plots and only use structures already selected
 for comparison: the structure choice is automatic for one selected structure and
 becomes a dropdown when several are selected.
