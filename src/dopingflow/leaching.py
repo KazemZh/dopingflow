@@ -162,6 +162,7 @@ def parse_leaching_config(
         relax_removed_surface=True,
         resume_completed=True,
         protonation={},
+        analysis_defaults={},
         outdir="09_leaching",
         summary_csv="leaching_summary.csv",
         aggregate_csv="leaching_surface_summary.csv",
@@ -246,6 +247,90 @@ def parse_leaching_config(
     raw["ion_activities"] = _map(raw.get("ion_activities"), float)
     if any(v <= 0 for v in raw["ion_activities"].values()):
         raise ValueError("[leaching].ion_activities must be positive")
+
+    analysis_defaults = dict(raw.get("analysis_defaults", {}) or {})
+    legacy_potentials = [float(x) for x in (raw.get("potentials_V") or [1.23, 1.50, 1.70])]
+    legacy_activities = _map(raw.get("ion_activities"), float)
+    analysis_seed = dict(
+        temperature_K=float(raw.get("temperature_K", 298.15)),
+        default_ion_activity=float(raw.get("default_ion_activity", 1e-6)),
+        ion_activities=legacy_activities,
+        potential_scale=str(raw.get("potential_scale", "RHE")).upper(),
+        potential_min_V=min(legacy_potentials) if legacy_potentials else 1.0,
+        potential_max_V=max(legacy_potentials) if legacy_potentials else 2.0,
+        potential_step_V=0.02,
+        pH_min=0.0,
+        pH_max=max(3.0, float(raw.get("pH", 0.0))),
+        pH_step=0.1,
+        selected_pH_values=[float(raw.get("pH", 0.0))],
+        selected_potential_values=legacy_potentials or [1.23, 1.50, 1.70],
+    )
+    for key, value in analysis_seed.items():
+        analysis_defaults.setdefault(key, value)
+
+    analysis_defaults["temperature_K"] = float(analysis_defaults["temperature_K"])
+    analysis_defaults["default_ion_activity"] = float(
+        analysis_defaults["default_ion_activity"]
+    )
+    analysis_defaults["ion_activities"] = _map(
+        analysis_defaults.get("ion_activities"), float
+    )
+    analysis_defaults["potential_scale"] = str(
+        analysis_defaults["potential_scale"]
+    ).upper()
+    if analysis_defaults["potential_scale"] not in {"SHE", "RHE"}:
+        raise ValueError("[leaching.analysis_defaults].potential_scale must be SHE or RHE")
+    for key in (
+        "potential_min_V",
+        "potential_max_V",
+        "potential_step_V",
+        "pH_min",
+        "pH_max",
+        "pH_step",
+    ):
+        analysis_defaults[key] = float(analysis_defaults[key])
+    analysis_defaults["selected_pH_values"] = [
+        float(x) for x in (analysis_defaults.get("selected_pH_values") or [0.0])
+    ]
+    analysis_defaults["selected_potential_values"] = [
+        float(x)
+        for x in (
+            analysis_defaults.get("selected_potential_values")
+            or [1.23, 1.50, 1.70]
+        )
+    ]
+    if analysis_defaults["temperature_K"] <= 0:
+        raise ValueError("[leaching.analysis_defaults].temperature_K must be positive")
+    if analysis_defaults["default_ion_activity"] <= 0:
+        raise ValueError(
+            "[leaching.analysis_defaults].default_ion_activity must be positive"
+        )
+    if any(v <= 0 for v in analysis_defaults["ion_activities"].values()):
+        raise ValueError(
+            "[leaching.analysis_defaults].ion_activities must be positive"
+        )
+    if analysis_defaults["potential_step_V"] <= 0 or analysis_defaults["pH_step"] <= 0:
+        raise ValueError(
+            "[leaching.analysis_defaults] potential_step_V and pH_step must be positive"
+        )
+    if analysis_defaults["potential_min_V"] >= analysis_defaults["potential_max_V"]:
+        raise ValueError(
+            "[leaching.analysis_defaults] potential_min_V must be below potential_max_V"
+        )
+    if analysis_defaults["pH_min"] >= analysis_defaults["pH_max"]:
+        raise ValueError("[leaching.analysis_defaults] pH_min must be below pH_max")
+
+    raw["analysis_defaults"] = analysis_defaults
+
+    # Keep legacy runtime aliases synchronized for the fixed summary/scan files.
+    # These are post-processing values only and do not participate in structural
+    # checkpoint fingerprints.
+    raw["temperature_K"] = analysis_defaults["temperature_K"]
+    raw["default_ion_activity"] = analysis_defaults["default_ion_activity"]
+    raw["ion_activities"] = dict(analysis_defaults["ion_activities"])
+    raw["potential_scale"] = analysis_defaults["potential_scale"]
+    raw["potentials_V"] = list(analysis_defaults["selected_potential_values"])
+    raw["pH"] = float(analysis_defaults["selected_pH_values"][0])
 
     protonation = dict(raw.get("protonation", {}) or {})
     protonation_defaults = dict(
