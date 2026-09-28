@@ -191,7 +191,10 @@ only slightly enlarged and labeled for identification. Atom colors persist while
 switching between sites.
 Hover labels can be enabled so moving the cursor over a base atom displays its
 element and the same zero-based atom/site index used throughout the leaching
-tables. Periodic-image coordinates are used for the local shell so neighbors
+tables. The viewer can also show an ``x/y/z`` coordinate triad and an explicit
+surface/vacuum arrow along the DopingFlow slab-normal direction: ``+z`` for
+``placement_side = top``, ``-z`` for ``bottom``, and both directions for
+``both``. Periodic-image coordinates are used for the local shell so neighbors
 across a cell boundary are represented by their physically nearest image.
 
 The environment table and the selected-site neighbor list can both be exported
