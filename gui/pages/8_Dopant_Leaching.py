@@ -1350,18 +1350,28 @@ else:
                 comparison_h_modes = ["Best"]
 
             st.markdown("#### Focus state for U–pH map and 3D surface")
+            st.caption(
+                "The focus structure is chosen only from the structures/sites selected above "
+                "for comparison. With one selected structure it is used automatically; with "
+                "multiple selected structures you can switch the heatmap and 3D view between them."
+            )
             focus_col1, focus_col2 = st.columns(2)
+
+            focus_site_key = "leaching_explorer_focus_site"
+            current_focus_site = st.session_state.get(focus_site_key)
+            if current_focus_site not in comparison_labels:
+                st.session_state[focus_site_key] = comparison_labels[0]
+
             focus_label = focus_col1.selectbox(
-                "Focus structure/site",
-                all_site_labels,
-                index=all_site_labels.index(comparison_labels[0])
-                if comparison_labels[0] in all_site_labels
-                else 0,
+                "Structure/site shown in heatmap and 3D plot",
+                comparison_labels,
+                disabled=len(comparison_labels) == 1,
                 help=(
+                    "Only structures/sites currently selected in the 2D comparison are offered. "
                     "The heatmap, preferred-H map, 3D surface, diagnostics, and grid export "
-                    "use one focus structure so those views remain interpretable."
+                    "all follow this focus selection."
                 ),
-                key="leaching_explorer_focus_site",
+                key=focus_site_key,
             )
             selected_row = explorer_rows.loc[site_labels[focus_label]]
             selected_surface = str(selected_row["surface_id"])
@@ -1372,15 +1382,21 @@ else:
             states = _states_for_explorer_row(selected_row)
             available_h = sorted({int(state["h_count"]) for state in states})
             focus_h_options = ["Best"] + [f"{h}H" for h in available_h]
+
+            focus_h_key = "leaching_explorer_focus_h_state"
+            current_focus_h = st.session_state.get(focus_h_key)
+            if current_focus_h not in focus_h_options:
+                st.session_state[focus_h_key] = "Best"
+
             focus_h_mode = focus_col2.selectbox(
-                "Focus H state",
+                "H state shown in heatmap and 3D plot",
                 focus_h_options,
-                index=0,
                 help=(
                     "Best lets the preferred H count change across U–pH space. "
-                    "Choose a fixed H count to inspect that protonation state only."
+                    "Choose a fixed H count to inspect that protonation state only. "
+                    "The available H states update automatically when the focus structure changes."
                 ),
-                key="leaching_explorer_focus_h_state",
+                key=focus_h_key,
             )
             selected_h_count = _h_mode_to_count(focus_h_mode)
 
