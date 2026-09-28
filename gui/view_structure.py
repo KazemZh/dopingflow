@@ -102,8 +102,8 @@ def show_site_environment(
     view.setStyle(
         {"index": idx},
         {
-            "stick": {"radius": 0.18, "color": target_color},
-            "sphere": {"scale": 0.62, "color": target_color},
+            "stick": {"radius": 0.13, "color": target_color},
+            "sphere": {"scale": 0.34, "color": target_color},
         },
     )
     view.addLabel(
