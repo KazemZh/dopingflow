@@ -821,6 +821,95 @@ def protonation_adjusted_leaching_delta_g_eV(
     )
 
 
+def build_thermodynamic_grid(
+    states: Sequence[Mapping[str, Any]],
+    oxidation_state: int,
+    standard_reduction_potential_V_SHE: float,
+    potentials_V: Sequence[float],
+    pH_values: Sequence[float],
+    *,
+    potential_scale: str,
+    ion_activity: float,
+    temperature_K: float,
+    selected_h_count: int | None = None,
+) -> pd.DataFrame:
+    """Evaluate/minimize leaching free energy over stored post-leaching states.
+
+    States provide extraction_base_eV and h_count. With selected_h_count=None,
+    the lowest-free-energy state is selected independently at every (U, pH).
+    """
+    z = int(oxidation_state)
+    if z <= 0:
+        raise ValueError("oxidation_state must be positive")
+    if float(ion_activity) <= 0:
+        raise ValueError("ion_activity must be positive")
+    if float(temperature_K) <= 0:
+        raise ValueError("temperature_K must be positive")
+
+    candidates: list[dict[str, Any]] = []
+    for state in states:
+        try:
+            base = float(state["extraction_base_eV"])
+            h_count = int(state.get("h_count", 0))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not math.isfinite(base):
+            continue
+        if selected_h_count is not None and h_count != int(selected_h_count):
+            continue
+        candidates.append(
+            {
+                "extraction_base_eV": base,
+                "h_count": h_count,
+                "arrangement_id": int(state.get("arrangement_id", 0) or 0),
+            }
+        )
+    if not candidates:
+        return pd.DataFrame(
+            columns=[
+                "applied_potential_V",
+                "pH",
+                "potential_scale",
+                "deltaG_leach_eV",
+                "best_h_count",
+                "best_arrangement_id",
+                "net_electrons",
+                "thermodynamically_favorable",
+            ]
+        )
+
+    rows: list[dict[str, Any]] = []
+    for pH in pH_values:
+        for potential in potentials_V:
+            evaluated: list[tuple[dict[str, Any], float]] = []
+            for state in candidates:
+                dg = protonation_adjusted_leaching_delta_g_eV(
+                    state["extraction_base_eV"],
+                    state["h_count"],
+                    z,
+                    float(standard_reduction_potential_V_SHE),
+                    float(potential),
+                    potential_scale=potential_scale,
+                    ion_activity=float(ion_activity),
+                    temperature_K=float(temperature_K),
+                    pH=float(pH),
+                )
+                evaluated.append((state, dg))
+            best_state, best_dg = min(evaluated, key=lambda item: item[1])
+            rows.append(
+                {
+                    "applied_potential_V": float(potential),
+                    "pH": float(pH),
+                    "potential_scale": str(potential_scale).upper(),
+                    "deltaG_leach_eV": float(best_dg),
+                    "best_h_count": int(best_state["h_count"]),
+                    "best_arrangement_id": int(best_state["arrangement_id"]),
+                    "net_electrons": int(z - int(best_state["h_count"])),
+                    "thermodynamically_favorable": bool(best_dg < 0),
+                }
+            )
+    return pd.DataFrame(rows)
+
 def protonation_dissolution_thresholds(
     extraction_base_eV: float,
     h_count: int,
@@ -1964,5 +2053,6 @@ __all__ = [
     "preview_leaching_sites", "resolve_leaching_output_dir", "load_redox_references", "electrochemical_metrics",
     "leaching_delta_g_eV", "protonation_delta_g_eV",
     "protonation_adjusted_leaching_delta_g_eV", "protonation_dissolution_thresholds",
+    "build_thermodynamic_grid",
     "run_leaching", "run_leaching_from_toml",
 ]
