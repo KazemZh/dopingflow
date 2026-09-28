@@ -206,6 +206,12 @@ tick labels, enlarged typography, thicker lines and markers, dark axis frames,
 and restrained light-gray grid lines. Two-column thermodynamic plots use a
 wider slide-friendly aspect ratio. Plotly's image-export button is configured
 for high-resolution PNG output (3x scale).
+
+Each plot also has an on-demand PDF export control. The PDF is rendered only
+after the user requests it so interactive slider changes do not repeatedly
+launch Kaleido. Standard 2D Plotly line/scatter/contour content is preserved
+as vector graphics in the PDF. WebGL-rendered 3D surface content is rasterized
+inside the PDF by Plotly/Kaleido.
 The environment table and the selected-site neighbor list can both be exported
 as CSV files. These descriptors are structural correlations, not proof of a
 causal leaching mechanism; differences can also arise from longer-range
