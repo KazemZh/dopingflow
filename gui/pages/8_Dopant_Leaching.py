@@ -1423,25 +1423,85 @@ else:
             saved_u_slices = analysis_cfg.get(
                 "selected_potential_values", [1.23, 1.50, 1.70]
             )
-            s1, s2 = st.columns(2)
-            ph_slice_text = s1.text_input(
-                "pH values for ΔG vs potential",
-                value=", ".join(str(float(x)) for x in saved_ph_slices),
-                key="leaching_explorer_ph_slices",
-            )
-            u_slice_text = s2.text_input(
-                f"Potential values (V vs {explorer_scale}) for ΔG vs pH",
-                value=", ".join(str(float(x)) for x in saved_u_slices),
-                key="leaching_explorer_u_slices",
-            )
 
-            try:
-                selected_ph_slices = [float(x.strip()) for x in ph_slice_text.split(",") if x.strip()]
-                selected_u_slices = [float(x.strip()) for x in u_slice_text.split(",") if x.strip()]
-            except ValueError:
-                st.error("Slice values must be comma-separated numbers.")
-                selected_ph_slices = []
-                selected_u_slices = []
+            selected_ph_slices: list[float] = []
+            selected_u_slices: list[float] = []
+            ranges_valid = u_max > u_min and ph_max > ph_min
+            if not ranges_valid:
+                st.error("Potential max and pH max must be larger than their corresponding minima.")
+            else:
+                slice_left, slice_right = st.columns(2)
+                with slice_left:
+                    st.markdown("**ΔG vs potential slice**")
+                    potential_slice_mode = st.radio(
+                        "pH selection mode",
+                        ["Single interactive slice", "Compare multiple slices"],
+                        horizontal=True,
+                        key="leaching_explorer_potential_slice_mode",
+                    )
+                    if potential_slice_mode == "Single interactive slice":
+                        default_ph = float(saved_ph_slices[0]) if saved_ph_slices else ph_min
+                        default_ph = min(max(default_ph, ph_min), ph_max)
+                        selected_ph = st.slider(
+                            "pH",
+                            min_value=float(ph_min),
+                            max_value=float(ph_max),
+                            value=float(default_ph),
+                            step=float(ph_step),
+                            key="leaching_explorer_single_ph_slider",
+                            help="Move the slider to update ΔG versus potential without rerunning any ML calculation.",
+                        )
+                        selected_ph_slices = [float(selected_ph)]
+                    else:
+                        ph_slice_text = st.text_input(
+                            "pH values to compare",
+                            value=", ".join(str(float(x)) for x in saved_ph_slices),
+                            key="leaching_explorer_ph_slices",
+                        )
+                        try:
+                            selected_ph_slices = [
+                                float(x.strip())
+                                for x in ph_slice_text.split(",")
+                                if x.strip()
+                            ]
+                        except ValueError:
+                            st.error("pH slice values must be comma-separated numbers.")
+
+                with slice_right:
+                    st.markdown("**ΔG vs pH slice**")
+                    ph_slice_mode = st.radio(
+                        "Potential selection mode",
+                        ["Single interactive slice", "Compare multiple slices"],
+                        horizontal=True,
+                        key="leaching_explorer_ph_slice_mode",
+                    )
+                    if ph_slice_mode == "Single interactive slice":
+                        default_u = float(saved_u_slices[0]) if saved_u_slices else u_min
+                        default_u = min(max(default_u, u_min), u_max)
+                        selected_u = st.slider(
+                            f"Potential (V vs {explorer_scale})",
+                            min_value=float(u_min),
+                            max_value=float(u_max),
+                            value=float(default_u),
+                            step=float(u_step),
+                            key="leaching_explorer_single_u_slider",
+                            help="Move the slider to update ΔG versus pH without rerunning any ML calculation.",
+                        )
+                        selected_u_slices = [float(selected_u)]
+                    else:
+                        u_slice_text = st.text_input(
+                            f"Potential values to compare (V vs {explorer_scale})",
+                            value=", ".join(str(float(x)) for x in saved_u_slices),
+                            key="leaching_explorer_u_slices",
+                        )
+                        try:
+                            selected_u_slices = [
+                                float(x.strip())
+                                for x in u_slice_text.split(",")
+                                if x.strip()
+                            ]
+                        except ValueError:
+                            st.error("Potential slice values must be comma-separated numbers.")
 
             grid_ok = u_max > u_min and ph_max > ph_min and selected_ph_slices and selected_u_slices
             if not grid_ok:
@@ -1492,38 +1552,90 @@ else:
                     st.markdown("#### 2D slices")
                     left, right = st.columns(2)
                     with left:
-                        line_u = u_slice_grid.copy()
-                        line_u["pH curve"] = line_u["pH"].map(lambda x: f"pH {x:g}")
-                        fig_u = px.line(
-                            line_u,
-                            x="applied_potential_V",
-                            y="deltaG_leach_eV",
-                            color="pH curve",
-                            markers=False,
-                            hover_data=["best_h_count", "net_electrons", "best_arrangement_id"],
-                            title=f"ΔG_leach vs potential — {selected_dopant} site {selected_site_index}",
-                            labels={
-                                "applied_potential_V": f"Potential (V vs {explorer_scale})",
-                                "deltaG_leach_eV": "ΔG_leach (eV)",
-                            },
+                        line_u = u_slice_grid.copy().sort_values(
+                            ["pH", "applied_potential_V"]
                         )
+                        if len(selected_ph_slices) == 1:
+                            current_ph = float(selected_ph_slices[0])
+                            st.caption(f"Current slice: **pH = {current_ph:g}**")
+                            fig_u = px.line(
+                                line_u,
+                                x="applied_potential_V",
+                                y="deltaG_leach_eV",
+                                markers=False,
+                                hover_data=[
+                                    "best_h_count",
+                                    "net_electrons",
+                                    "best_arrangement_id",
+                                ],
+                                title=f"ΔG_leach vs potential — {selected_dopant} site {selected_site_index}",
+                                labels={
+                                    "applied_potential_V": f"Potential (V vs {explorer_scale})",
+                                    "deltaG_leach_eV": "ΔG_leach (eV)",
+                                },
+                            )
+                        else:
+                            line_u["pH curve"] = line_u["pH"].map(lambda x: f"pH {x:g}")
+                            fig_u = px.line(
+                                line_u,
+                                x="applied_potential_V",
+                                y="deltaG_leach_eV",
+                                color="pH curve",
+                                markers=False,
+                                hover_data=[
+                                    "best_h_count",
+                                    "net_electrons",
+                                    "best_arrangement_id",
+                                ],
+                                title=f"ΔG_leach vs potential — {selected_dopant} site {selected_site_index}",
+                                labels={
+                                    "applied_potential_V": f"Potential (V vs {explorer_scale})",
+                                    "deltaG_leach_eV": "ΔG_leach (eV)",
+                                },
+                            )
                         fig_u.add_hline(y=0.0, line_dash="dash")
                         st.plotly_chart(fig_u, use_container_width=True)
+
                     with right:
-                        line_ph = ph_slice_grid.copy()
-                        line_ph["Potential curve"] = line_ph["applied_potential_V"].map(
-                            lambda x: f"{x:g} V"
+                        line_ph = ph_slice_grid.copy().sort_values(
+                            ["applied_potential_V", "pH"]
                         )
-                        fig_ph = px.line(
-                            line_ph,
-                            x="pH",
-                            y="deltaG_leach_eV",
-                            color="Potential curve",
-                            markers=False,
-                            hover_data=["best_h_count", "net_electrons", "best_arrangement_id"],
-                            title=f"ΔG_leach vs pH — {selected_dopant} site {selected_site_index}",
-                            labels={"deltaG_leach_eV": "ΔG_leach (eV)"},
-                        )
+                        if len(selected_u_slices) == 1:
+                            current_u = float(selected_u_slices[0])
+                            st.caption(
+                                f"Current slice: **U = {current_u:g} V vs {explorer_scale}**"
+                            )
+                            fig_ph = px.line(
+                                line_ph,
+                                x="pH",
+                                y="deltaG_leach_eV",
+                                markers=False,
+                                hover_data=[
+                                    "best_h_count",
+                                    "net_electrons",
+                                    "best_arrangement_id",
+                                ],
+                                title=f"ΔG_leach vs pH — {selected_dopant} site {selected_site_index}",
+                                labels={"deltaG_leach_eV": "ΔG_leach (eV)"},
+                            )
+                        else:
+                            line_ph["Potential curve"] = line_ph["applied_potential_V"].map(
+                                lambda x: f"{x:g} V"
+                            )
+                            fig_ph = px.line(
+                                line_ph,
+                                x="pH",
+                                y="deltaG_leach_eV",
+                                color="Potential curve",
+                                markers=False,
+                                hover_data=[
+                                    "best_h_count",
+                                    "net_electrons",
+                                    "best_arrangement_id",
+                                ],
+                                title=f"ΔG_leach vs pH — {selected_dopant} site {selected_site_index}",
+                                labels={"deltaG_leach_eV": "ΔG_leach (eV)"},
+                            )
                         fig_ph.add_hline(y=0.0, line_dash="dash")
                         st.plotly_chart(fig_ph, use_container_width=True)
 
@@ -1537,13 +1649,14 @@ else:
                     st.markdown("#### U–pH landscape")
                     map_left, map_right = st.columns(2)
                     with map_left:
-                        heat = go.Figure(
-                            data=go.Contour(
+                        heat = go.Figure()
+                        heat.add_trace(
+                            go.Heatmap(
                                 x=pivot_dg.columns.to_numpy(),
                                 y=pivot_dg.index.to_numpy(),
                                 z=pivot_dg.to_numpy(),
+                                zsmooth="best",
                                 colorbar=dict(title="ΔG (eV)"),
-                                contours=dict(showlines=True),
                                 hovertemplate=(
                                     "U=%{x:.3f} V<br>pH=%{y:.2f}<br>ΔG=%{z:.3f} eV<extra></extra>"
                                 ),
@@ -1554,14 +1667,19 @@ else:
                                 x=pivot_dg.columns.to_numpy(),
                                 y=pivot_dg.index.to_numpy(),
                                 z=pivot_dg.to_numpy(),
-                                contours=dict(start=0.0, end=0.0, size=1.0, coloring="lines"),
+                                contours=dict(
+                                    start=0.0,
+                                    end=0.0,
+                                    size=1.0,
+                                    coloring="lines",
+                                ),
                                 line=dict(width=4),
                                 showscale=False,
                                 hoverinfo="skip",
                             )
                         )
                         heat.update_layout(
-                            title="ΔG_leach(U, pH) with ΔG=0 boundary",
+                            title="Smooth ΔG_leach(U, pH) map with ΔG=0 boundary",
                             xaxis_title=f"Potential (V vs {explorer_scale})",
                             yaxis_title="pH",
                         )
