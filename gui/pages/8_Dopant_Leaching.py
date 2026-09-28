@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import subprocess
 from pathlib import Path
@@ -23,7 +24,12 @@ from dopingflow.leaching import (
     resolve_leaching_output_dir,
 )
 from gui_config import BACKEND_CHOICES, DEVICE_CHOICES, OPTIMIZER_CHOICES
-from view_structure import show_site_environment
+import view_structure as _view_structure
+
+# Streamlit can keep helper modules cached while rerunning a page after git pulls.
+# Reload this lightweight viewer module so the page and helper signature stay in sync.
+_view_structure = importlib.reload(_view_structure)
+show_site_environment = _view_structure.show_site_environment
 
 
 st.set_page_config(page_title="Dopant leaching", layout="wide")
