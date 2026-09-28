@@ -32,6 +32,9 @@ def show_site_environment(
     width: int = 760,
     height: int = 520,
     label_neighbors: bool = True,
+    element_colors: dict[str, str] | None = None,
+    target_color: str = "#D62728",
+    enable_hover: bool = True,
 ):
     """Show a structure with one target site and its periodic local shell marked."""
     import py3Dmol
@@ -51,12 +54,55 @@ def show_site_environment(
     view.addModel(xyz, "xyz")
     view.setStyle({}, {"stick": {"radius": 0.10}, "sphere": {"scale": 0.22}})
 
+    # Apply user-selected element colors consistently to both atoms and bonds.
+    for element, color in dict(element_colors or {}).items():
+        view.setStyle(
+            {"elem": str(element)},
+            {
+                "stick": {"radius": 0.10, "color": str(color)},
+                "sphere": {"scale": 0.22, "color": str(color)},
+            },
+        )
+
+    if enable_hover:
+        hover_callback = """
+        function(atom, viewer) {
+            if(!atom.label) {
+                var idx = (atom.index !== undefined) ? atom.index :
+                          ((atom.serial !== undefined) ? atom.serial - 1 : "?");
+                atom.label = viewer.addLabel(
+                    atom.elem + " site " + idx,
+                    {
+                        position: atom,
+                        backgroundColor: "white",
+                        backgroundOpacity: 0.90,
+                        fontColor: "black",
+                        fontSize: 13,
+                        borderThickness: 1,
+                        borderColor: "black"
+                    }
+                );
+            }
+        }
+        """
+        unhover_callback = """
+        function(atom, viewer) {
+            if(atom.label) {
+                viewer.removeLabel(atom.label);
+                delete atom.label;
+            }
+        }
+        """
+        model = view.getModel()
+        model.setHoverable({}, True, hover_callback, unhover_callback)
+        view.setHoverDuration(100)
+
     target = structure[idx]
     tx, ty, tz = (float(x) for x in target.coords)
     view.setStyle(
         {"serial": idx + 1},
         {
-            "stick": {"radius": 0.18, "color": "crimson"},
+            "stick": {"radius": 0.18, "color": target_color},
             "sphere": {"scale": 0.62, "color": "crimson"},
         },
     )
@@ -65,7 +111,7 @@ def show_site_environment(
         {
             "position": {"x": tx, "y": ty, "z": tz},
             "fontColor": "white",
-            "backgroundColor": "crimson",
+            "backgroundColor": target_color,
             "fontSize": 13,
             "showBackground": True,
         },
