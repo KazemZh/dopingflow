@@ -178,7 +178,9 @@ and ΔG-vs-pH slices, optional multi-slice comparison, and overlays of multiple
 structures/sites, dopants, and explicit H states (0H/1H/2H/3H/...) or the
 minimum-free-energy ``Best`` state. A separate focus structure/H state drives
 the smooth U-pH ΔG heatmap, discrete preferred-H-count map, 3D thermodynamic
-surface, net-electron diagnostics, and CSV grid export. The focus structure/H-state
+surface, net-electron diagnostics, and CSV grid export. Heatmap/3D ΔG limits can
+be shared across all selected structures/dopants, auto-scaled per structure, or
+fixed manually for reproducible side-by-side figures. The focus structure/H-state
 controls sit directly above the U-pH plots and only use structures already selected
 for comparison: the structure choice is automatic for one selected structure and
 becomes a dropdown when several are selected.
