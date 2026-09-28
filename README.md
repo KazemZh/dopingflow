@@ -170,6 +170,12 @@ an H2/CHE reference. See
 [`docs/source/methods/leaching.rst`](docs/source/methods/leaching.rst) for
 the model, configuration, outputs, and limitations.
 
+The GUI also includes an interactive **Thermodynamic explorer**. Temperature,
+ion activity, pH, potential range, and SHE/RHE are treated as post-processing
+variables, so completed MLFF/protonation calculations can be re-plotted without
+rerunning structures. The explorer provides ΔG-vs-potential and ΔG-vs-pH
+slices, a U-pH ΔG map with the ΔG=0 boundary, preferred-H-count mapping, a 3D
+thermodynamic surface, net-electron diagnostics, and CSV grid export.
 Completed bare-site and protonation-arrangement checkpoints are restartable.
 If a run is interrupted and only the current site should be completed before
 stopping, use the Streamlit leaching page's **Recovery / partial-result mode**.
