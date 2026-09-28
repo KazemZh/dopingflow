@@ -1401,7 +1401,10 @@ else:
                 annotation_text="ΔG_leach = 0",
                 annotation_position="top left",
             )
-            _show_publication_plot(fig_scan)
+            _show_publication_plot(
+                fig_scan,
+                export_name="protonation_adjusted_potential_scan",
+            )
 
         if (
             bare_threshold_col in results.columns
