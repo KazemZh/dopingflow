@@ -1869,7 +1869,7 @@ else:
                                     line_kwargs["line_dash"] = "pH slice"
                                 fig_u = px.line(**line_kwargs)
                                 fig_u.add_hline(y=0.0, line_dash="dash")
-                                _show_publication_plot(fig_u)
+                                _show_publication_plot(fig_u, height=520)
 
                     with right:
                         st.markdown("##### ΔG vs pH")
@@ -2006,7 +2006,7 @@ else:
                                     ph_kwargs["line_dash"] = "Potential slice"
                                 fig_ph = px.line(**ph_kwargs)
                                 fig_ph.add_hline(y=0.0, line_dash="dash")
-                                _show_publication_plot(fig_ph)
+                                _show_publication_plot(fig_ph, height=520)
 
                     st.markdown("#### U–pH landscape")
                     st.caption(
@@ -2324,7 +2324,7 @@ else:
                             xaxis_title=f"Potential (V vs {explorer_scale})",
                             yaxis_title="pH",
                         )
-                        _show_publication_plot(heat)
+                        _show_publication_plot(heat, height=520)
                     with map_right:
                         h_values = sorted(
                             {
@@ -2384,7 +2384,7 @@ else:
                                 xaxis_title=f"Potential (V vs {explorer_scale})",
                                 yaxis_title="pH",
                             )
-                            _show_publication_plot(hmap)
+                            _show_publication_plot(hmap, height=520)
 
                     surface_fig = go.Figure(
                         data=[
@@ -2415,7 +2415,7 @@ else:
                             ),
                         ),
                     )
-                    _show_publication_plot(surface_fig, height=680, is_3d=True)
+                    _show_publication_plot(surface_fig, height=620, is_3d=True)
 
                     st.markdown("#### State diagnostics")
                     d1, d2 = st.columns(2)
