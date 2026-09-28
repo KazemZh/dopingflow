@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import json
 import subprocess
@@ -12,6 +13,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import plotly.io as pio
 import streamlit as st
 import toml
 from pymatgen.core import Structure
@@ -187,11 +189,36 @@ def _publication_style(
     return fig
 
 
+@st.cache_data(show_spinner=False)
+def _render_plotly_pdf(
+    figure_json: str,
+    width: int,
+    height: int,
+) -> bytes:
+    """Render one Plotly figure to PDF only when explicitly requested."""
+    figure = pio.from_json(figure_json)
+    return figure.to_image(
+        format="pdf",
+        width=int(width),
+        height=int(height),
+        scale=1,
+    )
+
+
+def _plot_export_slug(value: str) -> str:
+    cleaned = "".join(
+        char.lower() if char.isalnum() else "_"
+        for char in str(value)
+    )
+    return "_".join(part for part in cleaned.split("_") if part)[:90] or "plot"
+
+
 def _show_publication_plot(
     fig: go.Figure,
     *,
     height: int = 620,
     is_3d: bool = False,
+    export_name: str | None = None,
 ) -> None:
     _publication_style(fig, height=height, is_3d=is_3d)
     st.plotly_chart(
@@ -199,6 +226,58 @@ def _show_publication_plot(
         width="stretch",
         config=PUBLICATION_PLOT_CONFIG,
     )
+
+    title_text = str(
+        getattr(getattr(fig.layout, "title", None), "text", "") or "DopingFlow plot"
+    )
+    slug = _plot_export_slug(export_name or title_text)
+    figure_json = fig.to_json()
+    fingerprint = hashlib.sha256(
+        figure_json.encode("utf-8")
+    ).hexdigest()[:12]
+    pdf_state_key = f"leaching_pdf_{slug}_{fingerprint}"
+    prepare_key = f"prepare_{pdf_state_key}"
+    download_key = f"download_{pdf_state_key}"
+
+    export_left, export_right = st.columns([5.5, 1.5])
+    with export_right:
+        if st.button(
+            "Prepare vector PDF",
+            key=prepare_key,
+            width="stretch",
+            help=(
+                "Create a publication-quality PDF for this exact plot. "
+                "2D Plotly traces are exported as vector graphics; WebGL 3D "
+                "surface layers are rasterized inside the PDF."
+            ),
+        ):
+            try:
+                with st.spinner("Rendering PDF…"):
+                    st.session_state[pdf_state_key] = _render_plotly_pdf(
+                        figure_json,
+                        1200,
+                        height,
+                    )
+            except Exception as exc:
+                st.error(
+                    "Could not create the PDF. Plotly/Kaleido reported: "
+                    f"{exc}"
+                )
+
+        pdf_bytes = st.session_state.get(pdf_state_key)
+        if pdf_bytes:
+            st.download_button(
+                "Download PDF",
+                data=pdf_bytes,
+                file_name=f"{slug}.pdf",
+                mime="application/pdf",
+                key=download_key,
+                width="stretch",
+                help=(
+                    "Vector PDF for 2D line/scatter/contour content. "
+                    "WebGL 3D content is rasterized by Plotly/Kaleido."
+                ),
+            )
 
 
 def _csv(value: Any) -> str:
@@ -1047,7 +1126,7 @@ else:
                     hover_data=[c for c in ("target_id", "variant_label", "site_index", "initial_dopant_zone", "surface_variant_declared_zone", "initial_depth_from_selected_surface_A") if c in plot.columns],
                     title="Metal-referenced dopant extraction energy",
                 )
-                _show_publication_plot(fig)
+                _show_publication_plot(fig, export_name="extraction_energy")
 
     with tabs[1]:
         if aggregate_path.exists():
@@ -1104,7 +1183,7 @@ else:
                         "dopant": "Dopant",
                     },
                 )
-                _show_publication_plot(fig_threshold)
+                _show_publication_plot(fig_threshold, export_name="bare_dissolution_threshold")
 
         if potential_path.exists():
             try:
@@ -1154,7 +1233,7 @@ else:
                     annotation_text="ΔG_leach = 0",
                     annotation_position="top left",
                 )
-                _show_publication_plot(fig)
+                _show_publication_plot(fig, export_name="bare_leaching_free_energy")
         else:
             st.info("No potential scan found.")
 
@@ -1261,7 +1340,10 @@ else:
                     annotation_text="Bare vacancy reference",
                     annotation_position="top left",
                 )
-                _show_publication_plot(fig_prot)
+                _show_publication_plot(
+                    fig_prot,
+                    export_name="protonation_zeroV_comparison",
+                )
 
         if protonation_scan_path.exists():
             try:
@@ -1389,7 +1471,10 @@ else:
                         "dopant": "Dopant",
                     },
                 )
-                _show_publication_plot(fig_threshold_compare)
+                _show_publication_plot(
+                    fig_threshold_compare,
+                    export_name="bare_vs_protonation_thresholds",
+                )
 
     with tabs[4]:
         st.markdown("### Interactive thermodynamic explorer")
@@ -1869,7 +1954,11 @@ else:
                                     line_kwargs["line_dash"] = "pH slice"
                                 fig_u = px.line(**line_kwargs)
                                 fig_u.add_hline(y=0.0, line_dash="dash")
-                                _show_publication_plot(fig_u, height=520)
+                                _show_publication_plot(
+                                    fig_u,
+                                    height=520,
+                                    export_name="deltaG_vs_potential_comparison",
+                                )
 
                     with right:
                         st.markdown("##### ΔG vs pH")
@@ -2006,7 +2095,11 @@ else:
                                     ph_kwargs["line_dash"] = "Potential slice"
                                 fig_ph = px.line(**ph_kwargs)
                                 fig_ph.add_hline(y=0.0, line_dash="dash")
-                                _show_publication_plot(fig_ph, height=520)
+                                _show_publication_plot(
+                                    fig_ph,
+                                    height=520,
+                                    export_name="deltaG_vs_pH_comparison",
+                                )
 
                     st.markdown("#### U–pH landscape")
                     st.caption(
@@ -2324,7 +2417,14 @@ else:
                             xaxis_title=f"Potential (V vs {explorer_scale})",
                             yaxis_title="pH",
                         )
-                        _show_publication_plot(heat, height=520)
+                        _show_publication_plot(
+                            heat,
+                            height=520,
+                            export_name=(
+                                f"deltaG_U_pH_{selected_dopant}_site_"
+                                f"{selected_site_index}_{focus_h_mode}"
+                            ),
+                        )
                     with map_right:
                         h_values = sorted(
                             {
@@ -2384,7 +2484,14 @@ else:
                                 xaxis_title=f"Potential (V vs {explorer_scale})",
                                 yaxis_title="pH",
                             )
-                            _show_publication_plot(hmap, height=520)
+                            _show_publication_plot(
+                                hmap,
+                                height=520,
+                                export_name=(
+                                    f"preferred_H_U_pH_{selected_dopant}_site_"
+                                    f"{selected_site_index}"
+                                ),
+                            )
 
                     surface_fig = go.Figure(
                         data=[
@@ -2415,7 +2522,15 @@ else:
                             ),
                         ),
                     )
-                    _show_publication_plot(surface_fig, height=620, is_3d=True)
+                    _show_publication_plot(
+                        surface_fig,
+                        height=620,
+                        is_3d=True,
+                        export_name=(
+                            f"deltaG_3D_{selected_dopant}_site_"
+                            f"{selected_site_index}_{focus_h_mode}"
+                        ),
+                    )
 
                     st.markdown("#### State diagnostics")
                     d1, d2 = st.columns(2)
@@ -2803,7 +2918,12 @@ else:
                                 f"{response_y} vs local structural environment"
                             ),
                         )
-                        _show_publication_plot(fig_env)
+                        _show_publication_plot(
+                            fig_env,
+                            export_name=(
+                                f"site_environment_{descriptor_x}_vs_{response_y}"
+                            ),
+                        )
 
                 st.markdown("#### Inspect one site")
                 site_option_map: dict[str, tuple[str, str, int]] = {}
