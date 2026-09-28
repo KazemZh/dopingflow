@@ -10,6 +10,7 @@ from pymatgen.io.vasp import Poscar
 
 from dopingflow.leaching import (
     KB_EV_K,
+    build_thermodynamic_grid,
     electrochemical_metrics,
     enumerate_leaching_sites,
     leaching_delta_g_eV,
@@ -51,6 +52,81 @@ def test_leaching_inherits_enabled_surface_refine_calculator() -> None:
     assert cfg["protonation"]["enabled"] is False
     assert cfg["protonation"]["h_counts"] == [0, 1, 2, 3]
 
+
+def test_analysis_defaults_are_separate_postprocessing_settings() -> None:
+    cfg = parse_leaching_config(
+        {
+            "leaching": {
+                "enabled": True,
+                "temperature_K": 300.0,
+                "pH": 1.0,
+                "potential_scale": "SHE",
+                "potentials_V": [1.2, 1.6],
+                "default_ion_activity": 1e-5,
+                "ion_activities": {"Sb": 2e-6},
+                "analysis_defaults": {
+                    "temperature_K": 310.0,
+                    "potential_scale": "RHE",
+                    "pH_min": 0.0,
+                    "pH_max": 2.0,
+                    "pH_step": 0.2,
+                    "potential_min_V": 1.0,
+                    "potential_max_V": 1.9,
+                    "potential_step_V": 0.05,
+                    "selected_pH_values": [0.0, 1.0],
+                    "selected_potential_values": [1.23, 1.5, 1.7],
+                },
+            }
+        }
+    )
+    analysis = cfg["analysis_defaults"]
+    assert analysis["temperature_K"] == pytest.approx(310.0)
+    assert analysis["potential_scale"] == "RHE"
+    assert analysis["pH_step"] == pytest.approx(0.2)
+    assert analysis["ion_activities"]["Sb"] == pytest.approx(2e-6)
+    # Legacy aliases remain synchronized for fixed summary/scan compatibility.
+    assert cfg["temperature_K"] == pytest.approx(310.0)
+    assert cfg["potential_scale"] == "RHE"
+    assert cfg["potentials_V"] == [1.23, 1.5, 1.7]
+
+
+def test_thermodynamic_grid_selects_best_h_state_and_reports_net_electrons() -> None:
+    states = [
+        {"h_count": 0, "arrangement_id": 0, "extraction_base_eV": 4.0},
+        {"h_count": 3, "arrangement_id": 1, "extraction_base_eV": 0.0},
+    ]
+    grid = build_thermodynamic_grid(
+        states,
+        oxidation_state=3,
+        standard_reduction_potential_V_SHE=-0.3382,
+        potentials_V=[1.2, 1.7],
+        pH_values=[0.0],
+        potential_scale="RHE",
+        ion_activity=1e-6,
+        temperature_K=298.15,
+    )
+    assert len(grid) == 2
+    assert set(grid["best_h_count"]) == {3}
+    assert set(grid["net_electrons"]) == {0}
+    # z == n_H gives zero potential slope at fixed pH in the implemented model.
+    assert grid.iloc[0]["deltaG_leach_eV"] == pytest.approx(
+        grid.iloc[1]["deltaG_leach_eV"]
+    )
+
+    bare = build_thermodynamic_grid(
+        states,
+        oxidation_state=3,
+        standard_reduction_potential_V_SHE=-0.3382,
+        potentials_V=[1.2, 1.7],
+        pH_values=[0.0],
+        potential_scale="RHE",
+        ion_activity=1e-6,
+        temperature_K=298.15,
+        selected_h_count=0,
+    )
+    assert set(bare["best_h_count"]) == {0}
+    assert set(bare["net_electrons"]) == {3}
+    assert bare.iloc[1]["deltaG_leach_eV"] < bare.iloc[0]["deltaG_leach_eV"]
 
 def test_dissolution_potential_zero_crossing_she() -> None:
     metrics = electrochemical_metrics(
