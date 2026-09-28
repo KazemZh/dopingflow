@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib
+from io import BytesIO
 import json
 import subprocess
 from pathlib import Path
@@ -16,6 +17,7 @@ import plotly.graph_objects as go
 import plotly.io as pio
 import streamlit as st
 import toml
+from PIL import Image
 from pymatgen.core import Structure
 
 from dopingflow.leaching import (
@@ -195,14 +197,34 @@ def _render_plotly_pdf(
     width: int,
     height: int,
 ) -> bytes:
-    """Render one Plotly figure to PDF only when explicitly requested."""
+    """Render a color PDF that matches the on-screen Plotly appearance."""
     figure = pio.from_json(figure_json)
-    return figure.to_image(
-        format="pdf",
+
+    # Render the same Plotly figure to a high-resolution PNG first. This avoids
+    # backend-specific PDF/vector color changes and preserves the exact palette,
+    # line styles, markers, heatmaps, and 3D appearance seen on screen.
+    png_bytes = figure.to_image(
+        format="png",
         width=int(width),
         height=int(height),
-        scale=1,
+        scale=2,
     )
+    image = Image.open(BytesIO(png_bytes))
+    if image.mode in {"RGBA", "LA"}:
+        background = Image.new("RGB", image.size, "white")
+        alpha = image.getchannel("A")
+        background.paste(image.convert("RGB"), mask=alpha)
+        image = background
+    elif image.mode != "RGB":
+        image = image.convert("RGB")
+
+    pdf_buffer = BytesIO()
+    image.save(
+        pdf_buffer,
+        format="PDF",
+        resolution=300.0,
+    )
+    return pdf_buffer.getvalue()
 
 
 def _plot_export_slug(value: str) -> str:
@@ -242,13 +264,12 @@ def _show_publication_plot(
     export_left, export_right = st.columns([5.5, 1.5])
     with export_right:
         if st.button(
-            "Prepare vector PDF",
+            "Prepare color PDF",
             key=prepare_key,
             width="stretch",
             help=(
-                "Create a publication-quality PDF for this exact plot. "
-                "2D Plotly traces are exported as vector graphics; WebGL 3D "
-                "surface layers are rasterized inside the PDF."
+                "Create a high-resolution color PDF that matches this exact "
+                "on-screen Plotly figure, including its colors and styling."
             ),
         ):
             try:
@@ -274,8 +295,7 @@ def _show_publication_plot(
                 key=download_key,
                 width="stretch",
                 help=(
-                    "Vector PDF for 2D line/scatter/contour content. "
-                    "WebGL 3D content is rasterized by Plotly/Kaleido."
+                    "High-resolution color PDF matching the on-screen figure."
                 ),
             )
 
