@@ -394,10 +394,11 @@ energies. It does not launch MLFF calculations.
 
 For one selected dopant site, the explorer provides:
 
-* ``Delta G_leach`` versus applied potential for user-selected pH slices;
-* ``Delta G_leach`` versus pH for user-selected potential slices;
-* a two-dimensional ``U``-pH contour/heatmap with the ``Delta G = 0`` boundary;
-* a map of the thermodynamically preferred post-leaching H count;
+* ``Delta G_leach`` versus applied potential with an interactive pH slider;
+* ``Delta G_leach`` versus pH with an interactive potential slider;
+* optional multi-slice comparison modes for both two-dimensional plots;
+* a smooth two-dimensional ``U``-pH ``Delta G`` heatmap with the ``Delta G = 0`` boundary;
+* a discrete map of the thermodynamically preferred post-leaching H count;
 * a three-dimensional ``Delta G_leach(U,pH)`` surface;
 * state diagnostics including oxidation-state electron count ``z``, preferred
   ``n_H``, and net electron count ``z - n_H``;
