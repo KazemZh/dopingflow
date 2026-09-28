@@ -144,15 +144,21 @@ def _publication_style(
                     trace.update(
                         colorbar=dict(
                             tickfont=dict(size=15, color="black"),
-                            title_font=dict(size=16, color="black"),
+                            title=dict(font=dict(size=16, color="black")),
                             ticks="outside",
                             tickcolor="black",
                         )
                     )
     else:
-        scene = dict(fig.layout.scene) if fig.layout.scene else {}
+        scene = (
+            fig.layout.scene.to_plotly_json()
+            if fig.layout.scene is not None
+            else {}
+        )
         for axis_name in ("xaxis", "yaxis", "zaxis"):
             axis = dict(scene.get(axis_name, {}) or {})
+            axis_title = dict(axis.get("title", {}) or {})
+            axis_title["font"] = dict(size=18, color="black")
             axis.update(
                 showbackground=True,
                 backgroundcolor="white",
@@ -160,7 +166,7 @@ def _publication_style(
                 linecolor="black",
                 zerolinecolor="#BDBDBD",
                 tickfont=dict(size=14, color="black"),
-                title_font=dict(size=18, color="black"),
+                title=axis_title,
             )
             scene[axis_name] = axis
         fig.update_layout(scene=scene)
@@ -169,7 +175,7 @@ def _publication_style(
                 trace.update(
                     colorbar=dict(
                         tickfont=dict(size=15, color="black"),
-                        title_font=dict(size=16, color="black"),
+                        title=dict(font=dict(size=16, color="black")),
                         ticks="outside",
                         tickcolor="black",
                     )
