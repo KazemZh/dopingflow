@@ -185,9 +185,13 @@ The tab provides a comparison table and descriptor-versus-leaching scatter
 plot across all sites. A selected site can also be inspected in an interactive
 3D structure viewer: the target dopant is highlighted, coordinating anions,
 nearby dopants, and other local atoms are marked separately, and optional
-labels show atom indices and distances. Periodic-image coordinates are used
-for the local shell so neighbors across a cell boundary are represented by
-their physically nearest image.
+labels show atom indices and distances. The viewer exposes one color picker
+for every chemical element present in the selected slab plus a separate target-
+site highlight color. Atom colors persist while switching between sites.
+Hover labels can be enabled so moving the cursor over a base atom displays its
+element and the same zero-based atom/site index used throughout the leaching
+tables. Periodic-image coordinates are used for the local shell so neighbors
+across a cell boundary are represented by their physically nearest image.
 
 The environment table and the selected-site neighbor list can both be exported
 as CSV files. These descriptors are structural correlations, not proof of a
