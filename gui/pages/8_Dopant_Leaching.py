@@ -1865,7 +1865,10 @@ else:
                             )
                         )
                         heat.update_layout(
-                            title="Smooth ΔG_leach(U, pH) map with ΔG=0 boundary",
+                            title=(
+                                f"Smooth ΔG_leach(U, pH) — {selected_dopant} site "
+                                f"{selected_site_index} | {focus_h_mode}"
+                            ),
                             xaxis_title=f"Potential (V vs {explorer_scale})",
                             yaxis_title="pH",
                         )
@@ -1922,7 +1925,10 @@ else:
                                 )
                             )
                             hmap.update_layout(
-                                title="Preferred post-leaching H count (discrete states)",
+                                title=(
+                                    f"Preferred post-leaching H count — {selected_dopant} "
+                                    f"site {selected_site_index}"
+                                ),
                                 xaxis_title=f"Potential (V vs {explorer_scale})",
                                 yaxis_title="pH",
                             )
@@ -1942,7 +1948,10 @@ else:
                         ]
                     )
                     surface_fig.update_layout(
-                        title="3D thermodynamic surface",
+                        title=(
+                            f"3D thermodynamic surface — {selected_dopant} site "
+                            f"{selected_site_index} | {focus_h_mode}"
+                        ),
                         scene=dict(
                             xaxis_title=f"Potential (V vs {explorer_scale})",
                             yaxis_title="pH",
@@ -2002,6 +2011,7 @@ else:
                     export_grid["standard_reduction_potential_V_SHE"] = e0_value
                     export_grid["ion_activity"] = explorer_activity
                     export_grid["temperature_K"] = explorer_temperature
+                    export_grid["requested_h_state"] = focus_h_mode
                     dl_col, save_col = st.columns(2)
                     dl_col.download_button(
                         "Export current U–pH grid CSV",
@@ -2016,13 +2026,11 @@ else:
                         use_container_width=True,
                         help="Saves only visualization/post-processing defaults; no MLFF calculation is launched.",
                     ):
-                        updated_activity_map = dict(analysis_cfg.get("ion_activities", {}) or {})
-                        updated_activity_map[selected_dopant] = explorer_activity
+                        updated_activity_map = dict(activity_map_saved)
+                        updated_activity_map.update(activity_by_dopant)
                         new_defaults = {
                             "temperature_K": explorer_temperature,
-                            "default_ion_activity": float(
-                                analysis_cfg.get("default_ion_activity", 1e-6)
-                            ),
+                            "default_ion_activity": explorer_default_activity,
                             "ion_activities": updated_activity_map,
                             "potential_scale": explorer_scale,
                             "potential_min_V": u_min,
