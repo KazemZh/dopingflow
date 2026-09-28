@@ -103,7 +103,7 @@ def show_site_environment(
         {"serial": idx + 1},
         {
             "stick": {"radius": 0.18, "color": target_color},
-            "sphere": {"scale": 0.62, "color": "crimson"},
+            "sphere": {"scale": 0.62, "color": target_color},
         },
     )
     view.addLabel(
