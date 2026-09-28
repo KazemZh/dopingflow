@@ -404,10 +404,11 @@ The explorer provides:
 * ``Delta G_leach`` versus pH with an interactive potential slider;
 * optional multi-slice comparison modes for both two-dimensional plots;
 * multi-structure / multi-dopant / multi-H-state overlays for the two-dimensional plots;
-* a separate focus structure and focus H state for the ``U``-pH landscape and 3D view;
-  the focus structure is restricted to the structures/sites already selected for the
-  two-dimensional comparison, is automatic when only one structure is selected, and
-  becomes a dropdown when multiple comparison structures are selected;
+* structure/site and H-state focus selectors placed directly under the ``U``-pH
+  landscape heading and immediately above the heatmap/3D views; the structure
+  selector is restricted to the structures/sites already selected for the
+  two-dimensional comparison, is automatic when only one structure is selected,
+  and becomes a dropdown when multiple comparison structures are selected;
 * a smooth two-dimensional ``U``-pH ``Delta G`` heatmap with the ``Delta G = 0`` boundary;
 * a discrete map of the thermodynamically preferred post-leaching H count;
 * a three-dimensional ``Delta G_leach(U,pH)`` surface;
