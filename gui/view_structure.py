@@ -2,10 +2,9 @@
 from __future__ import annotations
 from pathlib import Path
 import streamlit as st
-from ase.io import read
-
 def show_structure(path: Path, title: str = "", spin: bool = False, width: int = 800, height: int = 450):
     import py3Dmol
+    from ase.io import read
 
     atoms = read(str(path), format="vasp")
 
