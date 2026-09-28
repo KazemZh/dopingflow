@@ -148,6 +148,7 @@ def parse_leaching_config(
         source_summary="",
         source_mode="auto",
         surface_include=[],
+        site_include=[],
         dopant_species=[],
         zones=["surface"],
         placement_side=surface.get("placement_side", "top"),
@@ -195,6 +196,7 @@ def parse_leaching_config(
         raw.setdefault(key, value)
 
     raw["surface_include"] = _list(raw["surface_include"])
+    raw["site_include"] = _list(raw["site_include"])
     raw["dopant_species"] = _list(raw["dopant_species"])
     raw["anion_species"] = _list(raw["anion_species"]) or ["O"]
     raw["zones"] = [x.lower() for x in _list(raw["zones"])]
@@ -452,6 +454,28 @@ def _selected(row: Mapping[str, Any], patterns: Sequence[str]) -> bool:
     return any(fnmatch.fnmatchcase(value, pat) for pat in patterns for value in (sid, target, _safe(sid)))
 
 
+def _site_run_selector(surface_id: str, dopant: str, site_index: int) -> str:
+    return f"{_safe(str(surface_id))}/{str(dopant)}_site_{int(site_index):04d}"
+
+
+def _site_selected(record: Mapping[str, Any], patterns: Sequence[str]) -> bool:
+    """Match an exact/wildcard leaching site selector after site enumeration."""
+    if not patterns:
+        return True
+    sid = str(record.get("surface_id", ""))
+    dopant = str(record.get("dopant", ""))
+    idx = int(record.get("site_index"))
+    selector = _site_run_selector(sid, dopant, idx)
+    short = f"{dopant}_site_{idx:04d}"
+    readable = f"{sid}|{dopant}|{idx}"
+    values = (selector, short, readable)
+    return any(
+        fnmatch.fnmatchcase(value, pattern)
+        for pattern in patterns
+        for value in values
+    )
+
+
 def _structure_path(row: Mapping[str, Any], root: Path) -> tuple[Path, str]:
     for stage, key in (("refine", "refine_relaxed_structure_path"), ("screen", "screen_relaxed_structure_path"), ("generated", "generated_structure_path")):
         value = str(row.get(key) or "").strip()
@@ -598,6 +622,8 @@ def preview_leaching_sites(config: Mapping[str, Any], project_root: Path | str =
         structure = Structure.from_file(path)
         for site in enumerate_leaching_sites(row, structure, cfg):
             rec = _base(row, path, stage, site)
+            if not _site_selected(rec, cfg.get("site_include", [])):
+                continue
             if bool(proton_cfg.get("enabled", False)):
                 neighbors = _protonatable_oxygen_neighbors(
                     structure, int(site["site_index"]), cfg
