@@ -100,7 +100,7 @@ def show_site_environment(
     target = structure[idx]
     tx, ty, tz = (float(x) for x in target.coords)
     view.setStyle(
-        {"serial": idx + 1},
+        {"index": idx},
         {
             "stick": {"radius": 0.18, "color": target_color},
             "sphere": {"scale": 0.62, "color": target_color},
