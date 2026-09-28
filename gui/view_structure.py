@@ -35,6 +35,8 @@ def show_site_environment(
     element_colors: dict[str, str] | None = None,
     target_color: str = "#D62728",
     enable_hover: bool = True,
+    show_orientation: bool = True,
+    surface_side: str = "top",
 ):
     """Show a structure with one target site and its periodic local shell marked."""
     import py3Dmol
@@ -124,6 +126,96 @@ def show_site_environment(
             "showBackground": True,
         },
     )
+
+    if show_orientation:
+        coords = [site.coords for site in structure]
+        xs = [float(value[0]) for value in coords]
+        ys = [float(value[1]) for value in coords]
+        zs = [float(value[2]) for value in coords]
+        x_min, x_max = min(xs), max(xs)
+        y_min, y_max = min(ys), max(ys)
+        z_min, z_max = min(zs), max(zs)
+        span = max(x_max - x_min, y_max - y_min, z_max - z_min, 1.0)
+        axis_length = min(4.0, max(2.0, 0.16 * span))
+
+        # Put the coordinate triad just outside one lower slab corner.
+        origin = {
+            "x": x_min - 0.35 * axis_length,
+            "y": y_min - 0.35 * axis_length,
+            "z": z_min,
+        }
+        axes = [
+            ("x", "#D62728", (axis_length, 0.0, 0.0)),
+            ("y", "#2CA02C", (0.0, axis_length, 0.0)),
+            ("z", "#1F77B4", (0.0, 0.0, axis_length)),
+        ]
+        for label, color, vector in axes:
+            end = {
+                "x": origin["x"] + vector[0],
+                "y": origin["y"] + vector[1],
+                "z": origin["z"] + vector[2],
+            }
+            view.addArrow(
+                {
+                    "start": origin,
+                    "end": end,
+                    "radius": 0.08,
+                    "radiusRatio": 1.7,
+                    "mid": 0.82,
+                    "color": color,
+                }
+            )
+            view.addLabel(
+                label,
+                {
+                    "position": end,
+                    "fontColor": color,
+                    "backgroundColor": "white",
+                    "backgroundOpacity": 0.80,
+                    "fontSize": 12,
+                    "showBackground": True,
+                },
+            )
+
+        # Explicitly mark the exposed surface/vacuum direction used by DopingFlow.
+        side = str(surface_side).lower()
+        center_x = 0.5 * (x_min + x_max)
+        center_y = 0.5 * (y_min + y_max)
+        surface_color = "#FF8C00"
+
+        def _surface_arrow(z_start: float, direction: float, text: str) -> None:
+            start = {"x": center_x, "y": center_y, "z": z_start}
+            end = {
+                "x": center_x,
+                "y": center_y,
+                "z": z_start + direction * axis_length,
+            }
+            view.addArrow(
+                {
+                    "start": start,
+                    "end": end,
+                    "radius": 0.10,
+                    "radiusRatio": 1.8,
+                    "mid": 0.82,
+                    "color": surface_color,
+                }
+            )
+            view.addLabel(
+                text,
+                {
+                    "position": end,
+                    "fontColor": "black",
+                    "backgroundColor": "#FFD27F",
+                    "backgroundOpacity": 0.90,
+                    "fontSize": 11,
+                    "showBackground": True,
+                },
+            )
+
+        if side in {"top", "both"}:
+            _surface_arrow(z_max + 0.15, 1.0, "surface / vacuum  +z")
+        if side in {"bottom", "both"}:
+            _surface_arrow(z_min - 0.15, -1.0, "surface / vacuum  -z")
 
     records = (
         neighbors.to_dict("records")
