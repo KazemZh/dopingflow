@@ -848,8 +848,29 @@ else:
                 + (f"after `{stopped}`." if stopped else "at the requested recovery site.")
             )
     results = pd.read_csv(summary_path)
+    try:
+        parsed_for_results = parse_leaching_config(cfg, project_root)
+        analysis_cfg = dict(parsed_for_results.get("analysis_defaults", {}) or {})
+    except Exception:
+        analysis_cfg = dict(saved_analysis)
+
+    if protonation_summary_path.exists():
+        try:
+            protonation_table_all = pd.read_csv(protonation_summary_path)
+        except pd.errors.EmptyDataError:
+            protonation_table_all = pd.DataFrame()
+    else:
+        protonation_table_all = pd.DataFrame()
+
     tabs = st.tabs(
-        ["Site results", "Surface summary", "Bare potential scan", "Protonation", "Interpretation"]
+        [
+            "Site results",
+            "Surface summary",
+            "Saved bare scan",
+            "Protonation states",
+            "Thermodynamic explorer",
+            "Interpretation",
+        ]
     )
 
     with tabs[0]:
@@ -1211,7 +1232,7 @@ else:
                 )
                 st.plotly_chart(fig_threshold_compare, use_container_width=True)
 
-    with tabs[4]:
+    with tabs[5]:
         st.markdown(
             "Every row keeps the dopant's **initial relaxed-surface zone and coordinates** before removal. "
             "**Lower extraction energy** means weaker retention relative to the elemental-metal "
