@@ -57,6 +57,144 @@ refine = dict(surface.get("refine", {}) or {})
 screen = dict(surface.get("screen", {}) or {})
 
 
+PUBLICATION_PLOT_CONFIG = {
+    "displaylogo": False,
+    "toImageButtonOptions": {
+        "format": "png",
+        "filename": "dopingflow_leaching_plot",
+        "scale": 3,
+    },
+}
+
+
+def _publication_style(
+    fig: go.Figure,
+    *,
+    height: int = 620,
+    is_3d: bool = False,
+) -> go.Figure:
+    """Apply a high-contrast paper/slide style to Plotly figures."""
+    fig.update_layout(
+        template="plotly_white",
+        height=height,
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        font=dict(
+            family="Arial, Helvetica, sans-serif",
+            size=16,
+            color="black",
+        ),
+        title=dict(
+            font=dict(size=22, color="black"),
+            x=0.5,
+            xanchor="center",
+            y=0.97,
+            yanchor="top",
+        ),
+        legend=dict(
+            font=dict(size=15, color="black"),
+            title_font=dict(size=15, color="black"),
+            bgcolor="rgba(255,255,255,0.88)",
+            bordercolor="rgba(0,0,0,0.35)",
+            borderwidth=1,
+        ),
+        hoverlabel=dict(
+            bgcolor="white",
+            bordercolor="#333333",
+            font=dict(size=14, color="black"),
+        ),
+        margin=dict(l=90, r=35, t=80, b=80),
+    )
+
+    if not is_3d:
+        axis_style = dict(
+            showline=True,
+            linewidth=1.5,
+            linecolor="black",
+            mirror=True,
+            ticks="outside",
+            tickwidth=1.4,
+            ticklen=6,
+            tickcolor="black",
+            tickfont=dict(size=16, color="black"),
+            title_font=dict(size=20, color="black"),
+            gridcolor="#E3E3E3",
+            gridwidth=1,
+            zeroline=False,
+            automargin=True,
+        )
+        fig.update_xaxes(**axis_style)
+        fig.update_yaxes(**axis_style)
+
+        for trace in fig.data:
+            if getattr(trace, "type", "") == "scatter":
+                mode = str(getattr(trace, "mode", "") or "")
+                if "lines" in mode:
+                    trace.update(line=dict(width=3.0))
+                if "markers" in mode:
+                    trace.update(
+                        marker=dict(
+                            size=9,
+                            line=dict(color="black", width=0.7),
+                        )
+                    )
+            if getattr(trace, "type", "") in {"heatmap", "contour"}:
+                colorbar = getattr(trace, "colorbar", None)
+                if colorbar is not None:
+                    trace.update(
+                        colorbar=dict(
+                            tickfont=dict(size=15, color="black"),
+                            title_font=dict(size=16, color="black"),
+                            ticks="outside",
+                            tickcolor="black",
+                        )
+                    )
+    else:
+        scene = dict(fig.layout.scene) if fig.layout.scene else {}
+        for axis_name in ("xaxis", "yaxis", "zaxis"):
+            axis = dict(scene.get(axis_name, {}) or {})
+            axis.update(
+                showbackground=True,
+                backgroundcolor="white",
+                gridcolor="#D9D9D9",
+                linecolor="black",
+                zerolinecolor="#BDBDBD",
+                tickfont=dict(size=14, color="black"),
+                title_font=dict(size=18, color="black"),
+            )
+            scene[axis_name] = axis
+        fig.update_layout(scene=scene)
+        for trace in fig.data:
+            if getattr(trace, "type", "") == "surface":
+                trace.update(
+                    colorbar=dict(
+                        tickfont=dict(size=15, color="black"),
+                        title_font=dict(size=16, color="black"),
+                        ticks="outside",
+                        tickcolor="black",
+                    )
+                )
+
+    for annotation in fig.layout.annotations or []:
+        annotation.update(font=dict(size=15, color="black"))
+
+    return fig
+
+
+def _show_publication_plot(
+    fig: go.Figure,
+    *,
+    height: int = 620,
+    is_3d: bool = False,
+) -> None:
+    _publication_style(fig, height=height, is_3d=is_3d)
+    st.plotly_chart(
+        fig,
+        width="stretch",
+        config=PUBLICATION_PLOT_CONFIG,
+    )
+
+
 def _csv(value: Any) -> str:
     if isinstance(value, str):
         return value
@@ -903,7 +1041,7 @@ else:
                     hover_data=[c for c in ("target_id", "variant_label", "site_index", "initial_dopant_zone", "surface_variant_declared_zone", "initial_depth_from_selected_surface_A") if c in plot.columns],
                     title="Metal-referenced dopant extraction energy",
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                _show_publication_plot(fig)
 
     with tabs[1]:
         if aggregate_path.exists():
@@ -960,7 +1098,7 @@ else:
                         "dopant": "Dopant",
                     },
                 )
-                st.plotly_chart(fig_threshold, use_container_width=True)
+                _show_publication_plot(fig_threshold)
 
         if potential_path.exists():
             try:
@@ -1010,7 +1148,7 @@ else:
                     annotation_text="ΔG_leach = 0",
                     annotation_position="top left",
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                _show_publication_plot(fig)
         else:
             st.info("No potential scan found.")
 
@@ -1117,7 +1255,7 @@ else:
                     annotation_text="Bare vacancy reference",
                     annotation_position="top left",
                 )
-                st.plotly_chart(fig_prot, use_container_width=True)
+                _show_publication_plot(fig_prot)
 
         if protonation_scan_path.exists():
             try:
@@ -1175,7 +1313,7 @@ else:
                 annotation_text="ΔG_leach = 0",
                 annotation_position="top left",
             )
-            st.plotly_chart(fig_scan, use_container_width=True)
+            _show_publication_plot(fig_scan)
 
         if (
             bare_threshold_col in results.columns
@@ -1245,7 +1383,7 @@ else:
                         "dopant": "Dopant",
                     },
                 )
-                st.plotly_chart(fig_threshold_compare, use_container_width=True)
+                _show_publication_plot(fig_threshold_compare)
 
     with tabs[4]:
         st.markdown("### Interactive thermodynamic explorer")
@@ -1725,9 +1863,7 @@ else:
                                     line_kwargs["line_dash"] = "pH slice"
                                 fig_u = px.line(**line_kwargs)
                                 fig_u.add_hline(y=0.0, line_dash="dash")
-                                st.plotly_chart(
-                                    fig_u, use_container_width=True
-                                )
+                                _show_publication_plot(fig_u)
 
                     with right:
                         st.markdown("##### ΔG vs pH")
@@ -1864,9 +2000,7 @@ else:
                                     ph_kwargs["line_dash"] = "Potential slice"
                                 fig_ph = px.line(**ph_kwargs)
                                 fig_ph.add_hline(y=0.0, line_dash="dash")
-                                st.plotly_chart(
-                                    fig_ph, use_container_width=True
-                                )
+                                _show_publication_plot(fig_ph)
 
                     st.markdown("#### U–pH landscape")
                     st.caption(
@@ -2184,7 +2318,7 @@ else:
                             xaxis_title=f"Potential (V vs {explorer_scale})",
                             yaxis_title="pH",
                         )
-                        st.plotly_chart(heat, use_container_width=True)
+                        _show_publication_plot(heat)
                     with map_right:
                         h_values = sorted(
                             {
@@ -2244,7 +2378,7 @@ else:
                                 xaxis_title=f"Potential (V vs {explorer_scale})",
                                 yaxis_title="pH",
                             )
-                            st.plotly_chart(hmap, use_container_width=True)
+                            _show_publication_plot(hmap)
 
                     surface_fig = go.Figure(
                         data=[
@@ -2275,7 +2409,7 @@ else:
                             ),
                         ),
                     )
-                    st.plotly_chart(surface_fig, use_container_width=True)
+                    _show_publication_plot(surface_fig, height=680, is_3d=True)
 
                     st.markdown("#### State diagnostics")
                     d1, d2 = st.columns(2)
@@ -2663,7 +2797,7 @@ else:
                                 f"{response_y} vs local structural environment"
                             ),
                         )
-                        st.plotly_chart(fig_env, use_container_width=True)
+                        _show_publication_plot(fig_env)
 
                 st.markdown("#### Inspect one site")
                 site_option_map: dict[str, tuple[str, str, int]] = {}
