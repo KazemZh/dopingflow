@@ -10,6 +10,7 @@ from pymatgen.io.vasp import Poscar
 
 from dopingflow.leaching import (
     KB_EV_K,
+    analyze_site_environment,
     build_thermodynamic_grid,
     electrochemical_metrics,
     enumerate_leaching_sites,
@@ -221,6 +222,41 @@ def _surface_slab() -> Structure:
     ]
     return Structure(lattice, species, frac)
 
+
+
+def test_site_environment_reports_neighbors_and_coordination() -> None:
+    lattice = Lattice.cubic(20.0)
+    species = ["Sb", "O", "O", "Sn", "In"]
+    coords = [
+        [10.0, 10.0, 10.0],
+        [12.0, 10.0, 10.0],
+        [8.0, 10.0, 10.0],
+        [10.0, 13.0, 10.0],
+        [10.0, 10.0, 13.5],
+    ]
+    structure = Structure(
+        lattice, species, coords, coords_are_cartesian=True
+    )
+    summary, neighbors = analyze_site_environment(
+        structure,
+        0,
+        anion_species=["O"],
+        dopant_species=["Sb", "In"],
+        neighbor_cutoff_A=4.0,
+        coordination_cutoff_A=2.5,
+    )
+
+    assert summary["site_species"] == "Sb"
+    assert summary["anion_coordination_number"] == 2
+    assert summary["neighbors_within_cutoff"] == 4
+    assert summary["dopant_neighbors_within_cutoff"] == 1
+    assert summary["nearest_anion_distance_A"] == pytest.approx(2.0)
+    assert summary["mean_coordination_anion_distance_A"] == pytest.approx(2.0)
+    assert summary["nearest_cation_distance_A"] == pytest.approx(3.0)
+    assert summary["nearest_dopant_distance_A"] == pytest.approx(3.5)
+    assert "O2" in summary["local_environment_signature"]
+    assert set(neighbors["species"]) == {"O", "Sn", "In"}
+    assert int(neighbors["within_coordination_cutoff"].sum()) == 2
 
 def test_site_enumeration_defaults_to_surface_zone() -> None:
     slab = _surface_slab()
