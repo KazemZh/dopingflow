@@ -2775,9 +2775,6 @@ else:
                             st.session_state[
                                 f"leaching_environment_color_{element}"
                             ] = default_color
-                        st.session_state[
-                            "leaching_environment_target_color"
-                        ] = "#D62728"
 
                     color_columns = st.columns(
                         min(4, max(1, len(elements_present)))
@@ -2792,15 +2789,6 @@ else:
                             key=f"leaching_environment_color_{element}",
                         )
 
-                    target_color = st.color_picker(
-                        "Selected leaching-site highlight",
-                        value="#D62728",
-                        key="leaching_environment_target_color",
-                        help=(
-                            "This highlight overrides the element color only for "
-                            "the currently selected leaching site."
-                        ),
-                    )
                     enable_atom_hover = st.checkbox(
                         "Show element and site index on hover",
                         value=True,
@@ -2831,9 +2819,10 @@ else:
                         ].copy()
                     st.caption(
                         "Base atom colors follow your element palette. The selected "
-                        "leaching site uses the separate highlight color. Local-shell "
-                        "markers remain **gold** = coordinating anion, **blue** = nearby "
-                        "dopant, **green** = other local atom."
+                        "leaching site keeps the **same color as its element** and is "
+                        "only slightly enlarged; its label identifies it explicitly. "
+                        "Local-shell markers remain **gold** = coordinating anion, "
+                        "**blue** = nearby dopant, **green** = other local atom."
                     )
                     if enable_atom_hover:
                         st.caption(
@@ -2848,7 +2837,6 @@ else:
                             title=selected_environment_label,
                             label_neighbors=label_neighbors,
                             element_colors=element_colors,
-                            target_color=target_color,
                             enable_hover=enable_atom_hover,
                         )
                     except Exception as exc:
