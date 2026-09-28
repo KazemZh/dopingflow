@@ -93,7 +93,7 @@ def test_analysis_defaults_are_separate_postprocessing_settings() -> None:
 def test_thermodynamic_grid_selects_best_h_state_and_reports_net_electrons() -> None:
     states = [
         {"h_count": 0, "arrangement_id": 0, "extraction_base_eV": 4.0},
-        {"h_count": 3, "arrangement_id": 1, "extraction_base_eV": 0.0},
+        {"h_count": 3, "arrangement_id": 1, "extraction_base_eV": -2.5},
     ]
     grid = build_thermodynamic_grid(
         states,
