@@ -238,6 +238,91 @@ def _result_structure_path(value: Any, root: Path) -> Path:
     return path.resolve() if path.is_absolute() else (root / path).resolve()
 
 
+def _existing_leaching_site_choices(
+    root: Path,
+    source_root_value: str,
+    outdir_value: str,
+) -> dict[str, str]:
+    """Return label -> exact selector for already completed leaching sites."""
+    source = Path(str(source_root_value or "")).expanduser()
+    source_root = source.resolve() if source.is_absolute() else (root / source).resolve()
+    out = Path(str(outdir_value or "09_leaching")).expanduser()
+    result_dir = out.resolve() if out.is_absolute() else (source_root / out).resolve()
+    summary_path = result_dir / "leaching_summary.csv"
+    protonation_path = result_dir / "leaching_protonation_summary.csv"
+    if not summary_path.exists():
+        return {}
+
+    try:
+        summary = pd.read_csv(summary_path)
+    except (OSError, pd.errors.EmptyDataError):
+        return {}
+    if summary.empty:
+        return {}
+
+    completed_h: dict[tuple[str, str, int], list[int]] = {}
+    if protonation_path.exists():
+        try:
+            protonation = pd.read_csv(protonation_path)
+        except (OSError, pd.errors.EmptyDataError):
+            protonation = pd.DataFrame()
+        if not protonation.empty:
+            protonation = protonation.copy()
+            protonation["site_index"] = pd.to_numeric(
+                protonation["site_index"], errors="coerce"
+            )
+            protonation["h_count"] = pd.to_numeric(
+                protonation["h_count"], errors="coerce"
+            )
+            if "status" in protonation.columns:
+                protonation = protonation[
+                    protonation["status"].astype(str).eq("ok")
+                ]
+            for keys, group in protonation.dropna(
+                subset=["site_index", "h_count"]
+            ).groupby(["surface_id", "dopant", "site_index"], dropna=False):
+                completed_h[
+                    (str(keys[0]), str(keys[1]), int(keys[2]))
+                ] = sorted(
+                    {
+                        int(value)
+                        for value in group["h_count"].tolist()
+                    }
+                )
+
+    choices: dict[str, str] = {}
+    for _, row in summary.iterrows():
+        if "status" in summary.columns and str(row.get("status", "")) != "ok":
+            continue
+        try:
+            sid = str(row["surface_id"])
+            dopant = str(row["dopant"])
+            idx = int(row["site_index"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        selector = _site_selector(sid, dopant, idx)
+        target = str(row.get("target_id", ""))
+        zone = str(row.get("initial_dopant_zone", ""))
+        try:
+            hkl = (
+                f"({int(row.get('miller_h', 0))}"
+                f"{int(row.get('miller_k', 0))}"
+                f"{int(row.get('miller_l', 0))})"
+            )
+        except (TypeError, ValueError):
+            hkl = ""
+        h_counts = completed_h.get((sid, dopant, idx), [])
+        h_text = ",".join(str(value) for value in h_counts) if h_counts else "none"
+        label = (
+            f"{dopant} site {idx} | {hkl} | {zone} | {target} "
+            f"| completed H: {h_text}"
+        )
+        if label in choices:
+            label = f"{label} | {selector}"
+        choices[label] = selector
+    return choices
+
+
 def _recovery_candidates(result_dir: Path) -> tuple[dict[str, list[str]], int, int]:
     """Find already-started site jobs that do not have complete checkpoints."""
     surfaces_dir = result_dir / "surfaces"
@@ -627,6 +712,86 @@ with st.expander("Configuration & run controls", expanded=True):
             manual_h2_error = "Manual E(H₂) must be a number or left empty."
             st.error(manual_h2_error)
 
+    st.subheader("Continuation / exact-site selection")
+    st.caption(
+        "Use this to extend protonation scans only for leaching sites that were already "
+        "calculated. With Resume completed sites enabled, existing H-state checkpoints "
+        "are reused and only missing requested H states are calculated."
+    )
+
+    existing_site_choices = _existing_leaching_site_choices(
+        project_root,
+        source_root,
+        outdir,
+    )
+    saved_site_include = [
+        str(value) for value in saved.get("site_include", []) or []
+    ]
+    continuation_default = bool(saved_site_include)
+    restrict_existing_sites = st.checkbox(
+        "Restrict this run to selected previously calculated sites",
+        value=continuation_default,
+        help=(
+            "This is an exact atom-site filter, unlike Surface/target selector(s), "
+            "which filters whole surface structures."
+        ),
+    )
+
+    selected_existing_labels: list[str] = []
+    if existing_site_choices:
+        selector_to_label = {
+            selector: label for label, selector in existing_site_choices.items()
+        }
+        default_labels = [
+            selector_to_label[selector]
+            for selector in saved_site_include
+            if selector in selector_to_label
+        ]
+        selected_existing_labels = st.multiselect(
+            "Previously calculated sites to continue",
+            list(existing_site_choices.keys()),
+            default=default_labels,
+            disabled=not restrict_existing_sites,
+            help=(
+                "Choose the exact Sb/In atom sites to extend. The label also shows which "
+                "H counts are already present in the protonation summary."
+            ),
+        )
+    else:
+        st.info(
+            "No existing leaching_summary.csv was found in the current output directory, "
+            "so there are no previous sites to select yet."
+        )
+
+    site_include = (
+        [
+            existing_site_choices[label]
+            for label in selected_existing_labels
+        ]
+        if restrict_existing_sites
+        else []
+    )
+
+    if restrict_existing_sites:
+        if not site_include:
+            st.warning(
+                "Exact-site restriction is enabled but no previous site is selected."
+            )
+        if not resume_completed:
+            st.error(
+                "Continuation should use **Resume completed sites**; otherwise existing "
+                "bare/protonation calculations can be recomputed."
+            )
+        if protonation_enabled:
+            requested_counts = sorted(
+                set(int(value) for value in protonation_h_counts) | {0}
+            )
+            st.info(
+                "For an extension from the existing 0H–3H scan to 4H/5H, keep "
+                "**H counts to test = 0,1,2,3,4,5**. Existing 1H–3H arrangements "
+                "will be reused; missing 4H/5H arrangements will be calculated."
+            )
+
     st.subheader("Metal reference")
     a1, a2, a3 = st.columns(3)
     reference_file = a1.text_input(
@@ -720,6 +885,7 @@ with st.expander("Configuration & run controls", expanded=True):
         source_mode=source_mode,
         source_summary=source_summary,
         surface_include=surface_include,
+        site_include=site_include,
         dopant_species=dopants,
         zones=zones,
         placement_side=placement_side,
@@ -778,6 +944,16 @@ with st.expander("Configuration & run controls", expanded=True):
     resolved_cfg["leaching"] = resolved
 
     validation_error = redox_error or manual_h2_error
+    if restrict_existing_sites and not site_include and validation_error is None:
+        validation_error = (
+            "Exact-site continuation is enabled, but no previous site is selected."
+        )
+        st.error(validation_error)
+    if restrict_existing_sites and not resume_completed and validation_error is None:
+        validation_error = (
+            "Exact-site continuation requires Resume completed sites to be enabled."
+        )
+        st.error(validation_error)
     if validation_error is None:
         try:
             parse_leaching_config(resolved_cfg, project_root)
