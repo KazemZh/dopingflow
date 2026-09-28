@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib
-from io import BytesIO
 import json
 import subprocess
 from pathlib import Path
@@ -13,10 +12,8 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import plotly.io as pio
 import streamlit as st
 import toml
-from PIL import Image
 from pymatgen.core import Structure
 
 from dopingflow.leaching import (
@@ -190,58 +187,11 @@ def _publication_style(
     return fig
 
 
-def _render_plotly_pdf(
-    figure_json: str,
-    width: int,
-    height: int,
-) -> bytes:
-    """Render this exact Plotly figure to a color PDF with screen-faithful styling."""
-    figure = pio.from_json(figure_json)
-
-    # Render through Plotly's PNG path because it reproduces the interactive
-    # figure's colors, line styles, markers, legends, heatmaps, and 3D content
-    # consistently. Do not cache this conversion: every click renders the exact
-    # current figure supplied by the caller.
-    png_bytes = figure.to_image(
-        format="png",
-        width=int(width),
-        height=int(height),
-        scale=3,
-    )
-
-    image = Image.open(BytesIO(png_bytes))
-    if image.mode in {"RGBA", "LA"}:
-        background = Image.new("RGB", image.size, "white")
-        alpha = image.getchannel("A")
-        background.paste(image.convert("RGB"), mask=alpha)
-        image = background
-    elif image.mode != "RGB":
-        image = image.convert("RGB")
-
-    output = BytesIO()
-    image.save(
-        output,
-        format="PDF",
-        resolution=300.0,
-        quality=100,
-    )
-    return output.getvalue()
-
-
-def _plot_export_slug(value: str) -> str:
-    cleaned = "".join(
-        char.lower() if char.isalnum() else "_"
-        for char in str(value)
-    )
-    return "_".join(part for part in cleaned.split("_") if part)[:90] or "plot"
-
-
 def _show_publication_plot(
     fig: go.Figure,
     *,
     height: int = 620,
     is_3d: bool = False,
-    export_name: str | None = None,
 ) -> None:
     _publication_style(fig, height=height, is_3d=is_3d)
     st.plotly_chart(
@@ -249,63 +199,6 @@ def _show_publication_plot(
         width="stretch",
         config=PUBLICATION_PLOT_CONFIG,
     )
-
-    title_text = str(
-        getattr(getattr(fig.layout, "title", None), "text", "") or "DopingFlow plot"
-    )
-    slug = _plot_export_slug(export_name or title_text)
-    figure_json = fig.to_json()
-
-    # Use one state slot per visible plot. It is replaced every time the user
-    # requests a PDF, so an older figure can never be reused for another plot.
-    pdf_state_key = f"leaching_pdf_bytes_{slug}"
-    pdf_source_key = f"leaching_pdf_source_{slug}"
-    prepare_key = f"prepare_leaching_pdf_{slug}"
-    download_key = f"download_leaching_pdf_{slug}"
-
-    button_col, download_col = st.columns([1.0, 1.0])
-    with button_col:
-        if st.button(
-            "Generate color PDF",
-            key=prepare_key,
-            width="stretch",
-            help=(
-                "Render this exact current Plotly figure as a high-resolution "
-                "color PDF matching the on-screen plot. Each click renders the "
-                "current figure from scratch; no PDF is reused from another plot."
-            ),
-        ):
-            try:
-                with st.spinner("Rendering this exact plot to a color PDF…"):
-                    pdf_bytes = _render_plotly_pdf(
-                        figure_json,
-                        1200,
-                        height,
-                    )
-                st.session_state[pdf_state_key] = pdf_bytes
-                st.session_state[pdf_source_key] = figure_json
-            except Exception as exc:
-                st.session_state.pop(pdf_state_key, None)
-                st.session_state.pop(pdf_source_key, None)
-                st.error(
-                    "Could not create the PDF from the current plot. "
-                    f"Plotly/PDF renderer reported: {exc}"
-                )
-
-    current_pdf = st.session_state.get(pdf_state_key)
-    current_source = st.session_state.get(pdf_source_key)
-    with download_col:
-        if current_pdf is not None and current_source == figure_json:
-            st.download_button(
-                "Download PDF",
-                data=current_pdf,
-                file_name=f"{slug}.pdf",
-                mime="application/pdf",
-                key=download_key,
-                width="stretch",
-            )
-        else:
-            st.caption("Generate the PDF for the current plot first.")
 
 
 
@@ -1155,7 +1048,7 @@ else:
                     hover_data=[c for c in ("target_id", "variant_label", "site_index", "initial_dopant_zone", "surface_variant_declared_zone", "initial_depth_from_selected_surface_A") if c in plot.columns],
                     title="Metal-referenced dopant extraction energy",
                 )
-                _show_publication_plot(fig, export_name="extraction_energy")
+                _show_publication_plot(fig)
 
     with tabs[1]:
         if aggregate_path.exists():
@@ -1212,7 +1105,7 @@ else:
                         "dopant": "Dopant",
                     },
                 )
-                _show_publication_plot(fig_threshold, export_name="bare_dissolution_threshold")
+                _show_publication_plot(fig_threshold)
 
         if potential_path.exists():
             try:
@@ -1262,7 +1155,7 @@ else:
                     annotation_text="ΔG_leach = 0",
                     annotation_position="top left",
                 )
-                _show_publication_plot(fig, export_name="bare_leaching_free_energy")
+                _show_publication_plot(fig)
         else:
             st.info("No potential scan found.")
 
@@ -1369,10 +1262,7 @@ else:
                     annotation_text="Bare vacancy reference",
                     annotation_position="top left",
                 )
-                _show_publication_plot(
-                    fig_prot,
-                    export_name="protonation_zeroV_comparison",
-                )
+                _show_publication_plot(fig_prot)
 
         if protonation_scan_path.exists():
             try:
@@ -1430,10 +1320,7 @@ else:
                 annotation_text="ΔG_leach = 0",
                 annotation_position="top left",
             )
-            _show_publication_plot(
-                fig_scan,
-                export_name="protonation_adjusted_potential_scan",
-            )
+            _show_publication_plot(fig_scan)
 
         if (
             bare_threshold_col in results.columns
@@ -1503,10 +1390,7 @@ else:
                         "dopant": "Dopant",
                     },
                 )
-                _show_publication_plot(
-                    fig_threshold_compare,
-                    export_name="bare_vs_protonation_thresholds",
-                )
+                _show_publication_plot(fig_threshold_compare)
 
     with tabs[4]:
         st.markdown("### Interactive thermodynamic explorer")
@@ -1986,11 +1870,7 @@ else:
                                     line_kwargs["line_dash"] = "pH slice"
                                 fig_u = px.line(**line_kwargs)
                                 fig_u.add_hline(y=0.0, line_dash="dash")
-                                _show_publication_plot(
-                                    fig_u,
-                                    height=520,
-                                    export_name="deltaG_vs_potential_comparison",
-                                )
+                                _show_publication_plot(fig_u, height=520)
 
                     with right:
                         st.markdown("##### ΔG vs pH")
@@ -2127,11 +2007,7 @@ else:
                                     ph_kwargs["line_dash"] = "Potential slice"
                                 fig_ph = px.line(**ph_kwargs)
                                 fig_ph.add_hline(y=0.0, line_dash="dash")
-                                _show_publication_plot(
-                                    fig_ph,
-                                    height=520,
-                                    export_name="deltaG_vs_pH_comparison",
-                                )
+                                _show_publication_plot(fig_ph, height=520)
 
                     st.markdown("#### U–pH landscape")
                     st.caption(
@@ -2449,14 +2325,7 @@ else:
                             xaxis_title=f"Potential (V vs {explorer_scale})",
                             yaxis_title="pH",
                         )
-                        _show_publication_plot(
-                            heat,
-                            height=520,
-                            export_name=(
-                                f"deltaG_U_pH_{selected_dopant}_site_"
-                                f"{selected_site_index}_{focus_h_mode}"
-                            ),
-                        )
+                        _show_publication_plot(heat, height=520)
                     with map_right:
                         h_values = sorted(
                             {
@@ -2516,14 +2385,7 @@ else:
                                 xaxis_title=f"Potential (V vs {explorer_scale})",
                                 yaxis_title="pH",
                             )
-                            _show_publication_plot(
-                                hmap,
-                                height=520,
-                                export_name=(
-                                    f"preferred_H_U_pH_{selected_dopant}_site_"
-                                    f"{selected_site_index}"
-                                ),
-                            )
+                            _show_publication_plot(hmap, height=520)
 
                     surface_fig = go.Figure(
                         data=[
@@ -2558,10 +2420,6 @@ else:
                         surface_fig,
                         height=620,
                         is_3d=True,
-                        export_name=(
-                            f"deltaG_3D_{selected_dopant}_site_"
-                            f"{selected_site_index}_{focus_h_mode}"
-                        ),
                     )
 
                     st.markdown("#### State diagnostics")
@@ -2950,12 +2808,7 @@ else:
                                 f"{response_y} vs local structural environment"
                             ),
                         )
-                        _show_publication_plot(
-                            fig_env,
-                            export_name=(
-                                f"site_environment_{descriptor_x}_vs_{response_y}"
-                            ),
-                        )
+                        _show_publication_plot(fig_env)
 
                 st.markdown("#### Inspect one site")
                 site_option_map: dict[str, tuple[str, str, int]] = {}
