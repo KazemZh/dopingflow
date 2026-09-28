@@ -160,6 +160,40 @@ manual ``manual_h2_energy_eV`` can be supplied when a separate consistent
 reference is preferred. This protonation treatment is still a screening
 approximation: it does not add explicit liquid water or a constant-potential
 electrode calculation.
+Site-resolved local environment analysis
+----------------------------------------
+
+The Results page includes a ``Site environment`` tab for explaining why
+different sites of the same dopant can show different extraction/leaching
+energies. The analysis is performed on the relaxed parent surface *before*
+dopant removal and is therefore post-processing only; no MLFF calculation is
+repeated.
+
+For every leaching site, DopingFlow can report:
+
+* anion coordination number using a user-adjustable coordination cutoff;
+* nearest-anion distance and mean first-shell metal-anion distance;
+* first-shell bond-length standard deviation and range;
+* mean and standard deviation of pairwise anion-metal-anion angles;
+* total local-neighbor, cation/other-neighbor, and dopant-neighbor counts;
+* nearest cation/other and nearest dopant distances;
+* a local species-count signature inside a user-adjustable environment radius;
+* the original surface zone/depth, facet, vacancy metadata, and the associated
+  extraction/dissolution metrics.
+
+The tab provides a comparison table and descriptor-versus-leaching scatter
+plot across all sites. A selected site can also be inspected in an interactive
+3D structure viewer: the target dopant is highlighted, coordinating anions,
+nearby dopants, and other local atoms are marked separately, and optional
+labels show atom indices and distances. Periodic-image coordinates are used
+for the local shell so neighbors across a cell boundary are represented by
+their physically nearest image.
+
+The environment table and the selected-site neighbor list can both be exported
+as CSV files. These descriptors are structural correlations, not proof of a
+causal leaching mechanism; differences can also arise from longer-range
+relaxation, surface termination, vacancy arrangement, electrostatics, and the
+chosen thermodynamic reference model.
 Why redox data are not hard-coded
 ---------------------------------
 
