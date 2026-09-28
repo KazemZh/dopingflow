@@ -617,6 +617,187 @@ def preview_leaching_sites(config: Mapping[str, Any], project_root: Path | str =
     return frame
 
 
+
+def analyze_site_environment(
+    structure: Structure,
+    site_index: int,
+    *,
+    anion_species: Sequence[str] = ("O",),
+    dopant_species: Sequence[str] = (),
+    neighbor_cutoff_A: float = 4.0,
+    coordination_cutoff_A: float = 2.8,
+) -> tuple[dict[str, Any], pd.DataFrame]:
+    """Describe the local environment around one dopant/site.
+
+    This is geometry-only post-processing. neighbor_cutoff_A defines the
+    reporting shell, while coordination_cutoff_A defines the first anion
+    coordination shell. Periodic-image coordinates are retained so slab-edge
+    neighbors use their physically nearest image.
+    """
+    idx = int(site_index)
+    if idx < 0 or idx >= len(structure):
+        raise IndexError(
+            f"site_index {idx} is outside structure with {len(structure)} atoms"
+        )
+    neighbor_cutoff = float(neighbor_cutoff_A)
+    coordination_cutoff = float(coordination_cutoff_A)
+    if neighbor_cutoff <= 0 or coordination_cutoff <= 0:
+        raise ValueError("neighbor and coordination cutoffs must be positive")
+
+    anions = {str(x) for x in anion_species}
+    dopants = {str(x) for x in dopant_species}
+    center = structure[idx]
+    center_symbol = center.specie.symbol
+    center_coords = np.asarray(center.coords, dtype=float)
+
+    rows: list[dict[str, Any]] = []
+    for neighbor in structure.get_neighbors(center, neighbor_cutoff):
+        nidx = int(neighbor.index)
+        image = tuple(int(x) for x in neighbor.image)
+        if nidx == idx and image == (0, 0, 0):
+            continue
+        symbol = neighbor.specie.symbol
+        distance = float(neighbor.nn_distance)
+        coords = np.asarray(neighbor.coords, dtype=float)
+        vector = coords - center_coords
+        if symbol in anions:
+            neighbor_class = "anion"
+        elif symbol in dopants:
+            neighbor_class = "dopant"
+        else:
+            neighbor_class = "cation/other"
+        rows.append(
+            {
+                "neighbor_index": nidx,
+                "species": symbol,
+                "neighbor_class": neighbor_class,
+                "distance_A": distance,
+                "within_coordination_cutoff": bool(
+                    symbol in anions and distance <= coordination_cutoff
+                ),
+                "periodic_image_a": image[0],
+                "periodic_image_b": image[1],
+                "periodic_image_c": image[2],
+                "neighbor_cart_x_A": float(coords[0]),
+                "neighbor_cart_y_A": float(coords[1]),
+                "neighbor_cart_z_A": float(coords[2]),
+                "dx_A": float(vector[0]),
+                "dy_A": float(vector[1]),
+                "dz_A": float(vector[2]),
+            }
+        )
+    neighbors = pd.DataFrame(rows)
+    if not neighbors.empty:
+        neighbors = neighbors.sort_values(
+            ["distance_A", "species", "neighbor_index"], ignore_index=True
+        )
+
+    def _distances(mask: pd.Series) -> np.ndarray:
+        if neighbors.empty:
+            return np.asarray([], dtype=float)
+        return pd.to_numeric(
+            neighbors.loc[mask, "distance_A"], errors="coerce"
+        ).dropna().to_numpy(dtype=float)
+
+    if neighbors.empty:
+        anion_distances = cation_distances = dopant_distances = np.asarray(
+            [], dtype=float
+        )
+        coordination_rows = pd.DataFrame()
+        species_counts: dict[str, int] = {}
+    else:
+        anion_mask = neighbors["species"].isin(anions)
+        dopant_mask = neighbors["species"].isin(dopants)
+        cation_mask = ~anion_mask
+        anion_distances = _distances(anion_mask)
+        cation_distances = _distances(cation_mask)
+        dopant_distances = _distances(dopant_mask)
+        coordination_rows = neighbors[
+            anion_mask & neighbors["within_coordination_cutoff"]
+        ]
+        species_counts = {
+            str(key): int(value)
+            for key, value in neighbors["species"].value_counts().sort_index().items()
+        }
+
+    coord_distances = (
+        pd.to_numeric(
+            coordination_rows.get("distance_A", pd.Series(dtype=float)),
+            errors="coerce",
+        )
+        .dropna()
+        .to_numpy(dtype=float)
+    )
+
+    angles: list[float] = []
+    if len(coordination_rows) >= 2:
+        vectors = coordination_rows[["dx_A", "dy_A", "dz_A"]].to_numpy(dtype=float)
+        for first, second in combinations(vectors, 2):
+            denom = float(np.linalg.norm(first) * np.linalg.norm(second))
+            if denom <= 0:
+                continue
+            cosine = float(np.dot(first, second) / denom)
+            angles.append(
+                float(np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0))))
+            )
+
+    def _finite_or_none(values: np.ndarray, reducer: Any) -> float | None:
+        return float(reducer(values)) if len(values) else None
+
+    signature = ", ".join(
+        f"{element}{count}" for element, count in species_counts.items()
+    )
+
+    summary = {
+        "site_index": idx,
+        "site_species": center_symbol,
+        "site_cart_x_A": float(center_coords[0]),
+        "site_cart_y_A": float(center_coords[1]),
+        "site_cart_z_A": float(center_coords[2]),
+        "neighbor_cutoff_A": neighbor_cutoff,
+        "coordination_cutoff_A": coordination_cutoff,
+        "neighbors_within_cutoff": int(len(neighbors)),
+        "anion_neighbors_within_cutoff": int(
+            0 if neighbors.empty else neighbors["species"].isin(anions).sum()
+        ),
+        "cation_neighbors_within_cutoff": int(
+            0 if neighbors.empty else (~neighbors["species"].isin(anions)).sum()
+        ),
+        "dopant_neighbors_within_cutoff": int(
+            0 if neighbors.empty else neighbors["species"].isin(dopants).sum()
+        ),
+        "anion_coordination_number": int(len(coordination_rows)),
+        "nearest_anion_distance_A": _finite_or_none(anion_distances, np.min),
+        "mean_coordination_anion_distance_A": _finite_or_none(
+            coord_distances, np.mean
+        ),
+        "coordination_anion_distance_std_A": (
+            float(np.std(coord_distances)) if len(coord_distances) >= 2 else 0.0
+            if len(coord_distances) == 1
+            else None
+        ),
+        "coordination_anion_distance_range_A": (
+            float(np.max(coord_distances) - np.min(coord_distances))
+            if len(coord_distances) >= 2
+            else 0.0
+            if len(coord_distances) == 1
+            else None
+        ),
+        "nearest_cation_distance_A": _finite_or_none(cation_distances, np.min),
+        "nearest_dopant_distance_A": _finite_or_none(dopant_distances, np.min),
+        "mean_coordination_angle_deg": _finite_or_none(
+            np.asarray(angles, dtype=float), np.mean
+        ),
+        "coordination_angle_std_deg": (
+            float(np.std(angles)) if len(angles) >= 2 else 0.0
+            if len(angles) == 1
+            else None
+        ),
+        "neighbor_species_counts_json": json.dumps(species_counts, sort_keys=True),
+        "local_environment_signature": signature or "no neighbors in cutoff",
+    }
+    return summary, neighbors
+
 def _calculator_identity(cfg: Mapping[str, Any]) -> dict[str, str]:
     return {k: str(cfg[k]) for k in ("backend", "model", "task")}
 
@@ -2054,6 +2235,6 @@ __all__ = [
     "preview_leaching_sites", "resolve_leaching_output_dir", "load_redox_references", "electrochemical_metrics",
     "leaching_delta_g_eV", "protonation_delta_g_eV",
     "protonation_adjusted_leaching_delta_g_eV", "protonation_dissolution_thresholds",
-    "build_thermodynamic_grid",
+    "build_thermodynamic_grid", "analyze_site_environment",
     "run_leaching", "run_leaching_from_toml",
 ]
