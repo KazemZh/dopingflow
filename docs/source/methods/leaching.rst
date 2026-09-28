@@ -231,6 +231,27 @@ pathways. Optional post-leaching O-H protonation can be included with the CHE
 extension described above, but it remains a local surface-termination
 approximation rather than a full solvated/constant-potential treatment.
 
+Continuing only selected existing sites
+---------------------------------------
+
+For extending an already completed protonation scan, the GUI provides an
+exact-site continuation selector. It reads the existing leaching results and
+lets the user choose individual atom sites (for example ``Sb site 76`` or
+``In site 78``) rather than rerunning every site on the parent surface.
+
+The exact selectors are stored in ``[leaching].site_include``. This filter is
+applied after surface/site enumeration, while ``surface_include`` continues to
+filter whole surface/target rows.
+
+When extending an existing ``0H-3H`` scan to ``4H`` and ``5H``, keep
+``resume_completed = true`` and request the complete set
+``h_counts = [0, 1, 2, 3, 4, 5]``. Existing compatible 1H-3H arrangement
+checkpoints are reused; only missing 4H/5H arrangements are calculated. Keeping
+the old H counts in the request also allows the regenerated summary tables to
+contain the full set of old and new protonation states.
+
+If a selected site has fewer protonatable O neighbors than a requested H count,
+that H count has no valid arrangement and is skipped for that site.
 Configuration
 -------------
 
