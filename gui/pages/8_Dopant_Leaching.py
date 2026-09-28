@@ -2798,6 +2798,15 @@ else:
                             "zero-based atom/site index used by DopingFlow."
                         ),
                     )
+                    show_orientation = st.checkbox(
+                        "Show coordinate axes and surface-normal direction",
+                        value=True,
+                        key="leaching_environment_show_orientation",
+                        help=(
+                            "Shows x/y/z arrows and marks the exposed surface/vacuum "
+                            "direction along the slab-normal z axis."
+                        ),
+                    )
 
                 detail_left, detail_right = st.columns([1.35, 1.0])
                 with detail_left:
@@ -2829,6 +2838,21 @@ else:
                             "Move the cursor over any base atom to show "
                             "**element + DopingFlow site index**."
                         )
+                    if show_orientation:
+                        placement_side = str(
+                            parsed_for_results.get("placement_side", "top")
+                            if "parsed_for_results" in locals()
+                            else "top"
+                        )
+                        direction_text = {
+                            "top": "+z",
+                            "bottom": "−z",
+                            "both": "±z",
+                        }.get(placement_side, "z")
+                        st.caption(
+                            f"Surface-normal direction for this workflow: **{direction_text}**. "
+                            "The orange arrow marks the exposed surface/vacuum side."
+                        )
                     try:
                         show_site_environment(
                             selected_structure_path,
@@ -2838,6 +2862,12 @@ else:
                             label_neighbors=label_neighbors,
                             element_colors=element_colors,
                             enable_hover=enable_atom_hover,
+                            show_orientation=show_orientation,
+                            surface_side=str(
+                                parsed_for_results.get("placement_side", "top")
+                                if "parsed_for_results" in locals()
+                                else "top"
+                            ),
                         )
                     except Exception as exc:
                         st.error(f"Could not render the 3D site environment: {exc}")
