@@ -99,11 +99,19 @@ def show_site_environment(
 
     target = structure[idx]
     tx, ty, tz = (float(x) for x in target.coords)
+    target_element_color = dict(element_colors or {}).get(
+        target.specie.symbol
+    )
+    target_stick = {"radius": 0.10}
+    target_sphere = {"scale": 0.27}
+    if target_element_color:
+        target_stick["color"] = target_element_color
+        target_sphere["color"] = target_element_color
     view.setStyle(
         {"index": idx},
         {
-            "stick": {"radius": 0.13, "color": target_color},
-            "sphere": {"scale": 0.34, "color": target_color},
+            "stick": target_stick,
+            "sphere": target_sphere,
         },
     )
     view.addLabel(
@@ -111,7 +119,7 @@ def show_site_environment(
         {
             "position": {"x": tx, "y": ty, "z": tz},
             "fontColor": "white",
-            "backgroundColor": target_color,
+            "backgroundColor": "#333333",
             "fontSize": 13,
             "showBackground": True,
         },
