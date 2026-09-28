@@ -185,9 +185,10 @@ The tab provides a comparison table and descriptor-versus-leaching scatter
 plot across all sites. A selected site can also be inspected in an interactive
 3D structure viewer: the target dopant is highlighted, coordinating anions,
 nearby dopants, and other local atoms are marked separately, and optional
-labels show atom indices and distances. The viewer exposes one color picker
-for every chemical element present in the selected slab plus a separate target-
-site highlight color. Atom colors persist while switching between sites.
+labels show atom indices and distances. The viewer exposes one color picker for every chemical element present in the
+selected slab. The selected leaching site keeps the same element color and is
+only slightly enlarged and labeled for identification. Atom colors persist while
+switching between sites.
 Hover labels can be enabled so moving the cursor over a base atom displays its
 element and the same zero-based atom/site index used throughout the leaching
 tables. Periodic-image coordinates are used for the local shell so neighbors
