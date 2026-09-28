@@ -1994,6 +1994,7 @@ def run_leaching(
             "metal-referenced extraction + user-supplied M^z+/M redox reference "
             "+ optional post-leaching O-H protonation with CHE"
         ),
+        "analysis_defaults": dict(cfg.get("analysis_defaults", {}) or {}),
         "potential_scale": cfg["potential_scale"],
         "temperature_K": cfg["temperature_K"],
         "pH": cfg["pH"],
