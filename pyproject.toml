@@ -108,7 +108,7 @@ gui = [
   "toml>=0.10.2",
   "plotly>=5.18",
   "kaleido>=0.2.1",
-  "pillow>=10",
+  "cairosvg>=2.7",
   "py3Dmol",
 ]
 
