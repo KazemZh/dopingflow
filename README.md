@@ -180,7 +180,10 @@ minimum-free-energy ``Best`` state. A separate focus structure/H state drives
 the smooth U-pH ΔG heatmap, discrete preferred-H-count map, 3D thermodynamic
 surface, net-electron diagnostics, and CSV grid export. Heatmap/3D ΔG limits can
 be shared across all selected structures/dopants, auto-scaled per structure, or
-fixed manually for reproducible side-by-side figures. The focus structure/H-state
+fixed manually for reproducible side-by-side figures. A **Site environment** results tab
+reconstructs each dopant site's pre-leaching local geometry, reports coordination,
+bond-length/angle distortion and nearby-dopant descriptors, relates them to leaching
+metrics, and provides an interactive highlighted 3D structure plus CSV export. The focus structure/H-state
 controls sit directly above the U-pH plots and only use structures already selected
 for comparison: the structure choice is automatic for one selected structure and
 becomes a dropdown when several are selected.
