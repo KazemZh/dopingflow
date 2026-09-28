@@ -486,22 +486,23 @@ with st.expander("Configuration & run controls", expanded=True):
         value=bool(saved.get("relax_metal_reference", False)),
     )
 
-    st.subheader("Optional electrochemical dissolution")
+    st.subheader("Electrochemical model definition")
     st.info(
-        "Extraction energy does not require aqueous data. Only enter a standard potential "
-        "when the chosen dissolved species and electron count are chemically appropriate."
+        "Keep only the chemistry-defining redox data here. Temperature, ion activity, "
+        "pH, applied-potential range, and SHE/RHE are post-processing controls and are "
+        "now edited interactively in the Results → Thermodynamic explorer."
     )
     j1, j2 = st.columns(2)
     with j1:
         oxidation_states, err1 = _json_map(
             "Oxidation states / electron counts",
             saved.get("oxidation_states", {}),
-            'JSON object, e.g. {"Sb": 3}.',
+            'JSON object, e.g. {"Sb": 5, "In": 3}.',
         )
         aqueous_species, err2 = _json_map(
             "Aqueous species labels",
             saved.get("aqueous_species", {}),
-            'JSON object, e.g. {"Sb": "chosen Sb aqueous species"}.',
+            'JSON object, e.g. {"Sb": "effective Sb(V) oxide/Sb 5e couple", "In": "In3+(aq)"}.',
         )
     with j2:
         standard_potentials, err3 = _json_map(
@@ -509,42 +510,48 @@ with st.expander("Configuration & run controls", expanded=True):
             saved.get("standard_reduction_potentials_V_SHE", {}),
             "Use validated values for the exact redox reaction being modeled.",
         )
-        ion_activities, err4 = _json_map(
-            "Ion activities",
-            saved.get("ion_activities", {}),
-            'JSON object, e.g. {"Sb": 1e-6}.',
+        st.caption(
+            "These redox quantities define the thermodynamic model and remain saved with "
+            "the calculation. Environmental analysis variables are intentionally not here."
         )
-    redox_error = next((x for x in (err1, err2, err3, err4) if x), None)
+    redox_error = next((x for x in (err1, err2, err3) if x), None)
     if redox_error:
         st.error(redox_error)
 
-    e1, e2, e3, e4 = st.columns(4)
-    default_activity = float(
-        e1.number_input(
-            "Default ion activity",
-            min_value=1e-20,
-            value=float(saved.get("default_ion_activity", 1e-6)),
-            format="%.2e",
-        )
-    )
-    temperature = float(
-        e2.number_input("Temperature (K)", min_value=1.0, value=float(saved.get("temperature_K", 298.15)))
-    )
-    pH = float(e3.number_input("pH", value=float(saved.get("pH", 0.0)), step=0.5))
-    scale = e4.selectbox(
-        "Potential scale",
-        ["RHE", "SHE"],
-        index=0 if str(saved.get("potential_scale", "RHE")).upper() == "RHE" else 1,
-    )
-    potentials = [
-        float(x)
-        for x in _items(
-            st.text_input(
-                "Operating potentials (V)",
-                value=_csv(saved.get("potentials_V", [1.23, 1.50, 1.70])),
-            )
-        )
+    # Backward-compatible analysis defaults. They are saved for reproducibility but
+    # are no longer exposed as calculation/run controls.
+    legacy_potentials = [
+        float(x) for x in saved.get("potentials_V", [1.23, 1.50, 1.70])
     ]
+    analysis_defaults = dict(saved_analysis)
+    analysis_defaults.setdefault(
+        "temperature_K", float(saved.get("temperature_K", 298.15))
+    )
+    analysis_defaults.setdefault(
+        "default_ion_activity", float(saved.get("default_ion_activity", 1e-6))
+    )
+    analysis_defaults.setdefault(
+        "ion_activities", dict(saved.get("ion_activities", {}) or {})
+    )
+    analysis_defaults.setdefault(
+        "potential_scale", str(saved.get("potential_scale", "RHE")).upper()
+    )
+    analysis_defaults.setdefault(
+        "potential_min_V", min(legacy_potentials) if legacy_potentials else 1.0
+    )
+    analysis_defaults.setdefault(
+        "potential_max_V", max(legacy_potentials) if legacy_potentials else 2.0
+    )
+    analysis_defaults.setdefault("potential_step_V", 0.02)
+    analysis_defaults.setdefault("pH_min", 0.0)
+    analysis_defaults.setdefault("pH_max", max(3.0, float(saved.get("pH", 0.0))))
+    analysis_defaults.setdefault("pH_step", 0.1)
+    analysis_defaults.setdefault(
+        "selected_pH_values", [float(saved.get("pH", 0.0))]
+    )
+    analysis_defaults.setdefault(
+        "selected_potential_values", legacy_potentials or [1.23, 1.50, 1.70]
+    )
 
     resolved = dict(saved)
     resolved.update(
@@ -594,12 +601,18 @@ with st.expander("Configuration & run controls", expanded=True):
         oxidation_states=oxidation_states,
         standard_reduction_potentials_V_SHE=standard_potentials,
         aqueous_species=aqueous_species,
-        ion_activities=ion_activities,
-        default_ion_activity=default_activity,
-        temperature_K=temperature,
-        pH=pH,
-        potential_scale=scale,
-        potentials_V=potentials,
+        analysis_defaults=analysis_defaults,
+        # Legacy aliases remain synchronized so existing fixed summary/scan output
+        # code keeps working without making these look like expensive run settings.
+        ion_activities=dict(analysis_defaults.get("ion_activities", {}) or {}),
+        default_ion_activity=float(analysis_defaults.get("default_ion_activity", 1e-6)),
+        temperature_K=float(analysis_defaults.get("temperature_K", 298.15)),
+        pH=float((analysis_defaults.get("selected_pH_values") or [0.0])[0]),
+        potential_scale=str(analysis_defaults.get("potential_scale", "RHE")).upper(),
+        potentials_V=[
+            float(x)
+            for x in (analysis_defaults.get("selected_potential_values") or [1.23, 1.50, 1.70])
+        ],
     )
     resolved_cfg = dict(cfg)
     resolved_cfg["leaching"] = resolved
