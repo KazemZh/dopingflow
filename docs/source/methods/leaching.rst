@@ -410,8 +410,12 @@ The explorer provides:
   two-dimensional comparison, is automatic when only one structure is selected,
   and becomes a dropdown when multiple comparison structures are selected;
 * a smooth two-dimensional ``U``-pH ``Delta G`` heatmap with the ``Delta G = 0`` boundary;
+* a shared ``Delta G`` color/z-scale mode that applies identical limits across all
+  currently selected structures/dopants for publication-style side-by-side comparison,
+  plus per-structure automatic and manual fixed-range modes;
 * a discrete map of the thermodynamically preferred post-leaching H count;
-* a three-dimensional ``Delta G_leach(U,pH)`` surface;
+* a three-dimensional ``Delta G_leach(U,pH)`` surface using the same selected
+  ``Delta G`` limits as the heatmap;
 * state diagnostics including oxidation-state electron count ``z``, preferred
   ``n_H``, and net electron count ``z - n_H``;
 * dopant-specific ion activities for fair Sb/In (or other dopant) comparisons;
