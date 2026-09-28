@@ -1272,64 +1272,127 @@ else:
                 )
                 site_labels[label] = ridx
 
-            selected_label = st.selectbox(
-                "Site to explore",
-                list(site_labels.keys()),
-                help="Heatmaps and 3D surfaces are shown for one site at a time for clarity.",
+            def _states_for_explorer_row(row: pd.Series) -> list[dict[str, Any]]:
+                surface_id = str(row["surface_id"])
+                dopant = str(row["dopant"])
+                site_index = int(row["site_index"])
+                site_states: list[dict[str, Any]] = []
+                if not protonation_table_all.empty:
+                    table = protonation_table_all[
+                        (protonation_table_all["surface_id"].astype(str) == surface_id)
+                        & (protonation_table_all["dopant"].astype(str) == dopant)
+                        & (
+                            pd.to_numeric(
+                                protonation_table_all["site_index"], errors="coerce"
+                            )
+                            == site_index
+                        )
+                    ].copy()
+                    if "extraction_base_eV" in table.columns:
+                        table["extraction_base_eV"] = pd.to_numeric(
+                            table["extraction_base_eV"], errors="coerce"
+                        )
+                        table["h_count"] = pd.to_numeric(
+                            table.get("h_count"), errors="coerce"
+                        )
+                        table = table.dropna(
+                            subset=["extraction_base_eV", "h_count"]
+                        )
+                        site_states = table.to_dict("records")
+                if not site_states:
+                    site_states = [
+                        {
+                            "h_count": 0,
+                            "arrangement_id": 0,
+                            "extraction_base_eV": float(row["extraction_energy_eV"]),
+                        }
+                    ]
+                return site_states
+
+            def _h_mode_to_count(mode: str) -> int | None:
+                return None if mode == "Best" else int(mode.removesuffix("H"))
+
+            all_site_labels = list(site_labels.keys())
+            comparison_labels = st.multiselect(
+                "Structures/sites for 2D comparison",
+                all_site_labels,
+                default=all_site_labels[:1],
+                help=(
+                    "Select several surface structures/sites to overlay their ΔG curves. "
+                    "Selections may include different dopants such as Sb and In."
+                ),
+                key="leaching_explorer_comparison_sites",
             )
-            selected_row = explorer_rows.loc[site_labels[selected_label]]
+            if not comparison_labels:
+                st.warning("Select at least one structure/site for the 2D comparison plots.")
+                comparison_labels = all_site_labels[:1]
+
+            comparison_h_values: set[int] = set()
+            for label in comparison_labels:
+                row = explorer_rows.loc[site_labels[label]]
+                comparison_h_values.update(
+                    int(state["h_count"]) for state in _states_for_explorer_row(row)
+                )
+            comparison_h_options = ["Best"] + [
+                f"{h}H" for h in sorted(comparison_h_values)
+            ]
+            comparison_h_modes = st.multiselect(
+                "H state(s) for 2D comparison",
+                comparison_h_options,
+                default=["Best"],
+                help=(
+                    "Best minimizes ΔG over all calculated H states at every U/pH point. "
+                    "Choose explicit 0H/1H/2H/... states to compare fixed protonation levels."
+                ),
+                key="leaching_explorer_comparison_h_states",
+            )
+            if not comparison_h_modes:
+                comparison_h_modes = ["Best"]
+
+            st.markdown("#### Focus state for U–pH map and 3D surface")
+            focus_col1, focus_col2 = st.columns(2)
+            focus_label = focus_col1.selectbox(
+                "Focus structure/site",
+                all_site_labels,
+                index=all_site_labels.index(comparison_labels[0])
+                if comparison_labels[0] in all_site_labels
+                else 0,
+                help=(
+                    "The heatmap, preferred-H map, 3D surface, diagnostics, and grid export "
+                    "use one focus structure so those views remain interpretable."
+                ),
+                key="leaching_explorer_focus_site",
+            )
+            selected_row = explorer_rows.loc[site_labels[focus_label]]
             selected_surface = str(selected_row["surface_id"])
             selected_dopant = str(selected_row["dopant"])
             selected_site_index = int(selected_row["site_index"])
             z_value = int(selected_row["oxidation_state"])
             e0_value = float(selected_row["standard_reduction_potential_V_SHE"])
-
-            states: list[dict[str, Any]] = []
-            if not protonation_table_all.empty:
-                site_states = protonation_table_all[
-                    (protonation_table_all["surface_id"].astype(str) == selected_surface)
-                    & (protonation_table_all["dopant"].astype(str) == selected_dopant)
-                    & (pd.to_numeric(protonation_table_all["site_index"], errors="coerce") == selected_site_index)
-                ].copy()
-                if "extraction_base_eV" in site_states.columns:
-                    site_states["extraction_base_eV"] = pd.to_numeric(
-                        site_states["extraction_base_eV"], errors="coerce"
-                    )
-                    site_states["h_count"] = pd.to_numeric(
-                        site_states.get("h_count"), errors="coerce"
-                    )
-                    site_states = site_states.dropna(
-                        subset=["extraction_base_eV", "h_count"]
-                    )
-                    states = site_states.to_dict("records")
-
-            if not states:
-                states = [
-                    {
-                        "h_count": 0,
-                        "arrangement_id": 0,
-                        "extraction_base_eV": float(selected_row["extraction_energy_eV"]),
-                    }
-                ]
-
+            states = _states_for_explorer_row(selected_row)
             available_h = sorted({int(state["h_count"]) for state in states})
-            state_options = ["Best post-leaching state"] + [
-                ("Bare vacancy (0H)" if h == 0 else f"{h}H only")
-                for h in available_h
-            ]
+            focus_h_options = ["Best"] + [f"{h}H" for h in available_h]
+            focus_h_mode = focus_col2.selectbox(
+                "Focus H state",
+                focus_h_options,
+                index=0,
+                help=(
+                    "Best lets the preferred H count change across U–pH space. "
+                    "Choose a fixed H count to inspect that protonation state only."
+                ),
+                key="leaching_explorer_focus_h_state",
+            )
+            selected_h_count = _h_mode_to_count(focus_h_mode)
 
-            activity_map = dict(analysis_cfg.get("ion_activities", {}) or {})
-            default_activity = float(
-                activity_map.get(
-                    selected_dopant,
-                    analysis_cfg.get("default_ion_activity", 1e-6),
-                )
+            activity_map_saved = dict(analysis_cfg.get("ion_activities", {}) or {})
+            default_activity_saved = float(
+                analysis_cfg.get("default_ion_activity", 1e-6)
             )
             default_scale = str(analysis_cfg.get("potential_scale", "RHE")).upper()
             if default_scale not in {"RHE", "SHE"}:
                 default_scale = "RHE"
 
-            c1, c2, c3, c4 = st.columns(4)
+            c1, c2, c3 = st.columns(3)
             explorer_temperature = float(
                 c1.number_input(
                     "Temperature (K)",
@@ -1339,13 +1402,16 @@ else:
                     key="leaching_explorer_temperature",
                 )
             )
-            explorer_activity = float(
+            explorer_default_activity = float(
                 c2.number_input(
-                    f"{selected_dopant} ion activity",
+                    "Default ion activity",
                     min_value=1e-20,
-                    value=default_activity,
+                    value=default_activity_saved,
                     format="%.3e",
-                    key=f"leaching_explorer_activity_{selected_dopant}",
+                    key="leaching_explorer_default_activity",
+                    help=(
+                        "Used for selected dopants without a saved dopant-specific activity."
+                    ),
                 )
             )
             explorer_scale = c3.selectbox(
@@ -1354,14 +1420,38 @@ else:
                 index=0 if default_scale == "RHE" else 1,
                 key="leaching_explorer_scale",
             )
-            state_mode = c4.selectbox(
-                "Post-leaching state",
-                state_options,
-                key="leaching_explorer_state_mode",
+
+            selected_dopants = sorted(
+                {
+                    str(explorer_rows.loc[site_labels[label]]["dopant"])
+                    for label in set(comparison_labels + [focus_label])
+                }
             )
-            selected_h_count = None
-            if state_mode != "Best post-leaching state":
-                selected_h_count = 0 if state_mode.startswith("Bare") else int(state_mode.split("H")[0])
+            activity_by_dopant: dict[str, float] = {}
+            with st.expander("Dopant-specific ion activities", expanded=False):
+                st.caption(
+                    "Each compared dopant can use its own activity. These are post-processing "
+                    "values and do not trigger any structural calculation."
+                )
+                activity_cols = st.columns(min(4, max(1, len(selected_dopants))))
+                for activity_index, dopant in enumerate(selected_dopants):
+                    saved_value = float(
+                        activity_map_saved.get(dopant, explorer_default_activity)
+                    )
+                    activity_by_dopant[dopant] = float(
+                        activity_cols[activity_index % len(activity_cols)].number_input(
+                            f"{dopant} activity",
+                            min_value=1e-20,
+                            value=saved_value,
+                            format="%.3e",
+                            key=f"leaching_explorer_activity_{dopant}",
+                        )
+                    )
+            for dopant in selected_dopants:
+                activity_by_dopant.setdefault(dopant, explorer_default_activity)
+            explorer_activity = float(
+                activity_by_dopant.get(selected_dopant, explorer_default_activity)
+            )
 
             r1, r2, r3 = st.columns(3)
             u_min = float(
