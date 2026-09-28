@@ -9,10 +9,12 @@ from typing import Any
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 import toml
 
 from dopingflow.leaching import (
+    build_thermodynamic_grid,
     parse_leaching_config,
     preview_leaching_sites,
     resolve_leaching_output_dir,
@@ -39,6 +41,7 @@ if not config_path.exists():
 cfg = toml.load(str(config_path))
 saved = dict(cfg.get("leaching", {}) or {})
 saved_protonation = dict(saved.get("protonation", {}) or {})
+saved_analysis = dict(saved.get("analysis_defaults", {}) or {})
 surface = dict(cfg.get("surface", {}) or {})
 refine = dict(surface.get("refine", {}) or {})
 screen = dict(surface.get("screen", {}) or {})
