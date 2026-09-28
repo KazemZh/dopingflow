@@ -392,17 +392,26 @@ The Streamlit Results page includes a **Thermodynamic explorer** that rebuilds
 electrochemical free energies directly from the stored extraction/protonation
 energies. It does not launch MLFF calculations.
 
-For one selected dopant site, the explorer provides:
+The two-dimensional comparison plots can overlay **multiple structures/sites,
+different dopants, and multiple H-state definitions** on the same axes. H-state
+choices include ``Best`` (the minimum-free-energy state at each point) and any
+explicitly calculated fixed state such as ``0H``, ``1H``, ``2H``, or ``3H``.
+Unavailable structure/H-state combinations are skipped and reported.
+
+The explorer provides:
 
 * ``Delta G_leach`` versus applied potential with an interactive pH slider;
 * ``Delta G_leach`` versus pH with an interactive potential slider;
 * optional multi-slice comparison modes for both two-dimensional plots;
+* multi-structure / multi-dopant / multi-H-state overlays for the two-dimensional plots;
+* a separate focus structure and focus H state for the ``U``-pH landscape and 3D view;
 * a smooth two-dimensional ``U``-pH ``Delta G`` heatmap with the ``Delta G = 0`` boundary;
 * a discrete map of the thermodynamically preferred post-leaching H count;
 * a three-dimensional ``Delta G_leach(U,pH)`` surface;
 * state diagnostics including oxidation-state electron count ``z``, preferred
   ``n_H``, and net electron count ``z - n_H``;
-* CSV export of the current thermodynamic grid.
+* dopant-specific ion activities for fair Sb/In (or other dopant) comparisons;
+* CSV export of the current focus thermodynamic grid.
 
 The post-leaching-state selector can show the overall minimum or restrict the
 analysis to the bare vacancy or a specific H count. For a fixed pH, the
