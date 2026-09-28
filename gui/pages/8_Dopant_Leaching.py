@@ -2705,6 +2705,106 @@ else:
                     selected_environment_key
                 ]
 
+                selected_structure = structure_cache.get(
+                    str(selected_structure_path)
+                )
+                if selected_structure is None:
+                    selected_structure = Structure.from_file(
+                        selected_structure_path
+                    )
+                    structure_cache[str(selected_structure_path)] = (
+                        selected_structure
+                    )
+
+                elements_present = sorted(
+                    {site.specie.symbol for site in selected_structure}
+                )
+                default_element_colors = {
+                    "O": "#E41A1C",
+                    "Sn": "#377EB8",
+                    "Sb": "#984EA3",
+                    "In": "#4DAF4A",
+                    "H": "#F2F2F2",
+                    "Ti": "#FF7F00",
+                    "Zr": "#A6CEE3",
+                    "Nb": "#A65628",
+                    "Ba": "#FFD92F",
+                    "Mn": "#F781BF",
+                    "Ni": "#1B9E77",
+                    "Fe": "#E6550D",
+                    "Zn": "#66A61E",
+                    "W": "#7570B3",
+                }
+                fallback_colors = [
+                    "#4E79A7",
+                    "#F28E2B",
+                    "#59A14F",
+                    "#B07AA1",
+                    "#76B7B2",
+                    "#EDC948",
+                    "#9C755F",
+                    "#BAB0AC",
+                ]
+                element_defaults = {
+                    element: default_element_colors.get(
+                        element,
+                        fallback_colors[
+                            elements_present.index(element)
+                            % len(fallback_colors)
+                        ],
+                    )
+                    for element in elements_present
+                }
+
+                with st.expander(
+                    "Atom colors & interaction",
+                    expanded=False,
+                ):
+                    reset_colors = st.button(
+                        "Reset atom colors",
+                        key="leaching_environment_reset_colors",
+                    )
+                    if reset_colors:
+                        for element, default_color in element_defaults.items():
+                            st.session_state[
+                                f"leaching_environment_color_{element}"
+                            ] = default_color
+                        st.session_state[
+                            "leaching_environment_target_color"
+                        ] = "#D62728"
+
+                    color_columns = st.columns(
+                        min(4, max(1, len(elements_present)))
+                    )
+                    element_colors: dict[str, str] = {}
+                    for element_index, element in enumerate(elements_present):
+                        element_colors[element] = color_columns[
+                            element_index % len(color_columns)
+                        ].color_picker(
+                            f"{element} atoms",
+                            value=element_defaults[element],
+                            key=f"leaching_environment_color_{element}",
+                        )
+
+                    target_color = st.color_picker(
+                        "Selected leaching-site highlight",
+                        value="#D62728",
+                        key="leaching_environment_target_color",
+                        help=(
+                            "This highlight overrides the element color only for "
+                            "the currently selected leaching site."
+                        ),
+                    )
+                    enable_atom_hover = st.checkbox(
+                        "Show element and site index on hover",
+                        value=True,
+                        key="leaching_environment_enable_hover",
+                        help=(
+                            "Hovering over a base atom shows its element and the "
+                            "zero-based atom/site index used by DopingFlow."
+                        ),
+                    )
+
                 detail_left, detail_right = st.columns([1.35, 1.0])
                 with detail_left:
                     show_all_neighbors = st.checkbox(
@@ -2724,9 +2824,16 @@ else:
                             | selected_neighbors["neighbor_class"].eq("dopant")
                         ].copy()
                     st.caption(
-                        "3D legend: **red** = target dopant; **gold** = coordinating "
-                        "anion; **blue** = nearby dopant; **green** = other local cation/atom."
+                        "Base atom colors follow your element palette. The selected "
+                        "leaching site uses the separate highlight color. Local-shell "
+                        "markers remain **gold** = coordinating anion, **blue** = nearby "
+                        "dopant, **green** = other local atom."
                     )
+                    if enable_atom_hover:
+                        st.caption(
+                            "Move the cursor over any base atom to show "
+                            "**element + DopingFlow site index**."
+                        )
                     try:
                         show_site_environment(
                             selected_structure_path,
@@ -2734,6 +2841,9 @@ else:
                             displayed_neighbors,
                             title=selected_environment_label,
                             label_neighbors=label_neighbors,
+                            element_colors=element_colors,
+                            target_color=target_color,
+                            enable_hover=enable_atom_hover,
                         )
                     except Exception as exc:
                         st.error(f"Could not render the 3D site environment: {exc}")
