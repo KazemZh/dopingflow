@@ -197,6 +197,15 @@ surface/vacuum arrow along the DopingFlow slab-normal direction: ``+z`` for
 ``both``. Periodic-image coordinates are used for the local shell so neighbors
 across a cell boundary are represented by their physically nearest image.
 
+Publication/presentation plot styling
+-------------------------------------
+
+All Plotly figures on the leaching Results page use a high-contrast style
+intended for papers and slide decks: white backgrounds, black axis titles and
+tick labels, enlarged typography, thicker lines and markers, dark axis frames,
+and restrained light-gray grid lines. Two-column thermodynamic plots use a
+wider slide-friendly aspect ratio. Plotly's image-export button is configured
+for high-resolution PNG output (3x scale).
 The environment table and the selected-site neighbor list can both be exported
 as CSV files. These descriptors are structural correlations, not proof of a
 causal leaching mechanism; differences can also arise from longer-range
