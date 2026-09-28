@@ -1349,57 +1349,6 @@ else:
             if not comparison_h_modes:
                 comparison_h_modes = ["Best"]
 
-            st.markdown("#### Focus state for U–pH map and 3D surface")
-            st.caption(
-                "The focus structure is chosen only from the structures/sites selected above "
-                "for comparison. With one selected structure it is used automatically; with "
-                "multiple selected structures you can switch the heatmap and 3D view between them."
-            )
-            focus_col1, focus_col2 = st.columns(2)
-
-            focus_site_key = "leaching_explorer_focus_site"
-            current_focus_site = st.session_state.get(focus_site_key)
-            if current_focus_site not in comparison_labels:
-                st.session_state[focus_site_key] = comparison_labels[0]
-
-            focus_label = focus_col1.selectbox(
-                "Structure/site shown in heatmap and 3D plot",
-                comparison_labels,
-                disabled=len(comparison_labels) == 1,
-                help=(
-                    "Only structures/sites currently selected in the 2D comparison are offered. "
-                    "The heatmap, preferred-H map, 3D surface, diagnostics, and grid export "
-                    "all follow this focus selection."
-                ),
-                key=focus_site_key,
-            )
-            selected_row = explorer_rows.loc[site_labels[focus_label]]
-            selected_surface = str(selected_row["surface_id"])
-            selected_dopant = str(selected_row["dopant"])
-            selected_site_index = int(selected_row["site_index"])
-            z_value = int(selected_row["oxidation_state"])
-            e0_value = float(selected_row["standard_reduction_potential_V_SHE"])
-            states = _states_for_explorer_row(selected_row)
-            available_h = sorted({int(state["h_count"]) for state in states})
-            focus_h_options = ["Best"] + [f"{h}H" for h in available_h]
-
-            focus_h_key = "leaching_explorer_focus_h_state"
-            current_focus_h = st.session_state.get(focus_h_key)
-            if current_focus_h not in focus_h_options:
-                st.session_state[focus_h_key] = "Best"
-
-            focus_h_mode = focus_col2.selectbox(
-                "H state shown in heatmap and 3D plot",
-                focus_h_options,
-                help=(
-                    "Best lets the preferred H count change across U–pH space. "
-                    "Choose a fixed H count to inspect that protonation state only. "
-                    "The available H states update automatically when the focus structure changes."
-                ),
-                key=focus_h_key,
-            )
-            selected_h_count = _h_mode_to_count(focus_h_mode)
-
             activity_map_saved = dict(analysis_cfg.get("ion_activities", {}) or {})
             default_activity_saved = float(
                 analysis_cfg.get("default_ion_activity", 1e-6)
@@ -1440,7 +1389,7 @@ else:
             selected_dopants = sorted(
                 {
                     str(explorer_rows.loc[site_labels[label]]["dopant"])
-                    for label in set(comparison_labels + [focus_label])
+                    for label in comparison_labels
                 }
             )
             activity_by_dopant: dict[str, float] = {}
@@ -1465,9 +1414,6 @@ else:
                     )
             for dopant in selected_dopants:
                 activity_by_dopant.setdefault(dopant, explorer_default_activity)
-            explorer_activity = float(
-                activity_by_dopant.get(selected_dopant, explorer_default_activity)
-            )
 
             r1, r2, r3 = st.columns(3)
             u_min = float(
@@ -1621,19 +1567,6 @@ else:
                         "the potential or pH step so each axis has at most 300 points."
                     )
                 else:
-                    # Focus grid: used only by the U-pH landscape, 3D surface,
-                    # diagnostics, and grid export.
-                    full_grid = build_thermodynamic_grid(
-                        states,
-                        z_value,
-                        e0_value,
-                        u_values,
-                        ph_values,
-                        potential_scale=explorer_scale,
-                        ion_activity=explorer_activity,
-                        temperature_K=explorer_temperature,
-                        selected_h_count=selected_h_count,
-                    )
 
                     # Comparison grids: overlay any selected structures/dopants and
                     # any selected H-state definitions on the same 2D plots.
@@ -1841,14 +1774,84 @@ else:
                             fig_ph.add_hline(y=0.0, line_dash="dash")
                             st.plotly_chart(fig_ph, use_container_width=True)
 
+                    st.markdown("#### U–pH landscape")
+                    st.caption(
+                        "Choose which of the structures/sites selected above should be shown "
+                        "in the heatmap, preferred-H map, 3D surface, diagnostics, and grid export."
+                    )
+                    focus_col1, focus_col2 = st.columns(2)
+
+                    focus_site_key = "leaching_explorer_focus_site"
+                    current_focus_site = st.session_state.get(focus_site_key)
+                    if current_focus_site not in comparison_labels:
+                        st.session_state[focus_site_key] = comparison_labels[0]
+
+                    focus_label = focus_col1.selectbox(
+                        "Structure/site for U–pH and 3D",
+                        comparison_labels,
+                        disabled=len(comparison_labels) == 1,
+                        help=(
+                            "Only structures/sites selected in the 2D comparison are offered. "
+                            "With one selected structure this choice is automatic."
+                        ),
+                        key=focus_site_key,
+                    )
+                    selected_row = explorer_rows.loc[site_labels[focus_label]]
+                    selected_surface = str(selected_row["surface_id"])
+                    selected_dopant = str(selected_row["dopant"])
+                    selected_site_index = int(selected_row["site_index"])
+                    z_value = int(selected_row["oxidation_state"])
+                    e0_value = float(
+                        selected_row["standard_reduction_potential_V_SHE"]
+                    )
+                    states = _states_for_explorer_row(selected_row)
+                    available_h = sorted({int(state["h_count"]) for state in states})
+                    focus_h_options = ["Best"] + [f"{h}H" for h in available_h]
+
+                    focus_h_key = "leaching_explorer_focus_h_state"
+                    current_focus_h = st.session_state.get(focus_h_key)
+                    if current_focus_h not in focus_h_options:
+                        st.session_state[focus_h_key] = "Best"
+
+                    focus_h_mode = focus_col2.selectbox(
+                        "H state for U–pH and 3D",
+                        focus_h_options,
+                        help=(
+                            "Best minimizes ΔG over all calculated H states at every U/pH point. "
+                            "Choose 0H/1H/2H/... to inspect a fixed protonation level."
+                        ),
+                        key=focus_h_key,
+                    )
+                    selected_h_count = _h_mode_to_count(focus_h_mode)
+                    explorer_activity = float(
+                        activity_by_dopant.get(
+                            selected_dopant, explorer_default_activity
+                        )
+                    )
+
+                    full_grid = build_thermodynamic_grid(
+                        states,
+                        z_value,
+                        e0_value,
+                        u_values,
+                        ph_values,
+                        potential_scale=explorer_scale,
+                        ion_activity=explorer_activity,
+                        temperature_K=explorer_temperature,
+                        selected_h_count=selected_h_count,
+                    )
+
                     pivot_dg = full_grid.pivot(
-                        index="pH", columns="applied_potential_V", values="deltaG_leach_eV"
+                        index="pH",
+                        columns="applied_potential_V",
+                        values="deltaG_leach_eV",
                     ).sort_index()
                     pivot_h = full_grid.pivot(
-                        index="pH", columns="applied_potential_V", values="best_h_count"
+                        index="pH",
+                        columns="applied_potential_V",
+                        values="best_h_count",
                     ).sort_index()
 
-                    st.markdown("#### U–pH landscape")
                     map_left, map_right = st.columns(2)
                     with map_left:
                         heat = go.Figure()
