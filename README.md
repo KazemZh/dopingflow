@@ -178,7 +178,9 @@ and ΔG-vs-pH slices, optional multi-slice comparison, and overlays of multiple
 structures/sites, dopants, and explicit H states (0H/1H/2H/3H/...) or the
 minimum-free-energy ``Best`` state. A separate focus structure/H state drives
 the smooth U-pH ΔG heatmap, discrete preferred-H-count map, 3D thermodynamic
-surface, net-electron diagnostics, and CSV grid export.
+surface, net-electron diagnostics, and CSV grid export. The focus structure is
+chosen only from the structures already selected for comparison: it is automatic
+for one selected structure and becomes a dropdown when several are selected.
 Completed bare-site and protonation-arrangement checkpoints are restartable.
 If a run is interrupted and only the current site should be completed before
 stopping, use the Streamlit leaching page's **Recovery / partial-result mode**.
