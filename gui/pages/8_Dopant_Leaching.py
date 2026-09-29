@@ -1502,19 +1502,20 @@ else:
             bare_threshold_col in results.columns
             and adjusted_threshold_col in results.columns
         ):
-            threshold_compare = results[
-                [
-                    col
-                    for col in (
-                        "dopant",
-                        "site_index",
-                        "initial_dopant_zone",
-                        bare_threshold_col,
-                        adjusted_threshold_col,
-                    )
-                    if col in results.columns
-                ]
-            ].copy()
+            threshold_columns = [
+                col
+                for col in (
+                    "dopant",
+                    "site_index",
+                    "initial_dopant_zone",
+                    bare_threshold_col,
+                    adjusted_threshold_col,
+                    "protonation_adjusted_threshold_h_count",
+                    "protonation_adjusted_threshold_arrangement_id",
+                )
+                if col in results.columns
+            ]
+            threshold_compare = results[threshold_columns].copy()
             threshold_compare[bare_threshold_col] = pd.to_numeric(
                 threshold_compare[bare_threshold_col], errors="coerce"
             )
@@ -1526,43 +1527,95 @@ else:
                 how="all",
             )
             if not threshold_compare.empty:
-                melted = threshold_compare.melt(
-                    id_vars=[
-                        col
-                        for col in ("dopant", "site_index", "initial_dopant_zone")
-                        if col in threshold_compare.columns
-                    ],
-                    value_vars=[bare_threshold_col, adjusted_threshold_col],
-                    var_name="surface_state_model",
-                    value_name="dissolution_potential_V",
-                ).dropna(subset=["dissolution_potential_V"])
-                melted["surface_state_model"] = melted[
-                    "surface_state_model"
-                ].map(
-                    {
-                        bare_threshold_col: "Bare vacancy",
-                        adjusted_threshold_col: "Best protonated state",
+                st.markdown("#### Conventional dissolution-threshold comparison")
+                st.caption(
+                    "This plot is a **zero-crossing threshold comparison**, not a plot of the "
+                    "globally lowest ΔG state at an operating potential. The protonation-adjusted "
+                    "point is the lowest conventional anodic dissolution threshold among states "
+                    "with **n_H < z**. States with **n_H ≥ z** are intentionally excluded because "
+                    "they do not have the same conventional high-potential dissolution onset. "
+                    "Use **Best post-leaching state: ΔG_leach vs potential** or the "
+                    "**Thermodynamic explorer** to compare the true minimum ΔG across all "
+                    "available H states at a chosen operating potential."
+                )
+
+                common_cols = [
+                    col
+                    for col in ("dopant", "site_index", "initial_dopant_zone")
+                    if col in threshold_compare.columns
+                ]
+
+                bare_long = threshold_compare[
+                    common_cols + [bare_threshold_col]
+                ].copy()
+                bare_long = bare_long.rename(
+                    columns={bare_threshold_col: "dissolution_potential_V"}
+                )
+                bare_long["threshold_model"] = "Bare vacancy (0H)"
+                bare_long["threshold_h_count"] = 0
+                bare_long["threshold_arrangement_id"] = 0
+
+                adjusted_keep = common_cols + [adjusted_threshold_col]
+                if "protonation_adjusted_threshold_h_count" in threshold_compare.columns:
+                    adjusted_keep.append("protonation_adjusted_threshold_h_count")
+                if (
+                    "protonation_adjusted_threshold_arrangement_id"
+                    in threshold_compare.columns
+                ):
+                    adjusted_keep.append(
+                        "protonation_adjusted_threshold_arrangement_id"
+                    )
+                adjusted_long = threshold_compare[adjusted_keep].copy()
+                adjusted_long = adjusted_long.rename(
+                    columns={
+                        adjusted_threshold_col: "dissolution_potential_V",
+                        "protonation_adjusted_threshold_h_count": "threshold_h_count",
+                        "protonation_adjusted_threshold_arrangement_id": (
+                            "threshold_arrangement_id"
+                        ),
                     }
                 )
+                adjusted_long["threshold_model"] = (
+                    "Lowest eligible protonated threshold (n_H < z)"
+                )
+
+                long_frames = [
+                    bare_long.dropna(subset=["dissolution_potential_V"]),
+                    adjusted_long.dropna(subset=["dissolution_potential_V"]),
+                ]
+                threshold_long = pd.concat(long_frames, ignore_index=True)
+
+                hover_fields = [
+                    col
+                    for col in (
+                        "site_index",
+                        "initial_dopant_zone",
+                        "threshold_h_count",
+                        "threshold_arrangement_id",
+                    )
+                    if col in threshold_long.columns
+                ]
                 fig_threshold_compare = px.scatter(
-                    melted,
+                    threshold_long,
                     x="dopant",
                     y="dissolution_potential_V",
-                    color="surface_state_model",
+                    color="threshold_model",
                     symbol=(
                         "initial_dopant_zone"
-                        if "initial_dopant_zone" in melted.columns
+                        if "initial_dopant_zone" in threshold_long.columns
                         else None
                     ),
-                    hover_data=[
-                        col
-                        for col in ("site_index", "initial_dopant_zone")
-                        if col in melted.columns
-                    ],
-                    title=f"Bare vs protonation-adjusted dissolution threshold ({selected_scale})",
+                    hover_data=hover_fields,
+                    title=(
+                        f"Conventional dissolution thresholds ({selected_scale}; n_H < z)"
+                    ),
                     labels={
-                        "dissolution_potential_V": f"Dissolution potential (V vs {selected_scale})",
-                        "surface_state_model": "Post-leaching state",
+                        "dissolution_potential_V": (
+                            f"Dissolution threshold potential (V vs {selected_scale})"
+                        ),
+                        "threshold_model": "Threshold definition",
+                        "threshold_h_count": "H count used for threshold",
+                        "threshold_arrangement_id": "Arrangement",
                         "dopant": "Dopant",
                     },
                 )
