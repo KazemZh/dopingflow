@@ -150,10 +150,19 @@ followed by
 
 For each requested operating potential, DopingFlow compares the bare state
 (``n=0``) with all successfully relaxed protonated states and reports the
-lowest free energy. It also reports the lowest anodic zero-crossing among
-states with ``n < z``. The H count is *not* inferred from the dopant oxidation
-state; it is a local surface-termination search controlled independently by
-``h_counts``.
+lowest free energy. This minimum-``Delta G`` result can include states with
+``n >= z``.
+
+The conventional anodic dissolution-threshold quantity is a different
+diagnostic. DopingFlow reports the lowest zero-crossing only among states with
+``n < z``, because only those states have the usual negative potential slope
+``d(Delta G)/dU = n_H - z < 0``. States with ``n = z`` are potential-independent
+in this model, while states with ``n > z`` have a positive potential slope and
+therefore do not have the same conventional high-potential dissolution onset.
+The GUI labels the threshold plot explicitly as an ``n_H < z`` comparison and
+shows the H count/arrangement that generated the protonation-adjusted threshold.
+The H count is *not* inferred from the dopant oxidation state; it is a local
+surface-termination search controlled independently by ``h_counts``.
 
 The H2 reference is computed and cached with the same MLFF by default. A
 manual ``manual_h2_energy_eV`` can be supplied when a separate consistent
