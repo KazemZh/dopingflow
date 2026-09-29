@@ -1483,10 +1483,10 @@ else:
                     )
                     if col in proton_scan.columns
                 ],
-                title=f"Best post-leaching state: ΔG_leach vs potential ({selected_scale})",
+                title=f"Minimum ΔG_leach over all available H states ({selected_scale})",
                 labels={
                     "applied_potential_V": f"Applied potential (V vs {selected_scale})",
-                    "best_deltaG_leach_eV": "Best ΔG_leach (eV)",
+                    "best_deltaG_leach_eV": "Minimum ΔG_leach (eV)",
                     "dopant": "Dopant",
                 },
             )
