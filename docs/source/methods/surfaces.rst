@@ -129,7 +129,7 @@ Refinement calculator
 ---------------------
 
 The surface.refine section is independent of the screening calculator and
-re-evaluates only surface_screen_selected.csv.
+re-evaluates only the surfaces selected from the completed screening table.
 
 Example::
 
@@ -143,12 +143,21 @@ Example::
    fmax = 0.03
    max_steps = 500
 
-   # Which screened surfaces are sent to this calculator:
-   selection_mode = "per_orientation"  # or "global"
-   selection_top_k = 3
+   # Preserve both orientation and termination diversity:
+   selection_mode = "orientation_termination"
+   default_terminations_per_orientation = 3
+   default_variants_per_termination = 1
 
-   # Final global shortlist after refinement:
-   top_k_per_candidate = 5
+   # Keep all successfully refined surfaces:
+   final_selection_mode = "all"
+
+   [surface.refine.orientation_limits."1,0,0"]
+   terminations = 3
+   variants_per_termination = 2
+
+   [surface.refine.orientation_limits."1,1,0"]
+   terminations = 4
+   variants_per_termination = 2
 
 Any model accepted by the existing backend abstraction may be chosen,
 including a supported MACE alias or custom checkpoint path. Refinement therefore
@@ -157,36 +166,100 @@ does not mean DFT.
 Refinement candidate selection
 ------------------------------
 
-The screening stage ranks every rankable slab both globally and within each
-Miller orientation. ``[surface.refine].selection_mode`` controls which screened
-surfaces are passed to the higher-fidelity calculator.
+The screening table is organized hierarchically as::
+
+   source structure
+       -> Miller orientation
+           -> termination
+               -> surface/dopant variant
+
+``[surface.refine].selection_mode`` controls which screened structures are
+passed to the higher-fidelity calculator.
 
 ``selection_mode = "global"``
    Select the lowest ``selection_top_k`` surface energies for each source
-   structure irrespective of Miller orientation. This reproduces the original
-   behavior, but one particularly favorable facet can occupy the complete
-   refinement shortlist.
+   structure regardless of orientation or termination.
 
 ``selection_mode = "per_orientation"``
-   Select the lowest ``selection_top_k`` surfaces independently for every
-   Miller orientation and source structure. For example, with four orientations
-   and ``selection_top_k = 3``, up to 12 surfaces per source structure are sent
-   to refinement: three from (110), three from (100), three from (101), and
-   three from (001), provided that each orientation has at least three rankable
-   surfaces.
+   Select the lowest ``selection_top_k`` surfaces independently for each
+   Miller orientation. This prevents one facet from consuming the complete
+   refinement budget, but several selected structures can still belong to the
+   same termination.
 
-This selection is based on the **screen-calculator surface energy**, not raw slab
-total energy. ``surface_screen_selected.csv`` records the selected rows and the
-selection mode/reason. After the second calculator has evaluated those surfaces,
-``top_k_per_candidate`` controls the final global shortlist written to
-``surface_final_selected.csv``. The complete refined set remains available in
-``surface_refine_summary.csv``.
+``selection_mode = "orientation_termination"``
+   Preserve both facet and termination diversity. For each Miller orientation,
+   DopingFlow first ranks **distinct terminations** by the minimum screened
+   surface energy among the variants belonging to that termination. It then
+   keeps the requested number of terminations and, within each retained
+   termination, the requested number of lowest-energy variants.
+
+Per-orientation controls
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+The balanced mode has global defaults::
+
+   default_terminations_per_orientation = 3
+   default_variants_per_termination = 1
+
+and optional orientation-specific overrides::
+
+   [surface.refine.orientation_limits."1,0,0"]
+   terminations = 3
+   variants_per_termination = 2
+
+   [surface.refine.orientation_limits."1,1,0"]
+   terminations = 4
+   variants_per_termination = 2
+
+This allows different refinement budgets for (100), (110), (101), (001), or
+any other requested Miller orientation.
+
+Termination ranking
+~~~~~~~~~~~~~~~~~~~
+
+A termination can contain several dopant-depth variants. For the balanced
+selector, a termination is ranked using::
+
+   gamma_termination = min_j gamma_(termination,j)
+
+where ``j`` runs over rankable variants of that termination. After the best
+distinct terminations are chosen, variants inside each selected termination are
+ranked by their own screened surface energies.
+
+Manual override
+~~~~~~~~~~~~~~~
+
+Once ``surface_screen_summary.csv`` exists, the GUI can display every rankable
+screened surface with an editable ``Include`` checkbox. The automatic shortlist
+is shown as the initial selection, and the user may add or remove exact
+structures before refinement.
+
+Manual edits are stored as stable surface IDs in
+``manual_include_surface_ids`` and ``manual_exclude_surface_ids``. A surface ID
+contains the source target, Miller index, termination ID, and variant ID, so the
+same manual selection can be reconstructed later without rerunning the screen.
+
+Reusing an existing screen
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 When ``surface_screen_summary.csv`` already exists, ``surface-refine`` rebuilds
-the refinement shortlist from that complete screening table using the current
-``selection_mode`` and ``selection_top_k``. Therefore changing from global
-selection to per-orientation selection (or changing N) does **not** require
-repeating the expensive screening calculations.
+the refinement shortlist from the complete screen table using the **current**
+automatic and manual selection settings. Changing the strategy, orientation
+limits, or exact checked surfaces therefore does **not** require repeating the
+expensive screening calculations.
+
+Final refined set
+~~~~~~~~~~~~~~~~~
+
+All successfully refined surfaces are retained by default::
+
+   final_selection_mode = "all"
+
+Therefore ``surface_refine_summary.csv`` contains the complete refined set and
+``surface_final_selected.csv`` mirrors that set by default. A legacy/advanced
+``final_selection_mode = "global"`` remains available through TOML for users
+who explicitly want a final global top-k reduction, but it is no longer a
+mandatory control in the GUI.
 
 Calculator-consistent source references
 -------------------------------------
@@ -242,14 +315,15 @@ surface_screen_summary.csv
    Every generated orientation, termination, and dopant-depth variant.
 
 surface_screen_selected.csv
-   Screened surfaces selected for refinement according to ``selection_mode`` and
-   ``selection_top_k``.
+   The exact screened surfaces selected for refinement after the automatic
+   strategy and any manual include/exclude overrides.
 
 surface_refine_summary.csv
    Higher-fidelity results for the screening shortlist.
 
 surface_final_selected.csv
-   Final top-k variants after refinement.
+   All successfully refined surfaces by default. A later explicit downstream
+   selection can reduce this set if desired.
 
 Each variant directory also stores the generated POSCAR, stage-specific
 result.json, optional relaxed POSCAR, optimizer log/trajectory, and meta.json.
@@ -294,8 +368,9 @@ The page mirrors the staged CLI design:
 - run the screen and refinement either in the current environment or through
   separate named Conda environments;
 - inspect surface-energy rankings one selected source structure at a time;
-- choose either a global refinement shortlist or the best N surfaces from each
-  Miller orientation;
+- choose global, per-orientation, or orientation/termination-balanced refinement;
+- set different termination/variant budgets for each Miller orientation;
+- manually add or remove exact screened surfaces before refinement;
 - browse the selected slab geometry interactively;
 - inspect the raw screen/refinement tables.
 
