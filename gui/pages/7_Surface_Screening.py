@@ -739,6 +739,7 @@ with st.expander("Configuration & run controls", expanded=False):
         fmax_default=0.05,
         steps_default=300,
         topk_default=10,
+        show_top_k=False,
     )
 
     st.divider()
@@ -753,8 +754,71 @@ with st.expander("Configuration & run controls", expanded=False):
         fmax_default=0.03,
         steps_default=500,
         topk_default=5,
+        topk_label="Final top-k after refinement",
     )
 
+    st.markdown("##### Surfaces sent to refinement")
+    selection_labels = {
+        "Global best surfaces": "global",
+        "Best surfaces from each orientation": "per_orientation",
+    }
+    saved_selection_mode = str(
+        refine_saved.get("selection_mode", "global")
+    ).strip().lower().replace("-", "_")
+    if saved_selection_mode not in {"global", "per_orientation"}:
+        saved_selection_mode = "global"
+    default_label = next(
+        label for label, value in selection_labels.items()
+        if value == saved_selection_mode
+    )
+
+    select_col, count_col = st.columns(2)
+    selection_label = select_col.selectbox(
+        "Refinement selection strategy",
+        list(selection_labels),
+        index=list(selection_labels).index(default_label),
+        help=(
+            "Global selects the lowest-energy surfaces irrespective of facet. "
+            "Per orientation reserves the same number of refinement slots for each "
+            "Miller orientation so that one facet cannot dominate the shortlist."
+        ),
+    )
+    refinement_selection_mode = selection_labels[selection_label]
+    inherited_selection_top_k = int(
+        refine_saved.get(
+            "selection_top_k",
+            screen_saved.get("top_k_per_candidate", 10),
+        )
+    )
+    refinement_selection_top_k = int(
+        count_col.number_input(
+            (
+                "Best surfaces per orientation"
+                if refinement_selection_mode == "per_orientation"
+                else "Global best surfaces"
+            ),
+            min_value=1,
+            value=max(1, inherited_selection_top_k),
+            step=1,
+            help=(
+                "For per-orientation selection this number is applied independently "
+                "to every (hkl) orientation and source structure."
+            ),
+        )
+    )
+    refine["selection_mode"] = refinement_selection_mode
+    refine["selection_top_k"] = refinement_selection_top_k
+
+    if refinement_selection_mode == "per_orientation":
+        st.info(
+            f"Up to {refinement_selection_top_k} screened surfaces from each Miller "
+            "orientation will be sent to the refinement calculator for every source structure."
+        )
+    else:
+        st.info(
+            f"The globally best {refinement_selection_top_k} screened surfaces will be sent "
+            "to the refinement calculator for every source structure, regardless of orientation."
+        )
     resolved_surface = dict(surface)
     resolved_surface.update(
         {
