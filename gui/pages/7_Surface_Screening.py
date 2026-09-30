@@ -1224,7 +1224,6 @@ with ranking_tab:
                     "termination_id",
                     "variant_label",
                     gamma_col,
-                    f"{prefix}_segregation_energy_eV",
                     f"{prefix}_final_fmax_eV_per_A",
                 )
                 if col in rankable.columns
@@ -1236,64 +1235,6 @@ with ranking_tab:
                 hide_index=True,
             )
 
-        segregation_col = f"{prefix}_segregation_energy_eV"
-        segregation_status = f"{prefix}_segregation_status"
-        if segregation_col in subset.columns:
-            st.markdown("##### Dopant segregation within one termination")
-            facet_options = subset["Facet"].drop_duplicates().tolist()
-            chosen_facet = st.selectbox(
-                "Facet for segregation view",
-                facet_options,
-                key=f"surface_segregation_facet_{prefix}",
-            )
-            seg_subset = subset[subset["Facet"] == chosen_facet].copy()
-            term_options = sorted(
-                int(v)
-                for v in pd.to_numeric(
-                    seg_subset["termination_id"], errors="coerce"
-                ).dropna().unique()
-            )
-            if term_options:
-                chosen_term = st.selectbox(
-                    "Termination",
-                    term_options,
-                    key=f"surface_segregation_term_{prefix}",
-                )
-                seg_subset = seg_subset[
-                    pd.to_numeric(seg_subset["termination_id"], errors="coerce")
-                    == chosen_term
-                ].copy()
-                seg_subset[segregation_col] = pd.to_numeric(
-                    seg_subset[segregation_col], errors="coerce"
-                )
-                if segregation_status in seg_subset.columns:
-                    seg_subset = seg_subset[
-                        seg_subset[segregation_status].astype(str) == "ok"
-                    ]
-                seg_subset = seg_subset[seg_subset[segregation_col].notna()]
-                if seg_subset.empty:
-                    st.info(
-                        "No all-bulk-like reference variant is available for this termination, "
-                        "so a segregation energy cannot be assigned."
-                    )
-                else:
-                    seg_fig = px.scatter(
-                        seg_subset,
-                        x="variant_label",
-                        y=segregation_col,
-                        hover_data=[f"{prefix}_energy_eV", "target_zones_json"],
-                        labels={
-                            "variant_label": "Dopant-depth variant",
-                            segregation_col: "Segregation energy (eV)",
-                        },
-                    )
-                    seg_fig.add_hline(y=0.0, line_dash="dash")
-                    st.plotly_chart(seg_fig, use_container_width=True)
-                    st.caption(
-                        "E_seg = E_variant − E_all-bulk-like for the same source structure, facet, "
-                        "termination, composition, and calculator. Negative values indicate "
-                        "surface/subsurface enrichment relative to the bulk-like placement."
-                    )
 
 with structure_tab:
     available = []
@@ -1341,13 +1282,11 @@ with structure_tab:
 
     energy = row.get(f"{prefix}_energy_eV")
     gamma = row.get(f"{prefix}_surface_energy_J_m2")
-    eseg = row.get(f"{prefix}_segregation_energy_eV")
     fmax = row.get(f"{prefix}_final_fmax_eV_per_A")
-    k1, k2, k3, k4 = st.columns(4)
+    k1, k2, k3 = st.columns(3)
     k1.metric("Total energy", "-" if pd.isna(energy) else f"{float(energy):.5f} eV")
     k2.metric("Surface energy", "-" if pd.isna(gamma) else f"{float(gamma):.4f} J/m²")
-    k3.metric("Segregation energy", "-" if pd.isna(eseg) else f"{float(eseg):+.4f} eV")
-    k4.metric("Final fmax", "-" if pd.isna(fmax) else f"{float(fmax):.4f} eV/Å")
+    k3.metric("Final fmax", "-" if pd.isna(fmax) else f"{float(fmax):.4f} eV/Å")
 
     relaxed_key = f"{prefix}_relaxed_structure_path"
     structure_path_text = str(row.get(relaxed_key, "") or "").strip()
