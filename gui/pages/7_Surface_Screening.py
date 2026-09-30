@@ -961,6 +961,10 @@ with st.expander("Configuration & run controls", expanded=False):
         ),
     )
 
+    if not manual_review:
+        refine["manual_include_surface_ids"] = []
+        refine["manual_exclude_surface_ids"] = []
+
     if manual_review:
         if available_screen.empty:
             st.warning(
@@ -1383,7 +1387,7 @@ m2.metric(
     else 0,
 )
 m3.metric("Refined variants", len(refine_df))
-m4.metric("Final shortlist", len(final_df))
+m4.metric("Retained refined", len(final_df))
 
 ranking_tab, structure_tab, raw_tab = st.tabs(
     ["Surface ranking", "Structure browser", "Raw data"]
@@ -1579,7 +1583,7 @@ with raw_tab:
             "Screen summary",
             "Screen shortlist",
             "Refinement summary",
-            "Final shortlist",
+            "Retained refined set",
         ],
         key="surface_raw_table",
     )
@@ -1587,7 +1591,7 @@ with raw_tab:
         "Screen summary": screen_df,
         "Screen shortlist": screen_selected_df,
         "Refinement summary": refine_df,
-        "Final shortlist": final_df,
+        "Retained refined set": final_df,
     }
     raw = tables[table_choice]
     if raw.empty:
