@@ -819,6 +819,10 @@ with st.expander("Configuration & run controls", expanded=False):
             f"The globally best {refinement_selection_top_k} screened surfaces will be sent "
             "to the refinement calculator for every source structure, regardless of orientation."
         )
+    st.caption(
+        "If a full surface_screen_summary.csv already exists, you can change this strategy "
+        "or N and run refinement directly; the expensive surface screen does not need to be repeated."
+    )
     resolved_surface = dict(surface)
     resolved_surface.update(
         {
