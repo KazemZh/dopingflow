@@ -190,6 +190,8 @@ def _parse_config(config: Mapping[str, Any]) -> Dict[str, Any]:
     surface["poscar_order"] = (config.get("generate", {}) or {}).get("poscar_order")
 
     # Backward-compatible flat keys are mapped to the screen calculator.
+    raw_screen_cfg = dict(surface.get("screen", {}) or {})
+    raw_refine_cfg = dict(surface.get("refine", {}) or {})
     screen_defaults = {
         "enabled": True,
         "backend": surface.get("surface_backend", "grace"),
@@ -221,11 +223,33 @@ def _parse_config(config: Mapping[str, Any]) -> Dict[str, Any]:
         "top_k_per_candidate": 5,
     }
     surface["screen"] = _calculator_cfg(
-        surface.get("screen", {}), "surface.screen", screen_defaults
+        raw_screen_cfg, "surface.screen", screen_defaults
     )
     surface["refine"] = _calculator_cfg(
-        surface.get("refine", {}), "surface.refine", refine_defaults
+        raw_refine_cfg, "surface.refine", refine_defaults
     )
+
+    # Refinement candidate selection is independent of the calculator itself.
+    # Older configs used [surface.screen].top_k_per_candidate as the global
+    # refinement shortlist size, so inherit that value unless the new setting
+    # is explicitly present.
+    selection_mode = str(
+        raw_refine_cfg.get("selection_mode", "global")
+    ).strip().lower().replace("-", "_")
+    if selection_mode not in {"global", "per_orientation"}:
+        raise ValueError(
+            "[surface.refine].selection_mode must be 'global' or 'per_orientation'"
+        )
+    selection_top_k = int(
+        raw_refine_cfg.get(
+            "selection_top_k",
+            surface["screen"]["top_k_per_candidate"],
+        )
+    )
+    if selection_top_k <= 0:
+        raise ValueError("[surface.refine].selection_top_k must be > 0")
+    surface["refine"]["selection_mode"] = selection_mode
+    surface["refine"]["selection_top_k"] = selection_top_k
 
     if str(surface["orientation_mode"]).lower() not in {"explicit", "automatic"}:
         raise ValueError("[surface].orientation_mode must be explicit or automatic")
@@ -963,78 +987,6 @@ def _target_group_columns(df: pd.DataFrame) -> list[str]:
     return ["composition_tag", "candidate"]
 
 
-def _all_bulk_like_zones(value: Any) -> bool:
-    try:
-        zones = json.loads(str(value or "{}"))
-    except (json.JSONDecodeError, TypeError):
-        return False
-    return bool(zones) and all(
-        str(zone).lower() == "bulk" for zone in zones.values()
-    )
-
-
-def _add_segregation_metrics(df: pd.DataFrame, prefix: str) -> pd.DataFrame:
-    """Add same-termination co-dopant segregation energies.
-
-    The reference is the generated variant in which every explicitly moved
-    dopant species targets a bulk-like cation layer. Because compared rows have
-    identical composition, orientation, termination, atom count, and calculator,
-    the difference in total energy is a well-defined segregation descriptor:
-
-        E_seg = E_variant - E_all_bulk_like
-
-    Negative values therefore mean that the requested surface/subsurface
-    placement is preferred over the corresponding all-bulk-like placement.
-    """
-    out = df.copy()
-    energy_col = f"{prefix}_energy_eV"
-    out[f"{prefix}_segregation_reference_variant"] = ""
-    out[f"{prefix}_segregation_reference_energy_eV"] = np.nan
-    out[f"{prefix}_segregation_energy_eV"] = np.nan
-    out[f"{prefix}_segregation_status"] = "missing_bulk_like_reference"
-
-    if energy_col not in out.columns or "target_zones_json" not in out.columns:
-        return out
-
-    group_cols = [
-        *_target_group_columns(out),
-        "miller_h",
-        "miller_k",
-        "miller_l",
-        "termination_id",
-    ]
-    for _, group in out.groupby(group_cols, sort=False):
-        reference_rows = []
-        for idx, row in group.iterrows():
-            if _all_bulk_like_zones(row.get("target_zones_json", "{}")):
-                energy = pd.to_numeric(
-                    pd.Series([row.get(energy_col)]), errors="coerce"
-                ).iloc[0]
-                if pd.notna(energy):
-                    reference_rows.append((idx, float(energy)))
-
-        if not reference_rows:
-            continue
-
-        # There should normally be one all-bulk-like variant. If representative
-        # generation ever produces more than one, use the lowest-energy one and
-        # record the exact variant chosen.
-        ref_idx, ref_energy = min(reference_rows, key=lambda item: item[1])
-        ref_variant = str(out.loc[ref_idx].get("variant_label", ""))
-        energies = pd.to_numeric(out.loc[group.index, energy_col], errors="coerce")
-        valid = energies.notna()
-
-        out.loc[group.index, f"{prefix}_segregation_reference_variant"] = ref_variant
-        out.loc[group.index, f"{prefix}_segregation_reference_energy_eV"] = ref_energy
-        out.loc[group.index[valid], f"{prefix}_segregation_energy_eV"] = (
-            energies.loc[valid] - ref_energy
-        )
-        out.loc[group.index[valid], f"{prefix}_segregation_status"] = "ok"
-        out.loc[group.index[~valid], f"{prefix}_segregation_status"] = "missing_energy"
-
-    return out
-
-
 def _rank(df: pd.DataFrame, prefix: str) -> pd.DataFrame:
     out = df.copy()
     gamma = f"{prefix}_surface_energy_J_m2"
@@ -1089,60 +1041,73 @@ def _topk(
     )
 
 
-def _screen_shortlist_with_segregation_references(
+def _select_refinement_candidates(
     df: pd.DataFrame,
+    *,
+    mode: str,
     top_k: int,
 ) -> pd.DataFrame:
-    """Select top surface candidates plus bulk-like segregation references.
+    """Select screened surfaces to send to the refinement calculator.
 
-    The nominal top-k is applied per bulk parent. For every selected
-    orientation/termination, its generated all-bulk-like dopant variant is also
-    carried into the refinement handoff when available. These extra rows are
-    reference calculations and do not consume the nominal top-k.
+    global keeps the best top_k rankable surfaces across all Miller
+    orientations for each source structure.
+
+    per_orientation keeps the best top_k rankable surfaces separately
+    for every Miller orientation and source structure. This prevents a single
+    low-energy facet from occupying the entire refinement budget.
     """
-    selected = _topk(df, "screen", top_k)
-    if selected.empty:
+    mode = str(mode).strip().lower().replace("-", "_")
+    if mode not in {"global", "per_orientation"}:
+        raise ValueError(
+            "surface refinement selection mode must be 'global' or 'per_orientation'"
+        )
+    top_k = int(top_k)
+    if top_k <= 0:
+        raise ValueError("surface refinement selection top_k must be > 0")
+
+    if mode == "global":
+        selected = _topk(df, "screen", top_k)
+        if selected.empty:
+            return selected
+        selected = selected.copy()
+        selected["screen_selection_mode"] = "global"
+        selected["screen_selection_reason"] = "global_top_k"
         return selected
 
-    chosen = set(selected.index.tolist())
+    rows: list[pd.DataFrame] = []
     group_cols = [
         *_target_group_columns(df),
         "miller_h",
         "miller_k",
         "miller_l",
-        "termination_id",
     ]
-    for _, row in selected.iterrows():
-        mask = pd.Series(True, index=df.index)
-        for column in group_cols:
-            mask &= df[column].astype(str).eq(str(row[column]))
-        group = df[mask]
-        refs = group[
-            group["target_zones_json"].map(_all_bulk_like_zones)
-        ].copy()
-        if refs.empty:
+    for _, group in df.groupby(group_cols, sort=False):
+        good = group[group["screen_rankable"].fillna(False)].copy()
+        if good.empty:
             continue
-        refs["__energy"] = pd.to_numeric(
-            refs.get("screen_energy_eV"), errors="coerce"
-        )
-        refs = refs[refs["__energy"].notna()]
-        if not refs.empty:
-            chosen.add(refs.sort_values("__energy").index[0])
+        if "screen_rank_within_hkl" in good.columns:
+            good = good.sort_values("screen_rank_within_hkl")
+        else:
+            good = good.sort_values("screen_surface_energy_J_m2")
+        rows.append(good.head(top_k))
 
-    out = df.loc[sorted(chosen)].copy()
-    top_index = set(selected.index.tolist())
-    out["screen_selection_reason"] = [
-        "top_k" if idx in top_index else "segregation_reference"
-        for idx in out.index
-    ]
-    rank_values = pd.to_numeric(out.get("screen_rank_overall"), errors="coerce")
-    out["__sort_rank"] = rank_values.fillna(float("inf"))
-    out = out.sort_values(
-        [*_target_group_columns(out), "__sort_rank", "screen_selection_reason"],
+    if not rows:
+        return df.head(0).copy()
+
+    selected = pd.concat(rows).copy()
+    selected["screen_selection_mode"] = "per_orientation"
+    selected["screen_selection_reason"] = "orientation_top_k"
+    selected = selected.sort_values(
+        [
+            *_target_group_columns(selected),
+            "miller_h",
+            "miller_k",
+            "miller_l",
+            "screen_rank_within_hkl",
+        ],
         kind="stable",
-    ).drop(columns=["__sort_rank"])
-    return out
-
+    )
+    return selected
 
 def run_surface_scan(
     config: Mapping[str, Any],
@@ -1180,14 +1145,14 @@ def run_surface_scan(
                 f"[surface] Exceeded max_total_surfaces={cfg['max_total_surfaces']}"
             )
 
-    dataframe = _add_segregation_metrics(pd.DataFrame(records), "screen")
-    dataframe = _rank(dataframe, "screen")
+    dataframe = _rank(pd.DataFrame(records), "screen")
     summary = outdir / str(cfg["screen_summary_csv"])
     selected_path = outdir / str(cfg["screen_selected_csv"])
     dataframe.to_csv(summary, index=False)
-    _screen_shortlist_with_segregation_references(
+    _select_refinement_candidates(
         dataframe,
-        int(cfg["screen"]["top_k_per_candidate"]),
+        mode=str(cfg["refine"]["selection_mode"]),
+        top_k=int(cfg["refine"]["selection_top_k"]),
     ).to_csv(selected_path, index=False)
 
     print(f"[surface] Screened {len(dataframe)} slab variants -> {summary}")
@@ -1291,8 +1256,7 @@ def run_surface_refine(
         )
         records.append(rec)
 
-    dataframe = _add_segregation_metrics(pd.DataFrame(records), "refine")
-    dataframe = _rank(dataframe, "refine")
+    dataframe = _rank(pd.DataFrame(records), "refine")
     summary = outdir / str(cfg["refine_summary_csv"])
     final_path = outdir / str(cfg["refine_selected_csv"])
     dataframe.to_csv(summary, index=False)
@@ -1312,6 +1276,7 @@ __all__ = [
     "discover_surface_targets",
     "preview_surface_candidates",
     "resolve_surface_output_dir",
+    "_select_refinement_candidates",
     "run_surface_scan",
     "run_surface_scan_from_toml",
     "run_surface_refine",
