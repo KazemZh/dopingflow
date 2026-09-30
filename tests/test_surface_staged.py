@@ -35,6 +35,9 @@ def test_surface_defaults_use_low_index_sno2_facets_and_mace_r2scan_refine() -> 
     assert cfg["refine"]["task"] == "matpes_r2scan"
     assert cfg["refine"]["selection_mode"] == "global"
     assert cfg["refine"]["selection_top_k"] == 10
+    assert cfg["refine"]["final_selection_mode"] == "all"
+    assert cfg["refine"]["default_terminations_per_orientation"] == 3
+    assert cfg["refine"]["default_variants_per_termination"] == 1
 
 
 def test_surface_relative_outdir_is_below_user_source_root(tmp_path) -> None:
@@ -192,6 +195,8 @@ def _refinement_selection_frame() -> pd.DataFrame:
                     "miller_h": hkl[0],
                     "miller_k": hkl[1],
                     "miller_l": hkl[2],
+                    "termination_id": within,
+                    "variant_id": 1,
                     "screen_rankable": True,
                     "screen_rank_overall": overall,
                     "screen_rank_within_hkl": within,
@@ -243,6 +248,182 @@ def test_refinement_selection_per_orientation_keeps_each_facet() -> None:
     }
     assert set(selected["screen_selection_mode"]) == {"per_orientation"}
     assert set(selected["screen_selection_reason"]) == {"orientation_top_k"}
+
+
+def test_refinement_selection_balances_distinct_terminations() -> None:
+    rows = []
+    for hkl, base in [((1, 0, 0), 0.5), ((1, 1, 0), 0.8)]:
+        overall = 1
+        for term_id in (1, 2, 3):
+            for variant_id in (1, 2):
+                rows.append(
+                    {
+                        "target_id": "In2p5_Sb2p5/candidate_001",
+                        "composition_tag": "In2p5_Sb2p5",
+                        "candidate": "candidate_001",
+                        "miller_h": hkl[0],
+                        "miller_k": hkl[1],
+                        "miller_l": hkl[2],
+                        "termination_id": term_id,
+                        "variant_id": variant_id,
+                        "screen_rankable": True,
+                        "screen_rank_overall": overall,
+                        "screen_rank_within_hkl": overall,
+                        "screen_surface_energy_J_m2": (
+                            base + 0.10 * term_id + 0.01 * variant_id
+                        ),
+                    }
+                )
+                overall += 1
+    df = pd.DataFrame(rows)
+
+    selected = _select_refinement_candidates(
+        df,
+        mode="orientation_termination",
+        top_k=99,
+        default_terminations_per_orientation=2,
+        default_variants_per_termination=1,
+    )
+
+    counts = selected.groupby(
+        ["miller_h", "miller_k", "miller_l"]
+    ).size().to_dict()
+    assert counts == {(1, 0, 0): 2, (1, 1, 0): 2}
+    for _, group in selected.groupby(["miller_h", "miller_k", "miller_l"]):
+        assert group["termination_id"].nunique() == 2
+        assert set(group["termination_id"]) == {1, 2}
+        assert set(group["variant_id"]) == {1}
+
+
+def test_refinement_selection_supports_per_orientation_limits() -> None:
+    rows = []
+    for hkl in ((1, 0, 0), (1, 1, 0)):
+        for term_id in (1, 2, 3):
+            for variant_id in (1, 2):
+                rows.append(
+                    {
+                        "target_id": "In2p5_Sb2p5/candidate_001",
+                        "composition_tag": "In2p5_Sb2p5",
+                        "candidate": "candidate_001",
+                        "miller_h": hkl[0],
+                        "miller_k": hkl[1],
+                        "miller_l": hkl[2],
+                        "termination_id": term_id,
+                        "variant_id": variant_id,
+                        "screen_rankable": True,
+                        "screen_rank_overall": 1,
+                        "screen_rank_within_hkl": 1,
+                        "screen_surface_energy_J_m2": (
+                            term_id + 0.01 * variant_id
+                        ),
+                    }
+                )
+    df = pd.DataFrame(rows)
+
+    selected = _select_refinement_candidates(
+        df,
+        mode="orientation_termination",
+        top_k=99,
+        orientation_limits={
+            "1,0,0": {"terminations": 1, "variants_per_termination": 2},
+            "1,1,0": {"terminations": 2, "variants_per_termination": 1},
+        },
+    )
+
+    facet_100 = selected[
+        (selected["miller_h"] == 1)
+        & (selected["miller_k"] == 0)
+        & (selected["miller_l"] == 0)
+    ]
+    facet_110 = selected[
+        (selected["miller_h"] == 1)
+        & (selected["miller_k"] == 1)
+        & (selected["miller_l"] == 0)
+    ]
+    assert len(facet_100) == 2
+    assert facet_100["termination_id"].nunique() == 1
+    assert len(facet_110) == 2
+    assert facet_110["termination_id"].nunique() == 2
+
+
+def test_refinement_manual_override_edits_automatic_selection() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "target_id": "In2p5_Sb2p5/candidate_001",
+                "composition_tag": "In2p5_Sb2p5",
+                "candidate": "candidate_001",
+                "miller_h": 1,
+                "miller_k": 0,
+                "miller_l": 0,
+                "termination_id": 1,
+                "variant_id": 1,
+                "screen_rankable": True,
+                "screen_rank_overall": 1,
+                "screen_rank_within_hkl": 1,
+                "screen_surface_energy_J_m2": 0.50,
+            },
+            {
+                "target_id": "In2p5_Sb2p5/candidate_001",
+                "composition_tag": "In2p5_Sb2p5",
+                "candidate": "candidate_001",
+                "miller_h": 1,
+                "miller_k": 1,
+                "miller_l": 0,
+                "termination_id": 2,
+                "variant_id": 1,
+                "screen_rankable": True,
+                "screen_rank_overall": 2,
+                "screen_rank_within_hkl": 1,
+                "screen_surface_energy_J_m2": 0.70,
+            },
+        ]
+    )
+
+    automatic = _select_refinement_candidates(df, mode="global", top_k=1)
+    auto_id = automatic.iloc[0]["surface_id"]
+    other = _select_refinement_candidates(df, mode="global", top_k=2)
+    other_id = other.iloc[1]["surface_id"]
+
+    selected = _select_refinement_candidates(
+        df,
+        mode="global",
+        top_k=1,
+        manual_include_surface_ids=[other_id],
+        manual_exclude_surface_ids=[auto_id],
+    )
+
+    assert selected["surface_id"].tolist() == [other_id]
+    assert selected.iloc[0]["screen_selection_reason"] == "manual_include"
+
+
+def test_refinement_selection_config_accepts_balanced_limits() -> None:
+    cfg = _parse_config(
+        {
+            "surface": {
+                "enabled": True,
+                "refine": {
+                    "selection_mode": "orientation_termination",
+                    "default_terminations_per_orientation": 2,
+                    "default_variants_per_termination": 2,
+                    "orientation_limits": {
+                        "1,0,0": {
+                            "terminations": 4,
+                            "variants_per_termination": 3,
+                        }
+                    },
+                    "final_selection_mode": "all",
+                },
+            }
+        }
+    )
+
+    assert cfg["refine"]["selection_mode"] == "orientation_termination"
+    assert cfg["refine"]["orientation_limits"]["1,0,0"] == {
+        "terminations": 4,
+        "variants_per_termination": 3,
+    }
+    assert cfg["refine"]["final_selection_mode"] == "all"
 
 
 def test_refinement_selection_config_accepts_per_orientation() -> None:
