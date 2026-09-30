@@ -15,6 +15,14 @@ The format loosely follows semantic versioning.
 
 ## [Unreleased]
 ### Added
+- Surface refinement now supports **orientation + termination balanced** selection:
+  each Miller orientation can independently specify how many distinct terminations
+  and how many variants per termination are sent to the higher-fidelity calculator.
+- The Surface Screening GUI can review the automatic shortlist and manually include
+  or exclude exact screened surfaces before refinement. Manual choices use stable
+  surface IDs and can be reapplied without rerunning the screen.
+- All successfully refined surfaces are kept by default; the mandatory GUI-level
+  final global top-k reduction has been removed.
 - Surface refinement shortlist selection now supports both **global top-N** and
   **top-N per Miller orientation**. The per-orientation mode keeps every requested
   facet represented when one orientation dominates the global surface-energy ranking.
