@@ -1170,12 +1170,46 @@ def run_surface_refine(
 
     outdir = resolve_surface_output_dir(config, cfg, project_root)
     selected_path = outdir / str(cfg["screen_selected_csv"])
-    if not selected_path.exists():
+    screen_summary_path = outdir / str(cfg["screen_summary_csv"])
+
+    # Rebuild the refinement shortlist from the complete screen summary using
+    # the *current* refinement-selection settings. This lets users switch from
+    # global top-N to per-orientation top-N (or change N) without repeating the
+    # expensive screening calculations.
+    if screen_summary_path.exists():
+        screened = pd.read_csv(screen_summary_path)
+        selected = _select_refinement_candidates(
+            screened,
+            mode=str(cfg["refine"]["selection_mode"]),
+            top_k=int(cfg["refine"]["selection_top_k"]),
+        )
+        # Old screen summaries may still contain columns from the removed
+        # segregation-energy feature. Do not propagate them into new outputs.
+        legacy_cols = [
+            column for column in selected.columns
+            if "segregation" in str(column).lower()
+        ]
+        if legacy_cols:
+            selected = selected.drop(columns=legacy_cols)
+        selected.to_csv(selected_path, index=False)
+    elif selected_path.exists():
+        selected = pd.read_csv(selected_path)
+        legacy_cols = [
+            column for column in selected.columns
+            if "segregation" in str(column).lower()
+        ]
+        if legacy_cols:
+            selected = selected.drop(columns=legacy_cols)
+    else:
         raise FileNotFoundError(
-            f"[surface] Run surface-scan first; missing {selected_path}"
+            f"[surface] Run surface-scan first; missing {screen_summary_path}"
         )
 
-    selected = pd.read_csv(selected_path)
+    if selected.empty:
+        raise RuntimeError(
+            "[surface] No rankable screened surfaces matched the current refinement selection"
+        )
+
     calculator = _prepare_calculator(cfg["refine"], "Surface refine")
     bulk_cache: Dict[str, float | None] = {}
     records: List[Dict[str, Any]] = []
