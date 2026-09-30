@@ -15,18 +15,30 @@ The format loosely follows semantic versioning.
 
 ## [Unreleased]
 ### Added
+- Surface generation now keeps exactly **one natural structure per termination**:
+  dopants are never swapped between host sites. Each termination is labeled from
+  the dopants' inherited positions (surface/subsurface/bulk-like) on the slab cut.
+- Refinement selection is simplified to global or per-orientation termination
+  selection, with independent termination counts per Miller orientation and
+  optional exact manual include/exclude overrides.
+- The Surface Screening GUI can review the automatic shortlist and manually include
+  or exclude exact screened surfaces before refinement. Manual choices use stable
+  surface IDs and can be reapplied without rerunning the screen.
+- All successfully refined surfaces are kept by default; the mandatory GUI-level
+  final global top-k reduction has been removed.
+- Surface refinement shortlist selection now supports both **global top-N** and
+  **top-N per Miller orientation**. The per-orientation mode keeps every requested
+  facet represented when one orientation dominates the global surface-energy ranking.
+- The previous surface segregation-energy calculation/reporting path has been removed.
 - Surface target selection now mirrors Electronic Conductivity/Oxidation States:
   `source_root`, independent vacancy-free/O-vacancy toggles, and optional exact/glob
   `target_include` selectors drive both GUI preview and backend execution. Vacancy-free
   and O-vacancy source structures are ranked independently.
 - Dedicated Streamlit **Surface Screening** page with candidate/facet/termination
-  configuration, representative co-dopant depth controls, independent GRACE/MACE-style
-  screen/refine calculators, separate-environment execution, surface/segregation plots,
+  configuration, natural dopant-depth labeling, independent GRACE/MACE-style
+  screen/refine calculators, separate-environment execution, surface-energy plots,
   3D slab browsing, and raw result tables. The duplicate Surface editor in the main
   Input Builder now links to this page.
-- Explicit same-termination co-dopant segregation energies referenced to the generated
-  all-bulk-like placement, with negative values indicating favorable surface/subsurface
-  enrichment.
 - Staged surface screening and refinement with separate fast and higher-fidelity
   MLFF calculators, configurable Miller orientations and terminations,
   representative surface/subsurface/bulk co-dopant placements, calculator-specific

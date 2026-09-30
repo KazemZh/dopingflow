@@ -4,7 +4,7 @@ This example takes selected relaxed source structures (vacancy-free parents and,
 
 1. low-index slab generation;
 2. termination enumeration;
-3. representative Sb/co-dopant placement at surface, subsurface, and bulk-like cation layers;
+3. natural labeling of where the original dopants lie in each generated termination;
 4. fast MLFF screening and relaxation;
 5. surface-energy ranking using the periodic source reference evaluated with the **same calculator**;
 6. optional refinement of the screening shortlist with a second MLFF.
@@ -29,7 +29,7 @@ If both calculator dependencies are available in one environment, run both with:
 
 The default output directory is `08_surfaces/`.
 
-- `surface_screen_summary.csv`: every generated slab/termination/depth variant.
+- `surface_screen_summary.csv`: every generated natural termination and its dopant-depth label.
 - `surface_screen_selected.csv`: top screening candidates per selected source structure.
 - `surface_refine_summary.csv`: second-model results for the shortlist.
 - `surface_final_selected.csv`: final top-k after refinement.
@@ -60,3 +60,20 @@ target_include = []
 Set `include_oxygen_vacancies = true` to also expose relaxed O-vacancy
 structures listed in `vacancies_database.json`. Use `target_include` for exact
 IDs or wildcards when only selected parents/vacancy structures should be scanned.
+
+## Refinement shortlist strategy
+
+There is one screened structure per natural termination.
+
+- `selection_mode = "global"`: choose the best N terminations overall.
+- `selection_mode = "per_orientation"`: choose the best terminations separately for each Miller orientation.
+
+In per-orientation mode the number of terminations can be different for (100),
+(110), (101), (001), etc. The GUI also allows exact terminations to be checked
+or unchecked manually after screening.
+
+No dopant atoms are swapped to create additional surface structures. Labels such
+as `In: surface | Sb: subsurface` describe positions inherited naturally from
+the slab cut.
+
+All successfully refined terminations are kept by default.

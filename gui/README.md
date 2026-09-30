@@ -252,12 +252,12 @@ The page provides:
 - conductivity-style `source_root`, vacancy-free/O-vacancy toggles, and optional target selectors;
 - explicit low-index facets or automatic symmetrically distinct Miller indices;
 - termination and slab-size/vacuum controls;
-- representative surface/subsurface/bulk co-dopant placement scans;
+- natural surface/subsurface/bulk labels for dopant positions inherited from each slab cut;
 - fixed middle/bottom slab regions during relaxation;
 - independent fast-screen and higher-fidelity refinement calculators;
 - direct execution in the current environment or separate named Conda environments;
 - screening/refinement TOML preview and selected-structure preview;
-- surface-energy and segregation-energy plots;
+- surface-energy ranking with global or per-orientation termination selection;
 - per-surface structure browsing with the 3D structure viewer;
 - raw screen, shortlist, refinement, and final-shortlist tables.
 
@@ -272,15 +272,12 @@ Then select **Current environment** on the Surface Screening page to run
 `surface-scan`. For refinement, either launch the GUI from the MACE environment
 or select **Named Conda environments** and provide the MACE environment name.
 
-The segregation plot uses the same orientation, termination, composition, and
-calculator for all compared variants:
-
-```text
-E_seg = E_variant - E_all-bulk-like
-```
-
-Negative values indicate that the requested surface/subsurface dopant placement
-is favored relative to the generated all-bulk-like placement.
+The surface stage creates one structure per natural termination. Dopants are not
+moved or swapped. Their inherited positions are labeled as surface, subsurface, or
+bulk-like. Refinement can use the global best terminations or a different number
+of terminations for each Miller orientation, and an editable checkbox table allows
+exact terminations to be added or removed manually. All refined terminations are
+kept by default.
 
 ---
 

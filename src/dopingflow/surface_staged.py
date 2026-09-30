@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import itertools
 import json
 import math
 import time
@@ -48,8 +47,6 @@ except ModuleNotFoundError:  # pragma: no cover
 
 
 DEFAULT_MILLERS = [(1, 1, 0), (1, 0, 0), (1, 0, 1), (0, 0, 1)]
-_VALID_ZONES = {"surface", "subsurface", "bulk"}
-
 
 def run_surface_scan_from_toml(config_path: Path) -> Path | None:
     config_path = Path(config_path).expanduser().resolve()
@@ -170,16 +167,15 @@ def _parse_config(config: Mapping[str, Any]) -> Dict[str, Any]:
         "fix_n_layers": 2,
         "fix_thickness_A": 4.0,
         "fix_layer_tolerance_A": 0.6,
-        "dopant_variant_mode": "co-dopant-depth",
         "host_species": "",
         "dopant_species": [],
         "anion_species": ["O"],
-        "depth_zones": ["surface", "subsurface", "bulk"],
-        "placement_side": "top",
         "cation_layer_tolerance_A": 0.8,
-        "layers_per_zone": 1,
-        "include_original_variant": True,
-        "max_dopant_variants_per_termination": 18,
+        # Number of outer cation layers classified as surface and, separately,
+        # the next layers classified as subsurface on each exposed slab side.
+        "dopant_depth_layers": int(
+            surface.get("dopant_depth_layers", surface.get("layers_per_zone", 1))
+        ),
         "screen_summary_csv": "surface_screen_summary.csv",
         "screen_selected_csv": "surface_screen_selected.csv",
         "refine_summary_csv": "surface_refine_summary.csv",
@@ -190,6 +186,8 @@ def _parse_config(config: Mapping[str, Any]) -> Dict[str, Any]:
     surface["poscar_order"] = (config.get("generate", {}) or {}).get("poscar_order")
 
     # Backward-compatible flat keys are mapped to the screen calculator.
+    raw_screen_cfg = dict(surface.get("screen", {}) or {})
+    raw_refine_cfg = dict(surface.get("refine", {}) or {})
     screen_defaults = {
         "enabled": True,
         "backend": surface.get("surface_backend", "grace"),
@@ -221,24 +219,112 @@ def _parse_config(config: Mapping[str, Any]) -> Dict[str, Any]:
         "top_k_per_candidate": 5,
     }
     surface["screen"] = _calculator_cfg(
-        surface.get("screen", {}), "surface.screen", screen_defaults
+        raw_screen_cfg, "surface.screen", screen_defaults
     )
     surface["refine"] = _calculator_cfg(
-        surface.get("refine", {}), "surface.refine", refine_defaults
+        raw_refine_cfg, "surface.refine", refine_defaults
     )
+
+    # Refinement candidate selection is independent of the calculator itself.
+    # The natural-termination model has one screened structure per termination,
+    # so selection is either global or independently per Miller orientation.
+    selection_mode = str(
+        raw_refine_cfg.get("selection_mode", "global")
+    ).strip().lower().replace("-", "_")
+    if selection_mode in {"balanced", "orientation_termination"}:
+        # Backward-compatible migration from the former variant-aware selector.
+        selection_mode = "per_orientation"
+    if selection_mode not in {"global", "per_orientation"}:
+        raise ValueError(
+            "[surface.refine].selection_mode must be 'global' or 'per_orientation'"
+        )
+
+    selection_top_k = int(
+        raw_refine_cfg.get(
+            "selection_top_k",
+            surface["screen"]["top_k_per_candidate"],
+        )
+    )
+    if selection_top_k <= 0:
+        raise ValueError("[surface.refine].selection_top_k must be > 0")
+
+    default_terminations = int(
+        raw_refine_cfg.get(
+            "default_terminations_per_orientation",
+            selection_top_k,
+        )
+    )
+    if default_terminations <= 0:
+        raise ValueError(
+            "[surface.refine].default_terminations_per_orientation must be > 0"
+        )
+
+    orientation_limits_raw = raw_refine_cfg.get("orientation_limits", {}) or {}
+    if not isinstance(orientation_limits_raw, Mapping):
+        raise ValueError("[surface.refine].orientation_limits must be a table/object")
+    orientation_limits: Dict[str, Dict[str, int]] = {}
+    for key, value in orientation_limits_raw.items():
+        if not isinstance(value, Mapping):
+            raise ValueError(
+                f"[surface.refine].orientation_limits.{key} must be a table/object"
+            )
+        n_terms = int(value.get("terminations", default_terminations))
+        if n_terms <= 0:
+            raise ValueError(
+                f"[surface.refine].orientation_limits.{key}.terminations must be > 0"
+            )
+        orientation_limits[str(key)] = {"terminations": n_terms}
+
+    def _string_list(value: Any, name: str) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [value.strip()] if value.strip() else []
+        if isinstance(value, (list, tuple)):
+            return list(
+                dict.fromkeys(
+                    str(item).strip()
+                    for item in value
+                    if str(item).strip()
+                )
+            )
+        raise ValueError(f"[surface.refine].{name} must be a string or array")
+
+    manual_include = _string_list(
+        raw_refine_cfg.get("manual_include_surface_ids", []),
+        "manual_include_surface_ids",
+    )
+    manual_exclude = _string_list(
+        raw_refine_cfg.get("manual_exclude_surface_ids", []),
+        "manual_exclude_surface_ids",
+    )
+
+    final_selection_mode = str(
+        raw_refine_cfg.get("final_selection_mode", "all")
+    ).strip().lower().replace("-", "_")
+    if final_selection_mode not in {"all", "global"}:
+        raise ValueError(
+            "[surface.refine].final_selection_mode must be 'all' or 'global'"
+        )
+
+    surface["refine"]["selection_mode"] = selection_mode
+    surface["refine"]["selection_top_k"] = selection_top_k
+    surface["refine"]["default_terminations_per_orientation"] = default_terminations
+    surface["refine"]["orientation_limits"] = orientation_limits
+    surface["refine"]["manual_include_surface_ids"] = manual_include
+    surface["refine"]["manual_exclude_surface_ids"] = manual_exclude
+    surface["refine"]["final_selection_mode"] = final_selection_mode
 
     if str(surface["orientation_mode"]).lower() not in {"explicit", "automatic"}:
         raise ValueError("[surface].orientation_mode must be explicit or automatic")
     if str(surface["termination_mode"]).lower() not in {"all", "first"}:
         raise ValueError("[surface].termination_mode must be all or first")
-    if str(surface["dopant_variant_mode"]).lower() not in {"none", "co-dopant-depth"}:
-        raise ValueError("[surface].dopant_variant_mode must be none or co-dopant-depth")
-    if str(surface["placement_side"]).lower() not in {"top", "bottom", "both"}:
-        raise ValueError("[surface].placement_side must be top, bottom, or both")
-    zones = [str(x).lower() for x in surface["depth_zones"]]
-    if not zones or any(x not in _VALID_ZONES for x in zones):
-        raise ValueError("[surface].depth_zones may contain surface, subsurface, bulk")
-    surface["depth_zones"] = zones
+    surface["dopant_depth_layers"] = int(surface["dopant_depth_layers"])
+    if surface["dopant_depth_layers"] <= 0:
+        raise ValueError("[surface].dopant_depth_layers must be > 0")
+    surface["cation_layer_tolerance_A"] = float(surface["cation_layer_tolerance_A"])
+    if surface["cation_layer_tolerance_A"] <= 0:
+        raise ValueError("[surface].cation_layer_tolerance_A must be > 0")
     surface["miller_list"] = [
         tuple(int(x) for x in miller) for miller in surface["miller_list"]
     ]
@@ -449,169 +535,135 @@ def _cation_layers(
     return layers
 
 
-def _zone_host_sites(
-    structure: Structure,
-    host: str,
-    dopants: Sequence[str],
+def _classify_cation_layer(
+    layer_index: int,
+    n_layers: int,
+    edge_layers: int,
+) -> str:
+    """Classify a cation layer by distance from the nearest exposed slab side."""
+    edge_layers = max(1, int(edge_layers))
+    if (
+        layer_index < edge_layers
+        or layer_index >= max(0, n_layers - edge_layers)
+    ):
+        return "surface"
+
+    subsurface_end = 2 * edge_layers
+    if (
+        layer_index < subsurface_end
+        or layer_index >= max(0, n_layers - subsurface_end)
+    ):
+        return "subsurface"
+
+    return "bulk"
+
+
+def _format_dopant_zone_label(
+    dopant: str,
+    counts: Mapping[str, int],
+    *,
+    human: bool,
+) -> str:
+    parts: list[str] = []
+    for zone in ("surface", "subsurface", "bulk"):
+        count = int(counts.get(zone, 0))
+        if count <= 0:
+            continue
+        if human:
+            parts.append(zone if count == 1 else f"{zone}×{count}")
+        else:
+            parts.append(zone if count == 1 else f"{zone}{count}")
+    if not parts:
+        parts = ["unclassified"]
+    separator = " + " if human else "+"
+    prefix = f"{dopant}: " if human else f"{dopant}-"
+    return prefix + separator.join(parts)
+
+
+def _natural_dopant_depth_metadata(
+    slab: Structure,
     cfg: Mapping[str, Any],
-) -> Dict[str, List[int]]:
+) -> Dict[str, Any]:
+    """Describe dopant depths inherited directly from the slab cut.
+
+    No atoms are swapped or moved here. The label describes the original
+    dopant positions in the generated termination. Both exposed slab sides are
+    considered: the outermost cation layer(s) are surface, the next layer(s)
+    are subsurface, and all remaining cation layers are bulk.
+    """
+    host, dopants = _host_dopants(slab, cfg)
     layers = _cation_layers(
-        structure,
+        slab,
         [host, *dopants],
         float(cfg["cation_layer_tolerance_A"]),
     )
-    if not layers:
-        return {zone: [] for zone in _VALID_ZONES}
+    layer_by_site: Dict[int, int] = {
+        site_index: layer_index
+        for layer_index, layer in enumerate(layers)
+        for site_index in layer
+    }
+    edge_layers = int(cfg["dopant_depth_layers"])
 
-    n = max(1, int(cfg["layers_per_zone"]))
-    side = str(cfg["placement_side"]).lower()
-    if side == "top":
-        surface_layers = layers[-n:]
-        subsurface_layers = layers[
-            max(0, len(layers) - 2 * n) : max(0, len(layers) - n)
-        ]
-    elif side == "bottom":
-        surface_layers = layers[:n]
-        subsurface_layers = layers[n : 2 * n]
+    dopant_depths: Dict[str, List[Dict[str, Any]]] = {}
+    zone_counts: Dict[str, Dict[str, int]] = {}
+    human_parts: list[str] = []
+    slug_parts: list[str] = []
+
+    for dopant in dopants:
+        entries: List[Dict[str, Any]] = []
+        counts = {"surface": 0, "subsurface": 0, "bulk": 0}
+        for site_index, site in enumerate(slab):
+            if site.specie.symbol != dopant:
+                continue
+            layer_index = layer_by_site.get(site_index)
+            if layer_index is None or not layers:
+                zone = "bulk"
+            else:
+                zone = _classify_cation_layer(
+                    layer_index,
+                    len(layers),
+                    edge_layers,
+                )
+            counts[zone] += 1
+            entries.append(
+                {
+                    "site_index": int(site_index),
+                    "layer_index": (
+                        int(layer_index) if layer_index is not None else None
+                    ),
+                    "zone": zone,
+                    "z_A": float(site.coords[2]),
+                }
+            )
+        dopant_depths[dopant] = entries
+        zone_counts[dopant] = counts
+        human_parts.append(
+            _format_dopant_zone_label(dopant, counts, human=True)
+        )
+        slug_parts.append(
+            _format_dopant_zone_label(dopant, counts, human=False)
+        )
+
+    if dopants:
+        termination_label = " | ".join(human_parts)
+        termination_slug = "__".join(slug_parts)
     else:
-        surface_layers = layers[:n] + layers[-n:]
-        subsurface_layers = layers[n : 2 * n] + layers[
-            max(0, len(layers) - 2 * n) : max(0, len(layers) - n)
-        ]
-
-    center = 0.5 * (len(layers) - 1)
-    bulk_layers = [
-        layers[i]
-        for i in sorted(
-            range(len(layers)),
-            key=lambda i: abs(i - center),
-        )[:n]
-    ]
-
-    def host_only(group: Sequence[Sequence[int]]) -> List[int]:
-        return [
-            i
-            for layer in group
-            for i in layer
-            if structure[i].specie.symbol == host
-        ]
+        termination_label = "undoped"
+        termination_slug = "undoped"
 
     return {
-        "surface": host_only(surface_layers),
-        "subsurface": host_only(subsurface_layers),
-        "bulk": host_only(bulk_layers),
+        "host_species": host,
+        "dopant_species": dopants,
+        "dopant_depths": dopant_depths,
+        "dopant_zone_counts": zone_counts,
+        "termination_label": termination_label,
+        "termination_slug": termination_slug,
+        "dopant_depth_layers": edge_layers,
+        "dopant_depth_definition": (
+            "Both slab sides; outer cation layer(s)=surface, "
+            "next cation layer(s)=subsurface, remaining cation layers=bulk"
+        ),
     }
-
-
-def _move_dopant(
-    structure: Structure,
-    dopant: str,
-    host: str,
-    targets: Sequence[int],
-) -> Tuple[Structure, Dict[str, Any]] | None:
-    dopant_indices = [
-        i for i, site in enumerate(structure) if site.specie.symbol == dopant
-    ]
-    targets = [i for i in targets if structure[i].specie.symbol == host]
-    if not dopant_indices or not targets:
-        return None
-
-    distance, source, target = min(
-        (float(structure.get_distance(i, j)), i, j)
-        for i in dopant_indices
-        for j in targets
-    )
-    moved = structure.copy()
-    moved.replace(source, host)
-    moved.replace(target, dopant)
-    return moved, {
-        "dopant": dopant,
-        "from_index": source,
-        "to_index": target,
-        "swap_distance_A": distance,
-    }
-
-
-def _variants(
-    slab: Structure,
-    cfg: Mapping[str, Any],
-) -> List[Tuple[str, Structure, Dict[str, Any]]]:
-    if str(cfg["dopant_variant_mode"]).lower() == "none":
-        return [("original", slab.copy(), {"target_zones": {}, "moves": []})]
-
-    host, dopants = _host_dopants(slab, cfg)
-    if not dopants:
-        return [
-            (
-                "original",
-                slab.copy(),
-                {
-                    "host_species": host,
-                    "dopant_species": [],
-                    "target_zones": {},
-                    "moves": [],
-                },
-            )
-        ]
-
-    variants: List[Tuple[str, Structure, Dict[str, Any]]] = []
-    seen: set[Tuple[str, ...]] = set()
-
-    if cfg["include_original_variant"]:
-        key = tuple(site.specie.symbol for site in slab)
-        seen.add(key)
-        variants.append(
-            (
-                "original",
-                slab.copy(),
-                {
-                    "host_species": host,
-                    "dopant_species": dopants,
-                    "target_zones": {},
-                    "moves": [],
-                },
-            )
-        )
-
-    for combo in itertools.product(cfg["depth_zones"], repeat=len(dopants)):
-        current, moves, valid = slab.copy(), [], True
-        for dopant, zone in zip(dopants, combo):
-            sites = _zone_host_sites(current, host, dopants, cfg)
-            moved = _move_dopant(current, dopant, host, sites[zone])
-            if moved is None:
-                valid = False
-                break
-            current, move = moved
-            move["target_zone"] = zone
-            moves.append(move)
-
-        if not valid:
-            continue
-
-        key = tuple(site.specie.symbol for site in current)
-        if key in seen:
-            continue
-        seen.add(key)
-
-        label = "__".join(
-            f"{dopant}-{zone}" for dopant, zone in zip(dopants, combo)
-        )
-        variants.append(
-            (
-                label,
-                current,
-                {
-                    "host_species": host,
-                    "dopant_species": dopants,
-                    "target_zones": dict(zip(dopants, combo)),
-                    "moves": moves,
-                },
-            )
-        )
-        if len(variants) >= int(cfg["max_dopant_variants_per_termination"]):
-            break
-
-    return variants
 
 
 def _prepare_calculator(cfg: Mapping[str, Any], stage: str):
@@ -760,10 +812,8 @@ def _base_record(
     bulk_path: Path,
     hkl: Tuple[int, int, int],
     term_id: int,
-    variant_id: int,
-    label: str,
     meta: Mapping[str, Any],
-    variant_dir: Path,
+    term_dir: Path,
     structure: Structure,
 ) -> Dict[str, Any]:
     thickness, vacuum, c_length = _estimate_slab_and_vacuum_thickness_A(structure)
@@ -782,6 +832,10 @@ def _base_record(
     parent_id = str(row.get("parent_id") or target_id)
     return {
         "target_id": target_id,
+        "surface_id": (
+            f"{target_id}|hkl={hkl[0]},{hkl[1]},{hkl[2]}"
+            f"|term={term_id:03d}"
+        ),
         "parent_id": parent_id,
         "structure_kind": str(row.get("structure_kind", "vacancy-free")),
         "n_oxygen_vacancies": int(row.get("n_oxygen_vacancies", 0) or 0),
@@ -797,27 +851,26 @@ def _base_record(
         "miller_k": hkl[1],
         "miller_l": hkl[2],
         "termination_id": term_id,
-        "variant_id": variant_id,
-        "variant_label": label,
+        "termination_label": str(meta.get("termination_label", "undoped")),
+        "termination_slug": str(meta.get("termination_slug", "undoped")),
         "host_species": meta.get("host_species"),
         "dopant_species_json": json.dumps(meta.get("dopant_species", [])),
-        "target_zones_json": json.dumps(
-            meta.get("target_zones", {}),
-            sort_keys=True,
+        "dopant_depths_json": json.dumps(
+            meta.get("dopant_depths", {}), sort_keys=True
         ),
-        "dopant_moves_json": json.dumps(
-            meta.get("moves", []),
-            sort_keys=True,
+        "dopant_zone_counts_json": json.dumps(
+            meta.get("dopant_zone_counts", {}), sort_keys=True
         ),
+        "dopant_depth_layers": int(meta.get("dopant_depth_layers", 1)),
+        "dopant_depth_definition": str(meta.get("dopant_depth_definition", "")),
         "n_atoms": len(structure),
         "surface_area_A2": area,
         "slab_thickness_A_est": thickness,
         "vacuum_thickness_A_est": vacuum,
         "c_length_A": c_length,
-        "surface_variant_dir": str(variant_dir),
-        "generated_structure_path": str(variant_dir / "POSCAR"),
+        "surface_termination_dir": str(term_dir),
+        "generated_structure_path": str(term_dir / "POSCAR"),
     }
-
 
 def _run_candidate(
     row: pd.Series,
@@ -858,181 +911,102 @@ def _run_candidate(
                 slab,
                 preferred_order=cfg.get("poscar_order"),
             )
-            for variant_id, (label, variant, meta) in enumerate(
-                _variants(slab, cfg),
-                start=1,
-            ):
-                variant = _sort_structure_for_poscar(
-                    variant,
-                    preferred_order=cfg.get("poscar_order"),
-                )
-                fixed = _select_fixed_atom_indices(variant, dict(cfg))
-                variant_dir = (
-                    candidate_dir
-                    / f"hkl_{hkl[0]}_{hkl[1]}_{hkl[2]}"
-                    / f"term_{term_id:03d}"
-                    / f"variant_{variant_id:03d}_{label.replace('/', '-')}"
-                )
-                variant_dir.mkdir(parents=True, exist_ok=True)
+            meta = _natural_dopant_depth_metadata(slab, cfg)
+            slug = str(meta.get("termination_slug", "undoped"))
+            safe_slug = "".join(
+                ch if ch.isalnum() or ch in "._-+" else "_" for ch in slug
+            )
+            fixed = _select_fixed_atom_indices(slab, dict(cfg))
+            term_dir = (
+                candidate_dir
+                / f"hkl_{hkl[0]}_{hkl[1]}_{hkl[2]}"
+                / f"term_{term_id:03d}_{safe_slug}"
+            )
+            term_dir.mkdir(parents=True, exist_ok=True)
 
-                if fixed:
-                    _write_poscar_with_selective_dynamics(
-                        variant,
-                        fixed,
-                        variant_dir / "POSCAR",
-                    )
-                else:
-                    Poscar(variant).write_file(str(variant_dir / "POSCAR"))
-
-                if cfg["write_cif"]:
-                    variant.to(
-                        fmt="cif",
-                        filename=str(variant_dir / "slab.cif"),
-                    )
-
-                result = _evaluate(
-                    variant,
+            if fixed:
+                _write_poscar_with_selective_dynamics(
+                    slab,
                     fixed,
-                    calc_cfg,
-                    calculator,
-                    variant_dir / "screen",
+                    term_dir / "POSCAR",
                 )
-                final = variant
-                if result.get("status") == "ok" and result.get(
-                    "relaxed_structure_path"
-                ):
-                    final = Structure.from_file(result["relaxed_structure_path"])
+            else:
+                Poscar(slab).write_file(str(term_dir / "POSCAR"))
 
-                rec = _base_record(
-                    row,
-                    bulk_path,
-                    hkl,
-                    term_id,
-                    variant_id,
-                    label,
-                    meta,
-                    variant_dir,
-                    final,
+            if cfg["write_cif"]:
+                slab.to(
+                    fmt="cif",
+                    filename=str(term_dir / "slab.cif"),
                 )
-                rec.update(
-                    {
-                        "screen_status": result.get("status"),
-                        "screen_backend": calc_cfg["backend"],
-                        "screen_model": calc_cfg["model"],
-                        "screen_task": calc_cfg["task"],
-                        "screen_energy_eV": result.get("energy_eV"),
-                        "screen_energy_eV_atom": (
-                            float(result["energy_eV"]) / len(final)
-                            if result.get("energy_eV") is not None
-                            else None
-                        ),
-                        "screen_converged": result.get("converged"),
-                        "screen_final_fmax_eV_per_A": result.get(
-                            "final_fmax_eV_per_A"
-                        ),
-                        "screen_optimizer_steps": result.get("optimizer_steps"),
-                        "screen_relaxed_structure_path": result.get(
-                            "relaxed_structure_path"
-                        ),
-                        "screen_bulk_reference_eV": bulk_energy,
-                    }
-                )
-                rec.update(
-                    {
-                        f"screen_{key}": value
-                        for key, value in _surface_energy(
-                            bulk,
-                            final,
-                            result.get("energy_eV"),
-                            bulk_energy,
-                        ).items()
-                    }
-                )
-                (variant_dir / "meta.json").write_text(
-                    json.dumps(rec, indent=2, default=str),
-                    encoding="utf-8",
-                )
-                records.append(rec)
+
+            result = _evaluate(
+                slab,
+                fixed,
+                calc_cfg,
+                calculator,
+                term_dir / "screen",
+            )
+            final = slab
+            if result.get("status") == "ok" and result.get(
+                "relaxed_structure_path"
+            ):
+                final = Structure.from_file(result["relaxed_structure_path"])
+
+            rec = _base_record(
+                row,
+                bulk_path,
+                hkl,
+                term_id,
+                meta,
+                term_dir,
+                final,
+            )
+            rec.update(
+                {
+                    "screen_status": result.get("status"),
+                    "screen_backend": calc_cfg["backend"],
+                    "screen_model": calc_cfg["model"],
+                    "screen_task": calc_cfg["task"],
+                    "screen_energy_eV": result.get("energy_eV"),
+                    "screen_energy_eV_atom": (
+                        float(result["energy_eV"]) / len(final)
+                        if result.get("energy_eV") is not None
+                        else None
+                    ),
+                    "screen_converged": result.get("converged"),
+                    "screen_final_fmax_eV_per_A": result.get(
+                        "final_fmax_eV_per_A"
+                    ),
+                    "screen_optimizer_steps": result.get("optimizer_steps"),
+                    "screen_relaxed_structure_path": result.get(
+                        "relaxed_structure_path"
+                    ),
+                    "screen_bulk_reference_eV": bulk_energy,
+                }
+            )
+            rec.update(
+                {
+                    f"screen_{key}": value
+                    for key, value in _surface_energy(
+                        bulk,
+                        final,
+                        result.get("energy_eV"),
+                        bulk_energy,
+                    ).items()
+                }
+            )
+            (term_dir / "meta.json").write_text(
+                json.dumps(rec, indent=2, default=str),
+                encoding="utf-8",
+            )
+            records.append(rec)
 
     return records
-
 
 def _target_group_columns(df: pd.DataFrame) -> list[str]:
     if "target_id" in df.columns:
         return ["target_id"]
     return ["composition_tag", "candidate"]
-
-
-def _all_bulk_like_zones(value: Any) -> bool:
-    try:
-        zones = json.loads(str(value or "{}"))
-    except (json.JSONDecodeError, TypeError):
-        return False
-    return bool(zones) and all(
-        str(zone).lower() == "bulk" for zone in zones.values()
-    )
-
-
-def _add_segregation_metrics(df: pd.DataFrame, prefix: str) -> pd.DataFrame:
-    """Add same-termination co-dopant segregation energies.
-
-    The reference is the generated variant in which every explicitly moved
-    dopant species targets a bulk-like cation layer. Because compared rows have
-    identical composition, orientation, termination, atom count, and calculator,
-    the difference in total energy is a well-defined segregation descriptor:
-
-        E_seg = E_variant - E_all_bulk_like
-
-    Negative values therefore mean that the requested surface/subsurface
-    placement is preferred over the corresponding all-bulk-like placement.
-    """
-    out = df.copy()
-    energy_col = f"{prefix}_energy_eV"
-    out[f"{prefix}_segregation_reference_variant"] = ""
-    out[f"{prefix}_segregation_reference_energy_eV"] = np.nan
-    out[f"{prefix}_segregation_energy_eV"] = np.nan
-    out[f"{prefix}_segregation_status"] = "missing_bulk_like_reference"
-
-    if energy_col not in out.columns or "target_zones_json" not in out.columns:
-        return out
-
-    group_cols = [
-        *_target_group_columns(out),
-        "miller_h",
-        "miller_k",
-        "miller_l",
-        "termination_id",
-    ]
-    for _, group in out.groupby(group_cols, sort=False):
-        reference_rows = []
-        for idx, row in group.iterrows():
-            if _all_bulk_like_zones(row.get("target_zones_json", "{}")):
-                energy = pd.to_numeric(
-                    pd.Series([row.get(energy_col)]), errors="coerce"
-                ).iloc[0]
-                if pd.notna(energy):
-                    reference_rows.append((idx, float(energy)))
-
-        if not reference_rows:
-            continue
-
-        # There should normally be one all-bulk-like variant. If representative
-        # generation ever produces more than one, use the lowest-energy one and
-        # record the exact variant chosen.
-        ref_idx, ref_energy = min(reference_rows, key=lambda item: item[1])
-        ref_variant = str(out.loc[ref_idx].get("variant_label", ""))
-        energies = pd.to_numeric(out.loc[group.index, energy_col], errors="coerce")
-        valid = energies.notna()
-
-        out.loc[group.index, f"{prefix}_segregation_reference_variant"] = ref_variant
-        out.loc[group.index, f"{prefix}_segregation_reference_energy_eV"] = ref_energy
-        out.loc[group.index[valid], f"{prefix}_segregation_energy_eV"] = (
-            energies.loc[valid] - ref_energy
-        )
-        out.loc[group.index[valid], f"{prefix}_segregation_status"] = "ok"
-        out.loc[group.index[~valid], f"{prefix}_segregation_status"] = "missing_energy"
-
-    return out
 
 
 def _rank(df: pd.DataFrame, prefix: str) -> pd.DataFrame:
@@ -1089,60 +1063,158 @@ def _topk(
     )
 
 
-def _screen_shortlist_with_segregation_references(
-    df: pd.DataFrame,
-    top_k: int,
-) -> pd.DataFrame:
-    """Select top surface candidates plus bulk-like segregation references.
+def _orientation_key(h: Any, k: Any, l: Any) -> str:
+    return f"{int(h)},{int(k)},{int(l)}"
 
-    The nominal top-k is applied per bulk parent. For every selected
-    orientation/termination, its generated all-bulk-like dopant variant is also
-    carried into the refinement handoff when available. These extra rows are
-    reference calculations and do not consume the nominal top-k.
-    """
-    selected = _topk(df, "screen", top_k)
-    if selected.empty:
-        return selected
 
-    chosen = set(selected.index.tolist())
-    group_cols = [
-        *_target_group_columns(df),
-        "miller_h",
-        "miller_k",
-        "miller_l",
-        "termination_id",
-    ]
-    for _, row in selected.iterrows():
-        mask = pd.Series(True, index=df.index)
-        for column in group_cols:
-            mask &= df[column].astype(str).eq(str(row[column]))
-        group = df[mask]
-        refs = group[
-            group["target_zones_json"].map(_all_bulk_like_zones)
-        ].copy()
-        if refs.empty:
-            continue
-        refs["__energy"] = pd.to_numeric(
-            refs.get("screen_energy_eV"), errors="coerce"
+def _ensure_surface_ids(df: pd.DataFrame) -> pd.DataFrame:
+    """Return a copy with one stable identifier per natural termination."""
+    out = df.copy()
+    if "surface_id" in out.columns and out["surface_id"].notna().all():
+        return out
+
+    def make_id(row: pd.Series) -> str:
+        target_id = str(
+            row.get("target_id")
+            or f"{row.get('composition_tag', '')}/{row.get('candidate', '')}"
+        ).strip("/")
+        return (
+            f"{target_id}|hkl={int(row['miller_h'])},{int(row['miller_k'])},{int(row['miller_l'])}"
+            f"|term={int(row['termination_id']):03d}"
         )
-        refs = refs[refs["__energy"].notna()]
-        if not refs.empty:
-            chosen.add(refs.sort_values("__energy").index[0])
 
-    out = df.loc[sorted(chosen)].copy()
-    top_index = set(selected.index.tolist())
-    out["screen_selection_reason"] = [
-        "top_k" if idx in top_index else "segregation_reference"
-        for idx in out.index
-    ]
-    rank_values = pd.to_numeric(out.get("screen_rank_overall"), errors="coerce")
-    out["__sort_rank"] = rank_values.fillna(float("inf"))
-    out = out.sort_values(
-        [*_target_group_columns(out), "__sort_rank", "screen_selection_reason"],
-        kind="stable",
-    ).drop(columns=["__sort_rank"])
+    out["surface_id"] = out.apply(make_id, axis=1)
     return out
 
+
+def ensure_surface_ids(df: pd.DataFrame) -> pd.DataFrame:
+    """Public helper for GUI/manual refinement selection."""
+    return _ensure_surface_ids(df)
+
+
+def _rankable_mask(df: pd.DataFrame, prefix: str = "screen") -> pd.Series:
+    values = df.get(f"{prefix}_rankable", pd.Series(False, index=df.index))
+    if values.dtype == bool:
+        return values.fillna(False)
+    return values.astype(str).str.lower().eq("true")
+
+
+def _select_refinement_candidates(
+    df: pd.DataFrame,
+    *,
+    mode: str,
+    top_k: int,
+    orientation_limits: Mapping[str, Mapping[str, Any]] | None = None,
+    default_terminations_per_orientation: int = 3,
+    manual_include_surface_ids: Sequence[str] | None = None,
+    manual_exclude_surface_ids: Sequence[str] | None = None,
+) -> pd.DataFrame:
+    """Select natural surface terminations for higher-fidelity refinement."""
+    out = _ensure_surface_ids(df)
+    mode = str(mode).strip().lower().replace("-", "_")
+    if mode in {"balanced", "orientation_termination"}:
+        mode = "per_orientation"
+    if mode not in {"global", "per_orientation"}:
+        raise ValueError(
+            "surface refinement selection mode must be global or per_orientation"
+        )
+    top_k = int(top_k)
+    if top_k <= 0:
+        raise ValueError("surface refinement selection top_k must be > 0")
+
+    rankable = out[_rankable_mask(out, "screen")].copy()
+    if rankable.empty:
+        return out.head(0).copy()
+    rankable["screen_surface_energy_J_m2"] = pd.to_numeric(
+        rankable["screen_surface_energy_J_m2"], errors="coerce"
+    )
+    rankable = rankable[rankable["screen_surface_energy_J_m2"].notna()]
+
+    selected_indices: set[Any] = set()
+    auto_reason: dict[Any, str] = {}
+
+    if mode == "global":
+        for _, group in rankable.groupby(_target_group_columns(rankable), sort=False):
+            chosen = group.sort_values("screen_surface_energy_J_m2").head(top_k)
+            selected_indices.update(chosen.index)
+            auto_reason.update({idx: "global_top_k" for idx in chosen.index})
+    else:
+        orientation_limits = dict(orientation_limits or {})
+        group_cols = [
+            *_target_group_columns(rankable),
+            "miller_h", "miller_k", "miller_l",
+        ]
+        for group_key, group in rankable.groupby(group_cols, sort=False):
+            h, k, l = group_key[-3:] if isinstance(group_key, tuple) else (
+                group.iloc[0]["miller_h"],
+                group.iloc[0]["miller_k"],
+                group.iloc[0]["miller_l"],
+            )
+            key = _orientation_key(h, k, l)
+            limits = orientation_limits.get(key, {})
+            n_terms = int(
+                limits.get("terminations", default_terminations_per_orientation)
+            )
+            if n_terms <= 0:
+                continue
+            chosen = group.sort_values("screen_surface_energy_J_m2").head(n_terms)
+            selected_indices.update(chosen.index)
+            auto_reason.update({idx: "orientation_top_terminations" for idx in chosen.index})
+
+    include_ids = set(str(x) for x in (manual_include_surface_ids or []))
+    exclude_ids = set(str(x) for x in (manual_exclude_surface_ids or []))
+    by_surface_id = {
+        str(row["surface_id"]): idx for idx, row in rankable.iterrows()
+    }
+    for surface_id in include_ids:
+        idx = by_surface_id.get(surface_id)
+        if idx is not None:
+            selected_indices.add(idx)
+            auto_reason[idx] = "manual_include"
+    for surface_id in exclude_ids:
+        idx = by_surface_id.get(surface_id)
+        if idx is not None:
+            selected_indices.discard(idx)
+            auto_reason.pop(idx, None)
+
+    if not selected_indices:
+        return out.head(0).copy()
+
+    selected = out.loc[sorted(selected_indices)].copy()
+    selected["screen_selection_mode"] = mode
+    selected["screen_selection_reason"] = [
+        auto_reason.get(idx, "automatic") for idx in selected.index
+    ]
+    selected = selected.sort_values(
+        [
+            *_target_group_columns(selected),
+            "miller_h", "miller_k", "miller_l",
+            "screen_surface_energy_J_m2",
+        ],
+        kind="stable",
+    )
+    return selected
+
+
+def select_refinement_candidates(
+    df: pd.DataFrame,
+    refine_cfg: Mapping[str, Any],
+) -> pd.DataFrame:
+    """Public wrapper used by the CLI and GUI to preview the same shortlist."""
+    return _select_refinement_candidates(
+        df,
+        mode=str(refine_cfg.get("selection_mode", "global")),
+        top_k=int(refine_cfg.get("selection_top_k", 10)),
+        orientation_limits=refine_cfg.get("orientation_limits", {}),
+        default_terminations_per_orientation=int(
+            refine_cfg.get(
+                "default_terminations_per_orientation",
+                refine_cfg.get("selection_top_k", 10),
+            )
+        ),
+        manual_include_surface_ids=refine_cfg.get("manual_include_surface_ids", []),
+        manual_exclude_surface_ids=refine_cfg.get("manual_exclude_surface_ids", []),
+    )
 
 def run_surface_scan(
     config: Mapping[str, Any],
@@ -1180,17 +1252,13 @@ def run_surface_scan(
                 f"[surface] Exceeded max_total_surfaces={cfg['max_total_surfaces']}"
             )
 
-    dataframe = _add_segregation_metrics(pd.DataFrame(records), "screen")
-    dataframe = _rank(dataframe, "screen")
+    dataframe = _rank(pd.DataFrame(records), "screen")
     summary = outdir / str(cfg["screen_summary_csv"])
     selected_path = outdir / str(cfg["screen_selected_csv"])
     dataframe.to_csv(summary, index=False)
-    _screen_shortlist_with_segregation_references(
-        dataframe,
-        int(cfg["screen"]["top_k_per_candidate"]),
-    ).to_csv(selected_path, index=False)
+    select_refinement_candidates(dataframe, cfg["refine"]).to_csv(selected_path, index=False)
 
-    print(f"[surface] Screened {len(dataframe)} slab variants -> {summary}")
+    print(f"[surface] Screened {len(dataframe)} natural terminations -> {summary}")
     return summary
 
 
@@ -1205,12 +1273,48 @@ def run_surface_refine(
 
     outdir = resolve_surface_output_dir(config, cfg, project_root)
     selected_path = outdir / str(cfg["screen_selected_csv"])
-    if not selected_path.exists():
+    screen_summary_path = outdir / str(cfg["screen_summary_csv"])
+
+    # Rebuild the refinement shortlist from the complete screen summary using
+    # the *current* refinement-selection settings. This lets users switch from
+    # global top-N to per-orientation top-N (or change N) without repeating the
+    # expensive screening calculations.
+    if screen_summary_path.exists():
+        screened = pd.read_csv(screen_summary_path)
+        if "termination_label" not in screened.columns:
+            raise RuntimeError(
+                "[surface] Existing surface_screen_summary.csv uses the old artificial "
+                "dopant-variant workflow. Rerun surface-scan to generate natural terminations "
+                "without atom swapping before refinement."
+            )
+        selected = select_refinement_candidates(screened, cfg["refine"])
+        # Old screen summaries may still contain columns from the removed
+        # segregation-energy feature. Do not propagate them into new outputs.
+        legacy_cols = [
+            column for column in selected.columns
+            if "segregation" in str(column).lower()
+        ]
+        if legacy_cols:
+            selected = selected.drop(columns=legacy_cols)
+        selected.to_csv(selected_path, index=False)
+    elif selected_path.exists():
+        selected = pd.read_csv(selected_path)
+        legacy_cols = [
+            column for column in selected.columns
+            if "segregation" in str(column).lower()
+        ]
+        if legacy_cols:
+            selected = selected.drop(columns=legacy_cols)
+    else:
         raise FileNotFoundError(
-            f"[surface] Run surface-scan first; missing {selected_path}"
+            f"[surface] Run surface-scan first; missing {screen_summary_path}"
         )
 
-    selected = pd.read_csv(selected_path)
+    if selected.empty:
+        raise RuntimeError(
+            "[surface] No rankable screened surfaces matched the current refinement selection"
+        )
+
     calculator = _prepare_calculator(cfg["refine"], "Surface refine")
     bulk_cache: Dict[str, float | None] = {}
     records: List[Dict[str, Any]] = []
@@ -1225,7 +1329,7 @@ def run_surface_refine(
         bulk = Structure.from_file(bulk_path)
 
         if key not in bulk_cache:
-            candidate_dir = Path(str(row["surface_variant_dir"])).parents[2]
+            candidate_dir = Path(str(row["surface_termination_dir"])).parents[1]
             bulk_cache[key] = _bulk_energy(
                 bulk,
                 cfg["refine"],
@@ -1247,7 +1351,7 @@ def run_surface_refine(
             fixed,
             cfg["refine"],
             calculator,
-            Path(str(row["surface_variant_dir"])) / "refine",
+            Path(str(row["surface_termination_dir"])) / "refine",
         )
         final = structure
         if result.get("status") == "ok" and result.get(
@@ -1291,18 +1395,23 @@ def run_surface_refine(
         )
         records.append(rec)
 
-    dataframe = _add_segregation_metrics(pd.DataFrame(records), "refine")
-    dataframe = _rank(dataframe, "refine")
+    dataframe = _rank(pd.DataFrame(records), "refine")
     summary = outdir / str(cfg["refine_summary_csv"])
     final_path = outdir / str(cfg["refine_selected_csv"])
     dataframe.to_csv(summary, index=False)
-    _topk(
-        dataframe,
-        "refine",
-        int(cfg["refine"]["top_k_per_candidate"]),
-    ).to_csv(final_path, index=False)
+    if str(cfg["refine"].get("final_selection_mode", "all")) == "global":
+        final_selected = _topk(
+            dataframe,
+            "refine",
+            int(cfg["refine"]["top_k_per_candidate"]),
+        )
+        final_selected["final_selection_reason"] = "global_top_k"
+    else:
+        final_selected = dataframe.copy()
+        final_selected["final_selection_reason"] = "all_refined"
+    final_selected.to_csv(final_path, index=False)
 
-    print(f"[surface] Refined {len(dataframe)} slab variants -> {summary}")
+    print(f"[surface] Refined {len(dataframe)} natural terminations -> {summary}")
     return summary
 
 
@@ -1312,6 +1421,9 @@ __all__ = [
     "discover_surface_targets",
     "preview_surface_candidates",
     "resolve_surface_output_dir",
+    "_select_refinement_candidates",
+    "select_refinement_candidates",
+    "ensure_surface_ids",
     "run_surface_scan",
     "run_surface_scan_from_toml",
     "run_surface_refine",

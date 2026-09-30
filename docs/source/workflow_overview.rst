@@ -191,9 +191,11 @@ grand-potential hull.
 
    - Select the most stable bulk candidates
    - Generate configurable Miller-index slabs and surface terminations
-   - Scan representative Sb/co-dopant surface, subsurface, and bulk-like placements
+   - Keep each slab cut unchanged and label the naturally inherited dopant depths
    - Relax and rank all rankable slabs with a fast configurable MLFF
-   - Re-evaluate only the top-k shortlist with an independent higher-fidelity MLFF
+   - Build the refinement shortlist globally or with independently configurable
+     termination counts for each Miller orientation
+   - Optionally edit the exact screened surfaces manually before higher-fidelity refinement
    - Keep screening and refinement energies separated by calculator provenance
    - Preserve non-stoichiometric terminations without ranking them by raw total energy
 

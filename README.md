@@ -924,6 +924,13 @@ For example, use GRACE for the broad screen and MACE MH-1 with the matpes_r2scan
 head for refinement. Any M3GNet, UMA, MACE, or GRACE calculator accepted by the
 existing ML backend abstraction can be selected.
 
+The surface workflow now generates **one structure per natural termination**.
+Dopant atoms are never swapped to create artificial surface variants; labels such
+as **In: surface | Sb: subsurface** only describe where the original dopants lie
+after that slab cut. Refinement can select the best terminations globally or
+independently for each Miller orientation, with exact manual include/exclude
+overrides in the GUI. All successfully refined terminations are retained by default.
+
 Run the stages in separate environments when needed:
 
     conda activate dopingflow-grace
@@ -947,7 +954,8 @@ Relative surface output paths are created inside the selected `source_root`; for
 See examples/surfaces/input.toml and docs/source/methods/surfaces.rst for the
 complete configuration and interpretation notes. The Streamlit **Surface Screening**
 page provides the same staged controls, separate-environment execution, surface-energy
-and segregation-energy plots, and per-surface structure browsing. The old Surface
+ranking, orientation/termination-balanced selection, manual shortlist editing, and
+per-surface structure browsing. The old Surface
 editor in the main Input Builder now links to this dedicated page.
 
 ---
@@ -974,7 +982,7 @@ SHE/RHE potential. DopingFlow intentionally does not hard-code aqueous species
 or oxidation states because oxide dopants may dissolve as different
 oxo/hydroxo/charge-state species.
 
-Each result records the dopant's initial relaxed-surface zone (`surface`, `subsurface`, or `bulk`), the zone requested by the surface variant, its original atom index/coordinates, and its depth from the selected surface.
+Each result records the dopant's natural-cut zone and its zone in the relaxed surface (`surface`, `subsurface`, or `bulk`), together with its original atom index/coordinates and its depth from the selected surface.
 
 A relative `outdir = "09_leaching"` is created inside the leaching/source parent root (inherited from `[surface].source_root` unless overridden). Outputs include the exact site preview,
 `leaching_summary.csv`, a per-surface/per-dopant summary,
