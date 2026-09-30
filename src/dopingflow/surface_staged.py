@@ -1112,73 +1112,193 @@ def _topk(
     )
 
 
+def _orientation_key(h: Any, k: Any, l: Any) -> str:
+    return f"{int(h)},{int(k)},{int(l)}"
+
+
+def _ensure_surface_ids(df: pd.DataFrame) -> pd.DataFrame:
+    """Return a copy with a stable identifier for every generated surface row."""
+    out = df.copy()
+    if "surface_id" in out.columns and out["surface_id"].notna().all():
+        return out
+
+    def make_id(row: pd.Series) -> str:
+        target_id = str(
+            row.get("target_id")
+            or f"{row.get('composition_tag', '')}/{row.get('candidate', '')}"
+        ).strip("/")
+        return (
+            f"{target_id}|hkl={int(row['miller_h'])},{int(row['miller_k'])},{int(row['miller_l'])}"
+            f"|term={int(row['termination_id']):03d}|variant={int(row['variant_id']):03d}"
+        )
+
+    out["surface_id"] = out.apply(make_id, axis=1)
+    return out
+
+
+def _rankable_mask(df: pd.DataFrame, prefix: str = "screen") -> pd.Series:
+    values = df.get(f"{prefix}_rankable", pd.Series(False, index=df.index))
+    if values.dtype == bool:
+        return values.fillna(False)
+    return values.astype(str).str.lower().eq("true")
+
+
 def _select_refinement_candidates(
     df: pd.DataFrame,
     *,
     mode: str,
     top_k: int,
+    orientation_limits: Mapping[str, Mapping[str, Any]] | None = None,
+    default_terminations_per_orientation: int = 3,
+    default_variants_per_termination: int = 1,
+    manual_include_surface_ids: Sequence[str] | None = None,
+    manual_exclude_surface_ids: Sequence[str] | None = None,
 ) -> pd.DataFrame:
-    """Select screened surfaces to send to the refinement calculator.
+    """Select screened surfaces for higher-fidelity refinement.
 
-    global keeps the best top_k rankable surfaces across all Miller
-    orientations for each source structure.
+    ``global`` keeps the best ``top_k`` surfaces per source structure.
+    ``per_orientation`` keeps the best ``top_k`` surfaces independently for
+    each Miller orientation.
+    ``orientation_termination`` first ranks distinct terminations within each
+    orientation by the minimum surface energy among their variants, then keeps
+    a configurable number of terminations and variants per termination.
 
-    per_orientation keeps the best top_k rankable surfaces separately
-    for every Miller orientation and source structure. This prevents a single
-    low-energy facet from occupying the entire refinement budget.
+    Manual include/exclude surface IDs are applied after the automatic rule,
+    which makes the automatic selection editable without losing reproducibility.
     """
+    out = _ensure_surface_ids(df)
     mode = str(mode).strip().lower().replace("-", "_")
-    if mode not in {"global", "per_orientation"}:
+    if mode == "balanced":
+        mode = "orientation_termination"
+    if mode not in {"global", "per_orientation", "orientation_termination"}:
         raise ValueError(
-            "surface refinement selection mode must be 'global' or 'per_orientation'"
+            "surface refinement selection mode must be one of: "
+            "global, per_orientation, orientation_termination"
         )
     top_k = int(top_k)
     if top_k <= 0:
         raise ValueError("surface refinement selection top_k must be > 0")
 
+    rankable = out[_rankable_mask(out, "screen")].copy()
+    if rankable.empty:
+        return out.head(0).copy()
+    rankable["screen_surface_energy_J_m2"] = pd.to_numeric(
+        rankable["screen_surface_energy_J_m2"], errors="coerce"
+    )
+    rankable = rankable[rankable["screen_surface_energy_J_m2"].notna()]
+
+    selected_indices: set[Any] = set()
+    auto_reason: dict[Any, str] = {}
+
     if mode == "global":
-        selected = _topk(df, "screen", top_k)
-        if selected.empty:
-            return selected
-        selected = selected.copy()
-        selected["screen_selection_mode"] = "global"
-        selected["screen_selection_reason"] = "global_top_k"
-        return selected
+        for _, group in rankable.groupby(_target_group_columns(rankable), sort=False):
+            chosen = group.sort_values("screen_surface_energy_J_m2").head(top_k)
+            selected_indices.update(chosen.index)
+            auto_reason.update({idx: "global_top_k" for idx in chosen.index})
 
-    rows: list[pd.DataFrame] = []
-    group_cols = [
-        *_target_group_columns(df),
-        "miller_h",
-        "miller_k",
-        "miller_l",
+    elif mode == "per_orientation":
+        group_cols = [
+            *_target_group_columns(rankable),
+            "miller_h", "miller_k", "miller_l",
+        ]
+        for _, group in rankable.groupby(group_cols, sort=False):
+            chosen = group.sort_values("screen_surface_energy_J_m2").head(top_k)
+            selected_indices.update(chosen.index)
+            auto_reason.update({idx: "orientation_top_k" for idx in chosen.index})
+
+    else:
+        orientation_limits = dict(orientation_limits or {})
+        group_cols = [
+            *_target_group_columns(rankable),
+            "miller_h", "miller_k", "miller_l",
+        ]
+        for group_key, group in rankable.groupby(group_cols, sort=False):
+            h, k, l = group_key[-3:] if isinstance(group_key, tuple) else (
+                group.iloc[0]["miller_h"],
+                group.iloc[0]["miller_k"],
+                group.iloc[0]["miller_l"],
+            )
+            key = _orientation_key(h, k, l)
+            limits = orientation_limits.get(key, {})
+            n_terms = int(
+                limits.get("terminations", default_terminations_per_orientation)
+            )
+            n_variants = int(
+                limits.get("variants_per_termination", default_variants_per_termination)
+            )
+            if n_terms <= 0 or n_variants <= 0:
+                continue
+
+            termination_order = (
+                group.groupby("termination_id", as_index=False)["screen_surface_energy_J_m2"]
+                .min()
+                .sort_values("screen_surface_energy_J_m2")
+                .head(n_terms)
+            )
+            for term_id in termination_order["termination_id"].tolist():
+                term_group = group[group["termination_id"] == term_id]
+                chosen = term_group.sort_values("screen_surface_energy_J_m2").head(n_variants)
+                selected_indices.update(chosen.index)
+                auto_reason.update({
+                    idx: "orientation_termination_balanced" for idx in chosen.index
+                })
+
+    include_ids = set(str(x) for x in (manual_include_surface_ids or []))
+    exclude_ids = set(str(x) for x in (manual_exclude_surface_ids or []))
+    by_surface_id = {
+        str(row["surface_id"]): idx for idx, row in rankable.iterrows()
+    }
+    for surface_id in include_ids:
+        idx = by_surface_id.get(surface_id)
+        if idx is not None:
+            selected_indices.add(idx)
+            auto_reason[idx] = "manual_include"
+    for surface_id in exclude_ids:
+        idx = by_surface_id.get(surface_id)
+        if idx is not None:
+            selected_indices.discard(idx)
+            auto_reason.pop(idx, None)
+
+    if not selected_indices:
+        return out.head(0).copy()
+
+    selected = out.loc[sorted(selected_indices)].copy()
+    selected["screen_selection_mode"] = mode
+    selected["screen_selection_reason"] = [
+        auto_reason.get(idx, "automatic") for idx in selected.index
     ]
-    for _, group in df.groupby(group_cols, sort=False):
-        good = group[group["screen_rankable"].fillna(False)].copy()
-        if good.empty:
-            continue
-        if "screen_rank_within_hkl" in good.columns:
-            good = good.sort_values("screen_rank_within_hkl")
-        else:
-            good = good.sort_values("screen_surface_energy_J_m2")
-        rows.append(good.head(top_k))
-
-    if not rows:
-        return df.head(0).copy()
-
-    selected = pd.concat(rows).copy()
-    selected["screen_selection_mode"] = "per_orientation"
-    selected["screen_selection_reason"] = "orientation_top_k"
     selected = selected.sort_values(
         [
             *_target_group_columns(selected),
-            "miller_h",
-            "miller_k",
-            "miller_l",
-            "screen_rank_within_hkl",
+            "miller_h", "miller_k", "miller_l",
+            "termination_id",
+            "screen_surface_energy_J_m2",
         ],
         kind="stable",
     )
     return selected
+
+
+def select_refinement_candidates(
+    df: pd.DataFrame,
+    refine_cfg: Mapping[str, Any],
+) -> pd.DataFrame:
+    """Public wrapper used by the CLI and GUI to preview the same shortlist."""
+    return _select_refinement_candidates(
+        df,
+        mode=str(refine_cfg.get("selection_mode", "global")),
+        top_k=int(refine_cfg.get("selection_top_k", 10)),
+        orientation_limits=refine_cfg.get("orientation_limits", {}),
+        default_terminations_per_orientation=int(
+            refine_cfg.get("default_terminations_per_orientation", 3)
+        ),
+        default_variants_per_termination=int(
+            refine_cfg.get("default_variants_per_termination", 1)
+        ),
+        manual_include_surface_ids=refine_cfg.get("manual_include_surface_ids", []),
+        manual_exclude_surface_ids=refine_cfg.get("manual_exclude_surface_ids", []),
+    )
+
 
 def run_surface_scan(
     config: Mapping[str, Any],
@@ -1220,11 +1340,7 @@ def run_surface_scan(
     summary = outdir / str(cfg["screen_summary_csv"])
     selected_path = outdir / str(cfg["screen_selected_csv"])
     dataframe.to_csv(summary, index=False)
-    _select_refinement_candidates(
-        dataframe,
-        mode=str(cfg["refine"]["selection_mode"]),
-        top_k=int(cfg["refine"]["selection_top_k"]),
-    ).to_csv(selected_path, index=False)
+    select_refinement_candidates(dataframe, cfg["refine"]).to_csv(selected_path, index=False)
 
     print(f"[surface] Screened {len(dataframe)} slab variants -> {summary}")
     return summary
@@ -1249,11 +1365,7 @@ def run_surface_refine(
     # expensive screening calculations.
     if screen_summary_path.exists():
         screened = pd.read_csv(screen_summary_path)
-        selected = _select_refinement_candidates(
-            screened,
-            mode=str(cfg["refine"]["selection_mode"]),
-            top_k=int(cfg["refine"]["selection_top_k"]),
-        )
+        selected = select_refinement_candidates(screened, cfg["refine"])
         # Old screen summaries may still contain columns from the removed
         # segregation-energy feature. Do not propagate them into new outputs.
         legacy_cols = [
@@ -1365,11 +1477,17 @@ def run_surface_refine(
     summary = outdir / str(cfg["refine_summary_csv"])
     final_path = outdir / str(cfg["refine_selected_csv"])
     dataframe.to_csv(summary, index=False)
-    _topk(
-        dataframe,
-        "refine",
-        int(cfg["refine"]["top_k_per_candidate"]),
-    ).to_csv(final_path, index=False)
+    if str(cfg["refine"].get("final_selection_mode", "all")) == "global":
+        final_selected = _topk(
+            dataframe,
+            "refine",
+            int(cfg["refine"]["top_k_per_candidate"]),
+        )
+        final_selected["final_selection_reason"] = "global_top_k"
+    else:
+        final_selected = dataframe.copy()
+        final_selected["final_selection_reason"] = "all_refined"
+    final_selected.to_csv(final_path, index=False)
 
     print(f"[surface] Refined {len(dataframe)} slab variants -> {summary}")
     return summary
@@ -1382,6 +1500,7 @@ __all__ = [
     "preview_surface_candidates",
     "resolve_surface_output_dir",
     "_select_refinement_candidates",
+    "select_refinement_candidates",
     "run_surface_scan",
     "run_surface_scan_from_toml",
     "run_surface_refine",
