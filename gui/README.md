@@ -252,12 +252,12 @@ The page provides:
 - conductivity-style `source_root`, vacancy-free/O-vacancy toggles, and optional target selectors;
 - explicit low-index facets or automatic symmetrically distinct Miller indices;
 - termination and slab-size/vacuum controls;
-- representative surface/subsurface/bulk co-dopant placement scans;
+- natural surface/subsurface/bulk labels for dopant positions inherited from each slab cut;
 - fixed middle/bottom slab regions during relaxation;
 - independent fast-screen and higher-fidelity refinement calculators;
 - direct execution in the current environment or separate named Conda environments;
 - screening/refinement TOML preview and selected-structure preview;
-- surface-energy ranking with global, per-orientation, or orientation/termination-balanced refinement selection;
+- surface-energy ranking with global or per-orientation termination selection;
 - per-surface structure browsing with the 3D structure viewer;
 - raw screen, shortlist, refinement, and final-shortlist tables.
 
@@ -272,13 +272,12 @@ Then select **Current environment** on the Surface Screening page to run
 `surface-scan`. For refinement, either launch the GUI from the MACE environment
 or select **Named Conda environments** and provide the MACE environment name.
 
-The refinement shortlist can be configured as the global best N surfaces, the best
-N surfaces per Miller orientation, or an orientation/termination-balanced selection.
-In the balanced mode, each orientation has independent controls for the number of
-distinct terminations and the number of variants retained per termination. Once a
-screen summary exists, an editable checkbox table allows exact surfaces to be added
-or removed manually. All successfully refined surfaces are kept by default.
-The surface workflow no longer reports a separate segregation-energy metric.
+The surface stage creates one structure per natural termination. Dopants are not
+moved or swapped. Their inherited positions are labeled as surface, subsurface, or
+bulk-like. Refinement can use the global best terminations or a different number
+of terminations for each Miller orientation, and an editable checkbox table allows
+exact terminations to be added or removed manually. All refined terminations are
+kept by default.
 
 ---
 
