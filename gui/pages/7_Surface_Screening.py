@@ -756,74 +756,316 @@ with st.expander("Configuration & run controls", expanded=False):
         fmax_default=0.03,
         steps_default=500,
         topk_default=5,
-        topk_label="Final global top-k after refinement",
+        show_top_k=False,
     )
+    # Keep every successfully refined surface by default. Any later reduction
+    # is an explicit downstream choice rather than an automatic global top-k.
+    refine["final_selection_mode"] = "all"
 
     st.markdown("##### Surfaces sent to refinement")
     selection_labels = {
         "Global best surfaces": "global",
         "Best surfaces from each orientation": "per_orientation",
+        "Orientation + termination balanced": "orientation_termination",
     }
     saved_selection_mode = str(
-        refine_saved.get("selection_mode", "global")
+        refine_saved.get("selection_mode", "orientation_termination")
     ).strip().lower().replace("-", "_")
-    if saved_selection_mode not in {"global", "per_orientation"}:
-        saved_selection_mode = "global"
+    if saved_selection_mode == "balanced":
+        saved_selection_mode = "orientation_termination"
+    if saved_selection_mode not in set(selection_labels.values()):
+        saved_selection_mode = "orientation_termination"
     default_label = next(
         label for label, value in selection_labels.items()
         if value == saved_selection_mode
     )
 
-    select_col, count_col = st.columns(2)
-    selection_label = select_col.selectbox(
+    selection_label = st.selectbox(
         "Refinement selection strategy",
         list(selection_labels),
         index=list(selection_labels).index(default_label),
         help=(
-            "Global selects the lowest-energy surfaces irrespective of facet. "
-            "Per orientation reserves the same number of refinement slots for each "
-            "Miller orientation so that one facet cannot dominate the shortlist."
+            "Global keeps the lowest-energy surfaces overall. Per orientation keeps "
+            "the best N from every Miller orientation. Orientation + termination balanced "
+            "first picks distinct low-energy terminations within each orientation, then "
+            "keeps the requested number of variants from every selected termination."
         ),
     )
     refinement_selection_mode = selection_labels[selection_label]
     inherited_selection_top_k = int(
-        refine_saved.get(
-            "selection_top_k",
-            screen_saved.get("top_k_per_candidate", 10),
-        )
+        refine_saved.get("selection_top_k", screen_saved.get("top_k_per_candidate", 10))
     )
-    refinement_selection_top_k = int(
-        count_col.number_input(
-            (
-                "Best surfaces per orientation"
-                if refinement_selection_mode == "per_orientation"
-                else "Global best surfaces"
-            ),
-            min_value=1,
-            value=max(1, inherited_selection_top_k),
-            step=1,
-            help=(
-                "For per-orientation selection this number is applied independently "
-                "to every (hkl) orientation and source structure."
-            ),
-        )
+    refinement_selection_top_k = max(1, inherited_selection_top_k)
+
+    # Locate an existing complete screen summary, if available. This powers both
+    # orientation-specific controls and exact manual surface selection.
+    source_path_for_refine = Path(source_root).expanduser()
+    if not source_path_for_refine.is_absolute():
+        source_path_for_refine = (project_root / source_path_for_refine).resolve()
+    out_path_for_refine = Path(outdir).expanduser()
+    if not out_path_for_refine.is_absolute():
+        out_path_for_refine = (source_path_for_refine / out_path_for_refine).resolve()
+    screen_summary_path_for_refine = out_path_for_refine / str(
+        surface.get("screen_summary_csv", "surface_screen_summary.csv")
     )
+    available_screen = _ensure_target_columns(_read_csv(screen_summary_path_for_refine))
+    if not available_screen.empty:
+        available_screen = ensure_surface_ids(available_screen)
+
+    orientation_limits = dict(refine_saved.get("orientation_limits", {}) or {})
+    default_n_terms = int(refine_saved.get("default_terminations_per_orientation", 3))
+    default_n_variants = int(refine_saved.get("default_variants_per_termination", 1))
+
+    if refinement_selection_mode in {"global", "per_orientation"}:
+        refinement_selection_top_k = int(
+            st.number_input(
+                (
+                    "Best surfaces per orientation"
+                    if refinement_selection_mode == "per_orientation"
+                    else "Global best surfaces"
+                ),
+                min_value=1,
+                value=refinement_selection_top_k,
+                step=1,
+            )
+        )
+        if refinement_selection_mode == "per_orientation":
+            st.info(
+                f"Up to {refinement_selection_top_k} surfaces from every Miller orientation "
+                "will be refined for each source structure."
+            )
+        else:
+            st.info(
+                f"The globally best {refinement_selection_top_k} surfaces will be refined "
+                "for each source structure, regardless of orientation."
+            )
+
+    if refinement_selection_mode == "orientation_termination":
+        st.caption(
+            "For each orientation, choose how many distinct terminations to retain and "
+            "how many lowest-energy surface variants to take from each selected termination."
+        )
+        orientation_rows = []
+        if not available_screen.empty:
+            orientation_source = available_screen[
+                ["miller_h", "miller_k", "miller_l", "termination_id", "variant_id"]
+            ].drop_duplicates()
+            orientation_groups = orientation_source.groupby(
+                ["miller_h", "miller_k", "miller_l"], sort=True
+            )
+            for (h, k, l), group in orientation_groups:
+                key = f"{int(h)},{int(k)},{int(l)}"
+                limits = orientation_limits.get(key, {})
+                available_terms = int(group["termination_id"].nunique())
+                variants_per_term = int(
+                    group.groupby("termination_id")["variant_id"].nunique().max()
+                )
+                orientation_rows.append(
+                    {
+                        "Orientation": f"({int(h)}{int(k)}{int(l)})",
+                        "Key": key,
+                        "Available terminations": available_terms,
+                        "Max variants / termination": variants_per_term,
+                        "Terminations to refine": min(
+                            int(limits.get("terminations", default_n_terms)),
+                            available_terms,
+                        ),
+                        "Variants / termination": min(
+                            int(limits.get("variants_per_termination", default_n_variants)),
+                            variants_per_term,
+                        ),
+                    }
+                )
+        else:
+            source_orientations = (
+                miller_list
+                if orientation_mode == "explicit"
+                else [list(x) for x in DEFAULT_MILLERS]
+            )
+            for h, k, l in source_orientations:
+                key = f"{int(h)},{int(k)},{int(l)}"
+                limits = orientation_limits.get(key, {})
+                orientation_rows.append(
+                    {
+                        "Orientation": f"({int(h)}{int(k)}{int(l)})",
+                        "Key": key,
+                        "Available terminations": None,
+                        "Max variants / termination": None,
+                        "Terminations to refine": int(
+                            limits.get("terminations", default_n_terms)
+                        ),
+                        "Variants / termination": int(
+                            limits.get("variants_per_termination", default_n_variants)
+                        ),
+                    }
+                )
+
+        orientation_editor = pd.DataFrame(orientation_rows)
+        edited_orientation = st.data_editor(
+            orientation_editor,
+            use_container_width=True,
+            hide_index=True,
+            disabled=[
+                "Orientation",
+                "Key",
+                "Available terminations",
+                "Max variants / termination",
+            ],
+            column_config={
+                "Terminations to refine": st.column_config.NumberColumn(
+                    min_value=1, step=1
+                ),
+                "Variants / termination": st.column_config.NumberColumn(
+                    min_value=1, step=1
+                ),
+            },
+            key="surface_orientation_termination_editor",
+        )
+        orientation_limits = {}
+        for _, row_edit in edited_orientation.iterrows():
+            orientation_limits[str(row_edit["Key"])] = {
+                "terminations": max(1, int(row_edit["Terminations to refine"])),
+                "variants_per_termination": max(
+                    1, int(row_edit["Variants / termination"])
+                ),
+            }
+        if len(edited_orientation):
+            default_n_terms = int(
+                edited_orientation.iloc[0]["Terminations to refine"]
+            )
+            default_n_variants = int(
+                edited_orientation.iloc[0]["Variants / termination"]
+            )
+
     refine["selection_mode"] = refinement_selection_mode
     refine["selection_top_k"] = refinement_selection_top_k
+    refine["default_terminations_per_orientation"] = default_n_terms
+    refine["default_variants_per_termination"] = default_n_variants
+    refine["orientation_limits"] = orientation_limits
 
-    if refinement_selection_mode == "per_orientation":
-        st.info(
-            f"Up to {refinement_selection_top_k} screened surfaces from each Miller "
-            "orientation will be sent to the refinement calculator for every source structure."
-        )
-    else:
-        st.info(
-            f"The globally best {refinement_selection_top_k} screened surfaces will be sent "
-            "to the refinement calculator for every source structure, regardless of orientation."
-        )
+    # Manual override is intentionally applied after the automatic strategy.
+    saved_manual_include = list(
+        refine_saved.get("manual_include_surface_ids", []) or []
+    )
+    saved_manual_exclude = list(
+        refine_saved.get("manual_exclude_surface_ids", []) or []
+    )
+    refine["manual_include_surface_ids"] = saved_manual_include
+    refine["manual_exclude_surface_ids"] = saved_manual_exclude
+    manual_review = st.checkbox(
+        "Review / manually edit exact surfaces before refinement",
+        value=bool(saved_manual_include or saved_manual_exclude),
+        help=(
+            "Starts from the automatic shortlist above, then lets you include or exclude "
+            "individual screened surfaces. Requires an existing surface_screen_summary.csv."
+        ),
+    )
+
+    if manual_review:
+        if available_screen.empty:
+            st.warning(
+                "Run the surface screen first. Manual surface selection becomes available "
+                "once surface_screen_summary.csv exists."
+            )
+        else:
+            automatic_cfg = dict(refine)
+            automatic_cfg["manual_include_surface_ids"] = []
+            automatic_cfg["manual_exclude_surface_ids"] = []
+            automatic_selected = select_refinement_candidates(
+                available_screen, automatic_cfg
+            )
+            automatic_ids = set(
+                automatic_selected.get("surface_id", pd.Series(dtype=str)).astype(str)
+            )
+            rankable_mask = (
+                available_screen.get(
+                    "screen_rankable",
+                    pd.Series(False, index=available_screen.index),
+                )
+                .astype(str)
+                .str.lower()
+                .eq("true")
+            )
+            manual_table = available_screen[rankable_mask].copy()
+            manual_table["Facet"] = manual_table.apply(
+                lambda row: (
+                    f"({int(row['miller_h'])}{int(row['miller_k'])}"
+                    f"{int(row['miller_l'])})"
+                ),
+                axis=1,
+            )
+            manual_table["Include"] = manual_table["surface_id"].astype(str).isin(
+                automatic_ids
+            )
+            manual_table.loc[
+                manual_table["surface_id"].astype(str).isin(saved_manual_include),
+                "Include",
+            ] = True
+            manual_table.loc[
+                manual_table["surface_id"].astype(str).isin(saved_manual_exclude),
+                "Include",
+            ] = False
+            manual_table["screen_surface_energy_J_m2"] = pd.to_numeric(
+                manual_table["screen_surface_energy_J_m2"], errors="coerce"
+            )
+            manual_table = manual_table.sort_values(
+                [
+                    "target_id",
+                    "miller_h",
+                    "miller_k",
+                    "miller_l",
+                    "screen_surface_energy_J_m2",
+                ]
+            )
+            edit_cols = [
+                "Include",
+                "target_id",
+                "Facet",
+                "termination_id",
+                "variant_label",
+                "screen_surface_energy_J_m2",
+                "surface_id",
+            ]
+            edited_manual = st.data_editor(
+                manual_table[edit_cols],
+                use_container_width=True,
+                hide_index=True,
+                disabled=[
+                    "target_id",
+                    "Facet",
+                    "termination_id",
+                    "variant_label",
+                    "screen_surface_energy_J_m2",
+                    "surface_id",
+                ],
+                column_config={
+                    "Include": st.column_config.CheckboxColumn(required=True),
+                    "screen_surface_energy_J_m2": st.column_config.NumberColumn(
+                        "Surface energy (J/m²)", format="%.5f"
+                    ),
+                },
+                key="surface_exact_refinement_editor",
+            )
+            final_manual_ids = set(
+                edited_manual.loc[
+                    edited_manual["Include"], "surface_id"
+                ].astype(str)
+            )
+            refine["manual_include_surface_ids"] = sorted(
+                final_manual_ids - automatic_ids
+            )
+            refine["manual_exclude_surface_ids"] = sorted(
+                automatic_ids - final_manual_ids
+            )
+            st.caption(
+                f"Automatic selection: {len(automatic_ids)} surfaces · "
+                f"Final manual selection: {len(final_manual_ids)} surfaces."
+            )
+
     st.caption(
-        "If a full surface_screen_summary.csv already exists, you can change this strategy "
-        "or N and run refinement directly; the expensive surface screen does not need to be repeated."
+        "All successfully refined surfaces are kept. If surface_screen_summary.csv already "
+        "exists, you can change the selection strategy or manual choices and run refinement "
+        "directly without repeating the expensive screen."
     )
     resolved_surface = dict(surface)
     resolved_surface.update(
