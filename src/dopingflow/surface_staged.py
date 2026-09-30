@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import itertools
 import json
 import math
 import time
@@ -170,16 +169,15 @@ def _parse_config(config: Mapping[str, Any]) -> Dict[str, Any]:
         "fix_n_layers": 2,
         "fix_thickness_A": 4.0,
         "fix_layer_tolerance_A": 0.6,
-        "dopant_variant_mode": "co-dopant-depth",
         "host_species": "",
         "dopant_species": [],
         "anion_species": ["O"],
-        "depth_zones": ["surface", "subsurface", "bulk"],
-        "placement_side": "top",
         "cation_layer_tolerance_A": 0.8,
-        "layers_per_zone": 1,
-        "include_original_variant": True,
-        "max_dopant_variants_per_termination": 18,
+        # Number of outer cation layers classified as surface and, separately,
+        # the next layers classified as subsurface on each exposed slab side.
+        "dopant_depth_layers": int(
+            surface.get("dopant_depth_layers", surface.get("layers_per_zone", 1))
+        ),
         "screen_summary_csv": "surface_screen_summary.csv",
         "screen_selected_csv": "surface_screen_selected.csv",
         "refine_summary_csv": "surface_refine_summary.csv",
@@ -230,19 +228,19 @@ def _parse_config(config: Mapping[str, Any]) -> Dict[str, Any]:
     )
 
     # Refinement candidate selection is independent of the calculator itself.
-    # Existing global/per-orientation settings remain valid, while the new
-    # orientation_termination mode preserves both facet and termination diversity.
+    # The natural-termination model has one screened structure per termination,
+    # so selection is either global or independently per Miller orientation.
     selection_mode = str(
         raw_refine_cfg.get("selection_mode", "global")
     ).strip().lower().replace("-", "_")
-    if selection_mode == "balanced":
-        selection_mode = "orientation_termination"
-    valid_selection_modes = {"global", "per_orientation", "orientation_termination"}
-    if selection_mode not in valid_selection_modes:
+    if selection_mode in {"balanced", "orientation_termination"}:
+        # Backward-compatible migration from the former variant-aware selector.
+        selection_mode = "per_orientation"
+    if selection_mode not in {"global", "per_orientation"}:
         raise ValueError(
-            "[surface.refine].selection_mode must be one of: "
-            "global, per_orientation, orientation_termination"
+            "[surface.refine].selection_mode must be 'global' or 'per_orientation'"
         )
+
     selection_top_k = int(
         raw_refine_cfg.get(
             "selection_top_k",
@@ -253,14 +251,14 @@ def _parse_config(config: Mapping[str, Any]) -> Dict[str, Any]:
         raise ValueError("[surface.refine].selection_top_k must be > 0")
 
     default_terminations = int(
-        raw_refine_cfg.get("default_terminations_per_orientation", 3)
+        raw_refine_cfg.get(
+            "default_terminations_per_orientation",
+            selection_top_k,
+        )
     )
-    default_variants = int(
-        raw_refine_cfg.get("default_variants_per_termination", 1)
-    )
-    if default_terminations <= 0 or default_variants <= 0:
+    if default_terminations <= 0:
         raise ValueError(
-            "[surface.refine] default termination/variant limits must be > 0"
+            "[surface.refine].default_terminations_per_orientation must be > 0"
         )
 
     orientation_limits_raw = raw_refine_cfg.get("orientation_limits", {}) or {}
@@ -273,15 +271,11 @@ def _parse_config(config: Mapping[str, Any]) -> Dict[str, Any]:
                 f"[surface.refine].orientation_limits.{key} must be a table/object"
             )
         n_terms = int(value.get("terminations", default_terminations))
-        n_variants = int(value.get("variants_per_termination", default_variants))
-        if n_terms <= 0 or n_variants <= 0:
+        if n_terms <= 0:
             raise ValueError(
-                f"[surface.refine].orientation_limits.{key} values must be > 0"
+                f"[surface.refine].orientation_limits.{key}.terminations must be > 0"
             )
-        orientation_limits[str(key)] = {
-            "terminations": n_terms,
-            "variants_per_termination": n_variants,
-        }
+        orientation_limits[str(key)] = {"terminations": n_terms}
 
     def _string_list(value: Any, name: str) -> list[str]:
         if value is None:
@@ -289,7 +283,13 @@ def _parse_config(config: Mapping[str, Any]) -> Dict[str, Any]:
         if isinstance(value, str):
             return [value.strip()] if value.strip() else []
         if isinstance(value, (list, tuple)):
-            return list(dict.fromkeys(str(item).strip() for item in value if str(item).strip()))
+            return list(
+                dict.fromkeys(
+                    str(item).strip()
+                    for item in value
+                    if str(item).strip()
+                )
+            )
         raise ValueError(f"[surface.refine].{name} must be a string or array")
 
     manual_include = _string_list(
@@ -312,7 +312,6 @@ def _parse_config(config: Mapping[str, Any]) -> Dict[str, Any]:
     surface["refine"]["selection_mode"] = selection_mode
     surface["refine"]["selection_top_k"] = selection_top_k
     surface["refine"]["default_terminations_per_orientation"] = default_terminations
-    surface["refine"]["default_variants_per_termination"] = default_variants
     surface["refine"]["orientation_limits"] = orientation_limits
     surface["refine"]["manual_include_surface_ids"] = manual_include
     surface["refine"]["manual_exclude_surface_ids"] = manual_exclude
@@ -322,14 +321,12 @@ def _parse_config(config: Mapping[str, Any]) -> Dict[str, Any]:
         raise ValueError("[surface].orientation_mode must be explicit or automatic")
     if str(surface["termination_mode"]).lower() not in {"all", "first"}:
         raise ValueError("[surface].termination_mode must be all or first")
-    if str(surface["dopant_variant_mode"]).lower() not in {"none", "co-dopant-depth"}:
-        raise ValueError("[surface].dopant_variant_mode must be none or co-dopant-depth")
-    if str(surface["placement_side"]).lower() not in {"top", "bottom", "both"}:
-        raise ValueError("[surface].placement_side must be top, bottom, or both")
-    zones = [str(x).lower() for x in surface["depth_zones"]]
-    if not zones or any(x not in _VALID_ZONES for x in zones):
-        raise ValueError("[surface].depth_zones may contain surface, subsurface, bulk")
-    surface["depth_zones"] = zones
+    surface["dopant_depth_layers"] = int(surface["dopant_depth_layers"])
+    if surface["dopant_depth_layers"] <= 0:
+        raise ValueError("[surface].dopant_depth_layers must be > 0")
+    surface["cation_layer_tolerance_A"] = float(surface["cation_layer_tolerance_A"])
+    if surface["cation_layer_tolerance_A"] <= 0:
+        raise ValueError("[surface].cation_layer_tolerance_A must be > 0")
     surface["miller_list"] = [
         tuple(int(x) for x in miller) for miller in surface["miller_list"]
     ]
