@@ -138,6 +138,8 @@ def _calculator_editor(
     fmax_default: float,
     steps_default: int,
     topk_default: int,
+    show_top_k: bool = True,
+    topk_label: str = "Top-k per source structure",
 ) -> dict[str, Any]:
     st.markdown(f"#### {label}")
     c1, c2, c3 = st.columns(3)
@@ -298,18 +300,24 @@ def _calculator_editor(
         )
     )
 
-    p1, p2, p3 = st.columns(3)
-    top_k = int(
-        p1.number_input(
-            "Top-k per source structure",
-            min_value=1,
-            value=int(saved.get("top_k_per_candidate", topk_default)),
-            step=1,
-            key=f"{key_prefix}_topk",
+    top_k = int(saved.get("top_k_per_candidate", topk_default))
+    if show_top_k:
+        p1, p2, p3 = st.columns(3)
+        top_k = int(
+            p1.number_input(
+                topk_label,
+                min_value=1,
+                value=top_k,
+                step=1,
+                key=f"{key_prefix}_topk",
+            )
         )
-    )
+        tf_widget, omp_widget = p2, p3
+    else:
+        tf_widget, omp_widget = st.columns(2)
+
     tf_threads = int(
-        p2.number_input(
+        tf_widget.number_input(
             "TensorFlow threads",
             min_value=1,
             value=int(saved.get("tf_threads", 1)),
@@ -318,7 +326,7 @@ def _calculator_editor(
         )
     )
     omp_threads = int(
-        p3.number_input(
+        omp_widget.number_input(
             "OpenMP threads",
             min_value=1,
             value=int(saved.get("omp_threads", 1)),
@@ -582,7 +590,7 @@ with st.expander("Configuration & run controls", expanded=False):
                 value=bool(surface.get("reorient_lattice", True)),
             )
 
-    with st.expander("Co-dopant depth / segregation scan", expanded=True):
+    with st.expander("Co-dopant depth scan", expanded=True):
         st.caption(
             "This is a representative depth scan, not an exhaustive same-species permutation search. "
             "One representative atom of each selected dopant is moved while total composition is preserved."
@@ -665,11 +673,6 @@ with st.expander("Configuration & run controls", expanded=False):
                 step=1,
                 disabled=variant_mode == "none",
             )
-        )
-        st.info(
-            "Segregation energy is reported relative to the same orientation/termination variant "
-            "with all explicitly moved dopants in bulk-like layers. Negative E_seg means the "
-            "selected surface/subsurface placement is preferred."
         )
 
     with st.expander("Fixed atoms during slab relaxation", expanded=False):
