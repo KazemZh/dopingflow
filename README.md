@@ -924,10 +924,13 @@ For example, use GRACE for the broad screen and MACE MH-1 with the matpes_r2scan
 head for refinement. Any M3GNet, UMA, MACE, or GRACE calculator accepted by the
 existing ML backend abstraction can be selected.
 
-The refinement shortlist can be selected **globally** (best N surfaces irrespective
-of facet) or **per Miller orientation** (best N from each orientation). The latter
-keeps facets such as (110), (101), and (001) represented even when the global lowest
-surface energies are dominated by one orientation.
+The refinement shortlist can be selected **globally**, **per Miller orientation**,
+or with an **orientation + termination balanced** strategy. The balanced selector
+first keeps distinct low-energy terminations for every facet and then keeps a chosen
+number of surface variants from each selected termination. Once a screening summary
+exists, the GUI can also add or remove exact structures manually before refinement.
+All successfully refined surfaces are retained by default rather than being
+automatically collapsed back to a global top-k.
 
 Run the stages in separate environments when needed:
 
@@ -952,7 +955,8 @@ Relative surface output paths are created inside the selected `source_root`; for
 See examples/surfaces/input.toml and docs/source/methods/surfaces.rst for the
 complete configuration and interpretation notes. The Streamlit **Surface Screening**
 page provides the same staged controls, separate-environment execution, surface-energy
-ranking, global/per-orientation refinement selection, and per-surface structure browsing. The old Surface
+ranking, orientation/termination-balanced selection, manual shortlist editing, and
+per-surface structure browsing. The old Surface
 editor in the main Input Builder now links to this dedicated page.
 
 ---
