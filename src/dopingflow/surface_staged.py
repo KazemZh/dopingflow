@@ -1136,6 +1136,11 @@ def _ensure_surface_ids(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def ensure_surface_ids(df: pd.DataFrame) -> pd.DataFrame:
+    """Public helper for GUI/manual refinement selection."""
+    return _ensure_surface_ids(df)
+
+
 def _rankable_mask(df: pd.DataFrame, prefix: str = "screen") -> pd.Series:
     values = df.get(f"{prefix}_rankable", pd.Series(False, index=df.index))
     if values.dtype == bool:
@@ -1501,6 +1506,7 @@ __all__ = [
     "resolve_surface_output_dir",
     "_select_refinement_candidates",
     "select_refinement_candidates",
+    "ensure_surface_ids",
     "run_surface_scan",
     "run_surface_scan_from_toml",
     "run_surface_refine",
