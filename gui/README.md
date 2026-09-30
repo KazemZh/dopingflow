@@ -257,7 +257,7 @@ The page provides:
 - independent fast-screen and higher-fidelity refinement calculators;
 - direct execution in the current environment or separate named Conda environments;
 - screening/refinement TOML preview and selected-structure preview;
-- surface-energy and segregation-energy plots;
+- surface-energy ranking and global/per-orientation refinement selection;
 - per-surface structure browsing with the 3D structure viewer;
 - raw screen, shortlist, refinement, and final-shortlist tables.
 
@@ -272,15 +272,10 @@ Then select **Current environment** on the Surface Screening page to run
 `surface-scan`. For refinement, either launch the GUI from the MACE environment
 or select **Named Conda environments** and provide the MACE environment name.
 
-The segregation plot uses the same orientation, termination, composition, and
-calculator for all compared variants:
-
-```text
-E_seg = E_variant - E_all-bulk-like
-```
-
-Negative values indicate that the requested surface/subsurface dopant placement
-is favored relative to the generated all-bulk-like placement.
+The refinement shortlist can be configured as either the global best N surfaces
+or the best N surfaces independently for each Miller orientation. This prevents one
+low-energy orientation from consuming the complete higher-fidelity refinement budget.
+The surface workflow no longer reports a separate segregation-energy metric.
 
 ---
 
