@@ -440,11 +440,32 @@ def _safe(value: str) -> str:
 
 
 def _surface_id(row: Mapping[str, Any]) -> str:
-    target = str(row.get("target_id") or f"{row.get('composition_tag','')}/{row.get('candidate','')}").strip("/")
-    hkl = tuple(int(float(row.get(k, 0) or 0)) for k in ("miller_h", "miller_k", "miller_l"))
+    existing = str(row.get("surface_id") or "").strip()
+    if existing and existing.lower() != "nan":
+        return existing
+
+    target = str(
+        row.get("target_id")
+        or f"{row.get('composition_tag','')}/{row.get('candidate','')}"
+    ).strip("/")
+    hkl = tuple(
+        int(float(row.get(k, 0) or 0))
+        for k in ("miller_h", "miller_k", "miller_l")
+    )
     term = int(float(row.get("termination_id", 0) or 0))
+    termination_label = str(row.get("termination_label") or "").strip()
+    if termination_label and termination_label.lower() != "nan":
+        return (
+            f"{target}/hkl_{hkl[0]}_{hkl[1]}_{hkl[2]}/"
+            f"term_{term:03d}_{_safe(termination_label)}"
+        )
+
+    # Backward-compatible fallback for pre-natural-termination surface summaries.
     variant = int(float(row.get("variant_id", 0) or 0))
-    return f"{target}/hkl_{hkl[0]}_{hkl[1]}_{hkl[2]}/term_{term:03d}/variant_{variant:03d}_{row.get('variant_label','variant')}"
+    return (
+        f"{target}/hkl_{hkl[0]}_{hkl[1]}_{hkl[2]}/term_{term:03d}/"
+        f"variant_{variant:03d}_{row.get('variant_label','variant')}"
+    )
 
 
 def _selected(row: Mapping[str, Any], patterns: Sequence[str]) -> bool:
@@ -554,6 +575,20 @@ def enumerate_leaching_sites(
         for idx in zones[zone]:
             detected.setdefault(idx, zone)
     declared = _json(row.get("target_zones_json"), {})
+    natural_depths = _json(row.get("dopant_depths_json"), {})
+    natural_zone_by_site: dict[tuple[str, int], str] = {}
+    for element, entries in natural_depths.items():
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, Mapping):
+                continue
+            try:
+                natural_zone_by_site[(str(element), int(entry.get("site_index")))] = str(
+                    entry.get("zone", "")
+                )
+            except (TypeError, ValueError):
+                continue
     records: list[dict[str, Any]] = []
     for dopant in dopants:
         ids = [i for i, s in enumerate(structure) if s.specie.symbol == dopant and i in allowed]
@@ -572,12 +607,14 @@ def enumerate_leaching_sites(
                 depth = min(max(cation_z) - z, z - min(cation_z))
             initial_zone = detected.get(idx, "")
             declared_zone = str(declared.get(dopant, ""))
+            natural_cut_zone = natural_zone_by_site.get((dopant, idx), "")
             records.append(dict(
                 dopant=dopant,
                 site_index=idx,
                 site_ordinal=ordinal,
                 detected_zone=initial_zone,
                 declared_target_zone=declared_zone,
+                natural_cut_dopant_zone=natural_cut_zone,
                 initial_dopant_zone=initial_zone,
                 initial_dopant_zone_source="relaxed-surface-geometry",
                 surface_variant_declared_zone=declared_zone,
@@ -603,8 +640,15 @@ def _base(row: Mapping[str, Any], path: Path, stage: str, site: Mapping[str, Any
         structure_kind=str(row.get("structure_kind", "")), n_oxygen_vacancies=int(float(row.get("n_oxygen_vacancies", 0) or 0)),
         composition_tag=str(row.get("composition_tag", "")), candidate=str(row.get("candidate", "")),
         miller_h=int(float(row.get("miller_h", 0) or 0)), miller_k=int(float(row.get("miller_k", 0) or 0)), miller_l=int(float(row.get("miller_l", 0) or 0)),
-        termination_id=int(float(row.get("termination_id", 0) or 0)), variant_id=int(float(row.get("variant_id", 0) or 0)),
-        variant_label=str(row.get("variant_label", "")), surface_structure_path=str(path), surface_source_stage=stage,
+        termination_id=int(float(row.get("termination_id", 0) or 0)),
+        termination_label=str(
+            row.get("termination_label")
+            or row.get("variant_label")
+            or ""
+        ),
+        variant_id=int(float(row.get("variant_id", 0) or 0)),
+        variant_label=str(row.get("variant_label", "")),
+        surface_structure_path=str(path), surface_source_stage=stage,
         **dict(site),
     )
 
@@ -1523,7 +1567,11 @@ def _protonation_scan_frame(rows: Sequence[Mapping[str, Any]]) -> pd.DataFrame:
 
 def _aggregate(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty: return df.copy()
-    cols = ["surface_id", "target_id", "composition_tag", "candidate", "miller_h", "miller_k", "miller_l", "termination_id", "variant_id", "variant_label", "dopant", "initial_dopant_zone"]
+    cols = [
+        "surface_id", "target_id", "composition_tag", "candidate",
+        "miller_h", "miller_k", "miller_l", "termination_id",
+        "termination_label", "dopant", "initial_dopant_zone",
+    ]
     rows = []
     for keys, group in df.groupby(cols, dropna=False, sort=False):
         rec = dict(zip(cols, keys))
