@@ -924,13 +924,12 @@ For example, use GRACE for the broad screen and MACE MH-1 with the matpes_r2scan
 head for refinement. Any M3GNet, UMA, MACE, or GRACE calculator accepted by the
 existing ML backend abstraction can be selected.
 
-The refinement shortlist can be selected **globally**, **per Miller orientation**,
-or with an **orientation + termination balanced** strategy. The balanced selector
-first keeps distinct low-energy terminations for every facet and then keeps a chosen
-number of surface variants from each selected termination. Once a screening summary
-exists, the GUI can also add or remove exact structures manually before refinement.
-All successfully refined surfaces are retained by default rather than being
-automatically collapsed back to a global top-k.
+The surface workflow now generates **one structure per natural termination**.
+Dopant atoms are never swapped to create artificial surface variants; labels such
+as **In: surface | Sb: subsurface** only describe where the original dopants lie
+after that slab cut. Refinement can select the best terminations globally or
+independently for each Miller orientation, with exact manual include/exclude
+overrides in the GUI. All successfully refined terminations are retained by default.
 
 Run the stages in separate environments when needed:
 
