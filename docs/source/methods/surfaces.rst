@@ -182,6 +182,12 @@ selection mode/reason. After the second calculator has evaluated those surfaces,
 ``surface_final_selected.csv``. The complete refined set remains available in
 ``surface_refine_summary.csv``.
 
+When ``surface_screen_summary.csv`` already exists, ``surface-refine`` rebuilds
+the refinement shortlist from that complete screening table using the current
+``selection_mode`` and ``selection_top_k``. Therefore changing from global
+selection to per-orientation selection (or changing N) does **not** require
+repeating the expensive screening calculations.
+
 Calculator-consistent source references
 -------------------------------------
 
