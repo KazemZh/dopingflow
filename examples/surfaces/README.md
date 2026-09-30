@@ -63,21 +63,42 @@ IDs or wildcards when only selected parents/vacancy structures should be scanned
 
 ## Refinement shortlist strategy
 
-The higher-fidelity refinement can select candidates in two ways:
+The higher-fidelity refinement can select candidates in three automatic ways:
 
-- `selection_mode = "global"`: refine the best `selection_top_k` screened surfaces overall for each source structure.
-- `selection_mode = "per_orientation"`: refine the best `selection_top_k` surfaces independently for every Miller orientation.
+- `selection_mode = "global"`: best N screened surfaces overall for each source structure.
+- `selection_mode = "per_orientation"`: best N surfaces independently for each Miller orientation.
+- `selection_mode = "orientation_termination"`: choose distinct low-energy terminations inside each orientation, then the best variants inside each chosen termination.
 
-For example, with `(110)`, `(100)`, `(101)`, and `(001)` and `selection_top_k = 3`,
-`per_orientation` can send up to 12 surfaces per source structure to refinement.
-This avoids a case where the global top 10 all belong to `(100)` and the other facets
-are never checked by the higher-fidelity model.
+For balanced selection, use defaults such as:
+
+```toml
+[surface.refine]
+selection_mode = "orientation_termination"
+default_terminations_per_orientation = 3
+default_variants_per_termination = 1
+final_selection_mode = "all"
+
+[surface.refine.orientation_limits."1,0,0"]
+terminations = 3
+variants_per_termination = 2
+```
+
+Once `surface_screen_summary.csv` exists, the GUI also allows exact screened
+surfaces to be checked or unchecked manually. Those edits are stored as stable
+surface IDs and are applied after the automatic selection.
+
+The balanced selector ranks a distinct termination using the minimum screened
+surface energy among its variants, then ranks variants inside the selected
+termination by their own surface energies.
+
+Changing these refinement-selection settings does not require rerunning the screen.
+`dopingflow surface-refine -c input.toml` rebuilds the shortlist from the existing
+full screening summary before starting the higher-fidelity calculations.
+
+All successfully refined surfaces are kept by default. The workflow no longer
+performs an automatic final global top-k reduction unless explicitly requested
+through the advanced TOML setting `final_selection_mode = "global"`.
 
 The workflow no longer calculates or reports a separate segregation-energy metric.
 Dopant-depth variants remain explicit structures and are compared through their
 surface energies.
-
-If `surface_screen_summary.csv` already exists, changing `selection_mode` or
-`selection_top_k` does not require rerunning the screen. Running
-`dopingflow surface-refine -c input.toml` rebuilds the refinement shortlist from
-the existing full screening summary before starting the higher-fidelity calculations.
