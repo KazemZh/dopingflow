@@ -547,7 +547,7 @@ with st.expander("Configuration & run controls", expanded=False):
         )
         max_total_surfaces = int(
             g3.number_input(
-                "Maximum generated slab variants",
+                "Maximum generated terminations",
                 min_value=1,
                 value=int(surface.get("max_total_surfaces", 1000)),
                 step=10,
@@ -592,89 +592,69 @@ with st.expander("Configuration & run controls", expanded=False):
                 value=bool(surface.get("reorient_lattice", True)),
             )
 
-    with st.expander("Co-dopant depth scan", expanded=True):
+    with st.expander("Natural dopant positions in each termination", expanded=True):
         st.caption(
-            "This is a representative depth scan, not an exhaustive same-species permutation search. "
-            "One representative atom of each selected dopant is moved while total composition is preserved."
+            "DopingFlow does not move or swap dopants in the surface stage. Each termination "
+            "keeps the dopant positions inherited naturally from the slab cut. The labels below "
+            "only classify those original positions as surface, subsurface, or bulk-like."
         )
+
         d1, d2, d3 = st.columns(3)
-        variant_mode = d1.selectbox(
-            "Dopant variant mode",
-            ["co-dopant-depth", "none"],
-            index=0 if str(surface.get("dopant_variant_mode", "co-dopant-depth")) == "co-dopant-depth" else 1,
-        )
-        host_species = d2.text_input(
+        host_species = d1.text_input(
             "Host cation",
             value=str(surface.get("host_species", doping.get("host_species", "Sn"))),
         ).strip()
-        anion_text = d3.text_input(
+        anion_text = d2.text_input(
             "Anion species",
-            value=_csv_text(surface.get("anion_species", scan_cfg.get("anion_species", ["O"]))),
+            value=_csv_text(
+                surface.get("anion_species", scan_cfg.get("anion_species", ["O"]))
+            ),
         )
         anion_species = _parse_csv(anion_text)
-
-        dopants_text = st.text_input(
+        dopants_text = d3.text_input(
             "Dopant species",
             value=_csv_text(surface.get("dopant_species", [])),
-            placeholder="Sb, Ti",
-            help="Leave empty to infer all non-host, non-anion cations from each slab.",
-            disabled=variant_mode == "none",
+            placeholder="Sb, In",
+            help=(
+                "Leave empty to infer every non-host, non-anion cation from each "
+                "generated termination."
+            ),
         )
         dopant_species = _parse_csv(dopants_text)
 
-        v1, v2, v3, v4 = st.columns(4)
-        zones_default = [
-            str(x).lower()
-            for x in surface.get("depth_zones", ["surface", "subsurface", "bulk"])
-            if str(x).lower() in {"surface", "subsurface", "bulk"}
-        ]
-        depth_zones = v1.multiselect(
-            "Depth zones",
-            ["surface", "subsurface", "bulk"],
-            default=zones_default or ["surface", "subsurface", "bulk"],
-            disabled=variant_mode == "none",
-        )
-        placement_side = v2.selectbox(
-            "Surface side",
-            ["top", "bottom", "both"],
-            index=_choice_index(
-                ["top", "bottom", "both"],
-                surface.get("placement_side", "top"),
-                "top",
-            ),
-            disabled=variant_mode == "none",
-        )
-        layers_per_zone = int(
-            v3.number_input(
-                "Cation layers / zone",
+        z1, z2 = st.columns(2)
+        dopant_depth_layers = int(
+            z1.number_input(
+                "Cation layers used for each depth zone",
                 min_value=1,
-                value=int(surface.get("layers_per_zone", 1)),
+                value=int(
+                    surface.get(
+                        "dopant_depth_layers",
+                        surface.get("layers_per_zone", 1),
+                    )
+                ),
                 step=1,
-                disabled=variant_mode == "none",
+                help=(
+                    "Both exposed slab sides are considered. With value 1, the outermost "
+                    "cation layer on each side is surface, the next cation layer is "
+                    "subsurface, and all remaining cation layers are bulk-like."
+                ),
             )
         )
         cation_layer_tol = float(
-            v4.number_input(
+            z2.number_input(
                 "Cation-layer tolerance (Å)",
                 min_value=0.01,
                 value=float(surface.get("cation_layer_tolerance_A", 0.8)),
                 step=0.05,
-                disabled=variant_mode == "none",
+                help="Cartesian z tolerance used to group cations into slab layers.",
             )
         )
-        w1, w2 = st.columns(2)
-        include_original = w1.checkbox(
-            "Keep original cut-slab dopant arrangement",
-            value=bool(surface.get("include_original_variant", True)),
-        )
-        max_variants = int(
-            w2.number_input(
-                "Maximum depth variants / termination",
-                min_value=1,
-                value=int(surface.get("max_dopant_variants_per_termination", 18)),
-                step=1,
-                disabled=variant_mode == "none",
-            )
+
+        st.info(
+            "Example: if the natural (110) termination places In in the outermost "
+            "cation layer and Sb one cation layer deeper, it is labeled "
+            "**In: surface | Sb: subsurface**. No atom identities are changed."
         )
 
     with st.expander("Fixed atoms during slab relaxation", expanded=False):
