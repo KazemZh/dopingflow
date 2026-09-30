@@ -1068,7 +1068,7 @@ def _orientation_key(h: Any, k: Any, l: Any) -> str:
 
 
 def _ensure_surface_ids(df: pd.DataFrame) -> pd.DataFrame:
-    """Return a copy with a stable identifier for every generated surface row."""
+    """Return a copy with one stable identifier per natural termination."""
     out = df.copy()
     if "surface_id" in out.columns and out["surface_id"].notna().all():
         return out
@@ -1080,7 +1080,7 @@ def _ensure_surface_ids(df: pd.DataFrame) -> pd.DataFrame:
         ).strip("/")
         return (
             f"{target_id}|hkl={int(row['miller_h'])},{int(row['miller_k'])},{int(row['miller_l'])}"
-            f"|term={int(row['termination_id']):03d}|variant={int(row['variant_id']):03d}"
+            f"|term={int(row['termination_id']):03d}"
         )
 
     out["surface_id"] = out.apply(make_id, axis=1)
@@ -1106,30 +1106,17 @@ def _select_refinement_candidates(
     top_k: int,
     orientation_limits: Mapping[str, Mapping[str, Any]] | None = None,
     default_terminations_per_orientation: int = 3,
-    default_variants_per_termination: int = 1,
     manual_include_surface_ids: Sequence[str] | None = None,
     manual_exclude_surface_ids: Sequence[str] | None = None,
 ) -> pd.DataFrame:
-    """Select screened surfaces for higher-fidelity refinement.
-
-    ``global`` keeps the best ``top_k`` surfaces per source structure.
-    ``per_orientation`` keeps the best ``top_k`` surfaces independently for
-    each Miller orientation.
-    ``orientation_termination`` first ranks distinct terminations within each
-    orientation by the minimum surface energy among their variants, then keeps
-    a configurable number of terminations and variants per termination.
-
-    Manual include/exclude surface IDs are applied after the automatic rule,
-    which makes the automatic selection editable without losing reproducibility.
-    """
+    """Select natural surface terminations for higher-fidelity refinement."""
     out = _ensure_surface_ids(df)
     mode = str(mode).strip().lower().replace("-", "_")
-    if mode == "balanced":
-        mode = "orientation_termination"
-    if mode not in {"global", "per_orientation", "orientation_termination"}:
+    if mode in {"balanced", "orientation_termination"}:
+        mode = "per_orientation"
+    if mode not in {"global", "per_orientation"}:
         raise ValueError(
-            "surface refinement selection mode must be one of: "
-            "global, per_orientation, orientation_termination"
+            "surface refinement selection mode must be global or per_orientation"
         )
     top_k = int(top_k)
     if top_k <= 0:
@@ -1151,17 +1138,6 @@ def _select_refinement_candidates(
             chosen = group.sort_values("screen_surface_energy_J_m2").head(top_k)
             selected_indices.update(chosen.index)
             auto_reason.update({idx: "global_top_k" for idx in chosen.index})
-
-    elif mode == "per_orientation":
-        group_cols = [
-            *_target_group_columns(rankable),
-            "miller_h", "miller_k", "miller_l",
-        ]
-        for _, group in rankable.groupby(group_cols, sort=False):
-            chosen = group.sort_values("screen_surface_energy_J_m2").head(top_k)
-            selected_indices.update(chosen.index)
-            auto_reason.update({idx: "orientation_top_k" for idx in chosen.index})
-
     else:
         orientation_limits = dict(orientation_limits or {})
         group_cols = [
@@ -1179,25 +1155,11 @@ def _select_refinement_candidates(
             n_terms = int(
                 limits.get("terminations", default_terminations_per_orientation)
             )
-            n_variants = int(
-                limits.get("variants_per_termination", default_variants_per_termination)
-            )
-            if n_terms <= 0 or n_variants <= 0:
+            if n_terms <= 0:
                 continue
-
-            termination_order = (
-                group.groupby("termination_id", as_index=False)["screen_surface_energy_J_m2"]
-                .min()
-                .sort_values("screen_surface_energy_J_m2")
-                .head(n_terms)
-            )
-            for term_id in termination_order["termination_id"].tolist():
-                term_group = group[group["termination_id"] == term_id]
-                chosen = term_group.sort_values("screen_surface_energy_J_m2").head(n_variants)
-                selected_indices.update(chosen.index)
-                auto_reason.update({
-                    idx: "orientation_termination_balanced" for idx in chosen.index
-                })
+            chosen = group.sort_values("screen_surface_energy_J_m2").head(n_terms)
+            selected_indices.update(chosen.index)
+            auto_reason.update({idx: "orientation_top_terminations" for idx in chosen.index})
 
     include_ids = set(str(x) for x in (manual_include_surface_ids or []))
     exclude_ids = set(str(x) for x in (manual_exclude_surface_ids or []))
@@ -1227,7 +1189,6 @@ def _select_refinement_candidates(
         [
             *_target_group_columns(selected),
             "miller_h", "miller_k", "miller_l",
-            "termination_id",
             "screen_surface_energy_J_m2",
         ],
         kind="stable",
@@ -1246,15 +1207,14 @@ def select_refinement_candidates(
         top_k=int(refine_cfg.get("selection_top_k", 10)),
         orientation_limits=refine_cfg.get("orientation_limits", {}),
         default_terminations_per_orientation=int(
-            refine_cfg.get("default_terminations_per_orientation", 3)
-        ),
-        default_variants_per_termination=int(
-            refine_cfg.get("default_variants_per_termination", 1)
+            refine_cfg.get(
+                "default_terminations_per_orientation",
+                refine_cfg.get("selection_top_k", 10),
+            )
         ),
         manual_include_surface_ids=refine_cfg.get("manual_include_surface_ids", []),
         manual_exclude_surface_ids=refine_cfg.get("manual_exclude_surface_ids", []),
     )
-
 
 def run_surface_scan(
     config: Mapping[str, Any],
@@ -1298,7 +1258,7 @@ def run_surface_scan(
     dataframe.to_csv(summary, index=False)
     select_refinement_candidates(dataframe, cfg["refine"]).to_csv(selected_path, index=False)
 
-    print(f"[surface] Screened {len(dataframe)} slab variants -> {summary}")
+    print(f"[surface] Screened {len(dataframe)} natural terminations -> {summary}")
     return summary
 
 
@@ -1321,6 +1281,12 @@ def run_surface_refine(
     # expensive screening calculations.
     if screen_summary_path.exists():
         screened = pd.read_csv(screen_summary_path)
+        if "termination_label" not in screened.columns:
+            raise RuntimeError(
+                "[surface] Existing surface_screen_summary.csv uses the old artificial "
+                "dopant-variant workflow. Rerun surface-scan to generate natural terminations "
+                "without atom swapping before refinement."
+            )
         selected = select_refinement_candidates(screened, cfg["refine"])
         # Old screen summaries may still contain columns from the removed
         # segregation-energy feature. Do not propagate them into new outputs.
@@ -1363,7 +1329,7 @@ def run_surface_refine(
         bulk = Structure.from_file(bulk_path)
 
         if key not in bulk_cache:
-            candidate_dir = Path(str(row["surface_variant_dir"])).parents[2]
+            candidate_dir = Path(str(row["surface_termination_dir"])).parents[1]
             bulk_cache[key] = _bulk_energy(
                 bulk,
                 cfg["refine"],
@@ -1385,7 +1351,7 @@ def run_surface_refine(
             fixed,
             cfg["refine"],
             calculator,
-            Path(str(row["surface_variant_dir"])) / "refine",
+            Path(str(row["surface_termination_dir"])) / "refine",
         )
         final = structure
         if result.get("status") == "ok" and result.get(
@@ -1445,7 +1411,7 @@ def run_surface_refine(
         final_selected["final_selection_reason"] = "all_refined"
     final_selected.to_csv(final_path, index=False)
 
-    print(f"[surface] Refined {len(dataframe)} slab variants -> {summary}")
+    print(f"[surface] Refined {len(dataframe)} natural terminations -> {summary}")
     return summary
 
 
