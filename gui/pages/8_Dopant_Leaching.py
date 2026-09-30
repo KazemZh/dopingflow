@@ -973,7 +973,7 @@ with st.expander("Configuration & run controls", expanded=True):
                 columns = [
                     c for c in (
                         "target_id", "miller_h", "miller_k", "miller_l", "termination_id",
-                        "variant_label", "dopant", "site_index", "detected_zone",
+                        "termination_label", "dopant", "site_index", "detected_zone",
                         "oxygen_coordination_within_cutoff", "nearest_oxygen_distance_A",
                         "protonatable_oxygen_count", "protonation_jobs_estimated",
                     ) if c in preview.columns
@@ -1221,7 +1221,7 @@ else:
                     x="dopant",
                     y="extraction_energy_eV",
                     color="initial_dopant_zone" if "initial_dopant_zone" in plot.columns else None,
-                    hover_data=[c for c in ("target_id", "variant_label", "site_index", "initial_dopant_zone", "surface_variant_declared_zone", "initial_depth_from_selected_surface_A") if c in plot.columns],
+                    hover_data=[c for c in ("target_id", "termination_label", "site_index", "initial_dopant_zone", "surface_variant_declared_zone", "initial_depth_from_selected_surface_A") if c in plot.columns],
                     title="Metal-referenced dopant extraction energy",
                 )
                 _show_publication_plot(fig)
@@ -1267,7 +1267,7 @@ else:
                         col
                         for col in (
                             "target_id",
-                            "variant_label",
+                            "termination_label",
                             "site_index",
                             "initial_dopant_zone",
                             "initial_depth_from_selected_surface_A",
@@ -2864,7 +2864,7 @@ else:
                         "miller_h": env_row.get("miller_h"),
                         "miller_k": env_row.get("miller_k"),
                         "miller_l": env_row.get("miller_l"),
-                        "variant_label": str(env_row.get("variant_label", "")),
+                        "termination_label": str(env_row.get("termination_label", "")),
                         "initial_depth_from_selected_surface_A": env_row.get(
                             "initial_depth_from_selected_surface_A"
                         ),
