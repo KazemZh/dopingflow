@@ -60,3 +60,19 @@ target_include = []
 Set `include_oxygen_vacancies = true` to also expose relaxed O-vacancy
 structures listed in `vacancies_database.json`. Use `target_include` for exact
 IDs or wildcards when only selected parents/vacancy structures should be scanned.
+
+## Refinement shortlist strategy
+
+The higher-fidelity refinement can select candidates in two ways:
+
+- `selection_mode = "global"`: refine the best `selection_top_k` screened surfaces overall for each source structure.
+- `selection_mode = "per_orientation"`: refine the best `selection_top_k` surfaces independently for every Miller orientation.
+
+For example, with `(110)`, `(100)`, `(101)`, and `(001)` and `selection_top_k = 3`,
+`per_orientation` can send up to 12 surfaces per source structure to refinement.
+This avoids a case where the global top 10 all belong to `(100)` and the other facets
+are never checked by the higher-fidelity model.
+
+The workflow no longer calculates or reports a separate segregation-energy metric.
+Dopant-depth variants remain explicit structures and are compared through their
+surface energies.
