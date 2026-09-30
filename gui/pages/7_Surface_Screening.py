@@ -15,9 +15,11 @@ import toml
 
 from dopingflow.surface_staged import (
     DEFAULT_MILLERS,
+    ensure_surface_ids,
     parse_surface_config,
     preview_surface_candidates,
     resolve_surface_output_dir,
+    select_refinement_candidates,
 )
 from gui_config import (
     BACKEND_CHOICES,
