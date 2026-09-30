@@ -70,10 +70,34 @@ fmax = 0.03
 max_steps = 500
 
 # Choose which screened surfaces are sent to refinement.
-# "global": best N overall for each source structure.
+# "global": best N overall.
 # "per_orientation": best N separately for every Miller orientation.
-selection_mode = "per_orientation"
-selection_top_k = 3
+# "orientation_termination": preserve both orientation and termination diversity.
+selection_mode = "orientation_termination"
 
-# Final global shortlist after refinement.
-top_k_per_candidate = 5
+# Defaults for orientation_termination when no orientation-specific override exists.
+default_terminations_per_orientation = 3
+default_variants_per_termination = 1
+
+# Optional exact manual changes applied after the automatic shortlist.
+manual_include_surface_ids = []
+manual_exclude_surface_ids = []
+
+# Keep every successfully refined surface by default.
+final_selection_mode = "all"
+
+[surface.refine.orientation_limits."1,0,0"]
+terminations = 3
+variants_per_termination = 2
+
+[surface.refine.orientation_limits."1,1,0"]
+terminations = 3
+variants_per_termination = 2
+
+[surface.refine.orientation_limits."1,0,1"]
+terminations = 3
+variants_per_termination = 1
+
+[surface.refine.orientation_limits."0,0,1"]
+terminations = 2
+variants_per_termination = 1
