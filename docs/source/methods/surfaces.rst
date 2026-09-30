@@ -14,7 +14,7 @@ The intended sequence is::
    selected vacancy-free or O-vacancy source structure
        -> facets
        -> terminations
-       -> representative co-dopant depth variants
+       -> natural dopant-depth labels inherited from each termination
        -> fast MLFF screen
        -> configurable refinement shortlist
           (global best or best per orientation)
@@ -83,31 +83,40 @@ max_terminations_per_orientation; "first" keeps only the first.
 Slab thickness, vacuum, centering, lattice reorientation, orthogonal-c
 conversion, and optional symmetrization are controlled in the surface section.
 
-Representative co-dopant depth scan
------------------------------------
+Natural dopant-depth labels
+---------------------------
 
-With dopant_variant_mode = "co-dopant-depth", the workflow identifies a host
-cation and selected dopant species and constructs representative variants in
-surface, subsurface, and bulk-like cation layers.
+The surface stage no longer moves or swaps dopant atoms. For every generated
+termination, the dopants remain exactly on the sites inherited from the
+periodic source structure and the selected slab cut.
 
-For each selected dopant species, one representative dopant atom is swapped
-with a host site in the requested zone. Total composition is unchanged. Other
-same-species dopants retain their parent ordering.
+DopingFlow only labels those original dopant positions. Cations are grouped
+into layers along the slab normal. With ``dopant_depth_layers = 1``:
 
-This is deliberately a controlled screening of depth preference rather than an
-exhaustive enumeration of every possible same-species dopant permutation. The
-max_dopant_variants_per_termination setting prevents combinatorial growth.
+- the outermost cation layer on each exposed slab side is ``surface``;
+- the next cation layer on each side is ``subsurface``;
+- all remaining cation layers are ``bulk``.
 
-For the ATO/co-doped SnO2 use case an explicit setup may be::
+Both slab sides are considered. ``cation_layer_tolerance_A`` controls the
+Cartesian tolerance used to group cations into layers.
+
+A co-doped termination may therefore be labeled, for example::
+
+   In: surface | Sb: subsurface
+
+For multiple atoms of the same dopant, the label preserves the counts, e.g.::
+
+   In: surface + bulk×2 | Sb: subsurface
+
+These labels are descriptive metadata only; no atom identities are changed.
+
+Example::
 
    host_species = "Sn"
-   dopant_species = ["Sb", "Ti"]
+   dopant_species = ["Sb", "In"]
    anion_species = ["O"]
-   depth_zones = ["surface", "subsurface", "bulk"]
-
-If dopant_species is omitted, all non-host, non-anion species are inferred as
-dopants.
-
+   dopant_depth_layers = 1
+   cation_layer_tolerance_A = 0.8
 Screen calculator
 -----------------
 
@@ -166,101 +175,61 @@ does not mean DFT.
 Refinement candidate selection
 ------------------------------
 
-The screening table is organized hierarchically as::
+The natural-termination workflow has one screened structure per termination::
 
    source structure
        -> Miller orientation
            -> termination
-               -> surface/dopant variant
 
-``[surface.refine].selection_mode`` controls which screened structures are
-passed to the higher-fidelity calculator.
+Two automatic selection strategies are available.
 
 ``selection_mode = "global"``
-   Select the lowest ``selection_top_k`` surface energies for each source
-   structure regardless of orientation or termination.
+   Select the lowest-energy ``selection_top_k`` terminations for each source
+   structure regardless of orientation.
 
 ``selection_mode = "per_orientation"``
-   Select the lowest ``selection_top_k`` surfaces independently for each
-   Miller orientation. This prevents one facet from consuming the complete
-   refinement budget, but several selected structures can still belong to the
-   same termination.
+   Select terminations independently for every Miller orientation. The default
+   number is controlled by ``default_terminations_per_orientation`` and can be
+   overridden separately for every orientation::
 
-``selection_mode = "orientation_termination"``
-   Preserve both facet and termination diversity. For each Miller orientation,
-   DopingFlow first ranks **distinct terminations** by the minimum screened
-   surface energy among the variants belonging to that termination. It then
-   keeps the requested number of terminations and, within each retained
-   termination, the requested number of lowest-energy variants.
+      [surface.refine]
+      selection_mode = "per_orientation"
+      default_terminations_per_orientation = 3
 
-Per-orientation controls
-~~~~~~~~~~~~~~~~~~~~~~~~
+      [surface.refine.orientation_limits."1,0,0"]
+      terminations = 3
 
-The balanced mode has global defaults::
+      [surface.refine.orientation_limits."1,1,0"]
+      terminations = 5
 
-   default_terminations_per_orientation = 3
-   default_variants_per_termination = 1
-
-and optional orientation-specific overrides::
-
-   [surface.refine.orientation_limits."1,0,0"]
-   terminations = 3
-   variants_per_termination = 2
-
-   [surface.refine.orientation_limits."1,1,0"]
-   terminations = 4
-   variants_per_termination = 2
-
-This allows different refinement budgets for (100), (110), (101), (001), or
-any other requested Miller orientation.
-
-Termination ranking
-~~~~~~~~~~~~~~~~~~~
-
-A termination can contain several dopant-depth variants. For the balanced
-selector, a termination is ranked using::
-
-   gamma_termination = min_j gamma_(termination,j)
-
-where ``j`` runs over rankable variants of that termination. After the best
-distinct terminations are chosen, variants inside each selected termination are
-ranked by their own screened surface energies.
+This prevents a single low-energy facet from consuming the full refinement
+budget while still allowing a different number of terminations for each facet.
 
 Manual override
 ~~~~~~~~~~~~~~~
 
 Once ``surface_screen_summary.csv`` exists, the GUI can display every rankable
-screened surface with an editable ``Include`` checkbox. The automatic shortlist
-is shown as the initial selection, and the user may add or remove exact
-structures before refinement.
-
-Manual edits are stored as stable surface IDs in
-``manual_include_surface_ids`` and ``manual_exclude_surface_ids``. A surface ID
-contains the source target, Miller index, termination ID, and variant ID, so the
-same manual selection can be reconstructed later without rerunning the screen.
+termination with an ``Include`` checkbox. Exact terminations may be added or
+removed after the automatic selection. Stable surface IDs contain the source
+target, Miller index, and termination ID.
 
 Reusing an existing screen
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-When ``surface_screen_summary.csv`` already exists, ``surface-refine`` rebuilds
-the refinement shortlist from the complete screen table using the **current**
-automatic and manual selection settings. Changing the strategy, orientation
-limits, or exact checked surfaces therefore does **not** require repeating the
-expensive screening calculations.
+A screen produced by the natural-termination workflow can be reselected without
+rerunning the expensive screening calculations. Screen summaries created by the
+older artificial dopant-variant workflow must be regenerated once before
+refinement because they represent a different physical model.
 
 Final refined set
 ~~~~~~~~~~~~~~~~~
 
-All successfully refined surfaces are retained by default::
+All successfully refined terminations are retained by default::
 
    final_selection_mode = "all"
 
-Therefore ``surface_refine_summary.csv`` contains the complete refined set and
-``surface_final_selected.csv`` mirrors that set by default. A legacy/advanced
-``final_selection_mode = "global"`` remains available through TOML for users
-who explicitly want a final global top-k reduction, but it is no longer a
-mandatory control in the GUI.
-
+Thus ``surface_refine_summary.csv`` contains the complete refined set and
+``surface_final_selected.csv`` mirrors it by default.
 Calculator-consistent source references
 -------------------------------------
 
@@ -312,7 +281,7 @@ Outputs
 The default relative output directory is ``08_surfaces`` **inside the selected ``source_root``**. For example, ``source_root = "vacancy-selected/structures-analysis"`` and ``outdir = "08_surfaces"`` resolve to ``vacancy-selected/structures-analysis/08_surfaces``. An absolute ``outdir`` is used exactly as given.
 
 surface_screen_summary.csv
-   Every generated orientation, termination, and dopant-depth variant.
+   Every generated natural orientation/termination and its dopant-depth label.
 
 surface_screen_selected.csv
    The exact screened surfaces selected for refinement after the automatic
@@ -325,7 +294,7 @@ surface_final_selected.csv
    All successfully refined surfaces by default. A later explicit downstream
    selection can reduce this set if desired.
 
-Each variant directory also stores the generated POSCAR, stage-specific
+Each termination directory also stores the generated POSCAR, stage-specific
 result.json, optional relaxed POSCAR, optimizer log/trajectory, and meta.json.
 
 A typical path is::
@@ -339,7 +308,7 @@ A typical path is::
              refine/
            hkl_1_1_0/
              term_001/
-               variant_001_original/
+           term_001_In-surface__Sb-subsurface/
                  POSCAR
                  screen/
                  refine/
@@ -369,13 +338,11 @@ The page mirrors the staged CLI design:
   separate named Conda environments;
 - inspect surface-energy rankings one selected source structure at a time;
 - choose global, per-orientation, or orientation/termination-balanced refinement;
-- set different termination/variant budgets for each Miller orientation;
+- set a different number of natural terminations for each Miller orientation;
 - manually add or remove exact screened surfaces before refinement;
 - browse the selected slab geometry interactively;
 - inspect the raw screen/refinement tables.
 
-The results explorer focuses on surface-energy ranking. Dopant-depth variants
-remain explicit structures (for example surface, subsurface, bulk-like, and the
-original cut-slab arrangement), but the workflow no longer reports a separate
-segregation-energy metric. Their relative performance is assessed through the
-calculated surface energies and the selected refinement strategy.
+The results explorer focuses on surface-energy ranking of the natural terminations.
+The displayed dopant-depth label describes where the original dopants ended up
+after the slab cut; no atom swapping is performed.
