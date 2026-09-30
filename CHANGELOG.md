@@ -15,6 +15,12 @@ The format loosely follows semantic versioning.
 
 ## [Unreleased]
 ### Added
+- Surface generation now keeps exactly **one natural structure per termination**:
+  dopants are never swapped between host sites. Each termination is labeled from
+  the dopants' inherited positions (surface/subsurface/bulk-like) on the slab cut.
+- Refinement selection is simplified to global or per-orientation termination
+  selection, with independent termination counts per Miller orientation and
+  optional exact manual include/exclude overrides.
 - Surface refinement now supports **orientation + termination balanced** selection:
   each Miller orientation can independently specify how many distinct terminations
   and how many variants per termination are sent to the higher-fidelity calculator.
