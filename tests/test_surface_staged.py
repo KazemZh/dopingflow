@@ -10,10 +10,9 @@ from pymatgen.io.vasp import Poscar
 from dopingflow.surface_staged import (
     DEFAULT_MILLERS,
     discover_surface_targets,
-    _add_segregation_metrics,
     _parse_config,
     _rank,
-    _screen_shortlist_with_segregation_references,
+    _select_refinement_candidates,
     _surface_energy,
     _topk,
     _variants,
@@ -34,6 +33,8 @@ def test_surface_defaults_use_low_index_sno2_facets_and_mace_r2scan_refine() -> 
     assert cfg["refine"]["backend"] == "mace"
     assert cfg["refine"]["model"] == "mh-1"
     assert cfg["refine"]["task"] == "matpes_r2scan"
+    assert cfg["refine"]["selection_mode"] == "global"
+    assert cfg["refine"]["selection_top_k"] == 10
 
 
 def test_surface_relative_outdir_is_below_user_source_root(tmp_path) -> None:
@@ -172,114 +173,94 @@ def test_ranking_excludes_non_computable_terminations() -> None:
 
 
 
-def test_segregation_energy_uses_all_bulk_like_variant_as_reference() -> None:
-    df = pd.DataFrame(
-        [
-            {
-                "composition_tag": "Sb5_Ti5",
-                "candidate": "candidate_001",
-                "miller_h": 1,
-                "miller_k": 1,
-                "miller_l": 0,
-                "termination_id": 1,
-                "variant_label": "Sb-bulk__Ti-bulk",
-                "target_zones_json": '{"Sb": "bulk", "Ti": "bulk"}',
-                "screen_energy_eV": -100.0,
-            },
-            {
-                "composition_tag": "Sb5_Ti5",
-                "candidate": "candidate_001",
-                "miller_h": 1,
-                "miller_k": 1,
-                "miller_l": 0,
-                "termination_id": 1,
-                "variant_label": "Sb-surface__Ti-bulk",
-                "target_zones_json": '{"Sb": "surface", "Ti": "bulk"}',
-                "screen_energy_eV": -100.4,
-            },
-            {
-                "composition_tag": "Sb5_Ti5",
-                "candidate": "candidate_001",
-                "miller_h": 1,
-                "miller_k": 1,
-                "miller_l": 0,
-                "termination_id": 1,
-                "variant_label": "Sb-surface__Ti-surface",
-                "target_zones_json": '{"Sb": "surface", "Ti": "surface"}',
-                "screen_energy_eV": -99.8,
-            },
-        ]
-    )
-
-    out = _add_segregation_metrics(df, "screen")
-
-    assert set(out["screen_segregation_status"]) == {"ok"}
-    assert (
-        set(out["screen_segregation_reference_variant"])
-        == {"Sb-bulk__Ti-bulk"}
-    )
-    values = dict(zip(out["variant_label"], out["screen_segregation_energy_eV"]))
-    assert values["Sb-bulk__Ti-bulk"] == pytest.approx(0.0)
-    assert values["Sb-surface__Ti-bulk"] == pytest.approx(-0.4)
-    assert values["Sb-surface__Ti-surface"] == pytest.approx(0.2)
-
-
-
-def test_screen_shortlist_keeps_bulk_like_segregation_reference() -> None:
-    df = pd.DataFrame(
-        [
-            {
-                "composition_tag": "Sb5_Ti5",
-                "candidate": "candidate_001",
-                "miller_h": 1,
-                "miller_k": 1,
-                "miller_l": 0,
-                "termination_id": 1,
-                "variant_label": "Sb-surface__Ti-bulk",
-                "target_zones_json": '{"Sb": "surface", "Ti": "bulk"}',
-                "screen_energy_eV": -101.0,
-                "screen_rankable": True,
-                "screen_rank_overall": 1,
-            },
-            {
-                "composition_tag": "Sb5_Ti5",
-                "candidate": "candidate_001",
-                "miller_h": 1,
-                "miller_k": 1,
-                "miller_l": 0,
-                "termination_id": 1,
-                "variant_label": "Sb-bulk__Ti-bulk",
-                "target_zones_json": '{"Sb": "bulk", "Ti": "bulk"}',
-                "screen_energy_eV": -100.0,
-                "screen_rankable": True,
-                "screen_rank_overall": 8,
-            },
-            {
-                "composition_tag": "Sb5_Ti5",
-                "candidate": "candidate_001",
-                "miller_h": 1,
-                "miller_k": 0,
-                "miller_l": 0,
-                "termination_id": 1,
-                "variant_label": "Sb-surface__Ti-surface",
-                "target_zones_json": '{"Sb": "surface", "Ti": "surface"}',
-                "screen_energy_eV": -99.5,
-                "screen_rankable": True,
-                "screen_rank_overall": 2,
-            },
-        ]
-    )
-
-    selected = _screen_shortlist_with_segregation_references(df, top_k=1)
-
-    assert set(selected["variant_label"]) == {
-        "Sb-surface__Ti-bulk",
-        "Sb-bulk__Ti-bulk",
+def _refinement_selection_frame() -> pd.DataFrame:
+    rows = []
+    energies = {
+        (1, 0, 0): [0.50, 0.51, 0.52, 0.53],
+        (1, 1, 0): [0.70, 0.71, 0.72],
+        (1, 0, 1): [0.80, 0.81, 0.82],
+        (0, 0, 1): [0.90, 0.91, 0.92],
     }
-    reasons = dict(zip(selected["variant_label"], selected["screen_selection_reason"]))
-    assert reasons["Sb-surface__Ti-bulk"] == "top_k"
-    assert reasons["Sb-bulk__Ti-bulk"] == "segregation_reference"
+    overall = 1
+    for hkl, values in energies.items():
+        for within, gamma in enumerate(values, start=1):
+            rows.append(
+                {
+                    "target_id": "In2p5_Sb2p5/candidate_001",
+                    "composition_tag": "In2p5_Sb2p5",
+                    "candidate": "candidate_001",
+                    "miller_h": hkl[0],
+                    "miller_k": hkl[1],
+                    "miller_l": hkl[2],
+                    "screen_rankable": True,
+                    "screen_rank_overall": overall,
+                    "screen_rank_within_hkl": within,
+                    "screen_surface_energy_J_m2": gamma,
+                }
+            )
+            overall += 1
+    return pd.DataFrame(rows)
 
+
+def test_refinement_selection_global_can_be_dominated_by_one_orientation() -> None:
+    df = _refinement_selection_frame()
+
+    selected = _select_refinement_candidates(
+        df,
+        mode="global",
+        top_k=3,
+    )
+
+    assert len(selected) == 3
+    assert set(
+        zip(
+            selected["miller_h"],
+            selected["miller_k"],
+            selected["miller_l"],
+        )
+    ) == {(1, 0, 0)}
+    assert set(selected["screen_selection_mode"]) == {"global"}
+    assert set(selected["screen_selection_reason"]) == {"global_top_k"}
+
+
+def test_refinement_selection_per_orientation_keeps_each_facet() -> None:
+    df = _refinement_selection_frame()
+
+    selected = _select_refinement_candidates(
+        df,
+        mode="per_orientation",
+        top_k=2,
+    )
+
+    counts = selected.groupby(
+        ["miller_h", "miller_k", "miller_l"]
+    ).size().to_dict()
+    assert counts == {
+        (0, 0, 1): 2,
+        (1, 0, 0): 2,
+        (1, 0, 1): 2,
+        (1, 1, 0): 2,
+    }
+    assert set(selected["screen_selection_mode"]) == {"per_orientation"}
+    assert set(selected["screen_selection_reason"]) == {"orientation_top_k"}
+
+
+def test_refinement_selection_config_accepts_per_orientation() -> None:
+    cfg = _parse_config(
+        {
+            "surface": {
+                "enabled": True,
+                "screen": {"top_k_per_candidate": 10},
+                "refine": {
+                    "selection_mode": "per_orientation",
+                    "selection_top_k": 5,
+                },
+            }
+        }
+    )
+
+    assert cfg["refine"]["selection_mode"] == "per_orientation"
+    assert cfg["refine"]["selection_top_k"] == 5
 
 
 def test_surface_requires_at_least_one_structure_kind() -> None:
