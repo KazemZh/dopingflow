@@ -257,7 +257,7 @@ The page provides:
 - independent fast-screen and higher-fidelity refinement calculators;
 - direct execution in the current environment or separate named Conda environments;
 - screening/refinement TOML preview and selected-structure preview;
-- surface-energy ranking and global/per-orientation refinement selection;
+- surface-energy ranking with global, per-orientation, or orientation/termination-balanced refinement selection;
 - per-surface structure browsing with the 3D structure viewer;
 - raw screen, shortlist, refinement, and final-shortlist tables.
 
@@ -272,9 +272,12 @@ Then select **Current environment** on the Surface Screening page to run
 `surface-scan`. For refinement, either launch the GUI from the MACE environment
 or select **Named Conda environments** and provide the MACE environment name.
 
-The refinement shortlist can be configured as either the global best N surfaces
-or the best N surfaces independently for each Miller orientation. This prevents one
-low-energy orientation from consuming the complete higher-fidelity refinement budget.
+The refinement shortlist can be configured as the global best N surfaces, the best
+N surfaces per Miller orientation, or an orientation/termination-balanced selection.
+In the balanced mode, each orientation has independent controls for the number of
+distinct terminations and the number of variants retained per termination. Once a
+screen summary exists, an editable checkbox table allows exact surfaces to be added
+or removed manually. All successfully refined surfaces are kept by default.
 The surface workflow no longer reports a separate segregation-energy metric.
 
 ---
