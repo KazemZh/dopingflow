@@ -56,8 +56,6 @@ relax = true
 optimizer = "bfgs"
 fmax = 0.05
 max_steps = 300
-top_k_per_candidate = 10
-
 [surface.refine]
 # Optional higher-fidelity second model. Any supported MLFF may be selected.
 enabled = true
@@ -70,4 +68,12 @@ relax = true
 optimizer = "bfgs"
 fmax = 0.03
 max_steps = 500
+
+# Choose which screened surfaces are sent to refinement.
+# "global": best N overall for each source structure.
+# "per_orientation": best N separately for every Miller orientation.
+selection_mode = "per_orientation"
+selection_top_k = 3
+
+# Final global shortlist after refinement.
 top_k_per_candidate = 5
