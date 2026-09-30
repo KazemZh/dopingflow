@@ -76,3 +76,8 @@ are never checked by the higher-fidelity model.
 The workflow no longer calculates or reports a separate segregation-energy metric.
 Dopant-depth variants remain explicit structures and are compared through their
 surface energies.
+
+If `surface_screen_summary.csv` already exists, changing `selection_mode` or
+`selection_top_k` does not require rerunning the screen. Running
+`dopingflow surface-refine -c input.toml` rebuilds the refinement shortlist from
+the existing full screening summary before starting the higher-fidelity calculations.
