@@ -812,10 +812,8 @@ def _base_record(
     bulk_path: Path,
     hkl: Tuple[int, int, int],
     term_id: int,
-    variant_id: int,
-    label: str,
     meta: Mapping[str, Any],
-    variant_dir: Path,
+    term_dir: Path,
     structure: Structure,
 ) -> Dict[str, Any]:
     thickness, vacuum, c_length = _estimate_slab_and_vacuum_thickness_A(structure)
@@ -836,7 +834,7 @@ def _base_record(
         "target_id": target_id,
         "surface_id": (
             f"{target_id}|hkl={hkl[0]},{hkl[1]},{hkl[2]}"
-            f"|term={term_id:03d}|variant={variant_id:03d}"
+            f"|term={term_id:03d}"
         ),
         "parent_id": parent_id,
         "structure_kind": str(row.get("structure_kind", "vacancy-free")),
@@ -853,27 +851,26 @@ def _base_record(
         "miller_k": hkl[1],
         "miller_l": hkl[2],
         "termination_id": term_id,
-        "variant_id": variant_id,
-        "variant_label": label,
+        "termination_label": str(meta.get("termination_label", "undoped")),
+        "termination_slug": str(meta.get("termination_slug", "undoped")),
         "host_species": meta.get("host_species"),
         "dopant_species_json": json.dumps(meta.get("dopant_species", [])),
-        "target_zones_json": json.dumps(
-            meta.get("target_zones", {}),
-            sort_keys=True,
+        "dopant_depths_json": json.dumps(
+            meta.get("dopant_depths", {}), sort_keys=True
         ),
-        "dopant_moves_json": json.dumps(
-            meta.get("moves", []),
-            sort_keys=True,
+        "dopant_zone_counts_json": json.dumps(
+            meta.get("dopant_zone_counts", {}), sort_keys=True
         ),
+        "dopant_depth_layers": int(meta.get("dopant_depth_layers", 1)),
+        "dopant_depth_definition": str(meta.get("dopant_depth_definition", "")),
         "n_atoms": len(structure),
         "surface_area_A2": area,
         "slab_thickness_A_est": thickness,
         "vacuum_thickness_A_est": vacuum,
         "c_length_A": c_length,
-        "surface_variant_dir": str(variant_dir),
-        "generated_structure_path": str(variant_dir / "POSCAR"),
+        "surface_termination_dir": str(term_dir),
+        "generated_structure_path": str(term_dir / "POSCAR"),
     }
-
 
 def _run_candidate(
     row: pd.Series,
@@ -914,104 +911,97 @@ def _run_candidate(
                 slab,
                 preferred_order=cfg.get("poscar_order"),
             )
-            for variant_id, (label, variant, meta) in enumerate(
-                _variants(slab, cfg),
-                start=1,
-            ):
-                variant = _sort_structure_for_poscar(
-                    variant,
-                    preferred_order=cfg.get("poscar_order"),
-                )
-                fixed = _select_fixed_atom_indices(variant, dict(cfg))
-                variant_dir = (
-                    candidate_dir
-                    / f"hkl_{hkl[0]}_{hkl[1]}_{hkl[2]}"
-                    / f"term_{term_id:03d}"
-                    / f"variant_{variant_id:03d}_{label.replace('/', '-')}"
-                )
-                variant_dir.mkdir(parents=True, exist_ok=True)
+            meta = _natural_dopant_depth_metadata(slab, cfg)
+            slug = str(meta.get("termination_slug", "undoped"))
+            safe_slug = "".join(
+                ch if ch.isalnum() or ch in "._-+" else "_" for ch in slug
+            )
+            fixed = _select_fixed_atom_indices(slab, dict(cfg))
+            term_dir = (
+                candidate_dir
+                / f"hkl_{hkl[0]}_{hkl[1]}_{hkl[2]}"
+                / f"term_{term_id:03d}_{safe_slug}"
+            )
+            term_dir.mkdir(parents=True, exist_ok=True)
 
-                if fixed:
-                    _write_poscar_with_selective_dynamics(
-                        variant,
-                        fixed,
-                        variant_dir / "POSCAR",
-                    )
-                else:
-                    Poscar(variant).write_file(str(variant_dir / "POSCAR"))
-
-                if cfg["write_cif"]:
-                    variant.to(
-                        fmt="cif",
-                        filename=str(variant_dir / "slab.cif"),
-                    )
-
-                result = _evaluate(
-                    variant,
+            if fixed:
+                _write_poscar_with_selective_dynamics(
+                    slab,
                     fixed,
-                    calc_cfg,
-                    calculator,
-                    variant_dir / "screen",
+                    term_dir / "POSCAR",
                 )
-                final = variant
-                if result.get("status") == "ok" and result.get(
-                    "relaxed_structure_path"
-                ):
-                    final = Structure.from_file(result["relaxed_structure_path"])
+            else:
+                Poscar(slab).write_file(str(term_dir / "POSCAR"))
 
-                rec = _base_record(
-                    row,
-                    bulk_path,
-                    hkl,
-                    term_id,
-                    variant_id,
-                    label,
-                    meta,
-                    variant_dir,
-                    final,
+            if cfg["write_cif"]:
+                slab.to(
+                    fmt="cif",
+                    filename=str(term_dir / "slab.cif"),
                 )
-                rec.update(
-                    {
-                        "screen_status": result.get("status"),
-                        "screen_backend": calc_cfg["backend"],
-                        "screen_model": calc_cfg["model"],
-                        "screen_task": calc_cfg["task"],
-                        "screen_energy_eV": result.get("energy_eV"),
-                        "screen_energy_eV_atom": (
-                            float(result["energy_eV"]) / len(final)
-                            if result.get("energy_eV") is not None
-                            else None
-                        ),
-                        "screen_converged": result.get("converged"),
-                        "screen_final_fmax_eV_per_A": result.get(
-                            "final_fmax_eV_per_A"
-                        ),
-                        "screen_optimizer_steps": result.get("optimizer_steps"),
-                        "screen_relaxed_structure_path": result.get(
-                            "relaxed_structure_path"
-                        ),
-                        "screen_bulk_reference_eV": bulk_energy,
-                    }
-                )
-                rec.update(
-                    {
-                        f"screen_{key}": value
-                        for key, value in _surface_energy(
-                            bulk,
-                            final,
-                            result.get("energy_eV"),
-                            bulk_energy,
-                        ).items()
-                    }
-                )
-                (variant_dir / "meta.json").write_text(
-                    json.dumps(rec, indent=2, default=str),
-                    encoding="utf-8",
-                )
-                records.append(rec)
+
+            result = _evaluate(
+                slab,
+                fixed,
+                calc_cfg,
+                calculator,
+                term_dir / "screen",
+            )
+            final = slab
+            if result.get("status") == "ok" and result.get(
+                "relaxed_structure_path"
+            ):
+                final = Structure.from_file(result["relaxed_structure_path"])
+
+            rec = _base_record(
+                row,
+                bulk_path,
+                hkl,
+                term_id,
+                meta,
+                term_dir,
+                final,
+            )
+            rec.update(
+                {
+                    "screen_status": result.get("status"),
+                    "screen_backend": calc_cfg["backend"],
+                    "screen_model": calc_cfg["model"],
+                    "screen_task": calc_cfg["task"],
+                    "screen_energy_eV": result.get("energy_eV"),
+                    "screen_energy_eV_atom": (
+                        float(result["energy_eV"]) / len(final)
+                        if result.get("energy_eV") is not None
+                        else None
+                    ),
+                    "screen_converged": result.get("converged"),
+                    "screen_final_fmax_eV_per_A": result.get(
+                        "final_fmax_eV_per_A"
+                    ),
+                    "screen_optimizer_steps": result.get("optimizer_steps"),
+                    "screen_relaxed_structure_path": result.get(
+                        "relaxed_structure_path"
+                    ),
+                    "screen_bulk_reference_eV": bulk_energy,
+                }
+            )
+            rec.update(
+                {
+                    f"screen_{key}": value
+                    for key, value in _surface_energy(
+                        bulk,
+                        final,
+                        result.get("energy_eV"),
+                        bulk_energy,
+                    ).items()
+                }
+            )
+            (term_dir / "meta.json").write_text(
+                json.dumps(rec, indent=2, default=str),
+                encoding="utf-8",
+            )
+            records.append(rec)
 
     return records
-
 
 def _target_group_columns(df: pd.DataFrame) -> list[str]:
     if "target_id" in df.columns:
