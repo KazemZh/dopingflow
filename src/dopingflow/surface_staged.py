@@ -47,8 +47,6 @@ except ModuleNotFoundError:  # pragma: no cover
 
 
 DEFAULT_MILLERS = [(1, 1, 0), (1, 0, 0), (1, 0, 1), (0, 0, 1)]
-_VALID_ZONES = {"surface", "subsurface", "bulk"}
-
 
 def run_surface_scan_from_toml(config_path: Path) -> Path | None:
     config_path = Path(config_path).expanduser().resolve()
@@ -537,169 +535,135 @@ def _cation_layers(
     return layers
 
 
-def _zone_host_sites(
-    structure: Structure,
-    host: str,
-    dopants: Sequence[str],
+def _classify_cation_layer(
+    layer_index: int,
+    n_layers: int,
+    edge_layers: int,
+) -> str:
+    """Classify a cation layer by distance from the nearest exposed slab side."""
+    edge_layers = max(1, int(edge_layers))
+    if (
+        layer_index < edge_layers
+        or layer_index >= max(0, n_layers - edge_layers)
+    ):
+        return "surface"
+
+    subsurface_end = 2 * edge_layers
+    if (
+        layer_index < subsurface_end
+        or layer_index >= max(0, n_layers - subsurface_end)
+    ):
+        return "subsurface"
+
+    return "bulk"
+
+
+def _format_dopant_zone_label(
+    dopant: str,
+    counts: Mapping[str, int],
+    *,
+    human: bool,
+) -> str:
+    parts: list[str] = []
+    for zone in ("surface", "subsurface", "bulk"):
+        count = int(counts.get(zone, 0))
+        if count <= 0:
+            continue
+        if human:
+            parts.append(zone if count == 1 else f"{zone}×{count}")
+        else:
+            parts.append(zone if count == 1 else f"{zone}{count}")
+    if not parts:
+        parts = ["unclassified"]
+    separator = " + " if human else "+"
+    prefix = f"{dopant}: " if human else f"{dopant}-"
+    return prefix + separator.join(parts)
+
+
+def _natural_dopant_depth_metadata(
+    slab: Structure,
     cfg: Mapping[str, Any],
-) -> Dict[str, List[int]]:
+) -> Dict[str, Any]:
+    """Describe dopant depths inherited directly from the slab cut.
+
+    No atoms are swapped or moved here. The label describes the original
+    dopant positions in the generated termination. Both exposed slab sides are
+    considered: the outermost cation layer(s) are surface, the next layer(s)
+    are subsurface, and all remaining cation layers are bulk.
+    """
+    host, dopants = _host_dopants(slab, cfg)
     layers = _cation_layers(
-        structure,
+        slab,
         [host, *dopants],
         float(cfg["cation_layer_tolerance_A"]),
     )
-    if not layers:
-        return {zone: [] for zone in _VALID_ZONES}
+    layer_by_site: Dict[int, int] = {
+        site_index: layer_index
+        for layer_index, layer in enumerate(layers)
+        for site_index in layer
+    }
+    edge_layers = int(cfg["dopant_depth_layers"])
 
-    n = max(1, int(cfg["layers_per_zone"]))
-    side = str(cfg["placement_side"]).lower()
-    if side == "top":
-        surface_layers = layers[-n:]
-        subsurface_layers = layers[
-            max(0, len(layers) - 2 * n) : max(0, len(layers) - n)
-        ]
-    elif side == "bottom":
-        surface_layers = layers[:n]
-        subsurface_layers = layers[n : 2 * n]
+    dopant_depths: Dict[str, List[Dict[str, Any]]] = {}
+    zone_counts: Dict[str, Dict[str, int]] = {}
+    human_parts: list[str] = []
+    slug_parts: list[str] = []
+
+    for dopant in dopants:
+        entries: List[Dict[str, Any]] = []
+        counts = {"surface": 0, "subsurface": 0, "bulk": 0}
+        for site_index, site in enumerate(slab):
+            if site.specie.symbol != dopant:
+                continue
+            layer_index = layer_by_site.get(site_index)
+            if layer_index is None or not layers:
+                zone = "bulk"
+            else:
+                zone = _classify_cation_layer(
+                    layer_index,
+                    len(layers),
+                    edge_layers,
+                )
+            counts[zone] += 1
+            entries.append(
+                {
+                    "site_index": int(site_index),
+                    "layer_index": (
+                        int(layer_index) if layer_index is not None else None
+                    ),
+                    "zone": zone,
+                    "z_A": float(site.coords[2]),
+                }
+            )
+        dopant_depths[dopant] = entries
+        zone_counts[dopant] = counts
+        human_parts.append(
+            _format_dopant_zone_label(dopant, counts, human=True)
+        )
+        slug_parts.append(
+            _format_dopant_zone_label(dopant, counts, human=False)
+        )
+
+    if dopants:
+        termination_label = " | ".join(human_parts)
+        termination_slug = "__".join(slug_parts)
     else:
-        surface_layers = layers[:n] + layers[-n:]
-        subsurface_layers = layers[n : 2 * n] + layers[
-            max(0, len(layers) - 2 * n) : max(0, len(layers) - n)
-        ]
-
-    center = 0.5 * (len(layers) - 1)
-    bulk_layers = [
-        layers[i]
-        for i in sorted(
-            range(len(layers)),
-            key=lambda i: abs(i - center),
-        )[:n]
-    ]
-
-    def host_only(group: Sequence[Sequence[int]]) -> List[int]:
-        return [
-            i
-            for layer in group
-            for i in layer
-            if structure[i].specie.symbol == host
-        ]
+        termination_label = "undoped"
+        termination_slug = "undoped"
 
     return {
-        "surface": host_only(surface_layers),
-        "subsurface": host_only(subsurface_layers),
-        "bulk": host_only(bulk_layers),
+        "host_species": host,
+        "dopant_species": dopants,
+        "dopant_depths": dopant_depths,
+        "dopant_zone_counts": zone_counts,
+        "termination_label": termination_label,
+        "termination_slug": termination_slug,
+        "dopant_depth_layers": edge_layers,
+        "dopant_depth_definition": (
+            "Both slab sides; outer cation layer(s)=surface, "
+            "next cation layer(s)=subsurface, remaining cation layers=bulk"
+        ),
     }
-
-
-def _move_dopant(
-    structure: Structure,
-    dopant: str,
-    host: str,
-    targets: Sequence[int],
-) -> Tuple[Structure, Dict[str, Any]] | None:
-    dopant_indices = [
-        i for i, site in enumerate(structure) if site.specie.symbol == dopant
-    ]
-    targets = [i for i in targets if structure[i].specie.symbol == host]
-    if not dopant_indices or not targets:
-        return None
-
-    distance, source, target = min(
-        (float(structure.get_distance(i, j)), i, j)
-        for i in dopant_indices
-        for j in targets
-    )
-    moved = structure.copy()
-    moved.replace(source, host)
-    moved.replace(target, dopant)
-    return moved, {
-        "dopant": dopant,
-        "from_index": source,
-        "to_index": target,
-        "swap_distance_A": distance,
-    }
-
-
-def _variants(
-    slab: Structure,
-    cfg: Mapping[str, Any],
-) -> List[Tuple[str, Structure, Dict[str, Any]]]:
-    if str(cfg["dopant_variant_mode"]).lower() == "none":
-        return [("original", slab.copy(), {"target_zones": {}, "moves": []})]
-
-    host, dopants = _host_dopants(slab, cfg)
-    if not dopants:
-        return [
-            (
-                "original",
-                slab.copy(),
-                {
-                    "host_species": host,
-                    "dopant_species": [],
-                    "target_zones": {},
-                    "moves": [],
-                },
-            )
-        ]
-
-    variants: List[Tuple[str, Structure, Dict[str, Any]]] = []
-    seen: set[Tuple[str, ...]] = set()
-
-    if cfg["include_original_variant"]:
-        key = tuple(site.specie.symbol for site in slab)
-        seen.add(key)
-        variants.append(
-            (
-                "original",
-                slab.copy(),
-                {
-                    "host_species": host,
-                    "dopant_species": dopants,
-                    "target_zones": {},
-                    "moves": [],
-                },
-            )
-        )
-
-    for combo in itertools.product(cfg["depth_zones"], repeat=len(dopants)):
-        current, moves, valid = slab.copy(), [], True
-        for dopant, zone in zip(dopants, combo):
-            sites = _zone_host_sites(current, host, dopants, cfg)
-            moved = _move_dopant(current, dopant, host, sites[zone])
-            if moved is None:
-                valid = False
-                break
-            current, move = moved
-            move["target_zone"] = zone
-            moves.append(move)
-
-        if not valid:
-            continue
-
-        key = tuple(site.specie.symbol for site in current)
-        if key in seen:
-            continue
-        seen.add(key)
-
-        label = "__".join(
-            f"{dopant}-{zone}" for dopant, zone in zip(dopants, combo)
-        )
-        variants.append(
-            (
-                label,
-                current,
-                {
-                    "host_species": host,
-                    "dopant_species": dopants,
-                    "target_zones": dict(zip(dopants, combo)),
-                    "moves": moves,
-                },
-            )
-        )
-        if len(variants) >= int(cfg["max_dopant_variants_per_termination"]):
-            break
-
-    return variants
 
 
 def _prepare_calculator(cfg: Mapping[str, Any], stage: str):
