@@ -230,15 +230,18 @@ def _parse_config(config: Mapping[str, Any]) -> Dict[str, Any]:
     )
 
     # Refinement candidate selection is independent of the calculator itself.
-    # Older configs used [surface.screen].top_k_per_candidate as the global
-    # refinement shortlist size, so inherit that value unless the new setting
-    # is explicitly present.
+    # Existing global/per-orientation settings remain valid, while the new
+    # orientation_termination mode preserves both facet and termination diversity.
     selection_mode = str(
         raw_refine_cfg.get("selection_mode", "global")
     ).strip().lower().replace("-", "_")
-    if selection_mode not in {"global", "per_orientation"}:
+    if selection_mode == "balanced":
+        selection_mode = "orientation_termination"
+    valid_selection_modes = {"global", "per_orientation", "orientation_termination"}
+    if selection_mode not in valid_selection_modes:
         raise ValueError(
-            "[surface.refine].selection_mode must be 'global' or 'per_orientation'"
+            "[surface.refine].selection_mode must be one of: "
+            "global, per_orientation, orientation_termination"
         )
     selection_top_k = int(
         raw_refine_cfg.get(
@@ -248,8 +251,72 @@ def _parse_config(config: Mapping[str, Any]) -> Dict[str, Any]:
     )
     if selection_top_k <= 0:
         raise ValueError("[surface.refine].selection_top_k must be > 0")
+
+    default_terminations = int(
+        raw_refine_cfg.get("default_terminations_per_orientation", 3)
+    )
+    default_variants = int(
+        raw_refine_cfg.get("default_variants_per_termination", 1)
+    )
+    if default_terminations <= 0 or default_variants <= 0:
+        raise ValueError(
+            "[surface.refine] default termination/variant limits must be > 0"
+        )
+
+    orientation_limits_raw = raw_refine_cfg.get("orientation_limits", {}) or {}
+    if not isinstance(orientation_limits_raw, Mapping):
+        raise ValueError("[surface.refine].orientation_limits must be a table/object")
+    orientation_limits: Dict[str, Dict[str, int]] = {}
+    for key, value in orientation_limits_raw.items():
+        if not isinstance(value, Mapping):
+            raise ValueError(
+                f"[surface.refine].orientation_limits.{key} must be a table/object"
+            )
+        n_terms = int(value.get("terminations", default_terminations))
+        n_variants = int(value.get("variants_per_termination", default_variants))
+        if n_terms <= 0 or n_variants <= 0:
+            raise ValueError(
+                f"[surface.refine].orientation_limits.{key} values must be > 0"
+            )
+        orientation_limits[str(key)] = {
+            "terminations": n_terms,
+            "variants_per_termination": n_variants,
+        }
+
+    def _string_list(value: Any, name: str) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [value.strip()] if value.strip() else []
+        if isinstance(value, (list, tuple)):
+            return list(dict.fromkeys(str(item).strip() for item in value if str(item).strip()))
+        raise ValueError(f"[surface.refine].{name} must be a string or array")
+
+    manual_include = _string_list(
+        raw_refine_cfg.get("manual_include_surface_ids", []),
+        "manual_include_surface_ids",
+    )
+    manual_exclude = _string_list(
+        raw_refine_cfg.get("manual_exclude_surface_ids", []),
+        "manual_exclude_surface_ids",
+    )
+
+    final_selection_mode = str(
+        raw_refine_cfg.get("final_selection_mode", "all")
+    ).strip().lower().replace("-", "_")
+    if final_selection_mode not in {"all", "global"}:
+        raise ValueError(
+            "[surface.refine].final_selection_mode must be 'all' or 'global'"
+        )
+
     surface["refine"]["selection_mode"] = selection_mode
     surface["refine"]["selection_top_k"] = selection_top_k
+    surface["refine"]["default_terminations_per_orientation"] = default_terminations
+    surface["refine"]["default_variants_per_termination"] = default_variants
+    surface["refine"]["orientation_limits"] = orientation_limits
+    surface["refine"]["manual_include_surface_ids"] = manual_include
+    surface["refine"]["manual_exclude_surface_ids"] = manual_exclude
+    surface["refine"]["final_selection_mode"] = final_selection_mode
 
     if str(surface["orientation_mode"]).lower() not in {"explicit", "automatic"}:
         raise ValueError("[surface].orientation_mode must be explicit or automatic")
@@ -806,6 +873,10 @@ def _base_record(
     parent_id = str(row.get("parent_id") or target_id)
     return {
         "target_id": target_id,
+        "surface_id": (
+            f"{target_id}|hkl={hkl[0]},{hkl[1]},{hkl[2]}"
+            f"|term={term_id:03d}|variant={variant_id:03d}"
+        ),
         "parent_id": parent_id,
         "structure_kind": str(row.get("structure_kind", "vacancy-free")),
         "n_oxygen_vacancies": int(row.get("n_oxygen_vacancies", 0) or 0),
