@@ -16,7 +16,8 @@ The intended sequence is::
        -> terminations
        -> representative co-dopant depth variants
        -> fast MLFF screen
-       -> top-k shortlist
+       -> configurable refinement shortlist
+          (global best or best per orientation)
        -> optional higher-fidelity MLFF refinement
        -> final surface shortlist
 
@@ -123,7 +124,6 @@ Example::
    relax = true
    fmax = 0.05
    max_steps = 300
-   top_k_per_candidate = 10
 
 Refinement calculator
 ---------------------
@@ -142,11 +142,45 @@ Example::
    relax = true
    fmax = 0.03
    max_steps = 500
+
+   # Which screened surfaces are sent to this calculator:
+   selection_mode = "per_orientation"  # or "global"
+   selection_top_k = 3
+
+   # Final global shortlist after refinement:
    top_k_per_candidate = 5
 
 Any model accepted by the existing backend abstraction may be chosen,
 including a supported MACE alias or custom checkpoint path. Refinement therefore
 does not mean DFT.
+
+Refinement candidate selection
+------------------------------
+
+The screening stage ranks every rankable slab both globally and within each
+Miller orientation. ``[surface.refine].selection_mode`` controls which screened
+surfaces are passed to the higher-fidelity calculator.
+
+``selection_mode = "global"``
+   Select the lowest ``selection_top_k`` surface energies for each source
+   structure irrespective of Miller orientation. This reproduces the original
+   behavior, but one particularly favorable facet can occupy the complete
+   refinement shortlist.
+
+``selection_mode = "per_orientation"``
+   Select the lowest ``selection_top_k`` surfaces independently for every
+   Miller orientation and source structure. For example, with four orientations
+   and ``selection_top_k = 3``, up to 12 surfaces per source structure are sent
+   to refinement: three from (110), three from (100), three from (101), and
+   three from (001), provided that each orientation has at least three rankable
+   surfaces.
+
+This selection is based on the **screen-calculator surface energy**, not raw slab
+total energy. ``surface_screen_selected.csv`` records the selected rows and the
+selection mode/reason. After the second calculator has evaluated those surfaces,
+``top_k_per_candidate`` controls the final global shortlist written to
+``surface_final_selected.csv``. The complete refined set remains available in
+``surface_refine_summary.csv``.
 
 Calculator-consistent source references
 -------------------------------------
@@ -202,7 +236,8 @@ surface_screen_summary.csv
    Every generated orientation, termination, and dopant-depth variant.
 
 surface_screen_selected.csv
-   Top-k rankable variants per selected source structure after the screen calculator.
+   Screened surfaces selected for refinement according to ``selection_mode`` and
+   ``selection_top_k``.
 
 surface_refine_summary.csv
    Higher-fidelity results for the screening shortlist.
@@ -253,13 +288,13 @@ The page mirrors the staged CLI design:
 - run the screen and refinement either in the current environment or through
   separate named Conda environments;
 - inspect surface-energy rankings one selected source structure at a time;
-- inspect same-termination segregation energies relative to the all-bulk-like
-  variant;
+- choose either a global refinement shortlist or the best N surfaces from each
+  Miller orientation;
 - browse the selected slab geometry interactively;
 - inspect the raw screen/refinement tables.
 
-The results explorer keeps surface-energy ranking and dopant segregation as
-separate quantities. A low surface energy identifies a thermodynamically
-favorable exposed slab within the implemented model, whereas a negative
-segregation energy indicates that the selected dopant placement is favored
-relative to the corresponding bulk-like placement.
+The results explorer focuses on surface-energy ranking. Dopant-depth variants
+remain explicit structures (for example surface, subsurface, bulk-like, and the
+original cut-slab arrangement), but the workflow no longer reports a separate
+segregation-energy metric. Their relative performance is assessed through the
+calculated surface energies and the selected refinement strategy.
