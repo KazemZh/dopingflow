@@ -23,17 +23,13 @@ termination_mode = "all"
 max_terminations_per_orientation = 12
 symmetrize_slabs = false
 
-# Enumerate representative co-dopant depth placements while preserving composition.
-dopant_variant_mode = "co-dopant-depth"
+# Keep the dopants exactly where each slab cut places them.
+# These settings only label their natural positions as surface/subsurface/bulk.
 host_species = "Sn"
 dopant_species = ["Sb", "Ti"]  # replace Ti by the chosen co-dopant
 anion_species = ["O"]
-depth_zones = ["surface", "subsurface", "bulk"]
-placement_side = "top"
-layers_per_zone = 1
+dopant_depth_layers = 1
 cation_layer_tolerance_A = 0.8
-include_original_variant = true
-max_dopant_variants_per_termination = 18
 
 # Optional structural constraints during slab relaxation.
 fix_atoms = true
@@ -69,35 +65,28 @@ optimizer = "bfgs"
 fmax = 0.03
 max_steps = 500
 
-# Choose which screened surfaces are sent to refinement.
-# "global": best N overall.
-# "per_orientation": best N separately for every Miller orientation.
-# "orientation_termination": preserve both orientation and termination diversity.
-selection_mode = "orientation_termination"
-
-# Defaults for orientation_termination when no orientation-specific override exists.
+# Choose which natural terminations are sent to refinement.
+# "global": best N terminations overall.
+# "per_orientation": choose how many terminations to retain from each Miller orientation.
+selection_mode = "per_orientation"
+selection_top_k = 3
 default_terminations_per_orientation = 3
-default_variants_per_termination = 1
 
 # Optional exact manual changes applied after the automatic shortlist.
 manual_include_surface_ids = []
 manual_exclude_surface_ids = []
 
-# Keep every successfully refined surface by default.
+# Keep every successfully refined termination by default.
 final_selection_mode = "all"
 
 [surface.refine.orientation_limits."1,0,0"]
 terminations = 3
-variants_per_termination = 2
 
 [surface.refine.orientation_limits."1,1,0"]
 terminations = 3
-variants_per_termination = 2
 
 [surface.refine.orientation_limits."1,0,1"]
 terminations = 3
-variants_per_termination = 1
 
 [surface.refine.orientation_limits."0,0,1"]
 terminations = 2
-variants_per_termination = 1
