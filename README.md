@@ -982,7 +982,7 @@ SHE/RHE potential. DopingFlow intentionally does not hard-code aqueous species
 or oxidation states because oxide dopants may dissolve as different
 oxo/hydroxo/charge-state species.
 
-Each result records the dopant's initial relaxed-surface zone (`surface`, `subsurface`, or `bulk`), the zone requested by the surface variant, its original atom index/coordinates, and its depth from the selected surface.
+Each result records the dopant's natural-cut zone and its zone in the relaxed surface (`surface`, `subsurface`, or `bulk`), together with its original atom index/coordinates and its depth from the selected surface.
 
 A relative `outdir = "09_leaching"` is created inside the leaching/source parent root (inherited from `[surface].source_root` unless overridden). Outputs include the exact site preview,
 `leaching_summary.csv`, a per-surface/per-dopant summary,
