@@ -1084,16 +1084,11 @@ with st.expander("Configuration & run controls", expanded=False):
             "fix_n_layers": fix_n_layers,
             "fix_thickness_A": fix_thickness,
             "fix_layer_tolerance_A": fix_layer_tol,
-            "dopant_variant_mode": variant_mode,
             "host_species": host_species,
             "dopant_species": dopant_species,
             "anion_species": anion_species,
-            "depth_zones": depth_zones,
-            "placement_side": placement_side,
             "cation_layer_tolerance_A": cation_layer_tol,
-            "layers_per_zone": layers_per_zone,
-            "include_original_variant": include_original,
-            "max_dopant_variants_per_termination": max_variants,
+            "dopant_depth_layers": dopant_depth_layers,
             "screen": screen,
             "refine": refine,
         }
@@ -1130,6 +1125,12 @@ with st.expander("Configuration & run controls", expanded=False):
         "surface_relax_log_filename",
         "surface_relax_traj_filename",
         "surface_relax_meta_filename",
+        "dopant_variant_mode",
+        "depth_zones",
+        "placement_side",
+        "layers_per_zone",
+        "include_original_variant",
+        "max_dopant_variants_per_termination",
         "write_poscar",
         "write_metadata_json",
         "summary_csv",
@@ -1191,15 +1192,10 @@ with st.expander("Configuration & run controls", expanded=False):
                             else max_orientations
                         )
                         * max_terms
-                        * (
-                            max_variants
-                            if variant_mode == "co-dopant-depth"
-                            else 1
-                        )
                     )
                     st.caption(
                         "Conservative pre-deduplication ceiling from the current caps: "
-                        f"{estimated_upper:,} slab variants. Actual generation can be much smaller."
+                        f"{estimated_upper:,} natural terminations. Actual generation can be smaller."
                     )
     expensive_confirm = st.checkbox(
         "I confirm that running the selected MLFF surface calculations may be computationally expensive",
@@ -1354,7 +1350,7 @@ if screen_df.empty and refine_df.empty:
     st.stop()
 
 m1, m2, m3, m4 = st.columns(4)
-m1.metric("Screened variants", len(screen_df))
+m1.metric("Screened terminations", len(screen_df))
 m2.metric(
     "Screen-rankable",
     int(
@@ -1367,7 +1363,7 @@ m2.metric(
     if not screen_df.empty
     else 0,
 )
-m3.metric("Refined variants", len(refine_df))
+m3.metric("Refined terminations", len(refine_df))
 m4.metric("Retained refined", len(final_df))
 
 ranking_tab, structure_tab, raw_tab = st.tabs(
@@ -1433,17 +1429,17 @@ with ranking_tab:
                 rankable,
                 x="Facet",
                 y=gamma_col,
-                color="variant_label",
+                color="termination_label",
                 symbol="termination_id",
                 hover_data=[
                     "termination_id",
-                    "variant_label",
+                    "termination_label",
                     rank_col,
                     f"{prefix}_energy_eV",
                 ],
                 labels={
                     gamma_col: "Surface energy (J/m²)",
-                    "variant_label": "Dopant-depth variant",
+                    "termination_label": "Natural dopant positions",
                 },
                 title=f"{ranking_stage} surface-energy ranking — {selected_target}",
             )
@@ -1455,7 +1451,7 @@ with ranking_tab:
                     rank_col,
                     "Facet",
                     "termination_id",
-                    "variant_label",
+                    "termination_label",
                     gamma_col,
                     f"{prefix}_final_fmax_eV_per_A",
                 )
@@ -1501,7 +1497,7 @@ with structure_tab:
     browse["choice"] = browse.apply(
         lambda row: (
             f"({int(row['miller_h'])}{int(row['miller_k'])}{int(row['miller_l'])}) | "
-            f"term {int(row['termination_id']):03d} | {row.get('variant_label', 'original')}"
+            f"term {int(row['termination_id']):03d} | {row.get('termination_label', 'unlabeled')}"
         ),
         axis=1,
     )
