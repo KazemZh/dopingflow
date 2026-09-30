@@ -754,7 +754,7 @@ with st.expander("Configuration & run controls", expanded=False):
         fmax_default=0.03,
         steps_default=500,
         topk_default=5,
-        topk_label="Final top-k after refinement",
+        topk_label="Final global top-k after refinement",
     )
 
     st.markdown("##### Surfaces sent to refinement")
