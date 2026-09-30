@@ -21,9 +21,6 @@ The format loosely follows semantic versioning.
 - Refinement selection is simplified to global or per-orientation termination
   selection, with independent termination counts per Miller orientation and
   optional exact manual include/exclude overrides.
-- Surface refinement now supports **orientation + termination balanced** selection:
-  each Miller orientation can independently specify how many distinct terminations
-  and how many variants per termination are sent to the higher-fidelity calculator.
 - The Surface Screening GUI can review the automatic shortlist and manually include
   or exclude exact screened surfaces before refinement. Manual choices use stable
   surface IDs and can be reapplied without rerunning the screen.
@@ -32,14 +29,13 @@ The format loosely follows semantic versioning.
 - Surface refinement shortlist selection now supports both **global top-N** and
   **top-N per Miller orientation**. The per-orientation mode keeps every requested
   facet represented when one orientation dominates the global surface-energy ranking.
-- The previous surface segregation-energy calculation/reporting path has been removed;
-  dopant-depth variants remain available and are compared using surface energies.
+- The previous surface segregation-energy calculation/reporting path has been removed.
 - Surface target selection now mirrors Electronic Conductivity/Oxidation States:
   `source_root`, independent vacancy-free/O-vacancy toggles, and optional exact/glob
   `target_include` selectors drive both GUI preview and backend execution. Vacancy-free
   and O-vacancy source structures are ranked independently.
 - Dedicated Streamlit **Surface Screening** page with candidate/facet/termination
-  configuration, representative co-dopant depth controls, independent GRACE/MACE-style
+  configuration, natural dopant-depth labeling, independent GRACE/MACE-style
   screen/refine calculators, separate-environment execution, surface-energy plots,
   3D slab browsing, and raw result tables. The duplicate Surface editor in the main
   Input Builder now links to this page.
