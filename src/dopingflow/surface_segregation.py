@@ -152,7 +152,7 @@ def _surface_table_candidates(
     surface_cfg = parse_surface_config(raw)
     surface_root = resolve_surface_output_dir(raw, surface_cfg, root)
     return {
-        "final-selected": surface_root / str(surface_cfg["final_selected_csv"]),
+        "final-selected": surface_root / str(surface_cfg["refine_selected_csv"]),
         "refine-summary": surface_root / str(surface_cfg["refine_summary_csv"]),
         "screen-selected": surface_root / str(surface_cfg["screen_selected_csv"]),
         "screen-summary": surface_root / str(surface_cfg["screen_summary_csv"]),
