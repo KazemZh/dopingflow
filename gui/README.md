@@ -296,7 +296,7 @@ MC command runs.
 
 ## Dopant Leaching page
 
-`gui/pages/8_Dopant_Leaching.py` consumes the selected surface tables and exposes:
+`gui/pages/9_Dopant_Leaching.py` consumes the selected surface tables and exposes:
 
 - exact surface/target filtering and surface/subsurface/bulk site selection;
 - a dry-run table of every dopant atom that will be removed;
