@@ -3300,6 +3300,8 @@ elif tab == "Run":
         "oxidation",
         "conductivity",
         "surface",
+        "surface-segregation",
+        "leaching",
     ]
 
     st.divider()
@@ -3326,7 +3328,7 @@ elif tab == "Run":
             "Sequential workflow performs gradual sequential doping using the settings "
             "defined in the [sequential] section of input.toml. "
             "Stage range runs from a selected start stage to an end stage. "
-            "Single stage runs exactly one chosen stage, including the surface stage."
+            "Single stage runs exactly one chosen stage, including surface, surface segregation, or leaching."
         ),
     )
 
