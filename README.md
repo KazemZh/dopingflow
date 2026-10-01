@@ -8,7 +8,8 @@
 
 `dopingflow` is a modular CLI pipeline for automated generation, screening,
 relaxation, formation-energy analysis, phase stability, oxygen-vacancy studies,
-dopant site-preference / short-range-order analysis, and configurable oxidation-state
+dopant site-preference / short-range-order analysis, natural-surface screening,
+finite-temperature surface-segregation Monte Carlo, and configurable oxidation-state
 analysis of doped crystal structures using
 machine-learning interatomic potentials, graph neural networks, structural
 chemistry, and optional DFT post-processing.
