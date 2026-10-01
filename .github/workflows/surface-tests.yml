@@ -14,7 +14,9 @@ on:
       - "tests/test_surface_staged.py"
       - "tests/test_surface_segregation.py"
       - "examples/surfaces/**"
+      - "examples/surface_segregation/**"
       - "docs/source/methods/surfaces.rst"
+      - "docs/source/methods/surface_segregation.rst"
       - "docs/source/workflow_overview.rst"
   push:
     branches:
