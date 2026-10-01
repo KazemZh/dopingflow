@@ -15,6 +15,16 @@ The format loosely follows semantic versioning.
 
 ## [Unreleased]
 ### Added
+- New **Surface Segregation Monte Carlo** stage for user-selected natural surface
+  terminations. Fixed-composition host↔dopant swaps are sampled with a user-selected
+  MLFF at finite temperature, with burn-in and production sampling.
+- Site-resolved dopant occupancy, surface/subsurface/bulk populations normalized by
+  available site count, occupancy-derived effective segregation free energies,
+  site PMFs, convergence traces, swap statistics, and representative MC structures
+  are written for every selected surface.
+- Dedicated Streamlit **Surface Segregation MC** page with exact surface selection,
+  calculator/temperature/trajectory controls, live progress, and occupancy/free-energy
+  heat maps.
 - Surface generation now keeps exactly **one natural structure per termination**:
   dopants are never swapped between host sites. Each termination is labeled from
   the dopants' inherited positions (surface/subsurface/bulk-like) on the slab cut.

@@ -8,7 +8,8 @@
 
 `dopingflow` is a modular CLI pipeline for automated generation, screening,
 relaxation, formation-energy analysis, phase stability, oxygen-vacancy studies,
-dopant site-preference / short-range-order analysis, and configurable oxidation-state
+dopant site-preference / short-range-order analysis, natural-surface screening,
+finite-temperature surface-segregation Monte Carlo, and configurable oxidation-state
 analysis of doped crystal structures using
 machine-learning interatomic potentials, graph neural networks, structural
 chemistry, and optional DFT post-processing.
@@ -159,6 +160,7 @@ dopingflow vacancies-finalize -c input.toml
 dopingflow site-preference -c input.toml
 dopingflow oxidation -c input.toml
 dopingflow surface -c input.toml
+dopingflow surface-segregation -c input.toml
 ```
 
 ### Dopant leaching and interrupted-run recovery
@@ -909,15 +911,16 @@ utility remains available for advanced recovery/rebuild workflows:
 
 ## Staged surface screening and refinement
 
-After selecting relaxed source structures, DopingFlow can scan surface orientation,
-termination, and representative dopant depth before the later catalyst-interface stages.
+After selecting relaxed source structures, DopingFlow can scan surface orientations and
+natural terminations before the later catalyst-interface stages. Dopant-depth labels only
+describe where the original dopants lie after each slab cut.
 The surface stage uses the same `source_root`, vacancy-free/O-vacancy toggles, and
 optional `target_include` selectors as the oxidation/conductivity workflows.
 
 The current SnO2 starting set is (110), (100), (101), and (001), but the Miller
-list is fully configurable. The surface scan can move one representative atom of
-each selected dopant species among surface, subsurface, and bulk-like cation layers
-while preserving total composition.
+list is fully configurable. The surface scan does not move dopants between sites;
+it keeps one natural structure per termination and labels inherited dopant depths as
+surface, subsurface, or bulk-like.
 
 A fast calculator and a higher-fidelity calculator are configured independently.
 For example, use GRACE for the broad screen and MACE MH-1 with the matpes_r2scan

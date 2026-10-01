@@ -281,9 +281,28 @@ kept by default.
 
 ---
 
+## Surface Segregation MC page
+
+`gui/pages/8_Surface_Segregation.py` is the finite-temperature segregation interface.
+It reads the natural surface tables, lets the user check exact terminations, and runs
+fixed-composition host↔dopant Metropolis swaps with the selected MLFF.
+
+Results include site-occupancy and depth-zone heat maps, site-normalized enrichment,
+effective ΔGseg relative to bulk, site PMFs, energy/zone convergence traces, and
+per-dopant swap acceptance statistics. Progress is streamed into the page while the
+MC command runs.
+
+The MLFF editor is backend-aware: switching backend also switches the associated
+model/task controls. M3GNet uses its default model without a head; GRACE exposes
+only GRACE checkpoints; UMA exposes UMA model + task; and MACE exposes the MACE
+model catalogue or a custom checkpoint, with the head field enabled only where
+relevant. Backend-specific model/task values are not reused across backends.
+
+---
+
 ## Dopant Leaching page
 
-`gui/pages/8_Dopant_Leaching.py` consumes the selected surface tables and exposes:
+`gui/pages/9_Dopant_Leaching.py` consumes the selected surface tables and exposes:
 
 - exact surface/target filtering and surface/subsurface/bulk site selection;
 - a dry-run table of every dopant atom that will be removed;
@@ -311,17 +330,21 @@ gui/
 ├── phase_diagram_plots.py
 ├── vacancy_thermo_plots.py
 ├── pages/
-│   ├── Surface_Screening.py
-│   ├── Dopant_Leaching.py
-│   ├── Vacancy_MC_Staged.py
-│   ├── Vacancy_Energy_Correction.py
-│   └── Phase_Diagram.py
+│   ├── 1_Phase_Diagram.py
+│   ├── 2_Vacancy_MC_Staged.py
+│   ├── 3_Vacancy_Energy_Correction.py
+│   ├── 4_Dopant_Site_Preference.py
+│   ├── 5_Oxidation_States.py
+│   ├── 6_Electronic_Conductivity.py
+│   ├── 7_Surface_Screening.py
+│   ├── 8_Surface_Segregation.py
+│   └── 9_Dopant_Leaching.py
 ├── io_project.py
 └── view_structure.py
 ```
 
-Focused tests cover the staged vacancy and surface workflows. The surface CI also
-compiles the main app and dedicated Surface Screening page, while the documentation
+Focused tests cover the staged vacancy, surface screening, and surface-segregation workflows. The surface CI also
+compiles the main app plus the dedicated Surface Screening and Surface Segregation pages, while the documentation
 workflows keep the Sphinx guides synchronized.
 
 ---

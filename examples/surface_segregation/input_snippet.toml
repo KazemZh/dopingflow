@@ -1,0 +1,46 @@
+[surface_segregation]
+enabled = true
+
+# Read the natural terminations retained after surface refinement.
+source_mode = "final-selected"
+# Optional explicit CSV instead of source_mode.
+source_summary = ""
+
+# Select exact surface IDs from the Surface Segregation GUI or by hand.
+surface_include = [
+  "In2p5_Sb2p5/candidate_001|hkl=1,1,0|term=001",
+]
+max_surfaces = 5
+
+host_species = "Sn"
+anion_species = ["O"]
+# Leave empty to infer all non-host/non-anion cations.
+dopant_species = ["In", "Sb"]
+
+# Same geometric depth definition used by the surface stage.
+cation_layer_tolerance_A = 0.8
+dopant_depth_layers = 1
+
+# Canonical fixed-composition Monte Carlo.
+temperature_K = 800.0
+steps = 100000
+burn_in = 20000
+sample_interval = 20
+trace_interval = 100
+progress_interval = 500
+seed = 42
+
+# User-selected ML force field.
+backend = "mace"
+model = "mh-1"
+task = "matpes_r2scan"
+device = "cuda"
+gpu_id = 0
+tf_threads = 1
+omp_threads = 1
+
+# Independent surface chains can be parallelized on CPU.
+parallel_surfaces = 1
+
+# Relative paths are created inside the surface/source root.
+outdir = "09_surface_segregation"
