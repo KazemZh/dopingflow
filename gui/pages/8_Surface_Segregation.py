@@ -17,7 +17,14 @@ from dopingflow.surface_segregation import (
     resolve_surface_segregation_output_dir,
     resolve_surface_segregation_source_summary,
 )
-from gui_config import BACKEND_CHOICES, DEVICE_CHOICES
+from gui_config import (
+    BACKEND_CHOICES,
+    DEVICE_CHOICES,
+    GRACE_MODEL_CHOICES,
+    MACE_MODEL_CHOICES,
+    UMA_MODEL_CHOICES,
+    UMA_TASK_CHOICES,
+)
 
 
 st.set_page_config(page_title="Surface segregation MC", layout="wide")
@@ -89,6 +96,56 @@ def _default_backend() -> dict[str, Any]:
     fallback.update(source)
     fallback.update(saved)
     return fallback
+
+
+@st.cache_data(show_spinner=False)
+def _available_mace_models() -> tuple[str, ...]:
+    """Use the installed MACE catalogue when available."""
+    try:
+        from dopingflow.ml_backends import get_mace_model_choices
+
+        models = tuple(get_mace_model_choices())
+        if models:
+            return models
+    except Exception:
+        pass
+    return tuple(MACE_MODEL_CHOICES)
+
+
+def _backend_model_defaults(backend: str) -> tuple[str, str]:
+    """Return backend-valid model/task defaults without carrying stale values."""
+    backend = str(backend).strip().lower()
+
+    if backend == "m3gnet":
+        return "default", ""
+    if backend == "grace":
+        return "GRACE-1L-OMAT", ""
+    if backend == "uma":
+        return "uma-s-1p2", "omat"
+    if backend == "mace":
+        refine_backend = str(surface_refine.get("backend", "")).strip().lower()
+        if refine_backend == "mace":
+            model = str(surface_refine.get("model", "mh-1")).strip() or "mh-1"
+            task = str(surface_refine.get("task", "")).strip()
+            if model == "mh-1" and not task:
+                task = "matpes_r2scan"
+            return model, task
+        return "mh-1", "matpes_r2scan"
+
+    return "", ""
+
+
+def _saved_backend_value(
+    backend: str,
+    key: str,
+    fallback: str,
+) -> str:
+    """Reuse a saved model/task only when it belongs to the active backend."""
+    saved_backend = str(saved.get("backend", "")).strip().lower()
+    if saved_backend != str(backend).strip().lower():
+        return fallback
+    value = str(saved.get(key, fallback)).strip()
+    return value if value else fallback
 
 
 def _run_streaming(args: list[str]) -> int:
@@ -375,16 +432,150 @@ with st.expander("Configuration & run controls", expanded=True):
         "Backend",
         backend_options,
         index=backend_options.index(backend_default),
+        key="surface_segregation_backend",
     )
-    model = b2.text_input(
-        "Model / checkpoint",
-        value=str(defaults.get("model", "small")),
-    ).strip()
-    task = b3.text_input(
-        "Task / head",
-        value=str(defaults.get("task", "")),
-        help="For example matpes_r2scan for MACE-MH-1 when available.",
-    ).strip()
+
+    backend_model_default, backend_task_default = _backend_model_defaults(backend)
+
+    if backend == "m3gnet":
+        model = "default"
+        b2.text_input(
+            "Model",
+            value="default",
+            disabled=True,
+            key="surface_segregation_model_m3gnet",
+            help="M3GNet uses its default pretrained potential in this workflow.",
+        )
+        task = ""
+        b3.text_input(
+            "Task / head",
+            value="not used",
+            disabled=True,
+            key="surface_segregation_task_m3gnet",
+        )
+
+    elif backend == "grace":
+        current_model = _saved_backend_value(
+            backend,
+            "model",
+            backend_model_default,
+        )
+        if current_model not in GRACE_MODEL_CHOICES:
+            current_model = "GRACE-1L-OMAT"
+        model = b2.selectbox(
+            "GRACE model",
+            list(GRACE_MODEL_CHOICES),
+            index=list(GRACE_MODEL_CHOICES).index(current_model),
+            key="surface_segregation_model_grace",
+        )
+        task = ""
+        b3.text_input(
+            "Task / head",
+            value="not used",
+            disabled=True,
+            key="surface_segregation_task_grace",
+            help="GRACE model selection already defines the potential; no separate task/head is used.",
+        )
+
+    elif backend == "uma":
+        current_model = _saved_backend_value(
+            backend,
+            "model",
+            backend_model_default,
+        )
+        if current_model not in UMA_MODEL_CHOICES:
+            current_model = "uma-s-1p2"
+        model = b2.selectbox(
+            "UMA model",
+            list(UMA_MODEL_CHOICES),
+            index=list(UMA_MODEL_CHOICES).index(current_model),
+            key="surface_segregation_model_uma",
+        )
+
+        current_task = _saved_backend_value(
+            backend,
+            "task",
+            backend_task_default,
+        )
+        if current_task not in UMA_TASK_CHOICES:
+            current_task = "omat"
+        task = b3.selectbox(
+            "UMA task",
+            list(UMA_TASK_CHOICES),
+            index=list(UMA_TASK_CHOICES).index(current_task),
+            key="surface_segregation_task_uma",
+        )
+
+    else:  # MACE
+        mace_models = list(_available_mace_models())
+        custom_label = "Custom checkpoint path…"
+        current_model = _saved_backend_value(
+            backend,
+            "model",
+            backend_model_default,
+        )
+        if current_model in mace_models:
+            initial_model_choice = current_model
+        else:
+            initial_model_choice = custom_label
+
+        selected_model = b2.selectbox(
+            "MACE model",
+            [*mace_models, custom_label],
+            index=[*mace_models, custom_label].index(initial_model_choice),
+            key="surface_segregation_model_mace_choice",
+        )
+        if selected_model == custom_label:
+            model = b2.text_input(
+                "Checkpoint path",
+                value=(
+                    current_model
+                    if current_model not in mace_models
+                    else ""
+                ),
+                key="surface_segregation_model_mace_custom",
+                help="Path to a local MACE checkpoint.",
+            ).strip()
+        else:
+            model = selected_model
+
+        saved_mace_model = (
+            str(saved.get("model", "")).strip()
+            if str(saved.get("backend", "")).strip().lower() == "mace"
+            else ""
+        )
+        if model == saved_mace_model:
+            mace_task_default = str(saved.get("task", backend_task_default)).strip()
+        elif model == "mh-1":
+            mace_task_default = "matpes_r2scan"
+        else:
+            mace_task_default = ""
+
+        is_multihead_or_custom = (
+            model.startswith("mh-")
+            or selected_model == custom_label
+        )
+        if is_multihead_or_custom:
+            task = b3.text_input(
+                "MACE head",
+                value=mace_task_default,
+                key=f"surface_segregation_task_mace_{model}",
+                help=(
+                    "Head name for a multi-head MACE checkpoint. "
+                    "For MH-1, matpes_r2scan is the default used here. "
+                    "Leave blank only when the selected checkpoint does not require a head."
+                ),
+            ).strip()
+        else:
+            task = ""
+            b3.text_input(
+                "MACE head",
+                value="not used",
+                disabled=True,
+                key=f"surface_segregation_task_mace_single_{model}",
+                help="This selected MACE model is treated as a single-head model.",
+            )
+
     device_options = list(DEVICE_CHOICES)
     device_default = str(defaults.get("device", "cpu")).lower()
     if device_default not in device_options:
@@ -393,6 +584,16 @@ with st.expander("Configuration & run controls", expanded=True):
         "Device",
         device_options,
         index=device_options.index(device_default),
+        key="surface_segregation_device",
+    )
+
+    st.caption(
+        {
+            "m3gnet": "M3GNet: default pretrained model; no task/head.",
+            "grace": "GRACE: choose a GRACE checkpoint; no separate task/head.",
+            "uma": "UMA: choose both a foundation model and its task.",
+            "mace": "MACE: choose a packaged model or custom checkpoint; a head is requested only for multi-head/custom checkpoints.",
+        }[backend]
     )
 
     t1, t2, t3, t4 = st.columns(4)
