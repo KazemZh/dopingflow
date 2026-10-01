@@ -292,6 +292,12 @@ effective ΔGseg relative to bulk, site PMFs, energy/zone convergence traces, an
 per-dopant swap acceptance statistics. Progress is streamed into the page while the
 MC command runs.
 
+The MLFF editor is backend-aware: switching backend also switches the associated
+model/task controls. M3GNet uses its default model without a head; GRACE exposes
+only GRACE checkpoints; UMA exposes UMA model + task; and MACE exposes the MACE
+model catalogue or a custom checkpoint, with the head field enabled only where
+relevant. Backend-specific model/task values are not reused across backends.
+
 ---
 
 ## Dopant Leaching page
