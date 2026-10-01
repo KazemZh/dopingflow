@@ -12,6 +12,14 @@ X@site_i + Sn@site_j  ->  Sn@site_i + X@site_j
 Coordinates and the slab lattice remain fixed during the Markov chain. A user-selected
 ML force field provides the single-point energy for Metropolis acceptance.
 
+In the GUI, the model controls follow the selected backend automatically:
+
+- M3GNet → default model, no task/head;
+- GRACE → GRACE model dropdown, no task/head;
+- UMA → UMA model dropdown + UMA task;
+- MACE → MACE model dropdown (or custom checkpoint), with a head only for
+  multi-head/custom checkpoints. `mh-1` defaults to `matpes_r2scan`.
+
 Recommended first validation run:
 
 ```toml
