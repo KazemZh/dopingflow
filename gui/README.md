@@ -281,6 +281,19 @@ kept by default.
 
 ---
 
+## Surface Segregation MC page
+
+`gui/pages/8_Surface_Segregation.py` is the finite-temperature segregation interface.
+It reads the natural surface tables, lets the user check exact terminations, and runs
+fixed-composition host↔dopant Metropolis swaps with the selected MLFF.
+
+Results include site-occupancy and depth-zone heat maps, site-normalized enrichment,
+effective ΔGseg relative to bulk, site PMFs, energy/zone convergence traces, and
+per-dopant swap acceptance statistics. Progress is streamed into the page while the
+MC command runs.
+
+---
+
 ## Dopant Leaching page
 
 `gui/pages/8_Dopant_Leaching.py` consumes the selected surface tables and exposes:
