@@ -20,6 +20,7 @@ The workflow integrates:
 - Restricted one-dimensional alloy convex hulls and full multicomponent phase diagrams
 - Oxygen-vacancy screening, thermodynamics, optional fitted vacancy-energy corrections, vacancy-resolved closed-system energy-above-hull analysis, and staged GRACE-to-MACE Monte Carlo search/finalization
 - Configurable oxidation-state analysis using structural, ML, DFT, and combined strategies on matched vacancy-free and oxygen-vacancy structures
+- Natural surface screening/refinement and finite-temperature MLFF surface-segregation Monte Carlo
 - Bandgap prediction using ALIGNN
 - Automated database collection
 - Fully reproducible, stage-isolated execution
