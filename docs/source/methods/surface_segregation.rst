@@ -134,6 +134,23 @@ present in the selected surface.
 CPU. A single Metropolis chain remains sequential by construction. CUDA uses
 one surface chain at a time.
 
+Backend-aware GUI controls
+--------------------------
+
+The Surface Segregation GUI changes the model/task controls immediately when the
+backend changes, so values from one backend are not carried into another one:
+
+- ``m3gnet``: uses ``model = "default"`` and no task/head;
+- ``grace``: shows a GRACE-model dropdown and disables task/head;
+- ``uma``: shows a UMA-model dropdown plus a UMA task dropdown;
+- ``mace``: shows the available MACE model catalogue (plus a custom-checkpoint
+  option). A head field is shown only for multi-head/custom checkpoints; for
+  ``mh-1`` the default head is ``matpes_r2scan``.
+
+When possible, the MACE dropdown is populated from the models supported by the
+installed MACE package; otherwise DopingFlow falls back to its built-in model
+list.
+
 Production statistics
 ---------------------
 
