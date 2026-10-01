@@ -324,17 +324,21 @@ gui/
 ├── phase_diagram_plots.py
 ├── vacancy_thermo_plots.py
 ├── pages/
-│   ├── Surface_Screening.py
-│   ├── Dopant_Leaching.py
-│   ├── Vacancy_MC_Staged.py
-│   ├── Vacancy_Energy_Correction.py
-│   └── Phase_Diagram.py
+│   ├── 1_Phase_Diagram.py
+│   ├── 2_Vacancy_MC_Staged.py
+│   ├── 3_Vacancy_Energy_Correction.py
+│   ├── 4_Dopant_Site_Preference.py
+│   ├── 5_Oxidation_States.py
+│   ├── 6_Electronic_Conductivity.py
+│   ├── 7_Surface_Screening.py
+│   ├── 8_Surface_Segregation.py
+│   └── 9_Dopant_Leaching.py
 ├── io_project.py
 └── view_structure.py
 ```
 
-Focused tests cover the staged vacancy and surface workflows. The surface CI also
-compiles the main app and dedicated Surface Screening page, while the documentation
+Focused tests cover the staged vacancy, surface screening, and surface-segregation workflows. The surface CI also
+compiles the main app plus the dedicated Surface Screening and Surface Segregation pages, while the documentation
 workflows keep the Sphinx guides synchronized.
 
 ---
