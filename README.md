@@ -159,6 +159,7 @@ dopingflow vacancies-finalize -c input.toml
 dopingflow site-preference -c input.toml
 dopingflow oxidation -c input.toml
 dopingflow surface -c input.toml
+dopingflow surface-segregation -c input.toml
 ```
 
 ### Dopant leaching and interrupted-run recovery
