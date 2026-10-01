@@ -19,6 +19,7 @@ from dopingflow.oxidation import run_oxidation_from_toml
 from dopingflow.conductivity import rebuild_reference_comparison_from_toml, run_conductivity_from_toml
 from dopingflow.leaching import run_leaching_from_toml
 from dopingflow.site_preference import run_site_preference_from_toml
+from dopingflow.surface_segregation import run_surface_segregation_from_toml
 from dopingflow.surface_staged import (
     run_surface_refine_from_toml,
     run_surface_scan_from_toml,
@@ -319,6 +320,28 @@ def surface_cmd(
     typer.echo(f"\nWrote surface workflow summary: {output}")
 
 
+@app.command("surface-segregation")
+def surface_segregation_cmd(
+    config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Write the selected-surface MC plan without running MLFF calculations",
+    ),
+    verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
+) -> None:
+    """Step 15: Sample finite-temperature dopant segregation on selected surfaces."""
+    _init(config, verbose)
+    output = run_surface_segregation_from_toml(config, dry_run=dry_run)
+    if output is None:
+        typer.echo(
+            "Surface segregation stage disabled; "
+            "set [surface_segregation].enabled=true"
+        )
+        return
+    typer.echo(f"\nWrote surface segregation output: {output}")
+
+
 @app.command("leaching")
 def leaching_cmd(
     config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
@@ -338,7 +361,7 @@ def leaching_cmd(
     ),
     verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
 ) -> None:
-    """Step 15: Analyze thermodynamic dopant leaching from selected surfaces."""
+    """Step 16: Analyze thermodynamic dopant leaching from selected surfaces."""
     _init(config, verbose)
     output = run_leaching_from_toml(
         config,
@@ -359,7 +382,7 @@ def run_all_cmd(
         "--from",
         help=(
             "Start step key (refs, corrections, generate, scan, relax, filter, "
-            "bandgap, formation, collect, alloy-hull, phase-diagram, vacancies, site-preference, oxidation, conductivity, surface, leaching)"
+            "bandgap, formation, collect, alloy-hull, phase-diagram, vacancies, site-preference, oxidation, conductivity, surface, surface-segregation, leaching)"
         ),
     ),
     stop: str = typer.Option("phase-diagram", "--until", help="Stop step key (inclusive)"),
@@ -381,7 +404,7 @@ def run_all_cmd(
     Step keys:
       refs -> corrections -> generate -> scan -> relax -> filter -> bandgap
       -> formation -> collect -> alloy-hull -> phase-diagram -> vacancies
-      -> site-preference -> oxidation -> conductivity -> surface -> leaching
+      -> site-preference -> oxidation -> conductivity -> surface -> surface-segregation -> leaching
     """
     _init(config, verbose)
 
@@ -408,7 +431,8 @@ def run_all_cmd(
         ("oxidation", "12 oxidation", lambda: run_oxidation_from_toml(config)),
         ("conductivity", "13 conductivity", lambda: run_conductivity_from_toml(config)),
         ("surface", "14 surface scan/refine", lambda: run_surface_workflow_from_toml(config)),
-        ("leaching", "15 dopant leaching", lambda: run_leaching_from_toml(config)),
+        ("surface-segregation", "15 surface segregation MC", lambda: run_surface_segregation_from_toml(config)),
+        ("leaching", "16 dopant leaching", lambda: run_leaching_from_toml(config)),
     ]
 
     key_to_idx = {k: i for i, (k, _, _) in enumerate(steps)}
@@ -448,7 +472,7 @@ def run_all_cmd(
         typer.echo(f"\n=== {title} ({k}) ===")
         res = fn()
 
-        if k in {"collect", "alloy-hull", "phase-diagram", "vacancies", "site-preference", "oxidation", "surface", "leaching"} and isinstance(res, Path):
+        if k in {"collect", "alloy-hull", "phase-diagram", "vacancies", "site-preference", "oxidation", "surface", "surface-segregation", "leaching"} and isinstance(res, Path):
             typer.echo(f"\nWrote output: {res}")
 
 
