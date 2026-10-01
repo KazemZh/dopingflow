@@ -25,7 +25,7 @@ Vacancy Results → Optional M0/M1-corrected Vacancy Thermodynamics
 
 Vacancy Results → Vacancy-resolved Raw/Corrected Phase Diagram
 
-Database → Surface Scan → Higher-Fidelity Surface Refinement → Dopant Leaching
+Database → Surface Scan → Higher-Fidelity Surface Refinement → Surface Segregation MC → Dopant Leaching
 
 The vacancy M0/M1 option reuses the already fitted backend-specific correction
 model. It does not refit a separate vacancy-specific model. The correction is
@@ -199,7 +199,17 @@ grand-potential hull.
    - Keep screening and refinement energies separated by calculator provenance
    - Preserve non-stoichiometric terminations without ranking them by raw total energy
 
-15. Dopant leaching from selected surfaces (optional)
+15. Surface segregation Monte Carlo (optional)
+
+   - Select exact natural surface terminations from the screen/refinement outputs
+   - Keep the slab geometry fixed and sample host↔dopant cation swaps at finite temperature
+   - Use a user-selected MLFF for Metropolis single-point energies
+   - Accumulate site-resolved and surface/subsurface/bulk dopant occupancies after burn-in
+   - Normalize depth-zone populations by the number of available cation sites
+   - Report occupancy-derived effective segregation free energies relative to bulk
+   - Save MC convergence, swap acceptance, site heat-map, and representative structures
+
+16. Dopant leaching from selected surfaces (optional)
 
    - Reuse the selected staged-surface structures and compatible parent energies
    - Remove exposed dopant atoms one site at a time and relax the dopant-vacancy slab
@@ -286,7 +296,14 @@ A typical workflow consists of:
    If both calculator dependencies are available in the same environment,
    dopingflow surface -c input.toml runs both stages in sequence.
 
-7. Previewing and running dopant leaching on the selected surfaces:
+7. Sampling finite-temperature segregation on selected refined surfaces:
+
+   ::
+
+      dopingflow surface-segregation -c input.toml --dry-run
+      dopingflow surface-segregation -c input.toml
+
+8. Previewing and running dopant leaching on the selected surfaces:
 
    ::
 
