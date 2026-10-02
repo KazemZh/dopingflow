@@ -45,6 +45,7 @@ cfg = toml.load(str(config_path))
 saved = dict(cfg.get("surface_pourbaix", {}) or {})
 saved_screen = dict(saved.get("screen", {}) or {})
 saved_dft = dict(saved.get("dft", {}) or {})
+surface_cfg = dict(cfg.get("surface", {}) or {})
 
 
 def _csv(value: Any) -> str:
@@ -59,6 +60,26 @@ def _items(text: str) -> list[str]:
 
 def _ints(text: str) -> list[int]:
     return sorted(set(int(x.strip()) for x in text.split(",") if x.strip()))
+
+
+def _floats(text: str) -> list[float]:
+    return list(dict.fromkeys(float(x.strip()) for x in text.split(",") if x.strip()))
+
+
+def _mixed_coverage_text(value: Any) -> str:
+    pairs = value or [[25, 25], [25, 75], [50, 50], [75, 25]]
+    return ", ".join(f"{float(pair[0]):g}:{float(pair[1]):g}" for pair in pairs)
+
+
+def _mixed_coverages(text: str) -> list[list[float]]:
+    pairs: list[list[float]] = []
+    for raw in text.split(","):
+        item = raw.strip()
+        if not item:
+            continue
+        left, right = item.split(":", 1)
+        pairs.append([float(left.strip()), float(right.strip())])
+    return pairs
 
 
 @st.cache_data(show_spinner=False)
@@ -231,37 +252,147 @@ with st.expander("Configuration & run controls", expanded=True):
             ["clean", "protonated", "O", "OH", "H2O", "mixed-O-OH"],
         )),
     )
+
     s1, s2, s3, s4 = st.columns(4)
-    sides = ["top", "bottom", "both"]
-    saved_side = str(saved.get("placement_side", "top"))
+    side_options = ["dopant-nearest", "top", "bottom", "both"]
+    side_labels = {
+        "dopant-nearest": "Near dopants — automatic (recommended)",
+        "top": "Top",
+        "bottom": "Bottom",
+        "both": "Both",
+    }
+    saved_side = str(saved.get("placement_side", "dopant-nearest")).replace("_", "-")
+    if saved_side not in side_options:
+        saved_side = "dopant-nearest"
     placement_side = s1.selectbox(
-        "Surface side", sides, index=sides.index(saved_side) if saved_side in sides else 0
+        "Adsorbate / protonation side",
+        side_options,
+        index=side_options.index(saved_side),
+        format_func=lambda value: side_labels[value],
+        help=(
+            "Automatic mode evaluates the actual doped slab and chooses the side "
+            "closest to the selected dopant species independently for every surface."
+        ),
     )
     surface_window = s2.number_input(
         "Exposed-site window (Å)", min_value=0.1,
         value=float(saved.get("surface_window_A", 2.0)), step=0.1,
     )
     max_o_sites = s3.number_input(
-        "Max surface O sites", min_value=1,
-        value=int(saved.get("max_surface_oxygen_sites", 8)), step=1,
+        "Max exposed O sites (0 = all)",
+        min_value=0,
+        value=int(saved.get("max_surface_oxygen_sites", 0)),
+        step=1,
+        help="0 uses every eligible exposed O site and is recommended for coverage definitions.",
     )
     max_cat_sites = s4.number_input(
-        "Max surface cation sites", min_value=1,
-        value=int(saved.get("max_surface_cation_sites", 8)), step=1,
+        "Max exposed cation sites (0 = all)",
+        min_value=0,
+        value=int(saved.get("max_surface_cation_sites", 0)),
+        step=1,
+        help="0 uses every eligible exposed cation adsorption site.",
     )
-    s5, s6, s7 = st.columns(3)
-    h_counts_text = s5.text_input("H counts", value=_csv(saved.get("h_counts", [1, 2, 3, 4])))
-    ads_counts_text = s6.text_input(
-        "O/OH/H2O counts", value=_csv(saved.get("adsorbate_counts", [1, 2]))
+
+    inferred_side_targets = (
+        saved.get("side_target_species")
+        or surface_cfg.get("dopant_species")
+        or []
     )
-    max_arrangements = s7.number_input(
-        "Max arrangements / stoichiometry", min_value=1,
-        value=int(saved.get("max_arrangements_per_stoichiometry", 8)), step=1,
+    side_target_text = st.text_input(
+        "Dopant species for automatic side selection",
+        value=_csv(inferred_side_targets),
+        disabled=placement_side != "dopant-nearest",
+        help=(
+            "Example: Sb, In. Leave blank to infer all non-host cations from each "
+            "actual surface. The nearest depth is calculated per species, then "
+            "averaged so one dopant type does not dominate simply by atom count."
+        ),
+    )
+    side_target_species = _items(side_target_text)
+    if placement_side == "dopant-nearest":
+        st.caption(
+            "If top and bottom are equally close within the tie tolerance, both sides "
+            "are sampled rather than choosing one arbitrarily."
+        )
+
+    st.markdown("**Coverage grid (% of eligible sites on the selected side)**")
+    cH, cO, cOH, cW = st.columns(4)
+    proton_coverage_text = cH.text_input(
+        "Protonated O coverage (%)",
+        value=_csv(saved.get("proton_coverages_pct", [25, 50, 75, 100])),
+    )
+    o_coverage_text = cO.text_input(
+        "O* coverage (%)",
+        value=_csv(saved.get("o_coverages_pct", [25, 50, 75, 100])),
+    )
+    oh_coverage_text = cOH.text_input(
+        "OH* coverage (%)",
+        value=_csv(saved.get("oh_coverages_pct", [25, 50, 75, 100])),
+    )
+    h2o_coverage_text = cW.text_input(
+        "H2O* coverage (%)",
+        value=_csv(saved.get("h2o_coverages_pct", [25, 50, 100])),
+    )
+    mixed_coverage_text = st.text_input(
+        "Mixed O*:OH* coverage pairs (%)",
+        value=_mixed_coverage_text(saved.get("mixed_coverages_pct")),
+        help=(
+            "Format O%:OH%, separated by commas; e.g. 25:25, 25:75, 50:50, 75:25. "
+            "The two coverages must sum to at most 100%."
+        ),
     )
     st.caption(
-        "Mixed O/OH defaults to one O* + one OH*. Edit mixed_compositions in input.toml "
-        "for additional mixed stoichiometries."
+        "Coverage is converted to the nearest realizable integer occupation for each "
+        "surface. If the requested coverage lies exactly halfway between two integer "
+        "counts (for example 25% of 10 sites), both realizations are kept: 20% and 30%."
     )
+
+    q1, q2 = st.columns(2)
+    max_arrangements = q1.number_input(
+        "Max symmetry-distinct configurations / coverage",
+        min_value=1,
+        value=int(saved.get("max_arrangements_per_stoichiometry", 8)),
+        step=1,
+        help=(
+            "Symmetry-equivalent patterns are removed first. If more configurations "
+            "remain, a geometry/dopant-proximity diversity selection is applied."
+        ),
+    )
+    symmetry_reduce = q2.checkbox(
+        "Remove symmetry-equivalent arrangements",
+        value=bool(saved.get("symmetry_reduce", True)),
+        help=(
+            "Symmetry is determined from the actual doped/vacancy slab, not the "
+            "undoped parent crystal."
+        ),
+    )
+
+    with st.expander("Advanced site/symmetry controls"):
+        a1, a2, a3, a4 = st.columns(4)
+        symmetry_symprec = a1.number_input(
+            "Symmetry tolerance (Å)",
+            min_value=0.001,
+            value=float(saved.get("symmetry_symprec_A", 0.10)),
+            step=0.01,
+        )
+        symmetry_mapping_tol = a2.number_input(
+            "Site mapping tolerance (Å)",
+            min_value=0.001,
+            value=float(saved.get("symmetry_mapping_tolerance_A", 0.25)),
+            step=0.01,
+        )
+        side_tie_tol = a3.number_input(
+            "Dopant-side tie tolerance (Å)",
+            min_value=0.0,
+            value=float(saved.get("dopant_side_tie_tolerance_A", 0.25)),
+            step=0.05,
+        )
+        max_raw_configs = a4.number_input(
+            "Max raw patterns / coverage",
+            min_value=100,
+            value=int(saved.get("max_raw_configurations_per_stoichiometry", 100000)),
+            step=1000,
+        )
 
     st.subheader("Electrochemical grid")
     p1, p2, p3, p4 = st.columns(4)
@@ -500,16 +631,31 @@ with st.expander("Configuration & run controls", expanded=True):
     section.update(
         enabled=enabled, source_mode=source_mode, source_summary=source_summary,
         surface_include=effective_surface_include, max_surfaces=int(max_surfaces),
-        placement_side=placement_side, state_families=families,
-        h_counts=_ints(h_counts_text), adsorbate_counts=_ints(ads_counts_text),
-        surface_window_A=float(surface_window), max_surface_oxygen_sites=int(max_o_sites),
+        placement_side=placement_side, side_target_species=side_target_species,
+        state_families=families,
+        proton_coverages_pct=_floats(proton_coverage_text),
+        o_coverages_pct=_floats(o_coverage_text),
+        oh_coverages_pct=_floats(oh_coverage_text),
+        h2o_coverages_pct=_floats(h2o_coverage_text),
+        mixed_coverages_pct=_mixed_coverages(mixed_coverage_text),
+        surface_window_A=float(surface_window),
+        max_surface_oxygen_sites=int(max_o_sites),
         max_surface_cation_sites=int(max_cat_sites),
+        symmetry_reduce=bool(symmetry_reduce),
+        symmetry_symprec_A=float(symmetry_symprec),
+        symmetry_mapping_tolerance_A=float(symmetry_mapping_tol),
+        dopant_side_tie_tolerance_A=float(side_tie_tol),
+        max_raw_configurations_per_stoichiometry=int(max_raw_configs),
         max_arrangements_per_stoichiometry=int(max_arrangements),
         pH_min=float(ph_min), pH_max=float(ph_max), pH_step=float(ph_step),
         potential_scale=potential_scale, potential_min_V=float(u_min),
         potential_max_V=float(u_max), potential_step_V=float(u_step),
         temperature_K=float(temperature),
     )
+    # Remove superseded count-based controls when an older input.toml is upgraded.
+    for legacy_key in ("h_counts", "adsorbate_counts", "mixed_compositions"):
+        section.pop(legacy_key, None)
+
     section["screen"] = {
         **saved_screen, "backend": backend, "model": model, "task": task,
         "device": device, "optimizer": optimizer, "fmax": float(fmax),
