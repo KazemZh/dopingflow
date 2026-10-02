@@ -181,6 +181,19 @@ def _enrich_grid_for_display(
         "arrangement_id",
         "symmetry_unique_arrangements",
         "symmetry_operations",
+        "state_status",
+        "pourbaix_eligible",
+        "final_family",
+        "final_state_label",
+        "postprocess_reason",
+        "n_surface_O2",
+        "n_desorbed_O2",
+        "n_desorbed_H2O",
+        "n_unbound_H",
+        "final_protonated_coverage_pct",
+        "final_o_coverage_pct",
+        "final_oh_coverage_pct",
+        "final_h2o_coverage_pct",
     )
     for key in metadata_keys:
         if key not in output.columns:
@@ -273,6 +286,9 @@ def _phase_map_figure(view: pd.DataFrame, surface_id: str) -> go.Figure:
         side = _valid_text(row.get("resolved_placement_side"))
         if side:
             parts.append(f"Resolved side: {side}")
+        status = _valid_text(row.get("state_status"))
+        if status:
+            parts.append(f"Post-relaxation status: {status}")
         parts.append(f"Raw state ID: {row['stable_state_id']}")
         arrangement = _valid_text(row.get("arrangement_id"))
         if arrangement:
@@ -668,6 +684,68 @@ with st.expander("Configuration & run controls", expanded=True):
             step=1000,
         )
 
+    with st.expander("Post-relaxation chemistry validation", expanded=True):
+        st.caption(
+            "The final relaxed geometry, not the generated starting label, determines "
+            "whether a state enters the Pourbaix diagram. Detached O2/H2O and fragmented "
+            "states are excluded by default; adsorbed reconstructions can be reclassified."
+        )
+        v1, v2, v3 = st.columns(3)
+        validate_relaxed = v1.checkbox(
+            "Validate relaxed surface chemistry",
+            value=bool(saved.get("postprocess_validate_relaxed_states", True)),
+        )
+        exclude_desorbed = v2.checkbox(
+            "Exclude desorbed states",
+            value=bool(saved.get("postprocess_exclude_desorbed", True)),
+            disabled=not validate_relaxed,
+        )
+        exclude_fragmented = v3.checkbox(
+            "Exclude fragmented states",
+            value=bool(saved.get("postprocess_exclude_fragmented", True)),
+            disabled=not validate_relaxed,
+        )
+        allow_reclassified = st.checkbox(
+            "Allow adsorbed reconstructed/reclassified states in Pourbaix competition",
+            value=bool(saved.get("postprocess_allow_reclassified", True)),
+            disabled=not validate_relaxed,
+            help=(
+                "For example, if 2OH* relaxes to O* + H2O* while everything remains "
+                "surface-bound, the final chemistry is relabeled and can still compete."
+            ),
+        )
+        vc1, vc2, vc3, vc4 = st.columns(4)
+        oh_bond_cutoff = vc1.number_input(
+            "O-H bond cutoff (Å)",
+            min_value=0.5,
+            value=float(saved.get("postprocess_oh_bond_cutoff_A", 1.25)),
+            step=0.05,
+        )
+        oo_bond_cutoff = vc2.number_input(
+            "O-O molecular cutoff (Å)",
+            min_value=0.8,
+            value=float(saved.get("postprocess_oo_bond_cutoff_A", 1.75)),
+            step=0.05,
+            help=(
+                "Used only as a structural O-O-like flag; it does not assign "
+                "O2/superoxo/peroxo electronic character."
+            ),
+        )
+        attachment_cutoff = vc3.number_input(
+            "Surface O-cation attachment cutoff (Å)",
+            min_value=1.0,
+            value=float(
+                saved.get("postprocess_surface_attachment_cutoff_A", 2.80)
+            ),
+            step=0.05,
+        )
+        hh_bond_cutoff = vc4.number_input(
+            "H-H molecular cutoff (Å)",
+            min_value=0.4,
+            value=float(saved.get("postprocess_hh_bond_cutoff_A", 0.90)),
+            step=0.05,
+        )
+
     st.subheader("Electrochemical grid")
     p1, p2, p3, p4 = st.columns(4)
     ph_min = p1.number_input("pH minimum", value=float(saved.get("pH_min", -1.0)), step=0.1)
@@ -921,6 +999,14 @@ with st.expander("Configuration & run controls", expanded=True):
         dopant_side_tie_tolerance_A=float(side_tie_tol),
         max_raw_configurations_per_stoichiometry=int(max_raw_configs),
         max_arrangements_per_stoichiometry=int(max_arrangements),
+        postprocess_validate_relaxed_states=bool(validate_relaxed),
+        postprocess_exclude_desorbed=bool(exclude_desorbed),
+        postprocess_exclude_fragmented=bool(exclude_fragmented),
+        postprocess_allow_reclassified=bool(allow_reclassified),
+        postprocess_oh_bond_cutoff_A=float(oh_bond_cutoff),
+        postprocess_oo_bond_cutoff_A=float(oo_bond_cutoff),
+        postprocess_surface_attachment_cutoff_A=float(attachment_cutoff),
+        postprocess_hh_bond_cutoff_A=float(hh_bond_cutoff),
         pH_min=float(ph_min), pH_max=float(ph_max), pH_step=float(ph_step),
         potential_scale=potential_scale, potential_min_V=float(u_min),
         potential_max_V=float(u_max), potential_step_V=float(u_step),
@@ -1041,6 +1127,46 @@ try:
         st.info("No surface-Pourbaix results yet.")
 
     if state_summary is not None and not state_summary.empty:
+        st.markdown("**Post-relaxation state validation**")
+        if "state_status" in state_summary.columns:
+            validation_summary = (
+                state_summary.groupby(
+                    ["state_status", "pourbaix_eligible"],
+                    dropna=False,
+                )
+                .size()
+                .reset_index(name="n_states")
+                .sort_values("n_states", ascending=False)
+            )
+            st.dataframe(validation_summary, width="stretch", hide_index=True)
+
+            excluded_mask = ~state_summary["pourbaix_eligible"].fillna(False).astype(bool)
+            excluded = state_summary[excluded_mask].copy()
+            if not excluded.empty:
+                st.warning(
+                    f"{len(excluded)} relaxed state(s) were excluded from the Pourbaix "
+                    "competition because the intended surface chemistry did not survive."
+                )
+                excluded_columns = [
+                    "surface_id",
+                    "requested_state_label",
+                    "final_state_label",
+                    "state_status",
+                    "postprocess_reason",
+                    "n_desorbed_O2",
+                    "n_desorbed_H2O",
+                    "n_unbound_H",
+                    "ml_structure_path",
+                    "state_id",
+                ]
+                st.dataframe(
+                    excluded[
+                        [column for column in excluded_columns if column in excluded.columns]
+                    ],
+                    width="stretch",
+                    hide_index=True,
+                )
+
         with st.expander("All sampled surface states / provenance"):
             st.dataframe(state_summary, width="stretch", hide_index=True)
 except Exception as exc:
