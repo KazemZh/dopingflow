@@ -209,9 +209,19 @@ grand-potential hull.
    - Report occupancy-derived effective segregation free energies relative to bulk
    - Save MC convergence, swap acceptance, site heat-map, and representative structures
 
-16. Dopant leaching from selected surfaces (optional)
+16. Electrochemical surface states / Surface Pourbaix (optional)
 
-   - Reuse the selected staged-surface structures and compatible parent energies
+   - Start from the intact structures selected by surface-segregation MC (preferred) or staged surface screening
+   - Sample protonated, O*, OH*, H2O*, and mixed O/OH states over multiple coverages and site arrangements
+   - ML-relax all sampled states with restart-safe checkpoints
+   - Use the Computational Hydrogen Electrode to determine stable surface states versus potential and pH
+   - Default to pH -1 through 3, with configurable SHE/RHE scale and potential window
+   - Optionally refine ML-stable and near-stable states with provenance-checked GPAW single points
+   - Write a stable-state hand-off table for leaching
+
+17. Dopant leaching from electrochemically stable surfaces (optional)
+
+   - Prefer the stable Surface-Pourbaix structures and compatible parent energies
    - Remove exposed dopant atoms one site at a time and relax the dopant-vacancy slab
    - Reference the extraction energy to the elemental metal chemical potential
    - Reuse compatible global metal references or calculate/cache missing same-model references
@@ -240,7 +250,7 @@ Notes
 - The vacancy-resolved closed-system hull is only as complete as the competing
   phases supplied to the phase-diagram calculation.
 - Surface scanning can be run as one optional run-all stage or split into surface-scan and surface-refine commands when GRACE and MACE live in different environments.
-- Dopant leaching is a thermodynamic post-processing stage on the selected surfaces; electrochemical values require an explicitly chosen aqueous redox reference.
+- Surface Pourbaix determines intact-surface O/H termination stability with the CHE; it is distinct from bulk aqueous phase stability.\n- Dopant leaching is a thermodynamic post-processing stage on those stable surfaces; dissolution electrochemical values require an explicitly chosen aqueous redox reference.
 
 Typical Usage
 -------------
@@ -303,7 +313,16 @@ A typical workflow consists of:
       dopingflow surface-segregation -c input.toml --dry-run
       dopingflow surface-segregation -c input.toml
 
-8. Previewing and running dopant leaching on the selected surfaces:
+8. Sampling electrochemical surface states and building the surface Pourbaix map:
+
+   ::
+
+      dopingflow surface-pourbaix -c input.toml --dry-run
+      dopingflow surface-pourbaix -c input.toml
+
+   The default electrochemical window is pH -1 to 3 and 0--2 V vs SHE.
+
+9. Previewing and running dopant leaching on the electrochemically stable surfaces:
 
    ::
 
