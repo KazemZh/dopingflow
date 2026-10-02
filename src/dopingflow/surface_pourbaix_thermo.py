@@ -73,6 +73,8 @@ def build_surface_pourbaix_grid(
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     usable = []
     for state in states:
+        if "pourbaix_eligible" in state and not bool(state["pourbaix_eligible"]):
+            continue
         try:
             energy = float(state[energy_key])
             d_h, d_o = int(state["delta_n_H"]), int(state["delta_n_O"])
@@ -103,7 +105,8 @@ def build_surface_pourbaix_grid(
             rows.append(dict(
                 applied_potential_V=float(potential), pH=float(pH),
                 potential_scale=str(potential_scale).upper(), temperature_K=float(temperature_K),
-                stable_state_id=str(best_state["state_id"]), stable_family=str(best_state["family"]),
+                stable_state_id=str(best_state["state_id"]),
+                stable_family=str(best_state.get("final_family", best_state["family"])),
                 deltaG_stable_eV=float(best_dg), delta_n_H=int(best_state["delta_n_H"]),
                 delta_n_O=int(best_state["delta_n_O"]),
                 proton_electron_pairs=int(best_state["proton_electron_pairs"]),
