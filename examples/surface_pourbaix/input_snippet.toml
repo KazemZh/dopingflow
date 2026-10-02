@@ -9,16 +9,34 @@ max_surfaces = 10
 outdir = "10_surface_pourbaix"
 
 # Sample both coverage and arrangement. "clean" is always retained as the reference.
-placement_side = "top"
+# Automatic side selection is evaluated independently for every actual doped surface.
+placement_side = "dopant-nearest"     # dopant-nearest, top, bottom, both
+side_target_species = ["Sb", "In"]    # blank/[] -> infer all non-host cations
+dopant_side_tie_tolerance_A = 0.25
+dopant_side_fallback = "top"
+
 anion_species = ["O"]
 state_families = ["clean", "protonated", "O", "OH", "H2O", "mixed-O-OH"]
-h_counts = [1, 2, 3, 4]
-adsorbate_counts = [1, 2]
-mixed_compositions = [[1, 1]]        # [n(O*), n(OH*)]
+
+# Coverages are percentages of the eligible sites on the selected surface side.
+proton_coverages_pct = [25, 50, 75, 100]
+o_coverages_pct = [25, 50, 75, 100]
+oh_coverages_pct = [25, 50, 75, 100]
+h2o_coverages_pct = [25, 50, 100]
+mixed_coverages_pct = [[25, 25], [25, 75], [50, 50], [75, 25]]
+
 surface_window_A = 2.0
-max_surface_oxygen_sites = 8
-max_surface_cation_sites = 8
+max_surface_oxygen_sites = 0          # 0 = all eligible sites
+max_surface_cation_sites = 0          # 0 = all eligible sites
+
+# Symmetry is determined from the actual doped/vacancy slab.
+symmetry_reduce = true
+symmetry_symprec_A = 0.10
+symmetry_angle_tolerance_deg = 5.0
+symmetry_mapping_tolerance_A = 0.25
+max_raw_configurations_per_stoichiometry = 100000
 max_arrangements_per_stoichiometry = 8
+
 oh_bond_length_A = 0.98
 adsorbate_height_A = 1.85
 
