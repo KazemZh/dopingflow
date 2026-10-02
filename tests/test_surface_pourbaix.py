@@ -8,6 +8,7 @@ from dopingflow.surface_pourbaix import (
     build_surface_pourbaix_grid,
     enumerate_surface_states,
     parse_surface_pourbaix_config,
+    resolve_surface_pourbaix_source_summary,
     surface_state_delta_g_eV,
 )
 from dopingflow.surface_pourbaix_thermo import KB_EV_K, LN10
@@ -206,3 +207,61 @@ def test_dft_candidate_selection_ignores_failed_ml_state_gap() -> None:
     cfg = {"dft": {"candidate_window_eV": 0.30, "max_states_per_surface": 10}}
     selected = _select_dft_candidates(records, cfg)
     assert [row["state_id"] for row in selected] == ["clean", "good"]
+
+
+def test_surface_pourbaix_direct_surface_source_does_not_require_segregation(tmp_path) -> None:
+    surface_dir = tmp_path / "structures-analysis" / "08_surfaces"
+    surface_dir.mkdir(parents=True)
+    direct = surface_dir / "surface_final_selected.csv"
+    direct.write_text("surface_id\ndirect-surface\n", encoding="utf-8")
+
+    config = {
+        "surface": {
+            "source_root": "structures-analysis",
+            "outdir": "08_surfaces",
+        },
+        "surface_pourbaix": {
+            "enabled": True,
+            "source_mode": "surface",
+        },
+    }
+    path, mode = resolve_surface_pourbaix_source_summary(config, tmp_path)
+    assert path == direct.resolve()
+    assert mode == "final-selected"
+
+
+def test_surface_pourbaix_auto_prefers_direct_surface_over_existing_segregation(tmp_path) -> None:
+    root = tmp_path / "structures-analysis"
+    surface_dir = root / "08_surfaces"
+    surface_dir.mkdir(parents=True)
+    direct = surface_dir / "surface_final_selected.csv"
+    direct.write_text("surface_id\ndirect-surface\n", encoding="utf-8")
+
+    segregation_dir = root / "09_surface_segregation"
+    segregation_dir.mkdir(parents=True)
+    segregation = segregation_dir / "surface_segregation_summary.csv"
+    segregation.write_text("surface_id\nsegregated-surface\n", encoding="utf-8")
+
+    config = {
+        "surface": {
+            "source_root": "structures-analysis",
+            "outdir": "08_surfaces",
+        },
+        "surface_segregation": {
+            "source_root": "structures-analysis",
+            "outdir": "09_surface_segregation",
+        },
+        "surface_pourbaix": {
+            "enabled": True,
+            "source_mode": "auto",
+        },
+    }
+
+    auto_path, auto_mode = resolve_surface_pourbaix_source_summary(config, tmp_path)
+    assert auto_path == direct.resolve()
+    assert auto_mode == "final-selected"
+
+    config["surface_pourbaix"]["source_mode"] = "segregation"
+    seg_path, seg_mode = resolve_surface_pourbaix_source_summary(config, tmp_path)
+    assert seg_path == segregation.resolve()
+    assert seg_mode == "segregation"
