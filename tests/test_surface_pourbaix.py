@@ -10,6 +10,7 @@ from dopingflow.surface_pourbaix import (
     surface_state_delta_g_eV,
 )
 from dopingflow.surface_pourbaix_thermo import KB_EV_K, LN10
+from dopingflow.leaching import parse_leaching_config, resolve_surface_summary
 
 
 def _slab() -> Structure:
@@ -120,3 +121,32 @@ def test_grid_selects_lowest_free_energy_state() -> None:
     )
     assert list(grid["stable_state_id"]) == ["H", "clean"]
     assert set(gaps["state_id"]) == {"clean", "H"}
+
+
+def test_leaching_auto_prefers_surface_pourbaix_handoff(tmp_path) -> None:
+    source_root = tmp_path / "structures-analysis"
+    old_surface = source_root / "08_surfaces"
+    old_surface.mkdir(parents=True)
+    final_selected = old_surface / "surface_final_selected.csv"
+    final_selected.write_text("surface_id\nold-clean-surface\n", encoding="utf-8")
+
+    pourbaix_dir = source_root / "10_surface_pourbaix"
+    pourbaix_dir.mkdir(parents=True)
+    handoff = pourbaix_dir / "leaching_surface_states.csv"
+    handoff.write_text("surface_id\nstable-electrochemical-surface\n", encoding="utf-8")
+
+    config = {
+        "surface": {
+            "source_root": "structures-analysis",
+            "outdir": "08_surfaces",
+        },
+        "surface_pourbaix": {
+            "outdir": "10_surface_pourbaix",
+        },
+        "leaching": {
+            "enabled": True,
+            "source_mode": "auto",
+        },
+    }
+    cfg = parse_leaching_config(config, tmp_path)
+    assert resolve_surface_summary(config, cfg) == handoff.resolve()
