@@ -19,6 +19,9 @@ from dopingflow.surface_pourbaix_sampling import (
     resolve_placement_side,
     symmetry_permutations,
 )
+from dopingflow.surface_pourbaix_postprocess import (
+    analyze_relaxed_surface_state,
+)
 from dopingflow.leaching import (
     enumerate_leaching_sites,
     parse_leaching_config,
@@ -395,3 +398,209 @@ def test_surface_state_display_labels_use_actual_coverage_not_arrangement_ids() 
     assert surface_state_display_label(
         {"state_id": "clean", "family": "clean"}
     ) == "Clean"
+
+
+def _postprocess_parent() -> Structure:
+    lattice = Lattice.from_parameters(6.0, 6.0, 20.0, 90, 90, 90)
+    return Structure(
+        lattice,
+        ["Sn", "Sn", "O", "O"],
+        [
+            [0.25, 0.25, 0.45],
+            [0.75, 0.75, 0.45],
+            [0.25, 0.25, 0.38],
+            [0.75, 0.75, 0.38],
+        ],
+    )
+
+
+def _mixed_o_oh_generated() -> tuple[Structure, Structure, dict]:
+    parent = _postprocess_parent()
+    generated = parent.copy()
+    o_site_0 = parent[0].coords + [0.0, 0.0, 2.0]
+    o_site_1 = parent[1].coords + [0.0, 0.0, 2.0]
+    generated.append("O", o_site_0, coords_are_cartesian=True)
+    generated.append("O", o_site_1, coords_are_cartesian=True)
+    generated.append(
+        "H",
+        o_site_1 + [0.0, 0.0, 0.98],
+        coords_are_cartesian=True,
+    )
+    state = {
+        "state_id": "mixed_O01_OH01_arr001",
+        "family": "mixed-O-OH",
+        "delta_n_H": 1,
+        "delta_n_O": 2,
+        "site_indices": [0, 1],
+        "o_site_indices": [0],
+        "oh_site_indices": [1],
+        "eligible_surface_oxygen_sites": 2,
+        "eligible_surface_cation_sites": 2,
+    }
+    return parent, generated, state
+
+
+def _postprocess_cfg() -> dict:
+    return {
+        "anion_species": ["O"],
+        "postprocess_validate_relaxed_states": True,
+        "postprocess_oh_bond_cutoff_A": 1.25,
+        "postprocess_oo_bond_cutoff_A": 1.75,
+        "postprocess_surface_attachment_cutoff_A": 2.80,
+        "postprocess_hh_bond_cutoff_A": 0.90,
+        "postprocess_exclude_desorbed": True,
+        "postprocess_exclude_fragmented": True,
+        "postprocess_allow_reclassified": True,
+    }
+
+
+def test_postprocess_retains_intact_mixed_o_oh_state() -> None:
+    parent, generated, state = _mixed_o_oh_generated()
+    result = analyze_relaxed_surface_state(
+        parent,
+        generated,
+        generated.copy(),
+        state,
+        _postprocess_cfg(),
+    )
+    assert result["state_status"] == "retained"
+    assert result["pourbaix_eligible"] is True
+    assert result["final_family"] == "mixed-O-OH"
+    assert result["n_surface_O"] == 1
+    assert result["n_surface_OH"] == 1
+    assert result["n_desorbed_O2"] == 0
+
+
+def test_postprocess_excludes_mixed_state_that_forms_detached_o2() -> None:
+    parent, generated, state = _mixed_o_oh_generated()
+    coords = generated.cart_coords.copy()
+
+    # The two added oxygen atoms form an O-O molecule far from the slab.
+    coords[4] = [2.4, 2.4, 16.0]
+    coords[5] = [3.6, 2.4, 16.0]
+    # The proton transfers back to an original lattice oxygen.
+    coords[6] = parent[2].coords + [0.0, 0.0, 0.98]
+    relaxed = Structure(
+        generated.lattice,
+        [site.specie for site in generated],
+        coords,
+        coords_are_cartesian=True,
+    )
+
+    result = analyze_relaxed_surface_state(
+        parent,
+        generated,
+        relaxed,
+        state,
+        _postprocess_cfg(),
+    )
+    assert result["state_status"] == "desorbed"
+    assert result["pourbaix_eligible"] is False
+    assert result["n_desorbed_O2"] == 1
+    assert result["n_protonated_lattice_O"] == 1
+
+
+def test_postprocess_reclassifies_surface_bound_oh_disproportionation() -> None:
+    parent = _postprocess_parent()
+    generated = parent.copy()
+    o0 = parent[0].coords + [0.0, 0.0, 2.0]
+    o1 = parent[1].coords + [0.0, 0.0, 2.0]
+    generated.append("O", o0, coords_are_cartesian=True)
+    generated.append("H", o0 + [0.0, 0.0, 0.98], coords_are_cartesian=True)
+    generated.append("O", o1, coords_are_cartesian=True)
+    generated.append("H", o1 + [0.0, 0.0, 0.98], coords_are_cartesian=True)
+
+    state = {
+        "state_id": "OH_02_arr001",
+        "family": "OH",
+        "delta_n_H": 2,
+        "delta_n_O": 2,
+        "site_indices": [0, 1],
+        "eligible_surface_oxygen_sites": 2,
+        "eligible_surface_cation_sites": 2,
+    }
+
+    coords = generated.cart_coords.copy()
+    # Move both H atoms onto the second added O: O* + H2O* remains surface-bound.
+    coords[5] = o1 + [0.70, 0.0, 0.70]
+    coords[7] = o1 + [-0.70, 0.0, 0.70]
+    relaxed = Structure(
+        generated.lattice,
+        [site.specie for site in generated],
+        coords,
+        coords_are_cartesian=True,
+    )
+
+    result = analyze_relaxed_surface_state(
+        parent,
+        generated,
+        relaxed,
+        state,
+        _postprocess_cfg(),
+    )
+    assert result["state_status"] == "reclassified"
+    assert result["pourbaix_eligible"] is True
+    assert result["n_surface_O"] == 1
+    assert result["n_surface_H2O"] == 1
+    assert result["final_family"] == "reconstructed"
+    assert "O*" in result["final_state_label"]
+    assert "H₂O*" in result["final_state_label"]
+
+
+def test_pourbaix_grid_ignores_postprocess_ineligible_low_energy_state() -> None:
+    states = [
+        {
+            "state_id": "clean",
+            "family": "clean",
+            "final_family": "clean",
+            "pourbaix_eligible": True,
+            "delta_n_H": 0,
+            "delta_n_O": 0,
+            "proton_electron_pairs": 0,
+            "energy": -10.0,
+        },
+        {
+            "state_id": "detached_o2",
+            "family": "O",
+            "final_family": "desorbed",
+            "pourbaix_eligible": False,
+            "delta_n_H": 0,
+            "delta_n_O": 2,
+            "proton_electron_pairs": -4,
+            "energy": -100.0,
+        },
+        {
+            "state_id": "valid_oh",
+            "family": "OH",
+            "final_family": "OH",
+            "pourbaix_eligible": True,
+            "delta_n_H": 1,
+            "delta_n_O": 1,
+            "proton_electron_pairs": -1,
+            "energy": -11.0,
+        },
+    ]
+    grid, _ = build_surface_pourbaix_grid(
+        states,
+        h2_energy_eV=-6.0,
+        h2o_energy_eV=-14.0,
+        potential_values=[0.0, 1.0],
+        pH_values=[0.0],
+        potential_scale="SHE",
+        temperature_K=298.15,
+        energy_key="energy",
+        energy_level="test",
+    )
+    assert "detached_o2" not in set(grid["stable_state_id"])
+
+
+def test_display_label_prefers_post_relaxation_final_chemistry() -> None:
+    assert surface_state_display_label(
+        {
+            "state_id": "OH_02_arr001",
+            "family": "OH",
+            "actual_coverage_pct": 100.0,
+            "final_family": "reconstructed",
+            "final_state_label": "Reconstructed surface — 50% O*, 50% H₂O*",
+        }
+    ) == "Reconstructed surface — 50% O*, 50% H₂O*"
