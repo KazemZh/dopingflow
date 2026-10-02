@@ -25,7 +25,7 @@ Vacancy Results → Optional M0/M1-corrected Vacancy Thermodynamics
 
 Vacancy Results → Vacancy-resolved Raw/Corrected Phase Diagram
 
-Database → Surface Scan → Higher-Fidelity Surface Refinement → Surface Segregation MC → Surface Pourbaix → Dopant Leaching
+Database → Surface Scan → Higher-Fidelity Surface Refinement → [optional Surface Segregation MC] → Surface Pourbaix → Dopant Leaching
 
 The vacancy M0/M1 option reuses the already fitted backend-specific correction
 model. It does not refit a separate vacancy-specific model. The correction is
@@ -211,7 +211,8 @@ grand-potential hull.
 
 16. Electrochemical surface states / Surface Pourbaix (optional)
 
-   - Start from the intact structures selected by surface-segregation MC (preferred) or staged surface screening
+   - Start directly from staged Surface Screening/Refinement output by default
+   - Optionally use Surface Segregation MC structures when a segregation study has been performed
    - Sample protonated, O*, OH*, H2O*, and mixed O/OH states over multiple coverages and site arrangements
    - ML-relax all sampled states with restart-safe checkpoints
    - Use the Computational Hydrogen Electrode to determine stable surface states versus potential and pH
@@ -314,7 +315,7 @@ A typical workflow consists of:
       dopingflow surface-segregation -c input.toml --dry-run
       dopingflow surface-segregation -c input.toml
 
-8. Sampling electrochemical surface states and building the surface Pourbaix map:
+8. Sampling electrochemical surface states and building the surface Pourbaix map (segregation is optional):
 
    ::
 
