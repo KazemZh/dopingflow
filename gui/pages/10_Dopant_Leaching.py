@@ -411,13 +411,14 @@ with st.expander("Configuration & run controls", expanded=True):
     enabled = st.checkbox("Enable leaching stage", value=bool(saved.get("enabled", False)))
 
     st.subheader("Surface source and output")
-    source_modes = ["auto", "final-selected", "screen-selected", "refine-summary", "screen-summary"]
+    source_modes = ["auto", "surface-pourbaix", "final-selected", "screen-selected", "refine-summary", "screen-summary"]
     current_mode = str(saved.get("source_mode", "auto"))
     if current_mode not in source_modes:
         current_mode = "auto"
 
     inherited_source_root = (
         str(saved.get("source_root", "")).strip()
+        or str((cfg.get("surface_pourbaix", {}) or {}).get("source_root", "")).strip()
         or str(surface.get("source_root", "")).strip()
         or str((cfg.get("conductivity", {}) or {}).get("source_root", "")).strip()
         or str((cfg.get("oxidation", {}) or {}).get("source_root", "")).strip()
@@ -430,7 +431,7 @@ with st.expander("Configuration & run controls", expanded=True):
         value=inherited_source_root,
         help=(
             "Relative leaching output is created inside this directory. "
-            "By default it inherits the same source root used by the surface workflow."
+            "By default it inherits the source root used by Surface Pourbaix / the surface workflow."
         ),
     ).strip()
     source_mode = c2.selectbox("Surface table", source_modes, index=source_modes.index(current_mode))
@@ -445,7 +446,7 @@ with st.expander("Configuration & run controls", expanded=True):
     ).strip()
     outdir = c4.text_input(
         "Output directory",
-        value=str(saved.get("outdir", "09_leaching")),
+        value=str(saved.get("outdir", "11_leaching")),
         help="Relative paths are created inside Parent / source root; absolute paths are used exactly as entered.",
     ).strip()
 
