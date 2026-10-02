@@ -24,6 +24,9 @@ from dopingflow.surface_pourbaix_states import (
     ml_reference_energy,
     screen_state,
 )
+from dopingflow.surface_pourbaix_postprocess import (
+    analyze_relaxed_surface_state_path,
+)
 from dopingflow.surface_pourbaix_thermo import (
     build_surface_pourbaix_grid,
     summarize_stable_domains,
@@ -64,11 +67,15 @@ def _coverage_text(value: Any) -> str:
 def surface_state_display_label(state: Mapping[str, Any]) -> str:
     """Human-readable thermodynamic phase label for plots/tables.
 
-    Arrangement IDs remain available separately for provenance, but the phase
-    label is defined by chemistry + actual finite-cell coverage.
+    Arrangement IDs remain available separately for provenance. When
+    post-relaxation validation is available, the relaxed final chemistry takes
+    precedence over the originally generated state label.
     """
+    final_label = str(state.get("final_state_label") or "").strip()
+    if final_label:
+        return final_label
     family = str(
-        state.get("family", state.get("stable_family", ""))
+        state.get("final_family", state.get("family", state.get("stable_family", "")))
     ).strip()
     if family == "clean":
         return "Clean"
@@ -115,6 +122,29 @@ def _annotate_grid_with_state_metadata(
         "arrangement_id",
         "symmetry_unique_arrangements",
         "symmetry_operations",
+        "state_status",
+        "pourbaix_eligible",
+        "final_family",
+        "final_state_label",
+        "postprocess_reason",
+        "n_protonated_lattice_O",
+        "n_surface_O",
+        "n_surface_OH",
+        "n_surface_H2O",
+        "n_surface_O2",
+        "n_surface_OOH_like",
+        "n_desorbed_O",
+        "n_desorbed_OH",
+        "n_desorbed_H2O",
+        "n_desorbed_O2",
+        "n_unbound_H",
+        "n_H2_like",
+        "final_protonated_coverage_pct",
+        "final_o_coverage_pct",
+        "final_oh_coverage_pct",
+        "final_h2o_coverage_pct",
+        "final_o2_oxygen_coverage_pct",
+        "final_total_bound_added_O_coverage_pct",
     )
     for key in metadata_keys:
         output[key] = [
@@ -157,6 +187,7 @@ def _record_from_state(
         dft_energy_eV=None,
         dft_reused=None,
         dft_artifact="",
+        requested_state_label=surface_state_display_label(state),
     )
     # Sampling provenance is kept explicitly so coverage rounding, automatic side
     # selection, and symmetry reduction are visible in the final CSV rather than
@@ -206,8 +237,10 @@ def _select_dft_candidates(records: list[dict[str, Any]], cfg: Mapping[str, Any]
             return math.inf
 
     candidates = [
-        row for row in records
-        if row["family"] == "clean" or gap(row) <= window
+        row
+        for row in records
+        if bool(row.get("pourbaix_eligible", True))
+        and (row["family"] == "clean" or gap(row) <= window)
     ]
     candidates.sort(key=lambda row: (
         0 if row["family"] == "clean" else 1,
@@ -239,7 +272,11 @@ def _leaching_rows(
             "target_id": target.target_id,
             "parent_id": target.parent_id,
             "pourbaix_state_id": row["state_id"],
-            "pourbaix_family": row["family"],
+            "pourbaix_family": row.get("final_family", row["family"]),
+            "pourbaix_state_label": row.get(
+                "final_state_label", row.get("requested_state_label", "")
+            ),
+            "pourbaix_state_status": row.get("state_status", ""),
             "pourbaix_energy_level": energy_level,
             "pourbaix_delta_n_H": row["delta_n_H"],
             "pourbaix_delta_n_O": row["delta_n_O"],
@@ -309,8 +346,28 @@ def run_surface_pourbaix(
         target_dir = outdir / "surfaces" / target.safe_id
         records = []
         for state in enumerate_surface_states(structure, cfg):
-            result = screen_state(state, cfg, calculator, fixed, target_dir / "states_ml")
-            records.append(_record_from_state(target, state, result))
+            result = screen_state(
+                state, cfg, calculator, fixed, target_dir / "states_ml"
+            )
+            record = _record_from_state(target, state, result)
+            if result.get("status") == "ok":
+                validation = analyze_relaxed_surface_state_path(
+                    structure,
+                    state["structure"],
+                    result.get("structure_path", ""),
+                    state,
+                    cfg,
+                )
+            else:
+                validation = {
+                    "state_status": "calculation_failed",
+                    "pourbaix_eligible": False,
+                    "final_family": "invalid",
+                    "final_state_label": "Failed relaxation",
+                    "postprocess_reason": str(result.get("error", "ML relaxation failed")),
+                }
+            record.update(validation)
+            records.append(record)
 
         ml_grid, gaps = build_surface_pourbaix_grid(
             records, h2_energy_eV=h2_ml, h2o_energy_eV=h2o_ml,
@@ -389,6 +446,15 @@ def run_surface_pourbaix(
         h2o_reference_eV_ml=h2o_ml, h2o_reference_source=h2o_source,
         states_csv=str(states_path), pourbaix_grid_csv=str(grid_path),
         stable_states_csv=str(domains_path), leaching_surface_states_csv=str(leaching_path),
+        postprocess_validation_enabled=bool(cfg["postprocess_validate_relaxed_states"]),
+        postprocess_exclude_desorbed=bool(cfg["postprocess_exclude_desorbed"]),
+        postprocess_exclude_fragmented=bool(cfg["postprocess_exclude_fragmented"]),
+        postprocess_allow_reclassified=bool(cfg["postprocess_allow_reclassified"]),
+        postprocess_oh_bond_cutoff_A=float(cfg["postprocess_oh_bond_cutoff_A"]),
+        postprocess_oo_bond_cutoff_A=float(cfg["postprocess_oo_bond_cutoff_A"]),
+        postprocess_surface_attachment_cutoff_A=float(
+            cfg["postprocess_surface_attachment_cutoff_A"]
+        ),
         thermodynamic_model=(
             "Computational Hydrogen Electrode using electronic/reference energies; "
             "no implicit ZPE, vibrational entropy, configurational entropy, or solvation correction"
