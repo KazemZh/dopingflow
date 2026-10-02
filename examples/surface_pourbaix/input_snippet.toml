@@ -1,8 +1,8 @@
 # Step 16: electrochemical surface states / surface Pourbaix
-# Defaults to the best structures from Step 15 surface-segregation MC.
+# Surface segregation is optional; direct Surface-stage output is the default.
 [surface_pourbaix]
 enabled = true
-source_mode = "auto"                  # auto prefers surface-segregation output
+source_mode = "surface"               # best available direct Surface-stage table
 source_summary = ""
 surface_include = []
 max_surfaces = 10
