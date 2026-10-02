@@ -166,7 +166,7 @@ def parse_leaching_config(
         resume_completed=True,
         protonation={},
         analysis_defaults={},
-        outdir="09_leaching",
+        outdir="11_leaching",
         summary_csv="leaching_summary.csv",
         aggregate_csv="leaching_surface_summary.csv",
         potential_scan_csv="leaching_potential_scan.csv",
