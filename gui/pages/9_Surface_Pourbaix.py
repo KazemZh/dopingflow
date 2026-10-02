@@ -20,8 +20,9 @@ from gui_config import BACKEND_CHOICES, DEVICE_CHOICES, OPTIMIZER_CHOICES
 st.set_page_config(page_title="Surface Pourbaix", layout="wide")
 st.title("Electrochemical surface states / Pourbaix")
 st.caption(
-    "Starting from segregated intact surfaces, sample protonated, O*, OH*, H2O*, and mixed O/OH "
-    "states, then determine the stable surface state versus potential and pH with the CHE."
+    "Choose intact surfaces directly from Surface Screening/Refinement or, optionally, "
+    "from Surface Segregation. Then sample protonated, O*, OH*, H2O*, and mixed O/OH "
+    "states and determine the stable surface state versus potential and pH with the CHE."
 )
 
 project_root = Path(
@@ -77,12 +78,34 @@ with st.expander("Configuration & run controls", expanded=True):
 
     st.subheader("Input surfaces")
     c1, c2, c3 = st.columns(3)
-    source_modes = ["auto", "segregation", "final-selected", "refine-summary", "screen-selected", "screen-summary"]
-    saved_mode = str(saved.get("source_mode", "auto"))
+    source_modes = [
+        "surface",
+        "segregation",
+        "auto",
+        "final-selected",
+        "refine-summary",
+        "screen-selected",
+        "screen-summary",
+    ]
+    source_labels = {
+        "surface": "Surface stage — best available (default)",
+        "segregation": "Surface segregation output",
+        "auto": "Auto — direct surface first, segregation fallback",
+        "final-selected": "Surface stage — final selected",
+        "refine-summary": "Surface stage — all refined",
+        "screen-selected": "Surface stage — screened shortlist",
+        "screen-summary": "Surface stage — all screened/generated",
+    }
+    saved_mode = str(saved.get("source_mode", "surface"))
     source_mode = c1.selectbox(
-        "Surface source", source_modes,
+        "Surface source",
+        source_modes,
         index=source_modes.index(saved_mode) if saved_mode in source_modes else 0,
-        help="auto prefers surface-segregation output when it exists.",
+        format_func=lambda mode: source_labels[mode],
+        help=(
+            "Surface segregation is optional. The default reads the best available "
+            "table produced directly by the surface stage."
+        ),
     )
     source_summary = c2.text_input(
         "Explicit source CSV (optional)", value=str(saved.get("source_summary", ""))
@@ -90,21 +113,62 @@ with st.expander("Configuration & run controls", expanded=True):
     max_surfaces = c3.number_input(
         "Maximum surfaces", min_value=1, value=int(saved.get("max_surfaces", 10)), step=1
     )
-    surface_include = st.text_input(
-        "Surface selectors (optional, comma-separated/globs)",
+
+    selector_text = st.text_input(
+        "Surface selectors (optional, comma-separated exact IDs or globs)",
         value=_csv(saved.get("surface_include", [])),
+        help="Leave empty for all surfaces in the chosen source table.",
     )
+    requested_selectors = _items(selector_text)
+
+    # First discover all surfaces from the selected source so users can pick
+    # exact generated/refined surfaces without having to know their IDs.
+    available_preview = pd.DataFrame()
+    try:
+        available_cfg = dict(cfg)
+        available_section = dict(saved)
+        available_section.update(
+            enabled=True,
+            source_mode=source_mode,
+            source_summary=source_summary,
+            surface_include=[],
+            max_surfaces=10000,
+        )
+        available_cfg["surface_pourbaix"] = available_section
+        available_preview = preview_surface_pourbaix_targets(available_cfg, project_root)
+    except Exception:
+        pass
+
+    exact_surface_ids = (
+        list(dict.fromkeys(available_preview["surface_id"].astype(str)))
+        if not available_preview.empty and "surface_id" in available_preview.columns
+        else []
+    )
+    exact_defaults = [value for value in requested_selectors if value in exact_surface_ids]
+    picked_surfaces = st.multiselect(
+        "Pick exact surfaces (optional)",
+        exact_surface_ids,
+        default=exact_defaults,
+        help=(
+            "This list is populated directly from the selected surface-stage or "
+            "segregation table. If you select entries here, they override the text selectors above."
+        ),
+    )
+    effective_surface_include = picked_surfaces or requested_selectors
 
     preview_cfg = dict(cfg)
     preview_section = dict(saved)
     preview_section.update(
         enabled=True, source_mode=source_mode, source_summary=source_summary,
-        surface_include=_items(surface_include), max_surfaces=int(max_surfaces),
+        surface_include=effective_surface_include, max_surfaces=int(max_surfaces),
     )
     preview_cfg["surface_pourbaix"] = preview_section
     try:
         preview = preview_surface_pourbaix_targets(preview_cfg, project_root)
-        st.caption(f"Selected source table: {preview.attrs.get('source_summary', '')}")
+        st.caption(
+            f"Selected source table: {preview.attrs.get('source_summary', '')} "
+            f"({len(preview)} surface(s) selected)"
+        )
         st.dataframe(preview, width="stretch", hide_index=True)
     except Exception as exc:
         st.warning(str(exc))
@@ -239,7 +303,7 @@ with st.expander("Configuration & run controls", expanded=True):
     section = dict(saved)
     section.update(
         enabled=enabled, source_mode=source_mode, source_summary=source_summary,
-        surface_include=_items(surface_include), max_surfaces=int(max_surfaces),
+        surface_include=effective_surface_include, max_surfaces=int(max_surfaces),
         placement_side=placement_side, state_families=families,
         h_counts=_ints(h_counts_text), adsorbate_counts=_ints(ads_counts_text),
         surface_window_A=float(surface_window), max_surface_oxygen_sites=int(max_o_sites),
