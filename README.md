@@ -9,8 +9,8 @@
 `dopingflow` is a modular CLI pipeline for automated generation, screening,
 relaxation, formation-energy analysis, phase stability, oxygen-vacancy studies,
 dopant site-preference / short-range-order analysis, natural-surface screening,
-finite-temperature surface-segregation Monte Carlo, and configurable oxidation-state
-analysis of doped crystal structures using
+finite-temperature surface-segregation Monte Carlo, electrochemical surface-state / CHE Pourbaix analysis,
+dopant leaching, and configurable oxidation-state analysis of doped crystal structures using
 machine-learning interatomic potentials, graph neural networks, structural
 chemistry, and optional DFT post-processing.
 
@@ -25,6 +25,8 @@ Designed for **reproducible, scalable materials-discovery workflows**.
 - **Oxidation-state guide:** [`docs/source/methods/oxidation_states.rst`](docs/source/methods/oxidation_states.rst)
 - **Vacancy example:** [`examples/vacancies`](examples/vacancies)
 - **Dopant site-preference example:** [`examples/site_preference`](examples/site_preference)
+- **Surface Pourbaix guide:** [`docs/source/methods/surface_pourbaix.rst`](docs/source/methods/surface_pourbaix.rst)
+- **Surface Pourbaix example:** [`examples/surface_pourbaix`](examples/surface_pourbaix)
 
 ---
 
@@ -161,7 +163,30 @@ dopingflow site-preference -c input.toml
 dopingflow oxidation -c input.toml
 dopingflow surface -c input.toml
 dopingflow surface-segregation -c input.toml
+dopingflow surface-pourbaix -c input.toml
+dopingflow leaching -c input.toml
 ```
+
+### Electrochemical surface states and surface Pourbaix
+
+After surface segregation, run:
+
+```bash
+dopingflow surface-pourbaix -c input.toml
+```
+
+The stage samples intact-surface protonated, O*, OH*, H2O*, and mixed O/OH
+states, screens coverage/site arrangements with the selected MLFF, and evaluates
+their relative stability with the Computational Hydrogen Electrode. The default
+Pourbaix window is **pH -1 to 3** and 0--2 V vs SHE; both ranges and the SHE/RHE
+reference scale are configurable. Optional GPAW refinement is restricted to
+ML-stable and near-stable states.
+
+The resulting `leaching_surface_states.csv` is the preferred automatic input
+to the leaching stage, so dissolution is studied from electrochemically stable
+surface terminations instead of an arbitrary clean slab. See the
+[Surface Pourbaix guide](docs/source/methods/surface_pourbaix.rst) and
+[configuration example](examples/surface_pourbaix/input_snippet.toml).
 
 ### Dopant leaching and interrupted-run recovery
 
