@@ -1,14 +1,12 @@
 Dopant leaching from selected surfaces
 ======================================
 
-The leaching stage runs after :doc:`surfaces`. It removes exposed dopant atoms
-from the already generated/relaxed slabs, relaxes the dopant-vacancy slab, and
+The leaching stage runs after :doc:`surface_pourbaix` when that stage is enabled.\nWith ``source_mode = "auto"``, electrochemically stable intact-surface states are\npreferred; older selected/refined clean-surface tables remain a fallback. Leaching\nthen removes exposed dopant atoms, relaxes the dopant-vacancy slab, and
 reports a thermodynamic leaching descriptor while preserving the full surface
 provenance (bulk target, vacancy state, Miller index, termination, variant,
 dopant, and atom index).
 
-This is a thermodynamic screening stage. It is not a kinetic dissolution-rate
-simulation or a complete surface Pourbaix model.
+This is a thermodynamic dissolution-screening stage. It is not a kinetic\ndissolution-rate simulation. The upstream Surface-Pourbaix stage determines the\nintact-surface O/H termination; the optional protonation model below is a different\npost-leaching local compensation search around the newly removed dopant.
 
 Metal-referenced extraction energy
 ----------------------------------
