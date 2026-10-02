@@ -44,6 +44,90 @@ def _scalar(value: Any) -> Any:
     return json.dumps(value, sort_keys=True, default=str)
 
 
+def _finite_float(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _coverage_text(value: Any) -> str:
+    number = _finite_float(value)
+    if number is None:
+        return ""
+    if abs(number - round(number)) <= 1e-8:
+        return f"{int(round(number))}%"
+    return f"{number:.1f}%"
+
+
+def surface_state_display_label(state: Mapping[str, Any]) -> str:
+    """Human-readable thermodynamic phase label for plots/tables.
+
+    Arrangement IDs remain available separately for provenance, but the phase
+    label is defined by chemistry + actual finite-cell coverage.
+    """
+    family = str(
+        state.get("family", state.get("stable_family", ""))
+    ).strip()
+    if family == "clean":
+        return "Clean"
+
+    if family == "mixed-O-OH":
+        o_cov = _coverage_text(state.get("actual_o_coverage_pct"))
+        oh_cov = _coverage_text(state.get("actual_oh_coverage_pct"))
+        if o_cov and oh_cov:
+            return f"Mixed O*/OH* — {o_cov} O* + {oh_cov} OH*"
+        return "Mixed O*/OH*"
+
+    family_names = {
+        "protonated": "Protonated lattice O",
+        "O": "O*",
+        "OH": "OH*",
+        "H2O": "H₂O*",
+    }
+    name = family_names.get(family, family or "Surface state")
+    coverage = _coverage_text(state.get("actual_coverage_pct"))
+    return f"{name} — {coverage}" if coverage else name
+
+
+def _annotate_grid_with_state_metadata(
+    grid: pd.DataFrame,
+    states: list[dict[str, Any]],
+) -> pd.DataFrame:
+    """Attach coverage/side metadata for the stable state at each U-pH point."""
+    if grid.empty:
+        return grid
+    by_id = {str(row["state_id"]): row for row in states}
+    output = grid.copy()
+    metadata_keys = (
+        "requested_coverage_pct",
+        "actual_coverage_pct",
+        "requested_o_coverage_pct",
+        "requested_oh_coverage_pct",
+        "actual_o_coverage_pct",
+        "actual_oh_coverage_pct",
+        "resolved_placement_side",
+        "requested_placement_side",
+        "side_target_species",
+        "eligible_surface_oxygen_sites",
+        "eligible_surface_cation_sites",
+        "arrangement_id",
+        "symmetry_unique_arrangements",
+        "symmetry_operations",
+    )
+    for key in metadata_keys:
+        output[key] = [
+            _scalar(by_id.get(str(state_id), {}).get(key))
+            for state_id in output["stable_state_id"]
+        ]
+    output["stable_state_label"] = [
+        surface_state_display_label(by_id.get(str(state_id), {}))
+        for state_id in output["stable_state_id"]
+    ]
+    return output
+
+
 def _record_from_state(
     target: SurfacePourbaixTarget,
     state: Mapping[str, Any],
@@ -234,6 +318,7 @@ def run_surface_pourbaix(
             potential_scale=cfg["potential_scale"], temperature_K=cfg["temperature_K"],
             energy_key="ml_energy_eV", energy_level="ML",
         )
+        ml_grid = _annotate_grid_with_state_metadata(ml_grid, records)
         ml_grid.insert(0, "surface_id", target.surface_id)
         gap_map = dict(zip(gaps["state_id"], gaps["minimum_deltaG_above_stable_eV"]))
         for record in records:
@@ -260,6 +345,9 @@ def run_surface_pourbaix(
                         potential_values=potentials, pH_values=ph_values,
                         potential_scale=cfg["potential_scale"], temperature_K=cfg["temperature_K"],
                         energy_key="dft_energy_eV", energy_level="DFT",
+                    )
+                    dft_grid = _annotate_grid_with_state_metadata(
+                        dft_grid, candidates
                     )
                     dft_grid.insert(0, "surface_id", target.surface_id)
                     chosen_grid, energy_level = dft_grid, "DFT"
@@ -325,4 +413,5 @@ __all__ = [
     "resolve_surface_pourbaix_output_dir", "resolve_surface_pourbaix_source_summary",
     "run_surface_pourbaix", "run_surface_pourbaix_from_toml",
     "summarize_stable_domains", "surface_state_delta_g_eV",
+    "surface_state_display_label",
 ]
