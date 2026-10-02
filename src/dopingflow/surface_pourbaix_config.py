@@ -1,0 +1,308 @@
+from __future__ import annotations
+
+import fnmatch
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Mapping, Sequence
+
+import pandas as pd
+
+from dopingflow.ml_backends import normalize_backend_config
+from dopingflow.surface_segregation import resolve_surface_segregation_output_dir
+from dopingflow.surface_staged import ensure_surface_ids, parse_surface_config, resolve_surface_output_dir
+
+DEFAULT_FAMILIES = ("clean", "protonated", "O", "OH", "H2O", "mixed-O-OH")
+
+
+@dataclass(frozen=True)
+class SurfacePourbaixTarget:
+    surface_id: str
+    target_id: str
+    parent_id: str
+    structure_path: Path
+    source_stage: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def safe_id(self) -> str:
+        text = self.surface_id.replace("\\", "__").replace("/", "__")
+        return "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in text)
+
+
+def _string_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [x.strip() for x in value.split(",") if x.strip()]
+    if isinstance(value, (list, tuple, set)):
+        return [str(x).strip() for x in value if str(x).strip()]
+    raise ValueError("Expected an array or comma-separated string")
+
+
+def _int_list(value: Any, default: Sequence[int]) -> list[int]:
+    raw = default if value is None else value
+    if isinstance(raw, str):
+        values = [int(x.strip()) for x in raw.split(",") if x.strip()]
+    else:
+        values = [int(x) for x in raw]
+    return sorted(set(values))
+
+
+def _resolve(root: Path, value: str | Path) -> Path:
+    path = Path(value).expanduser()
+    return path.resolve() if path.is_absolute() else (root / path).resolve()
+
+
+def source_root(raw: Mapping[str, Any], root: Path) -> Path:
+    pbx = dict(raw.get("surface_pourbaix", {}) or {})
+    segregation = dict(raw.get("surface_segregation", {}) or {})
+    surface = dict(raw.get("surface", {}) or {})
+    structure = dict(raw.get("structure", {}) or {})
+    value = (
+        str(pbx.get("source_root", "")).strip()
+        or str(segregation.get("source_root", "")).strip()
+        or str(surface.get("source_root", "")).strip()
+        or str(structure.get("outdir", "random_structures")).strip()
+    )
+    return _resolve(root, value)
+
+
+def resolve_surface_pourbaix_output_dir(raw: Mapping[str, Any], root: Path | str) -> Path:
+    root = Path(root).expanduser().resolve()
+    section = dict(raw.get("surface_pourbaix", {}) or {})
+    return _resolve(source_root(raw, root), str(section.get("outdir", "10_surface_pourbaix")))
+
+
+def _surface_candidates(raw: Mapping[str, Any], root: Path) -> dict[str, Path]:
+    surface_cfg = parse_surface_config(raw)
+    output = resolve_surface_output_dir(raw, surface_cfg, root)
+    return {
+        "final-selected": output / str(surface_cfg["refine_selected_csv"]),
+        "refine-summary": output / str(surface_cfg["refine_summary_csv"]),
+        "screen-selected": output / str(surface_cfg["screen_selected_csv"]),
+        "screen-summary": output / str(surface_cfg["screen_summary_csv"]),
+    }
+
+
+def resolve_surface_pourbaix_source_summary(
+    raw: Mapping[str, Any], root: Path | str
+) -> tuple[Path, str]:
+    root = Path(root).expanduser().resolve()
+    section = dict(raw.get("surface_pourbaix", {}) or {})
+    explicit = str(section.get("source_summary", "")).strip()
+    if explicit:
+        return _resolve(source_root(raw, root), explicit), "explicit"
+
+    mode = str(section.get("source_mode", "auto")).strip().lower()
+    segregation = resolve_surface_segregation_output_dir(raw, root) / "surface_segregation_summary.csv"
+    surfaces = _surface_candidates(raw, root)
+    if mode == "segregation":
+        return segregation, "segregation"
+    if mode == "auto":
+        if segregation.exists():
+            return segregation, "segregation"
+        for name in ("final-selected", "refine-summary", "screen-selected", "screen-summary"):
+            if surfaces[name].exists():
+                return surfaces[name], name
+        return segregation, "segregation"
+    if mode not in surfaces:
+        raise ValueError(
+            "[surface_pourbaix].source_mode must be auto, segregation, final-selected, "
+            "refine-summary, screen-selected, or screen-summary"
+        )
+    return surfaces[mode], mode
+
+
+def _calculator_defaults(raw: Mapping[str, Any]) -> dict[str, Any]:
+    surface = dict(raw.get("surface", {}) or {})
+    refine = dict(surface.get("refine", {}) or {})
+    screen = dict(surface.get("screen", {}) or {})
+    source = refine if bool(refine.get("enabled", False)) else screen
+    defaults = dict(
+        backend="mace", model="mh-1", task="matpes_r2scan", device="cpu",
+        gpu_id=0, tf_threads=1, omp_threads=1, optimizer="bfgs",
+        fmax=0.05, max_steps=300, relax=True,
+    )
+    defaults.update(source)
+    return defaults
+
+
+def parse_surface_pourbaix_config(
+    raw: Mapping[str, Any], root: Path | str = Path(".")
+) -> dict[str, Any]:
+    root = Path(root).expanduser().resolve()
+    section = dict(raw.get("surface_pourbaix", {}) or {})
+    surface = dict(raw.get("surface", {}) or {})
+    scan = dict(raw.get("scan", {}) or {})
+    defaults = dict(
+        enabled=False, source_root=str(source_root(raw, root)), source_mode="auto",
+        source_summary="", surface_include=[], max_surfaces=10,
+        outdir="10_surface_pourbaix", placement_side=surface.get("placement_side", "top"),
+        anion_species=surface.get("anion_species", scan.get("anion_species", ["O"])),
+        state_families=list(DEFAULT_FAMILIES), h_counts=[1, 2, 3, 4],
+        adsorbate_counts=[1, 2], mixed_compositions=[[1, 1]],
+        surface_window_A=2.0, max_surface_oxygen_sites=8, max_surface_cation_sites=8,
+        max_arrangements_per_stoichiometry=8, oh_bond_length_A=0.98,
+        adsorbate_height_A=1.85, water_oh_bond_length_A=0.9572,
+        water_hoh_angle_deg=104.5, temperature_K=298.15,
+        potential_scale="SHE", potential_min_V=0.0, potential_max_V=2.0,
+        potential_step_V=0.05, pH_min=-1.0, pH_max=3.0, pH_step=0.1,
+        manual_h2_energy_eV="", manual_h2o_energy_eV="", compute_references=True,
+        reference_relax=True, reference_box_A=15.0,
+        h2_free_energy_correction_eV=0.0, h2o_free_energy_correction_eV=0.0,
+        inherit_surface_fixed_atoms=True, resume_completed=True, screen={}, dft={},
+    )
+    for key, value in defaults.items():
+        section.setdefault(key, value)
+
+    section["root"] = root
+    section["source_root"] = source_root(raw, root)
+    section["output_dir"] = resolve_surface_pourbaix_output_dir(raw, root)
+    summary, mode = resolve_surface_pourbaix_source_summary(raw, root)
+    section["resolved_source_summary"] = summary
+    section["resolved_source_mode"] = mode
+    section["surface_include"] = _string_list(section["surface_include"])
+    section["anion_species"] = _string_list(section["anion_species"]) or ["O"]
+    section["state_families"] = _string_list(section["state_families"])
+    invalid = [x for x in section["state_families"] if x not in DEFAULT_FAMILIES]
+    if invalid:
+        raise ValueError(f"Unsupported surface-state families: {invalid}")
+    if "clean" not in section["state_families"]:
+        section["state_families"].insert(0, "clean")
+    section["h_counts"] = [x for x in _int_list(section["h_counts"], [1, 2, 3, 4]) if x > 0]
+    section["adsorbate_counts"] = [x for x in _int_list(section["adsorbate_counts"], [1, 2]) if x > 0]
+    mixed = []
+    for item in section["mixed_compositions"]:
+        if not isinstance(item, (list, tuple)) or len(item) != 2:
+            raise ValueError("mixed_compositions entries must be [n_O, n_OH]")
+        n_o, n_oh = int(item[0]), int(item[1])
+        if n_o < 0 or n_oh < 0 or n_o + n_oh <= 0:
+            raise ValueError("Invalid mixed O/OH composition")
+        mixed.append((n_o, n_oh))
+    section["mixed_compositions"] = mixed
+
+    section["placement_side"] = str(section["placement_side"]).lower()
+    if section["placement_side"] not in {"top", "bottom", "both"}:
+        raise ValueError("placement_side must be top, bottom, or both")
+    section["potential_scale"] = str(section["potential_scale"]).upper()
+    if section["potential_scale"] not in {"SHE", "RHE"}:
+        raise ValueError("potential_scale must be SHE or RHE")
+
+    for key in ("max_surfaces", "max_surface_oxygen_sites", "max_surface_cation_sites", "max_arrangements_per_stoichiometry"):
+        section[key] = int(section[key])
+        if section[key] <= 0:
+            raise ValueError(f"{key} must be positive")
+    for key in (
+        "surface_window_A", "oh_bond_length_A", "adsorbate_height_A",
+        "water_oh_bond_length_A", "water_hoh_angle_deg", "temperature_K",
+        "potential_min_V", "potential_max_V", "potential_step_V", "pH_min",
+        "pH_max", "pH_step", "reference_box_A", "h2_free_energy_correction_eV",
+        "h2o_free_energy_correction_eV",
+    ):
+        section[key] = float(section[key])
+    if section["temperature_K"] <= 0 or section["surface_window_A"] <= 0:
+        raise ValueError("temperature_K and surface_window_A must be positive")
+    if section["potential_step_V"] <= 0 or section["pH_step"] <= 0:
+        raise ValueError("potential_step_V and pH_step must be positive")
+    if section["potential_min_V"] >= section["potential_max_V"] or section["pH_min"] >= section["pH_max"]:
+        raise ValueError("Potential and pH minima must be below maxima")
+    for key in ("manual_h2_energy_eV", "manual_h2o_energy_eV"):
+        value = section[key]
+        section[key] = None if value is None or str(value).strip() == "" else float(value)
+
+    screen_cfg = _calculator_defaults(raw)
+    screen_cfg.update(dict(section.get("screen", {}) or {}))
+    backend, model, task = normalize_backend_config(
+        backend=str(screen_cfg.get("backend", "mace")).lower(),
+        model=str(screen_cfg.get("model", "mh-1")), task=str(screen_cfg.get("task", "")),
+        section_name="surface_pourbaix.screen",
+    )
+    screen_cfg.update(backend=backend, model=model, task=task)
+    defaults_int = {"gpu_id": 0, "tf_threads": 1, "omp_threads": 1, "max_steps": 300}
+    for key in defaults_int:
+        screen_cfg[key] = int(screen_cfg.get(key, defaults_int[key]))
+    screen_cfg["device"] = str(screen_cfg.get("device", "cpu")).lower()
+    screen_cfg["optimizer"] = str(screen_cfg.get("optimizer", "bfgs")).lower()
+    screen_cfg["fmax"] = float(screen_cfg.get("fmax", 0.05))
+    screen_cfg["relax"] = bool(screen_cfg.get("relax", True))
+    section["screen"] = screen_cfg
+
+    dft = dict(section.get("dft", {}) or {})
+    dft_defaults = dict(
+        enabled=False, execute=False, max_states_per_surface=20, candidate_window_eV=0.30,
+        code="gpaw", mode="pw", xc="PBE", ecut_eV=500.0, kpts=[3, 3, 1], gamma=True,
+        smearing_eV=0.05, convergence_density=1e-5, maxiter=333, charge=0.0,
+        spinpol="auto", initial_magmoms={}, nbands=None, save_wavefunctions=False,
+        reuse_existing=True, cache_root="dft_cache", fail_fast=False,
+    )
+    for key, value in dft_defaults.items():
+        dft.setdefault(key, value)
+    dft["max_states_per_surface"] = int(dft["max_states_per_surface"])
+    dft["candidate_window_eV"] = float(dft["candidate_window_eV"])
+    section["dft"] = dft
+    return section
+
+
+def _present(value: Any) -> bool:
+    text = str(value or "").strip()
+    return bool(text) and text.lower() not in {"nan", "none"}
+
+
+def _target_path(row: Mapping[str, Any], root: Path) -> tuple[Path, str]:
+    for key, stage in (
+        ("best_structure_path", "segregation-best"),
+        ("final_structure_path", "segregation-final"),
+        ("refine_relaxed_structure_path", "refine"),
+        ("screen_relaxed_structure_path", "screen"),
+        ("generated_structure_path", "generated"),
+    ):
+        if _present(row.get(key)):
+            path = _resolve(root, str(row[key]))
+            if path.exists():
+                return path, stage
+    raise FileNotFoundError("No usable surface structure path")
+
+
+def discover_surface_pourbaix_targets(cfg: Mapping[str, Any]) -> list[SurfacePourbaixTarget]:
+    summary = Path(cfg["resolved_source_summary"])
+    if not summary.exists():
+        raise FileNotFoundError(f"Surface-Pourbaix source table not found: {summary}")
+    frame = pd.read_csv(summary)
+    if frame.empty:
+        return []
+    if "surface_id" not in frame.columns:
+        frame = ensure_surface_ids(frame)
+    targets, seen = [], set()
+    for _, series in frame.iterrows():
+        row = series.to_dict()
+        values = (str(row.get("surface_id", "")), str(row.get("target_id", "")), str(row.get("termination_label", "")))
+        if cfg["surface_include"] and not any(
+            fnmatch.fnmatchcase(value, pattern) for pattern in cfg["surface_include"] for value in values
+        ):
+            continue
+        sid = str(row.get("surface_id", "")).strip()
+        if not sid or sid in seen:
+            continue
+        try:
+            path, stage = _target_path(row, Path(cfg["root"]))
+        except FileNotFoundError:
+            continue
+        targets.append(SurfacePourbaixTarget(
+            surface_id=sid, target_id=str(row.get("target_id", "")),
+            parent_id=str(row.get("parent_id") or row.get("target_id") or ""),
+            structure_path=path, source_stage=stage, metadata=row,
+        ))
+        seen.add(sid)
+        if len(targets) >= int(cfg["max_surfaces"]):
+            break
+    return targets
+
+
+def preview_surface_pourbaix_targets(raw: Mapping[str, Any], root: Path | str = Path(".")) -> pd.DataFrame:
+    cfg = parse_surface_pourbaix_config(raw, root)
+    frame = pd.DataFrame([
+        dict(surface_id=t.surface_id, target_id=t.target_id, source_stage=t.source_stage, structure_path=str(t.structure_path))
+        for t in discover_surface_pourbaix_targets(cfg)
+    ])
+    frame.attrs["source_summary"] = str(cfg["resolved_source_summary"])
+    return frame
