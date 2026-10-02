@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from itertools import combinations
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -12,49 +11,15 @@ from pymatgen.core import Lattice, Structure
 from pymatgen.io.vasp import Poscar
 
 from dopingflow.surface_staged import _evaluate
-
-
-def surface_normal(structure: Structure) -> np.ndarray:
-    normal = np.cross(structure.lattice.matrix[0], structure.lattice.matrix[1])
-    norm = float(np.linalg.norm(normal))
-    if norm <= 1e-12:
-        raise ValueError("Surface cell vectors are degenerate")
-    return np.asarray(normal, dtype=float) / norm
-
-
-def exposed_sites(
-    structure: Structure,
-    species: Sequence[str],
-    *,
-    normal: np.ndarray,
-    placement_side: str,
-    window_A: float,
-    limit: int,
-) -> list[tuple[int, int]]:
-    allowed = set(species)
-    rows = [
-        (i, float(np.dot(site.coords, normal)))
-        for i, site in enumerate(structure)
-        if site.specie.symbol in allowed
-    ]
-    if not rows:
-        return []
-    lo, hi = min(x[1] for x in rows), max(x[1] for x in rows)
-    selected: list[tuple[int, int, float]] = []
-    if placement_side in {"top", "both"}:
-        selected.extend((i, +1, hi - p) for i, p in rows if hi - p <= window_A + 1e-12)
-    if placement_side in {"bottom", "both"}:
-        selected.extend((i, -1, p - lo) for i, p in rows if p - lo <= window_A + 1e-12)
-    selected.sort(key=lambda item: (item[2], item[0], -item[1]))
-    result, seen = [], set()
-    for idx, sign, _ in selected:
-        key = (idx, sign)
-        if key not in seen:
-            result.append(key)
-            seen.add(key)
-        if len(result) >= int(limit):
-            break
-    return result
+from dopingflow.surface_pourbaix_sampling import (
+    enumerate_binary_patterns,
+    enumerate_mixed_patterns,
+    exposed_sites,
+    mixed_realizable_coverages,
+    realizable_coverages,
+    resolve_placement_side,
+    surface_normal,
+)
 
 
 def _inplane_unit(structure: Structure, normal: np.ndarray) -> np.ndarray:
@@ -107,94 +72,225 @@ def _add_adsorbate(
     raise ValueError(f"Unknown adsorbate family {family}")
 
 
-def _combos(items: Sequence[Any], n: int, cap: int) -> list[tuple[Any, ...]]:
-    if n <= 0 or n > len(items):
-        return []
-    result = []
-    for combo in combinations(items, n):
-        result.append(combo)
-        if len(result) >= int(cap):
-            break
-    return result
+def _coverage_label(values: Sequence[float]) -> str:
+    return ",".join(f"{float(value):g}" for value in values)
+
+
+def _base_state_metadata(
+    *,
+    side_info: Mapping[str, Any],
+    n_oxygen_sites: int,
+    n_cation_sites: int,
+) -> dict[str, Any]:
+    return {
+        "requested_placement_side": side_info.get("requested_placement_side"),
+        "resolved_placement_side": side_info.get("resolved_placement_side"),
+        "side_target_species": list(side_info.get("side_target_species", [])),
+        "top_dopant_depth_A": side_info.get("top_dopant_depth_A"),
+        "bottom_dopant_depth_A": side_info.get("bottom_dopant_depth_A"),
+        "side_selection_reason": side_info.get("side_selection_reason"),
+        "eligible_surface_oxygen_sites": int(n_oxygen_sites),
+        "eligible_surface_cation_sites": int(n_cation_sites),
+    }
 
 
 def enumerate_surface_states(structure: Structure, cfg: Mapping[str, Any]) -> list[dict[str, Any]]:
     normal = surface_normal(structure)
     inplane = _inplane_unit(structure, normal)
+    resolved_side, side_info = resolve_placement_side(structure, cfg)
+
     anions = list(cfg["anion_species"])
     cations = sorted({
         site.specie.symbol for site in structure
         if site.specie.symbol not in set(anions) and site.specie.symbol != "H"
     })
     oxygen_sites = exposed_sites(
-        structure, anions, normal=normal, placement_side=str(cfg["placement_side"]),
-        window_A=float(cfg["surface_window_A"]), limit=int(cfg["max_surface_oxygen_sites"]),
+        structure,
+        anions,
+        normal=normal,
+        placement_side=resolved_side,
+        window_A=float(cfg["surface_window_A"]),
+        limit=int(cfg.get("max_surface_oxygen_sites", 0)),
     )
     cation_sites = exposed_sites(
-        structure, cations, normal=normal, placement_side=str(cfg["placement_side"]),
-        window_A=float(cfg["surface_window_A"]), limit=int(cfg["max_surface_cation_sites"]),
+        structure,
+        cations,
+        normal=normal,
+        placement_side=resolved_side,
+        window_A=float(cfg["surface_window_A"]),
+        limit=int(cfg.get("max_surface_cation_sites", 0)),
     )
-    cap = int(cfg["max_arrangements_per_stoichiometry"])
     families = set(cfg["state_families"])
+    common = _base_state_metadata(
+        side_info=side_info,
+        n_oxygen_sites=len(oxygen_sites),
+        n_cation_sites=len(cation_sites),
+    )
     states = [dict(
-        state_id="clean", family="clean", delta_n_H=0, delta_n_O=0,
-        proton_electron_pairs=0, arrangement_id=0, site_indices=[], site_sides=[],
+        state_id="clean",
+        family="clean",
+        delta_n_H=0,
+        delta_n_O=0,
+        proton_electron_pairs=0,
+        arrangement_id=0,
+        site_indices=[],
+        site_sides=[],
+        requested_coverage_pct=0.0,
+        actual_coverage_pct=0.0,
+        raw_arrangements_total=1,
+        raw_arrangements_examined=1,
+        symmetry_unique_arrangements=1,
+        symmetry_operations=1,
         structure=structure.copy(),
+        **common,
     )]
 
-    if "protonated" in families:
-        for n_h in cfg["h_counts"]:
-            for arr, combo in enumerate(_combos(oxygen_sites, int(n_h), cap), 1):
+    if "protonated" in families and oxygen_sites:
+        for coverage in realizable_coverages(
+            len(oxygen_sites), cfg["proton_coverages_pct"]
+        ):
+            n_h = int(coverage["count"])
+            patterns, stats = enumerate_binary_patterns(
+                structure, oxygen_sites, n_h, cfg
+            )
+            for arr, pattern in enumerate(patterns, 1):
                 candidate = structure.copy()
-                for idx, sign in combo:
-                    _add_proton(candidate, idx, sign, normal, cfg["oh_bond_length_A"])
+                selected = [
+                    oxygen_sites[pos]
+                    for pos, label in enumerate(pattern)
+                    if int(label) != 0
+                ]
+                for idx, sign in selected:
+                    _add_proton(
+                        candidate, idx, sign, normal, cfg["oh_bond_length_A"]
+                    )
                 states.append(dict(
-                    state_id=f"protonated_H{int(n_h):02d}_arr{arr:03d}", family="protonated",
-                    delta_n_H=int(n_h), delta_n_O=0, proton_electron_pairs=int(n_h),
-                    arrangement_id=arr, site_indices=[x[0] for x in combo],
-                    site_sides=[x[1] for x in combo], structure=candidate,
+                    state_id=f"protonated_H{n_h:02d}_arr{arr:03d}",
+                    family="protonated",
+                    delta_n_H=n_h,
+                    delta_n_O=0,
+                    proton_electron_pairs=n_h,
+                    arrangement_id=arr,
+                    site_indices=[x[0] for x in selected],
+                    site_sides=[x[1] for x in selected],
+                    requested_coverage_pct=_coverage_label(
+                        coverage["requested_coverages_pct"]
+                    ),
+                    actual_coverage_pct=float(coverage["actual_coverage_pct"]),
+                    raw_arrangements_total=int(stats["raw_total"]),
+                    raw_arrangements_examined=int(stats["raw_examined"]),
+                    symmetry_unique_arrangements=int(stats["symmetry_unique"]),
+                    symmetry_operations=int(stats.get("symmetry_operations", 1)),
+                    structure=candidate,
+                    **common,
                 ))
 
+    family_coverage_keys = {
+        "O": "o_coverages_pct",
+        "OH": "oh_coverages_pct",
+        "H2O": "h2o_coverages_pct",
+    }
     for family, h_per in (("O", 0), ("OH", 1), ("H2O", 2)):
-        if family not in families:
+        if family not in families or not cation_sites:
             continue
-        for count in cfg["adsorbate_counts"]:
-            for arr, combo in enumerate(_combos(cation_sites, int(count), cap), 1):
+        for coverage in realizable_coverages(
+            len(cation_sites), cfg[family_coverage_keys[family]]
+        ):
+            count = int(coverage["count"])
+            patterns, stats = enumerate_binary_patterns(
+                structure, cation_sites, count, cfg
+            )
+            for arr, pattern in enumerate(patterns, 1):
                 candidate = structure.copy()
-                for idx, sign in combo:
-                    _add_adsorbate(candidate, idx, sign, family, normal, inplane, cfg)
-                d_h, d_o = int(count) * h_per, int(count)
+                selected = [
+                    cation_sites[pos]
+                    for pos, label in enumerate(pattern)
+                    if int(label) != 0
+                ]
+                for idx, sign in selected:
+                    _add_adsorbate(
+                        candidate, idx, sign, family, normal, inplane, cfg
+                    )
+                d_h, d_o = count * h_per, count
                 states.append(dict(
-                    state_id=f"{family}_{int(count):02d}_arr{arr:03d}", family=family,
-                    delta_n_H=d_h, delta_n_O=d_o, proton_electron_pairs=d_h - 2 * d_o,
-                    arrangement_id=arr, site_indices=[x[0] for x in combo],
-                    site_sides=[x[1] for x in combo], structure=candidate,
+                    state_id=f"{family}_{count:02d}_arr{arr:03d}",
+                    family=family,
+                    delta_n_H=d_h,
+                    delta_n_O=d_o,
+                    proton_electron_pairs=d_h - 2 * d_o,
+                    arrangement_id=arr,
+                    site_indices=[x[0] for x in selected],
+                    site_sides=[x[1] for x in selected],
+                    requested_coverage_pct=_coverage_label(
+                        coverage["requested_coverages_pct"]
+                    ),
+                    actual_coverage_pct=float(coverage["actual_coverage_pct"]),
+                    raw_arrangements_total=int(stats["raw_total"]),
+                    raw_arrangements_examined=int(stats["raw_examined"]),
+                    symmetry_unique_arrangements=int(stats["symmetry_unique"]),
+                    symmetry_operations=int(stats.get("symmetry_operations", 1)),
+                    structure=candidate,
+                    **common,
                 ))
 
-    if "mixed-O-OH" in families:
-        for n_o, n_oh in cfg["mixed_compositions"]:
-            total, arr = int(n_o) + int(n_oh), 0
-            for selected in combinations(cation_sites, total):
-                for oh_positions in combinations(range(total), int(n_oh)):
-                    arr += 1
-                    candidate = structure.copy()
-                    oh_set = set(oh_positions)
-                    for pos, (idx, sign) in enumerate(selected):
-                        _add_adsorbate(
-                            candidate, idx, sign, "OH" if pos in oh_set else "O",
-                            normal, inplane, cfg,
-                        )
-                    states.append(dict(
-                        state_id=f"mixed_O{int(n_o):02d}_OH{int(n_oh):02d}_arr{arr:03d}",
-                        family="mixed-O-OH", delta_n_H=int(n_oh), delta_n_O=total,
-                        proton_electron_pairs=int(n_oh) - 2 * total,
-                        arrangement_id=arr, site_indices=[x[0] for x in selected],
-                        site_sides=[x[1] for x in selected], structure=candidate,
-                    ))
-                    if arr >= cap:
-                        break
-                if arr >= cap:
-                    break
+    if "mixed-O-OH" in families and cation_sites:
+        for coverage in mixed_realizable_coverages(
+            len(cation_sites), cfg["mixed_coverages_pct"]
+        ):
+            n_o, n_oh = int(coverage["n_o"]), int(coverage["n_oh"])
+            patterns, stats = enumerate_mixed_patterns(
+                structure, cation_sites, n_o, n_oh, cfg
+            )
+            for arr, pattern in enumerate(patterns, 1):
+                candidate = structure.copy()
+                selected_sites: list[tuple[int, int]] = []
+                o_sites: list[int] = []
+                oh_sites: list[int] = []
+                for pos, label in enumerate(pattern):
+                    if int(label) == 0:
+                        continue
+                    idx, sign = cation_sites[pos]
+                    selected_sites.append((idx, sign))
+                    family = "O" if int(label) == 1 else "OH"
+                    _add_adsorbate(
+                        candidate, idx, sign, family, normal, inplane, cfg
+                    )
+                    (o_sites if family == "O" else oh_sites).append(idx)
+                total = n_o + n_oh
+                states.append(dict(
+                    state_id=f"mixed_O{n_o:02d}_OH{n_oh:02d}_arr{arr:03d}",
+                    family="mixed-O-OH",
+                    delta_n_H=n_oh,
+                    delta_n_O=total,
+                    proton_electron_pairs=n_oh - 2 * total,
+                    arrangement_id=arr,
+                    site_indices=[x[0] for x in selected_sites],
+                    site_sides=[x[1] for x in selected_sites],
+                    o_site_indices=o_sites,
+                    oh_site_indices=oh_sites,
+                    requested_o_coverage_pct=";".join(
+                        f"{pair[0]:g}" for pair in coverage["requested_pairs_pct"]
+                    ),
+                    requested_oh_coverage_pct=";".join(
+                        f"{pair[1]:g}" for pair in coverage["requested_pairs_pct"]
+                    ),
+                    actual_o_coverage_pct=float(
+                        coverage["actual_o_coverage_pct"]
+                    ),
+                    actual_oh_coverage_pct=float(
+                        coverage["actual_oh_coverage_pct"]
+                    ),
+                    actual_coverage_pct=float(
+                        coverage["actual_o_coverage_pct"]
+                        + coverage["actual_oh_coverage_pct"]
+                    ),
+                    raw_arrangements_total=int(stats["raw_total"]),
+                    raw_arrangements_examined=int(stats["raw_examined"]),
+                    symmetry_unique_arrangements=int(stats["symmetry_unique"]),
+                    symmetry_operations=int(stats.get("symmetry_operations", 1)),
+                    structure=candidate,
+                    **common,
+                ))
     return states
 
 
