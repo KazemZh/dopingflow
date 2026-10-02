@@ -169,13 +169,13 @@ dopingflow leaching -c input.toml
 
 ### Electrochemical surface states and surface Pourbaix
 
-After surface segregation, run:
+After surface screening/refinement — or after optional surface segregation — run:
 
 ```bash
 dopingflow surface-pourbaix -c input.toml
 ```
 
-The stage samples intact-surface protonated, O*, OH*, H2O*, and mixed O/OH
+Surface segregation is **not a prerequisite**. By default, the stage reads the best available surfaces directly from Surface Screening/Refinement; segregated surfaces can be selected explicitly when desired. The stage samples intact-surface protonated, O*, OH*, H2O*, and mixed O/OH
 states, screens coverage/site arrangements with the selected MLFF, and evaluates
 their relative stability with the Computational Hydrogen Electrode. The default
 Pourbaix window is **pH -1 to 3** and 0--2 V vs SHE; both ranges and the SHE/RHE
