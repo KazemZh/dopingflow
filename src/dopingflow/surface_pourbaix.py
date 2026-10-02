@@ -74,6 +74,33 @@ def _record_from_state(
         dft_reused=None,
         dft_artifact="",
     )
+    # Sampling provenance is kept explicitly so coverage rounding, automatic side
+    # selection, and symmetry reduction are visible in the final CSV rather than
+    # being hidden implementation details.
+    for key in (
+        "requested_coverage_pct",
+        "actual_coverage_pct",
+        "requested_o_coverage_pct",
+        "requested_oh_coverage_pct",
+        "actual_o_coverage_pct",
+        "actual_oh_coverage_pct",
+        "requested_placement_side",
+        "resolved_placement_side",
+        "side_target_species",
+        "top_dopant_depth_A",
+        "bottom_dopant_depth_A",
+        "side_selection_reason",
+        "eligible_surface_oxygen_sites",
+        "eligible_surface_cation_sites",
+        "raw_arrangements_total",
+        "raw_arrangements_examined",
+        "symmetry_unique_arrangements",
+        "symmetry_operations",
+        "o_site_indices",
+        "oh_site_indices",
+    ):
+        if key in state:
+            record[key] = _scalar(state[key])
     for key in (
         "miller_h", "miller_k", "miller_l", "termination_id", "termination_label",
         "host_species", "dopant_species_json", "structure_kind", "n_oxygen_vacancies",
@@ -156,11 +183,22 @@ def run_surface_pourbaix(
     outdir.mkdir(parents=True, exist_ok=True)
     preview_rows = []
     for target in targets:
-        n_states = len(enumerate_surface_states(Structure.from_file(target.structure_path), cfg))
+        planned_states = enumerate_surface_states(
+            Structure.from_file(target.structure_path), cfg
+        )
+        clean = planned_states[0] if planned_states else {}
         preview_rows.append(dict(
-            surface_id=target.surface_id, target_id=target.target_id,
-            source_stage=target.source_stage, structure_path=str(target.structure_path),
-            n_states=n_states,
+            surface_id=target.surface_id,
+            target_id=target.target_id,
+            source_stage=target.source_stage,
+            structure_path=str(target.structure_path),
+            resolved_placement_side=clean.get("resolved_placement_side", ""),
+            side_target_species=_scalar(clean.get("side_target_species", [])),
+            top_dopant_depth_A=clean.get("top_dopant_depth_A"),
+            bottom_dopant_depth_A=clean.get("bottom_dopant_depth_A"),
+            eligible_surface_oxygen_sites=clean.get("eligible_surface_oxygen_sites", 0),
+            eligible_surface_cation_sites=clean.get("eligible_surface_cation_sites", 0),
+            n_states=len(planned_states),
         ))
     preview_path = outdir / "surface_pourbaix_preview.csv"
     pd.DataFrame(preview_rows).to_csv(preview_path, index=False)
