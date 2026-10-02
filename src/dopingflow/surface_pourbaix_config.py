@@ -48,6 +48,15 @@ def _int_list(value: Any, default: Sequence[int]) -> list[int]:
     return sorted(set(values))
 
 
+def _float_list(value: Any, default: Sequence[float]) -> list[float]:
+    raw = default if value is None else value
+    if isinstance(raw, str):
+        values = [float(x.strip()) for x in raw.split(",") if x.strip()]
+    else:
+        values = [float(x) for x in raw]
+    return list(dict.fromkeys(values))
+
+
 def _resolve(root: Path, value: str | Path) -> Path:
     path = Path(value).expanduser()
     return path.resolve() if path.is_absolute() else (root / path).resolve()
@@ -157,11 +166,21 @@ def parse_surface_pourbaix_config(
     defaults = dict(
         enabled=False, source_root=str(source_root(raw, root)), source_mode="surface",
         source_summary="", surface_include=[], max_surfaces=10,
-        outdir="10_surface_pourbaix", placement_side=surface.get("placement_side", "top"),
+        outdir="10_surface_pourbaix", placement_side="dopant-nearest",
+        host_species=surface.get("host_species", ""),
+        side_target_species=surface.get("dopant_species", []),
+        dopant_side_tie_tolerance_A=0.25, dopant_side_fallback="top",
         anion_species=surface.get("anion_species", scan.get("anion_species", ["O"])),
-        state_families=list(DEFAULT_FAMILIES), h_counts=[1, 2, 3, 4],
-        adsorbate_counts=[1, 2], mixed_compositions=[[1, 1]],
-        surface_window_A=2.0, max_surface_oxygen_sites=8, max_surface_cation_sites=8,
+        state_families=list(DEFAULT_FAMILIES),
+        proton_coverages_pct=[25.0, 50.0, 75.0, 100.0],
+        o_coverages_pct=[25.0, 50.0, 75.0, 100.0],
+        oh_coverages_pct=[25.0, 50.0, 75.0, 100.0],
+        h2o_coverages_pct=[25.0, 50.0, 100.0],
+        mixed_coverages_pct=[[25.0, 25.0], [25.0, 75.0], [50.0, 50.0], [75.0, 25.0]],
+        surface_window_A=2.0, max_surface_oxygen_sites=0, max_surface_cation_sites=0,
+        symmetry_reduce=True, symmetry_symprec_A=0.10,
+        symmetry_angle_tolerance_deg=5.0, symmetry_mapping_tolerance_A=0.25,
+        max_raw_configurations_per_stoichiometry=100000,
         max_arrangements_per_stoichiometry=8, oh_bond_length_A=0.98,
         adsorbate_height_A=1.85, water_oh_bond_length_A=0.9572,
         water_hoh_angle_deg=104.5, temperature_K=298.15,
@@ -183,45 +202,75 @@ def parse_surface_pourbaix_config(
     section["resolved_source_mode"] = mode
     section["surface_include"] = _string_list(section["surface_include"])
     section["anion_species"] = _string_list(section["anion_species"]) or ["O"]
+    section["side_target_species"] = _string_list(section["side_target_species"])
+    section["host_species"] = str(section.get("host_species", "")).strip()
     section["state_families"] = _string_list(section["state_families"])
     invalid = [x for x in section["state_families"] if x not in DEFAULT_FAMILIES]
     if invalid:
         raise ValueError(f"Unsupported surface-state families: {invalid}")
     if "clean" not in section["state_families"]:
         section["state_families"].insert(0, "clean")
-    section["h_counts"] = [x for x in _int_list(section["h_counts"], [1, 2, 3, 4]) if x > 0]
-    section["adsorbate_counts"] = [x for x in _int_list(section["adsorbate_counts"], [1, 2]) if x > 0]
-    mixed = []
-    for item in section["mixed_compositions"]:
-        if not isinstance(item, (list, tuple)) or len(item) != 2:
-            raise ValueError("mixed_compositions entries must be [n_O, n_OH]")
-        n_o, n_oh = int(item[0]), int(item[1])
-        if n_o < 0 or n_oh < 0 or n_o + n_oh <= 0:
-            raise ValueError("Invalid mixed O/OH composition")
-        mixed.append((n_o, n_oh))
-    section["mixed_compositions"] = mixed
 
-    section["placement_side"] = str(section["placement_side"]).lower()
-    if section["placement_side"] not in {"top", "bottom", "both"}:
-        raise ValueError("placement_side must be top, bottom, or both")
+    coverage_defaults = {
+        "proton_coverages_pct": [25.0, 50.0, 75.0, 100.0],
+        "o_coverages_pct": [25.0, 50.0, 75.0, 100.0],
+        "oh_coverages_pct": [25.0, 50.0, 75.0, 100.0],
+        "h2o_coverages_pct": [25.0, 50.0, 100.0],
+    }
+    for key, default in coverage_defaults.items():
+        values = _float_list(section.get(key), default)
+        if not values or any(value <= 0.0 or value > 100.0 for value in values):
+            raise ValueError(f"{key} values must lie in (0, 100]")
+        section[key] = values
+
+    mixed = []
+    for item in section["mixed_coverages_pct"]:
+        if not isinstance(item, (list, tuple)) or len(item) != 2:
+            raise ValueError("mixed_coverages_pct entries must be [O%, OH%]")
+        o_pct, oh_pct = float(item[0]), float(item[1])
+        if o_pct <= 0.0 or oh_pct <= 0.0 or o_pct + oh_pct > 100.0 + 1e-12:
+            raise ValueError("Mixed O/OH coverages must be positive and sum to <= 100%")
+        mixed.append((o_pct, oh_pct))
+    section["mixed_coverages_pct"] = mixed
+
+    section["placement_side"] = str(section["placement_side"]).lower().replace("_", "-")
+    if section["placement_side"] not in {"top", "bottom", "both", "dopant-nearest"}:
+        raise ValueError("placement_side must be top, bottom, both, or dopant-nearest")
+    section["dopant_side_fallback"] = str(section["dopant_side_fallback"]).lower()
+    if section["dopant_side_fallback"] not in {"top", "bottom", "both"}:
+        raise ValueError("dopant_side_fallback must be top, bottom, or both")
     section["potential_scale"] = str(section["potential_scale"]).upper()
     if section["potential_scale"] not in {"SHE", "RHE"}:
         raise ValueError("potential_scale must be SHE or RHE")
 
-    for key in ("max_surfaces", "max_surface_oxygen_sites", "max_surface_cation_sites", "max_arrangements_per_stoichiometry"):
+    section["max_surfaces"] = int(section["max_surfaces"])
+    section["max_arrangements_per_stoichiometry"] = int(section["max_arrangements_per_stoichiometry"])
+    section["max_raw_configurations_per_stoichiometry"] = int(section["max_raw_configurations_per_stoichiometry"])
+    if section["max_surfaces"] <= 0 or section["max_arrangements_per_stoichiometry"] <= 0:
+        raise ValueError("max_surfaces and max_arrangements_per_stoichiometry must be positive")
+    if section["max_raw_configurations_per_stoichiometry"] <= 0:
+        raise ValueError("max_raw_configurations_per_stoichiometry must be positive")
+    for key in ("max_surface_oxygen_sites", "max_surface_cation_sites"):
         section[key] = int(section[key])
-        if section[key] <= 0:
-            raise ValueError(f"{key} must be positive")
+        if section[key] < 0:
+            raise ValueError(f"{key} must be >= 0 (0 means all eligible sites)")
     for key in (
         "surface_window_A", "oh_bond_length_A", "adsorbate_height_A",
         "water_oh_bond_length_A", "water_hoh_angle_deg", "temperature_K",
         "potential_min_V", "potential_max_V", "potential_step_V", "pH_min",
         "pH_max", "pH_step", "reference_box_A", "h2_free_energy_correction_eV",
-        "h2o_free_energy_correction_eV",
+        "h2o_free_energy_correction_eV", "dopant_side_tie_tolerance_A",
+        "symmetry_symprec_A", "symmetry_angle_tolerance_deg",
+        "symmetry_mapping_tolerance_A",
     ):
         section[key] = float(section[key])
     if section["temperature_K"] <= 0 or section["surface_window_A"] <= 0:
         raise ValueError("temperature_K and surface_window_A must be positive")
+    if section["dopant_side_tie_tolerance_A"] < 0:
+        raise ValueError("dopant_side_tie_tolerance_A must be >= 0")
+    if section["symmetry_symprec_A"] <= 0 or section["symmetry_mapping_tolerance_A"] <= 0:
+        raise ValueError("symmetry tolerances must be positive")
+    section["symmetry_reduce"] = bool(section["symmetry_reduce"])
     if section["potential_step_V"] <= 0 or section["pH_step"] <= 0:
         raise ValueError("potential_step_V and pH_step must be positive")
     if section["potential_min_V"] >= section["potential_max_V"] or section["pH_min"] >= section["pH_max"]:
