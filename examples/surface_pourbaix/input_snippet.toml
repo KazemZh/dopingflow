@@ -37,6 +37,18 @@ symmetry_mapping_tolerance_A = 0.25
 max_raw_configurations_per_stoichiometry = 100000
 max_arrangements_per_stoichiometry = 8
 
+# Validate the relaxed chemistry before a state is allowed into the Pourbaix map.
+# Short O-O distances are structural flags only; they do not assign electronic
+# O2/superoxo/peroxo character.
+postprocess_validate_relaxed_states = true
+postprocess_oh_bond_cutoff_A = 1.25
+postprocess_oo_bond_cutoff_A = 1.75
+postprocess_surface_attachment_cutoff_A = 2.80
+postprocess_hh_bond_cutoff_A = 0.90
+postprocess_exclude_desorbed = true
+postprocess_exclude_fragmented = true
+postprocess_allow_reclassified = true
+
 oh_bond_length_A = 0.98
 adsorbate_height_A = 1.85
 
