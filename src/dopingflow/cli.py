@@ -20,6 +20,7 @@ from dopingflow.conductivity import rebuild_reference_comparison_from_toml, run_
 from dopingflow.leaching import run_leaching_from_toml
 from dopingflow.site_preference import run_site_preference_from_toml
 from dopingflow.surface_segregation import run_surface_segregation_from_toml
+from dopingflow.surface_pourbaix import run_surface_pourbaix_from_toml
 from dopingflow.surface_staged import (
     run_surface_refine_from_toml,
     run_surface_scan_from_toml,
@@ -342,6 +343,25 @@ def surface_segregation_cmd(
     typer.echo(f"\nWrote surface segregation output: {output}")
 
 
+@app.command("surface-pourbaix")
+def surface_pourbaix_cmd(
+    config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Preview electrochemical surface states without running ML/DFT calculations",
+    ),
+    verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
+) -> None:
+    """Step 16: Sample electrochemical surface states and build a CHE surface Pourbaix map."""
+    _init(config, verbose)
+    output = run_surface_pourbaix_from_toml(config, dry_run=dry_run)
+    if output is None:
+        typer.echo("Surface-Pourbaix stage disabled; set [surface_pourbaix].enabled=true")
+        return
+    typer.echo(f"\nWrote surface-Pourbaix output: {output}")
+
+
 @app.command("leaching")
 def leaching_cmd(
     config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
@@ -361,7 +381,7 @@ def leaching_cmd(
     ),
     verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
 ) -> None:
-    """Step 16: Analyze thermodynamic dopant leaching from selected surfaces."""
+    """Step 17: Analyze thermodynamic dopant leaching from electrochemically stable surfaces."""
     _init(config, verbose)
     output = run_leaching_from_toml(
         config,
@@ -382,7 +402,7 @@ def run_all_cmd(
         "--from",
         help=(
             "Start step key (refs, corrections, generate, scan, relax, filter, "
-            "bandgap, formation, collect, alloy-hull, phase-diagram, vacancies, site-preference, oxidation, conductivity, surface, surface-segregation, leaching)"
+            "bandgap, formation, collect, alloy-hull, phase-diagram, vacancies, site-preference, oxidation, conductivity, surface, surface-segregation, surface-pourbaix, leaching)"
         ),
     ),
     stop: str = typer.Option("phase-diagram", "--until", help="Stop step key (inclusive)"),
@@ -404,7 +424,7 @@ def run_all_cmd(
     Step keys:
       refs -> corrections -> generate -> scan -> relax -> filter -> bandgap
       -> formation -> collect -> alloy-hull -> phase-diagram -> vacancies
-      -> site-preference -> oxidation -> conductivity -> surface -> surface-segregation -> leaching
+      -> site-preference -> oxidation -> conductivity -> surface -> surface-segregation -> surface-pourbaix -> leaching
     """
     _init(config, verbose)
 
@@ -432,7 +452,8 @@ def run_all_cmd(
         ("conductivity", "13 conductivity", lambda: run_conductivity_from_toml(config)),
         ("surface", "14 surface scan/refine", lambda: run_surface_workflow_from_toml(config)),
         ("surface-segregation", "15 surface segregation MC", lambda: run_surface_segregation_from_toml(config)),
-        ("leaching", "16 dopant leaching", lambda: run_leaching_from_toml(config)),
+        ("surface-pourbaix", "16 electrochemical surface states / Pourbaix", lambda: run_surface_pourbaix_from_toml(config)),
+        ("leaching", "17 dopant leaching", lambda: run_leaching_from_toml(config)),
     ]
 
     key_to_idx = {k: i for i, (k, _, _) in enumerate(steps)}
@@ -472,7 +493,7 @@ def run_all_cmd(
         typer.echo(f"\n=== {title} ({k}) ===")
         res = fn()
 
-        if k in {"collect", "alloy-hull", "phase-diagram", "vacancies", "site-preference", "oxidation", "surface", "surface-segregation", "leaching"} and isinstance(res, Path):
+        if k in {"collect", "alloy-hull", "phase-diagram", "vacancies", "site-preference", "oxidation", "surface", "surface-segregation", "surface-pourbaix", "leaching"} and isinstance(res, Path):
             typer.echo(f"\nWrote output: {res}")
 
 
