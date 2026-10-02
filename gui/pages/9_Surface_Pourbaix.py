@@ -15,7 +15,15 @@ from dopingflow.surface_pourbaix import (
     preview_surface_pourbaix_targets,
     resolve_surface_pourbaix_output_dir,
 )
-from gui_config import BACKEND_CHOICES, DEVICE_CHOICES, OPTIMIZER_CHOICES
+from gui_config import (
+    BACKEND_CHOICES,
+    DEVICE_CHOICES,
+    GRACE_MODEL_CHOICES,
+    MACE_MODEL_CHOICES,
+    OPTIMIZER_CHOICES,
+    UMA_MODEL_CHOICES,
+    UMA_TASK_CHOICES,
+)
 
 st.set_page_config(page_title="Surface Pourbaix", layout="wide")
 st.title("Electrochemical surface states / Pourbaix")
@@ -51,6 +59,47 @@ def _items(text: str) -> list[str]:
 
 def _ints(text: str) -> list[int]:
     return sorted(set(int(x.strip()) for x in text.split(",") if x.strip()))
+
+
+@st.cache_data(show_spinner=False)
+def _available_mace_models() -> tuple[str, ...]:
+    """Use the installed MACE catalogue when available."""
+    try:
+        from dopingflow.ml_backends import get_mace_model_choices
+
+        models = tuple(get_mace_model_choices())
+        if models:
+            return models
+    except Exception:
+        pass
+    return tuple(MACE_MODEL_CHOICES)
+
+
+def _backend_model_defaults(backend: str) -> tuple[str, str]:
+    """Return valid defaults for the selected ML backend."""
+    backend = str(backend).strip().lower()
+    if backend == "m3gnet":
+        return "default", ""
+    if backend == "grace":
+        return "GRACE-1L-OMAT", ""
+    if backend == "uma":
+        return "uma-s-1p2", "omat"
+    if backend == "mace":
+        return "mh-1", "matpes_r2scan"
+    return "", ""
+
+
+def _saved_screen_value(
+    backend: str,
+    key: str,
+    fallback: str,
+) -> str:
+    """Never carry a model/task saved for another backend into this backend."""
+    saved_backend = str(saved_screen.get("backend", "")).strip().lower()
+    if saved_backend != str(backend).strip().lower():
+        return fallback
+    value = str(saved_screen.get(key, fallback)).strip()
+    return value if value else fallback
 
 
 def _run(args: list[str]) -> int:
@@ -248,18 +297,165 @@ with st.expander("Configuration & run controls", expanded=True):
 
     st.subheader("ML screening")
     m1, m2, m3, m4 = st.columns(4)
-    saved_backend = str(saved_screen.get("backend", "mace"))
+
+    backend_options = list(BACKEND_CHOICES)
+    saved_backend = str(saved_screen.get("backend", "mace")).strip().lower()
+    if saved_backend not in backend_options:
+        saved_backend = "mace"
     backend = m1.selectbox(
-        "Backend", BACKEND_CHOICES,
-        index=BACKEND_CHOICES.index(saved_backend) if saved_backend in BACKEND_CHOICES else 0,
+        "Backend",
+        backend_options,
+        index=backend_options.index(saved_backend),
+        key="surface_pourbaix_screen_backend",
     )
-    model = m2.text_input("Model", value=str(saved_screen.get("model", "mh-1")))
-    task = m3.text_input("Task", value=str(saved_screen.get("task", "matpes_r2scan")))
-    saved_device = str(saved_screen.get("device", "cpu"))
+
+    backend_model_default, backend_task_default = _backend_model_defaults(backend)
+
+    if backend == "m3gnet":
+        model = "default"
+        m2.text_input(
+            "Model",
+            value="default",
+            disabled=True,
+            key="surface_pourbaix_screen_model_m3gnet",
+            help="M3GNet uses its default pretrained model in this workflow.",
+        )
+        task = ""
+        m3.text_input(
+            "Task / head",
+            value="not used",
+            disabled=True,
+            key="surface_pourbaix_screen_task_m3gnet",
+        )
+
+    elif backend == "grace":
+        current_model = _saved_screen_value(
+            backend, "model", backend_model_default
+        )
+        if current_model not in GRACE_MODEL_CHOICES:
+            current_model = "GRACE-1L-OMAT"
+        model = m2.selectbox(
+            "GRACE model",
+            list(GRACE_MODEL_CHOICES),
+            index=list(GRACE_MODEL_CHOICES).index(current_model),
+            key="surface_pourbaix_screen_model_grace",
+        )
+        task = ""
+        m3.text_input(
+            "Task / head",
+            value="not used",
+            disabled=True,
+            key="surface_pourbaix_screen_task_grace",
+            help="GRACE model selection defines the potential; no separate task/head is used.",
+        )
+
+    elif backend == "uma":
+        current_model = _saved_screen_value(
+            backend, "model", backend_model_default
+        )
+        if current_model not in UMA_MODEL_CHOICES:
+            current_model = "uma-s-1p2"
+        model = m2.selectbox(
+            "UMA model",
+            list(UMA_MODEL_CHOICES),
+            index=list(UMA_MODEL_CHOICES).index(current_model),
+            key="surface_pourbaix_screen_model_uma",
+        )
+
+        current_task = _saved_screen_value(
+            backend, "task", backend_task_default
+        )
+        if current_task not in UMA_TASK_CHOICES:
+            current_task = "omat"
+        task = m3.selectbox(
+            "UMA task",
+            list(UMA_TASK_CHOICES),
+            index=list(UMA_TASK_CHOICES).index(current_task),
+            key="surface_pourbaix_screen_task_uma",
+        )
+
+    else:  # MACE
+        mace_models = list(_available_mace_models())
+        custom_label = "Custom checkpoint path…"
+        current_model = _saved_screen_value(
+            backend, "model", backend_model_default
+        )
+        initial_model_choice = (
+            current_model if current_model in mace_models else custom_label
+        )
+
+        selected_model = m2.selectbox(
+            "MACE model",
+            [*mace_models, custom_label],
+            index=[*mace_models, custom_label].index(initial_model_choice),
+            key="surface_pourbaix_screen_model_mace_choice",
+        )
+        if selected_model == custom_label:
+            model = m2.text_input(
+                "Checkpoint path",
+                value=current_model if current_model not in mace_models else "",
+                key="surface_pourbaix_screen_model_mace_custom",
+                help="Path to a local MACE checkpoint.",
+            ).strip()
+        else:
+            model = selected_model
+
+        saved_mace_model = (
+            str(saved_screen.get("model", "")).strip()
+            if str(saved_screen.get("backend", "")).strip().lower() == "mace"
+            else ""
+        )
+        if model == saved_mace_model:
+            mace_task_default = str(
+                saved_screen.get("task", backend_task_default)
+            ).strip()
+        elif model == "mh-1":
+            mace_task_default = "matpes_r2scan"
+        else:
+            mace_task_default = ""
+
+        is_multihead_or_custom = (
+            model.startswith("mh-") or selected_model == custom_label
+        )
+        if is_multihead_or_custom:
+            task = m3.text_input(
+                "MACE head",
+                value=mace_task_default,
+                key=f"surface_pourbaix_screen_task_mace_{model}",
+                help=(
+                    "Head for a multi-head MACE checkpoint. For MH-1, "
+                    "matpes_r2scan is the default. Leave blank only if the "
+                    "selected checkpoint does not require a head."
+                ),
+            ).strip()
+        else:
+            task = ""
+            m3.text_input(
+                "MACE head",
+                value="not used",
+                disabled=True,
+                key=f"surface_pourbaix_screen_task_mace_single_{model}",
+            )
+
+    saved_device = str(saved_screen.get("device", "cpu")).strip().lower()
+    if saved_device not in DEVICE_CHOICES:
+        saved_device = "cpu"
     device = m4.selectbox(
-        "Device", DEVICE_CHOICES,
-        index=DEVICE_CHOICES.index(saved_device) if saved_device in DEVICE_CHOICES else 0,
+        "Device",
+        DEVICE_CHOICES,
+        index=DEVICE_CHOICES.index(saved_device),
+        key="surface_pourbaix_screen_device",
     )
+
+    st.caption(
+        {
+            "m3gnet": "M3GNet: fixed default pretrained model; no task/head.",
+            "grace": "GRACE: choose only from GRACE checkpoints; no separate task/head.",
+            "uma": "UMA: choose a UMA foundation model and its task.",
+            "mace": "MACE: choose an installed packaged model or a custom checkpoint; a head is shown only where relevant.",
+        }[backend]
+    )
+
     m5, m6, m7 = st.columns(3)
     saved_optimizer = str(saved_screen.get("optimizer", "bfgs"))
     optimizer = m5.selectbox(
