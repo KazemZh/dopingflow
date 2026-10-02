@@ -4,6 +4,7 @@ import pytest
 from pymatgen.core import Lattice, Structure
 
 from dopingflow.surface_pourbaix import (
+    _select_dft_candidates,
     build_surface_pourbaix_grid,
     enumerate_surface_states,
     parse_surface_pourbaix_config,
@@ -182,3 +183,26 @@ def test_leaching_does_not_treat_surface_hydrogen_as_a_dopant(tmp_path) -> None:
     )
     assert rows
     assert {row["dopant"] for row in rows} == {"Sb"}
+
+
+def test_dft_candidate_selection_ignores_failed_ml_state_gap() -> None:
+    records = [
+        {
+            "state_id": "clean",
+            "family": "clean",
+            "minimum_deltaG_above_stable_ml_eV": 0.0,
+        },
+        {
+            "state_id": "good",
+            "family": "OH",
+            "minimum_deltaG_above_stable_ml_eV": 0.12,
+        },
+        {
+            "state_id": "failed",
+            "family": "O",
+            "minimum_deltaG_above_stable_ml_eV": None,
+        },
+    ]
+    cfg = {"dft": {"candidate_window_eV": 0.30, "max_states_per_surface": 10}}
+    selected = _select_dft_candidates(records, cfg)
+    assert [row["state_id"] for row in selected] == ["clean", "good"]
