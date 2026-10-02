@@ -10,10 +10,18 @@ pH.
 Input and state search
 ----------------------
 
-With source_mode = "auto" the stage first looks for
-surface_segregation_summary.csv and uses each segregated POSCAR_best_mc. If no
-segregation output exists it falls back to the selected/refined surface
-tables. The generated state families are:
+Surface segregation is **not required**. By default, ``source_mode = "surface"``
+reads the best available table produced directly by the Surface stage, in this
+order: final selected surfaces, all refined surfaces, screened shortlist, then
+the full screened/generated surface table.
+
+If a segregation study has been performed and those structures should be used
+instead, set ``source_mode = "segregation"``. ``source_mode = "auto"`` also
+prefers the direct Surface-stage tables and uses segregation only as a fallback.
+An explicit source CSV can still be supplied with ``source_summary``.
+
+The GUI lists the surfaces found in the selected table and allows exact surface
+IDs to be picked directly. The generated state families are:
 
 * clean surface;
 * protonated surface oxygen sites;
