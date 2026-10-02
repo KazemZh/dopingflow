@@ -10,6 +10,7 @@ from dopingflow.surface_pourbaix import (
     parse_surface_pourbaix_config,
     resolve_surface_pourbaix_source_summary,
     surface_state_delta_g_eV,
+    surface_state_display_label,
 )
 from dopingflow.surface_pourbaix_thermo import KB_EV_K, LN10
 from dopingflow.surface_pourbaix_sampling import (
@@ -366,3 +367,31 @@ def test_surface_site_symmetry_reduces_equivalent_single_occupations() -> None:
     assert stats["raw_total"] == 4
     assert stats["symmetry_unique"] == 1
     assert len(patterns) == 1
+
+
+def test_surface_state_display_labels_use_actual_coverage_not_arrangement_ids() -> None:
+    assert surface_state_display_label(
+        {
+            "state_id": "protonated_H04_arr006",
+            "family": "protonated",
+            "actual_coverage_pct": 33.333333,
+        }
+    ) == "Protonated lattice O — 33.3%"
+    assert surface_state_display_label(
+        {
+            "state_id": "O_02_arr004",
+            "family": "O",
+            "actual_coverage_pct": 20.0,
+        }
+    ) == "O* — 20%"
+    assert surface_state_display_label(
+        {
+            "state_id": "mixed_O02_OH03_arr007",
+            "family": "mixed-O-OH",
+            "actual_o_coverage_pct": 20.0,
+            "actual_oh_coverage_pct": 30.0,
+        }
+    ) == "Mixed O*/OH* — 20% O* + 30% OH*"
+    assert surface_state_display_label(
+        {"state_id": "clean", "family": "clean"}
+    ) == "Clean"
