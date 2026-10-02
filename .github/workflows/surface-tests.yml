@@ -6,17 +6,30 @@ on:
       - "src/dopingflow/surface.py"
       - "src/dopingflow/surface_staged.py"
       - "src/dopingflow/surface_segregation.py"
+      - "src/dopingflow/surface_pourbaix.py"
+      - "src/dopingflow/surface_pourbaix_config.py"
+      - "src/dopingflow/surface_pourbaix_states.py"
+      - "src/dopingflow/surface_pourbaix_thermo.py"
+      - "src/dopingflow/surface_pourbaix_dft.py"
+      - "src/dopingflow/leaching.py"
       - "src/dopingflow/cli.py"
       - "gui/app.py"
       - "gui/pages/7_Surface_Screening.py"
       - "gui/pages/8_Surface_Segregation.py"
+      - "gui/pages/9_Surface_Pourbaix.py"
+      - "gui/pages/10_Dopant_Leaching.py"
       - "gui/README.md"
       - "tests/test_surface_staged.py"
       - "tests/test_surface_segregation.py"
+      - "tests/test_surface_pourbaix.py"
+      - "tests/test_leaching.py"
       - "examples/surfaces/**"
       - "examples/surface_segregation/**"
+      - "examples/surface_pourbaix/**"
       - "docs/source/methods/surfaces.rst"
       - "docs/source/methods/surface_segregation.rst"
+      - "docs/source/methods/surface_pourbaix.rst"
+      - "docs/source/methods/leaching.rst"
       - "docs/source/workflow_overview.rst"
   push:
     branches:
@@ -37,5 +50,5 @@ jobs:
           pip install -e ".[dev]"
       - name: Run surface tests
         run: |
-          python -m py_compile src/dopingflow/surface_segregation.py gui/app.py gui/pages/7_Surface_Screening.py gui/pages/8_Surface_Segregation.py
-          pytest -q tests/test_surface_staged.py tests/test_surface_segregation.py tests/test_cli_help.py
+          python -m py_compile src/dopingflow/surface_segregation.py src/dopingflow/surface_pourbaix.py src/dopingflow/surface_pourbaix_config.py src/dopingflow/surface_pourbaix_states.py src/dopingflow/surface_pourbaix_thermo.py src/dopingflow/surface_pourbaix_dft.py src/dopingflow/leaching.py gui/app.py gui/pages/7_Surface_Screening.py gui/pages/8_Surface_Segregation.py gui/pages/9_Surface_Pourbaix.py gui/pages/10_Dopant_Leaching.py
+          pytest -q tests/test_surface_staged.py tests/test_surface_segregation.py tests/test_surface_pourbaix.py tests/test_leaching.py tests/test_cli_help.py
