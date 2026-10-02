@@ -131,11 +131,13 @@ def parse_leaching_config(
 ) -> dict[str, Any]:
     raw = dict(config.get("leaching", {}) or {})
     surface = dict(config.get("surface", {}) or {})
+    surface_pourbaix = dict(config.get("surface_pourbaix", {}) or {})
     structure = dict(config.get("structure", {}) or {})
     oxidation = dict(config.get("oxidation", {}) or {})
     conductivity = dict(config.get("conductivity", {}) or {})
     source_root_default = (
         str(raw.get("source_root", "")).strip()
+        or str(surface_pourbaix.get("source_root", "")).strip()
         or str(surface.get("source_root", "")).strip()
         or str(conductivity.get("source_root", "")).strip()
         or str(oxidation.get("source_root", "")).strip()
@@ -205,7 +207,7 @@ def parse_leaching_config(
 
     raw["source_mode"] = str(raw["source_mode"]).lower()
     valid_sources = {
-        "auto", "final-selected", "screen-selected", "refine-summary", "screen-summary"
+        "auto", "surface-pourbaix", "final-selected", "screen-selected", "refine-summary", "screen-summary"
     }
     if raw["source_mode"] not in valid_sources:
         raise ValueError(f"[leaching].source_mode must be one of {sorted(valid_sources)}")
@@ -419,7 +421,10 @@ def resolve_surface_summary(config: Mapping[str, Any], cfg: Mapping[str, Any]) -
 
     surface_cfg = parse_surface_config(config)
     out = resolve_surface_output_dir(config, surface_cfg, root)
+    from dopingflow.surface_pourbaix_config import resolve_surface_pourbaix_output_dir
+
     choices = {
+        "surface-pourbaix": resolve_surface_pourbaix_output_dir(config, root) / "leaching_surface_states.csv",
         "final-selected": out / str(surface_cfg.get("refine_selected_csv", "surface_final_selected.csv")),
         "screen-selected": out / str(surface_cfg.get("screen_selected_csv", "surface_screen_selected.csv")),
         "refine-summary": out / str(surface_cfg.get("refine_summary_csv", "surface_refine_summary.csv")),
@@ -430,10 +435,10 @@ def resolve_surface_summary(config: Mapping[str, Any], cfg: Mapping[str, Any]) -
         if not p.exists():
             raise FileNotFoundError(f"[leaching] Requested surface source does not exist: {p}")
         return p
-    for name in ("final-selected", "screen-selected", "refine-summary", "screen-summary"):
+    for name in ("surface-pourbaix", "final-selected", "screen-selected", "refine-summary", "screen-summary"):
         if choices[name].exists():
             return choices[name]
-    raise FileNotFoundError("[leaching] Run `dopingflow surface` first or set source_summary")
+    raise FileNotFoundError("[leaching] Run `dopingflow surface-pourbaix` (preferred) or `dopingflow surface`, or set source_summary")
 
 def _safe(value: str) -> str:
     return "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in value.replace("/", "__"))
@@ -498,7 +503,7 @@ def _site_selected(record: Mapping[str, Any], patterns: Sequence[str]) -> bool:
 
 
 def _structure_path(row: Mapping[str, Any], root: Path) -> tuple[Path, str]:
-    for stage, key in (("refine", "refine_relaxed_structure_path"), ("screen", "screen_relaxed_structure_path"), ("generated", "generated_structure_path")):
+    for stage, key in (("surface-pourbaix", "pourbaix_structure_path"), ("refine", "refine_relaxed_structure_path"), ("screen", "screen_relaxed_structure_path"), ("generated", "generated_structure_path")):
         value = str(row.get(key) or "").strip()
         if value and value.lower() != "nan":
             p = _path(root, value)
