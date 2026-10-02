@@ -30,11 +30,54 @@ IDs to be picked directly. The generated state families are:
 * H2O* adsorbates; and
 * mixed O*/OH* states.
 
-Coverage and arrangement are separate degrees of freedom. The h_counts and
-adsorbate_counts settings choose coverages, while
-max_arrangements_per_stoichiometry limits the deterministic enumeration of
-site arrangements. ML relaxations are checkpointed with a structure and
-calculator fingerprint.
+Coverage, side selection, and arrangement
+----------------------------------------
+
+Coverage is specified as a percentage of the eligible sites on the selected
+surface side, rather than as an absolute atom count. Separate grids are available
+for protonated lattice O, O*, OH*, and H2O*, plus explicit O*:OH* coverage pairs.
+For each surface, DopingFlow converts the requested percentage to the closest
+integer occupation allowed by that finite surface cell. When a requested value
+lies exactly halfway between two integer occupations, both are retained. For
+example, 25% coverage on 12 sites maps to 3 occupied sites, whereas 25% on 10
+sites maps to both 2/10 (20%) and 3/10 (30%). Requested and actual coverages are
+both written to the state summary.
+
+By default ``max_surface_oxygen_sites = 0`` and
+``max_surface_cation_sites = 0``, so all eligible exposed sites are used when
+defining coverage. A positive value is an explicit search-site cap and therefore
+changes the considered coverage denominator.
+
+``placement_side = "dopant-nearest"`` provides a surface-independent automatic
+choice for asymmetric doped slabs. DopingFlow determines the slab normal from
+the first two lattice vectors, computes the nearest depth of each requested
+dopant species from the top and bottom sides, and averages those nearest depths
+*per species*. The side with the lower species-balanced depth is selected. This
+prevents a species with more atoms from dominating the decision simply by
+multiplicity. ``side_target_species`` can explicitly name co-dopants such as
+``["Sb", "In"]``; when it is empty, non-host cations are inferred from each
+actual slab. If the two sides are tied within
+``dopant_side_tie_tolerance_A``, both sides are retained. Manual ``top``,
+``bottom``, and ``both`` modes remain available.
+
+Before any ML relaxation, adsorbate/proton arrangements are symmetry-reduced.
+The symmetry operations are determined from the **actual doped/vacancy slab**,
+not from the pristine parent crystal. Therefore a dopant or vacancy that breaks
+a parent symmetry also prevents that symmetry from being used to discard
+chemically distinct configurations. Only operations that map the complete
+eligible surface-site set onto itself are accepted.
+
+After symmetry reduction, if more inequivalent configurations remain than
+``max_arrangements_per_stoichiometry``, DopingFlow selects a diverse subset
+using surface-site geometry, adsorbate separation, underlying cation identity,
+and proximity to the target dopants. This replaces the former "first N
+combinations" behavior. ``max_raw_configurations_per_stoichiometry`` is a
+safety cap for exceptionally large combinatorial spaces.
+
+ML relaxations are checkpointed with a structure and calculator fingerprint,
+and the output records raw arrangement count, examined count, number of
+symmetry-unique arrangements, symmetry operations used, resolved surface side,
+eligible-site counts, and actual coverage.
 
 CHE thermodynamics
 ------------------
