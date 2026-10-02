@@ -60,8 +60,8 @@ def source_root(raw: Mapping[str, Any], root: Path) -> Path:
     structure = dict(raw.get("structure", {}) or {})
     value = (
         str(pbx.get("source_root", "")).strip()
-        or str(segregation.get("source_root", "")).strip()
         or str(surface.get("source_root", "")).strip()
+        or str(segregation.get("source_root", "")).strip()
         or str(structure.get("outdir", "random_structures")).strip()
     )
     return _resolve(root, value)
@@ -84,6 +84,18 @@ def _surface_candidates(raw: Mapping[str, Any], root: Path) -> dict[str, Path]:
     }
 
 
+def _best_direct_surface_summary(
+    surfaces: Mapping[str, Path],
+) -> tuple[Path, str]:
+    """Return the best available table produced directly by the surface stage."""
+    for name in ("final-selected", "refine-summary", "screen-selected", "screen-summary"):
+        path = Path(surfaces[name])
+        if path.exists():
+            return path, name
+    # Return the preferred path so the eventual FileNotFoundError is informative.
+    return Path(surfaces["final-selected"]), "final-selected"
+
+
 def resolve_surface_pourbaix_source_summary(
     raw: Mapping[str, Any], root: Path | str
 ) -> tuple[Path, str]:
@@ -93,22 +105,30 @@ def resolve_surface_pourbaix_source_summary(
     if explicit:
         return _resolve(source_root(raw, root), explicit), "explicit"
 
-    mode = str(section.get("source_mode", "auto")).strip().lower()
-    segregation = resolve_surface_segregation_output_dir(raw, root) / "surface_segregation_summary.csv"
+    mode = str(section.get("source_mode", "surface")).strip().lower()
+    segregation = (
+        resolve_surface_segregation_output_dir(raw, root)
+        / "surface_segregation_summary.csv"
+    )
     surfaces = _surface_candidates(raw, root)
+
+    # Surface Pourbaix must not depend on running segregation. The direct
+    # surface-stage tables are a first-class source and are the default.
+    if mode == "surface":
+        return _best_direct_surface_summary(surfaces)
     if mode == "segregation":
         return segregation, "segregation"
     if mode == "auto":
+        direct_path, direct_mode = _best_direct_surface_summary(surfaces)
+        if direct_path.exists():
+            return direct_path, direct_mode
         if segregation.exists():
             return segregation, "segregation"
-        for name in ("final-selected", "refine-summary", "screen-selected", "screen-summary"):
-            if surfaces[name].exists():
-                return surfaces[name], name
-        return segregation, "segregation"
+        return direct_path, direct_mode
     if mode not in surfaces:
         raise ValueError(
-            "[surface_pourbaix].source_mode must be auto, segregation, final-selected, "
-            "refine-summary, screen-selected, or screen-summary"
+            "[surface_pourbaix].source_mode must be surface, auto, segregation, "
+            "final-selected, refine-summary, screen-selected, or screen-summary"
         )
     return surfaces[mode], mode
 
@@ -135,7 +155,7 @@ def parse_surface_pourbaix_config(
     surface = dict(raw.get("surface", {}) or {})
     scan = dict(raw.get("scan", {}) or {})
     defaults = dict(
-        enabled=False, source_root=str(source_root(raw, root)), source_mode="auto",
+        enabled=False, source_root=str(source_root(raw, root)), source_mode="surface",
         source_summary="", surface_include=[], max_surfaces=10,
         outdir="10_surface_pourbaix", placement_side=surface.get("placement_side", "top"),
         anion_species=surface.get("anion_species", scan.get("anion_species", ["O"])),
