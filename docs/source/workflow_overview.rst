@@ -250,7 +250,8 @@ Notes
 - The vacancy-resolved closed-system hull is only as complete as the competing
   phases supplied to the phase-diagram calculation.
 - Surface scanning can be run as one optional run-all stage or split into surface-scan and surface-refine commands when GRACE and MACE live in different environments.
-- Surface Pourbaix determines intact-surface O/H termination stability with the CHE; it is distinct from bulk aqueous phase stability.\n- Dopant leaching is a thermodynamic post-processing stage on those stable surfaces; dissolution electrochemical values require an explicitly chosen aqueous redox reference.
+- Surface Pourbaix determines intact-surface O/H termination stability with the CHE; it is distinct from bulk aqueous phase stability.
+- Dopant leaching is a thermodynamic post-processing stage on those stable surfaces; dissolution electrochemical values require an explicitly chosen aqueous redox reference.
 
 Typical Usage
 -------------
