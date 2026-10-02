@@ -1,0 +1,75 @@
+# Step 16: electrochemical surface states / surface Pourbaix
+# Defaults to the best structures from Step 15 surface-segregation MC.
+[surface_pourbaix]
+enabled = true
+source_mode = "auto"                  # auto prefers surface-segregation output
+source_summary = ""
+surface_include = []
+max_surfaces = 10
+outdir = "10_surface_pourbaix"
+
+# Sample both coverage and arrangement. "clean" is always retained as the reference.
+placement_side = "top"
+anion_species = ["O"]
+state_families = ["clean", "protonated", "O", "OH", "H2O", "mixed-O-OH"]
+h_counts = [1, 2, 3, 4]
+adsorbate_counts = [1, 2]
+mixed_compositions = [[1, 1]]        # [n(O*), n(OH*)]
+surface_window_A = 2.0
+max_surface_oxygen_sites = 8
+max_surface_cation_sites = 8
+max_arrangements_per_stoichiometry = 8
+oh_bond_length_A = 0.98
+adsorbate_height_A = 1.85
+
+# Requested PEM-relevant pH window. SHE gives the conventional pH-sloped map.
+temperature_K = 298.15
+potential_scale = "SHE"              # SHE or RHE
+potential_min_V = 0.0
+potential_max_V = 2.0
+potential_step_V = 0.05
+pH_min = -1.0
+pH_max = 3.0
+pH_step = 0.1
+
+# H2/H2O are calculated with the screening backend unless manual values are supplied.
+compute_references = true
+reference_relax = true
+reference_box_A = 15.0
+manual_h2_energy_eV = ""
+manual_h2o_energy_eV = ""
+h2_free_energy_correction_eV = 0.0
+h2o_free_energy_correction_eV = 0.0
+resume_completed = true
+inherit_surface_fixed_atoms = true
+
+[surface_pourbaix.screen]
+backend = "mace"
+model = "mh-1"
+task = "matpes_r2scan"
+device = "cpu"
+relax = true
+optimizer = "bfgs"
+fmax = 0.05
+max_steps = 300
+
+# Optional DFT refinement of ML-competitive states only.
+[surface_pourbaix.dft]
+enabled = false
+execute = false
+max_states_per_surface = 20
+candidate_window_eV = 0.30
+code = "gpaw"
+mode = "pw"
+xc = "PBE"
+ecut_eV = 500.0
+kpts = [3, 3, 1]
+gamma = true
+smearing_eV = 0.05
+convergence_density = 1e-5
+maxiter = 333
+spinpol = "auto"
+save_wavefunctions = false
+reuse_existing = true
+cache_root = "dft_cache"
+fail_fast = false
