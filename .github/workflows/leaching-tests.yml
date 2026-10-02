@@ -8,7 +8,12 @@ on:
       - "src/dopingflow/cli.py"
       - "tests/test_leaching.py"
       - "tests/test_surface_staged.py"
-      - "gui/pages/9_Dopant_Leaching.py"
+      - "gui/pages/9_Surface_Pourbaix.py"
+      - "gui/pages/10_Dopant_Leaching.py"
+      - "src/dopingflow/surface_pourbaix.py"
+      - "src/dopingflow/surface_pourbaix_config.py"
+      - "src/dopingflow/surface_pourbaix_states.py"
+      - "src/dopingflow/surface_pourbaix_thermo.py"
       - "examples/leaching/**"
       - "docs/source/methods/leaching.rst"
       - "docs/source/index.rst"
@@ -33,5 +38,6 @@ jobs:
       - name: Run leaching tests
         run: |
           python -m py_compile src/dopingflow/leaching.py
-          if [ -f gui/pages/9_Dopant_Leaching.py ]; then python -m py_compile gui/pages/9_Dopant_Leaching.py; fi
-          pytest -q tests/test_leaching.py tests/test_surface_staged.py tests/test_cli_help.py
+          if [ -f gui/pages/10_Dopant_Leaching.py ]; then python -m py_compile gui/pages/10_Dopant_Leaching.py; fi
+          if [ -f gui/pages/9_Surface_Pourbaix.py ]; then python -m py_compile gui/pages/9_Surface_Pourbaix.py; fi
+          pytest -q tests/test_leaching.py tests/test_surface_pourbaix.py tests/test_surface_staged.py tests/test_cli_help.py
