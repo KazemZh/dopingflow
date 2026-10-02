@@ -58,7 +58,9 @@ The sidebar order follows the scientific workflow rather than alphabetical filen
 5. Oxidation States
 6. Electronic Conductivity
 7. Surface Screening
-8. Dopant Leaching
+8. Surface Segregation MC
+9. Surface Pourbaix
+10. Dopant Leaching
 
 Numeric filename prefixes are used only to control Streamlit ordering; they are not shown in the page labels.
 
@@ -300,9 +302,17 @@ relevant. Backend-specific model/task values are not reused across backends.
 
 ---
 
+## Surface Pourbaix page
+
+`gui/pages/9_Surface_Pourbaix.py` sits between segregation and leaching. It
+selects intact segregated surfaces, samples protonated/O*/OH*/H2O*/mixed O-OH
+states, controls the ML screening and optional GPAW refinement, and plots the
+stable state on a configurable U-pH grid. The default pH range is -1 to 3.
+
 ## Dopant Leaching page
 
-`gui/pages/9_Dopant_Leaching.py` consumes the selected surface tables and exposes:
+`gui/pages/10_Dopant_Leaching.py` prefers the stable Surface-Pourbaix hand-off
+table when `source_mode = "auto"` and exposes:
 
 - exact surface/target filtering and surface/subsurface/bulk site selection;
 - a dry-run table of every dopant atom that will be removed;
@@ -338,13 +348,14 @@ gui/
 │   ├── 6_Electronic_Conductivity.py
 │   ├── 7_Surface_Screening.py
 │   ├── 8_Surface_Segregation.py
-│   └── 9_Dopant_Leaching.py
+│   ├── 9_Surface_Pourbaix.py
+│   └── 10_Dopant_Leaching.py
 ├── io_project.py
 └── view_structure.py
 ```
 
-Focused tests cover the staged vacancy, surface screening, and surface-segregation workflows. The surface CI also
-compiles the main app plus the dedicated Surface Screening and Surface Segregation pages, while the documentation
+Focused tests cover the staged vacancy, surface screening, surface-segregation, Surface-Pourbaix, and leaching workflows. The surface CI also
+compiles the main app plus the dedicated Surface Screening, Surface Segregation, Surface Pourbaix, and Dopant Leaching pages, while the documentation
 workflows keep the Sphinx guides synchronized.
 
 ---
