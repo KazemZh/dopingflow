@@ -121,6 +121,25 @@ candidate_window_eV of stability anywhere on the ML grid are refined with the
 shared provenance-checked GPAW infrastructure. The clean surface is always
 included. This limits DFT work while retaining near-boundary states.
 
+Surface-Pourbaix visualization
+-----------------------------
+
+The Streamlit results view renders the U-pH grid as a **filled discrete phase
+map**, rather than as individual square scatter markers. The plotted category is
+the stable chemistry/coverage state. Phase boundaries are drawn between adjacent
+grid cells with different stable categories.
+
+Legend labels intentionally omit internal arrangement identifiers such as
+``arr006``. New runs use the actual finite-cell coverage recorded during state
+generation, for example ``Protonated lattice O — 33.3%``, ``O* — 20%``, or
+``Mixed O*/OH* — 20% O* + 30% OH*``. The exact ``state_id``, arrangement,
+resolved slab side, symmetry statistics, and CHE free energy remain available
+in hover text and the provenance table.
+
+Legacy result files generated before coverage metadata was added are still
+viewable, but the GUI warns that a rerun is required before percentage-based
+phase labels can be shown reliably.
+
 Outputs and leaching hand-off
 -----------------------------
 
