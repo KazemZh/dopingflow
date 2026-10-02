@@ -25,7 +25,7 @@ Vacancy Results → Optional M0/M1-corrected Vacancy Thermodynamics
 
 Vacancy Results → Vacancy-resolved Raw/Corrected Phase Diagram
 
-Database → Surface Scan → Higher-Fidelity Surface Refinement → Surface Segregation MC → Dopant Leaching
+Database → Surface Scan → Higher-Fidelity Surface Refinement → Surface Segregation MC → Surface Pourbaix → Dopant Leaching
 
 The vacancy M0/M1 option reuses the already fitted backend-specific correction
 model. It does not refit a separate vacancy-specific model. The correction is
