@@ -189,6 +189,14 @@ def parse_surface_pourbaix_config(
         manual_h2_energy_eV="", manual_h2o_energy_eV="", compute_references=True,
         reference_relax=True, reference_box_A=15.0,
         h2_free_energy_correction_eV=0.0, h2o_free_energy_correction_eV=0.0,
+        postprocess_validate_relaxed_states=True,
+        postprocess_oh_bond_cutoff_A=1.25,
+        postprocess_oo_bond_cutoff_A=1.75,
+        postprocess_surface_attachment_cutoff_A=2.80,
+        postprocess_hh_bond_cutoff_A=0.90,
+        postprocess_exclude_desorbed=True,
+        postprocess_exclude_fragmented=True,
+        postprocess_allow_reclassified=True,
         inherit_surface_fixed_atoms=True, resume_completed=True, screen={}, dft={},
     )
     for key, value in defaults.items():
@@ -261,7 +269,9 @@ def parse_surface_pourbaix_config(
         "pH_max", "pH_step", "reference_box_A", "h2_free_energy_correction_eV",
         "h2o_free_energy_correction_eV", "dopant_side_tie_tolerance_A",
         "symmetry_symprec_A", "symmetry_angle_tolerance_deg",
-        "symmetry_mapping_tolerance_A",
+        "symmetry_mapping_tolerance_A", "postprocess_oh_bond_cutoff_A",
+        "postprocess_oo_bond_cutoff_A", "postprocess_surface_attachment_cutoff_A",
+        "postprocess_hh_bond_cutoff_A",
     ):
         section[key] = float(section[key])
     if section["temperature_K"] <= 0 or section["surface_window_A"] <= 0:
@@ -271,6 +281,25 @@ def parse_surface_pourbaix_config(
     if section["symmetry_symprec_A"] <= 0 or section["symmetry_mapping_tolerance_A"] <= 0:
         raise ValueError("symmetry tolerances must be positive")
     section["symmetry_reduce"] = bool(section["symmetry_reduce"])
+    section["postprocess_validate_relaxed_states"] = bool(
+        section["postprocess_validate_relaxed_states"]
+    )
+    section["postprocess_exclude_desorbed"] = bool(
+        section["postprocess_exclude_desorbed"]
+    )
+    section["postprocess_exclude_fragmented"] = bool(
+        section["postprocess_exclude_fragmented"]
+    )
+    section["postprocess_allow_reclassified"] = bool(
+        section["postprocess_allow_reclassified"]
+    )
+    if (
+        section["postprocess_oh_bond_cutoff_A"] <= 0
+        or section["postprocess_oo_bond_cutoff_A"] <= 0
+        or section["postprocess_surface_attachment_cutoff_A"] <= 0
+        or section["postprocess_hh_bond_cutoff_A"] <= 0
+    ):
+        raise ValueError("post-relaxation validation distance cutoffs must be positive")
     if section["potential_step_V"] <= 0 or section["pH_step"] <= 0:
         raise ValueError("potential_step_V and pH_step must be positive")
     if section["potential_min_V"] >= section["potential_max_V"] or section["pH_min"] >= section["pH_max"]:
