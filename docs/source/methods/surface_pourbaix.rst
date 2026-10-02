@@ -79,6 +79,48 @@ and the output records raw arrangement count, examined count, number of
 symmetry-unique arrangements, symmetry operations used, resolved surface side,
 eligible-site counts, and actual coverage.
 
+Post-relaxation chemistry validation
+------------------------------------
+
+The generated state name is a starting hypothesis, not the final phase label.
+After each ML relaxation, DopingFlow inspects the relaxed connectivity before
+the energy is allowed into the Pourbaix competition.
+
+The validator tracks newly added H/O atoms relative to the parent slab and
+classifies:
+
+* protonated original lattice oxygen;
+* surface-bound O*, OH*, and H2O*;
+* short added-O--added-O motifs (O2/peroxo-like structurally);
+* added-O--lattice-O reconstructions;
+* detached O, OH, H2O, O2-like, and larger oxygen fragments;
+* unbound H / H2-like fragments; and
+* adsorption/protonation-site changes at otherwise unchanged coverage.
+
+Distance thresholds are configurable. A short O--O distance is deliberately
+reported as an ``O-O-like`` structural motif; the workflow does **not** infer
+the electronic identity O2 vs superoxo vs peroxo from bond length alone.
+
+Each state receives a ``state_status``:
+
+* ``retained`` -- intended chemistry and site pattern survived;
+* ``reconstructed_same_coverage`` -- same chemistry/coverage, different sites;
+* ``reclassified`` -- chemistry changed but the products remain surface-bound;
+* ``desorbed`` -- one or more fragments detached from the slab;
+* ``fragmented`` -- unbound/abnormal fragments formed;
+* ``invalid`` / ``calculation_failed`` -- unusable relaxation.
+
+By default, desorbed and fragmented states are excluded from the Pourbaix
+competition. Surface-bound reclassified states remain eligible and use their
+**final relaxed chemistry** in the plot label. Thus an intended O*/OH* state
+that forms detached O2 is not mislabeled as a stable high-O coverage phase,
+whereas a bound reconstruction such as 2OH* -> O* + H2O* can be retained under
+a reconstructed final-state label.
+
+The state summary records requested and final labels, final coverages, counts
+of surface-bound/desorbed species, the validation reason, and the exact relaxed
+structure path for inspection.
+
 CHE thermodynamics
 ------------------
 
