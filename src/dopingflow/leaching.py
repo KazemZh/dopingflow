@@ -564,7 +564,11 @@ def _dopants(row: Mapping[str, Any], structure: Structure, cfg: Mapping[str, Any
     if wanted:
         return [x for x in wanted if x in present]
     host, anions = str(row.get("host_species") or ""), set(cfg["anion_species"])
-    return sorted(x for x in present if x not in anions and x != host)
+    # Electrochemical Surface-Pourbaix states may contain adsorbed/protonic H.
+    # Hydrogen is not a substitutional cation dopant and must never become a
+    # leaching target merely because it is present in the stable surface state.
+    excluded = {*anions, host, "H"}
+    return sorted(x for x in present if x not in excluded)
 
 
 def enumerate_leaching_sites(
@@ -572,7 +576,11 @@ def enumerate_leaching_sites(
 ) -> list[dict[str, Any]]:
     dopants = _dopants(row, structure, cfg)
     anions = set(cfg["anion_species"])
-    cations = sorted({s.specie.symbol for s in structure if s.specie.symbol not in anions})
+    cations = sorted({
+        s.specie.symbol
+        for s in structure
+        if s.specie.symbol not in anions and s.specie.symbol != "H"
+    })
     zones = _zones(structure, cations, cfg)
     allowed = {i for zone, ids in zones.items() if zone in set(cfg["zones"]) for i in ids}
     detected: dict[int, str] = {}
