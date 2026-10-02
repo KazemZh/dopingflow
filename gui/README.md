@@ -304,10 +304,7 @@ relevant. Backend-specific model/task values are not reused across backends.
 
 ## Surface Pourbaix page
 
-`gui/pages/9_Surface_Pourbaix.py` sits between segregation and leaching. It
-selects intact segregated surfaces, samples protonated/O*/OH*/H2O*/mixed O-OH
-states, controls the ML screening and optional GPAW refinement, and plots the
-stable state on a configurable U-pH grid. The default pH range is -1 to 3.
+`gui/pages/9_Surface_Pourbaix.py` can start directly from Surface Screening/Refinement output; Surface Segregation is optional. The page also lets the user switch explicitly to segregation output, choose among final/refined/screened surface tables, and pick exact surface IDs. It then samples protonated/O*/OH*/H2O*/mixed O-OH states, controls ML screening and optional GPAW refinement, and plots the stable state on a configurable U-pH grid. The default pH range is -1 to 3.
 
 ## Dopant Leaching page
 
