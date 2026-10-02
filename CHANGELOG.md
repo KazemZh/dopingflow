@@ -15,6 +15,7 @@ The format loosely follows semantic versioning.
 
 ## [Unreleased]
 ### Added
+- Surface Pourbaix now validates relaxed surface chemistry before thermodynamic competition: surface-bound reconstructions are reclassified, while detached O/OH/H2O/O2-like and fragmented states are excluded by default and reported explicitly in the GUI/CSV outputs.
 - New **Surface Pourbaix** stage between surface segregation and leaching. It enumerates protonated, O*, OH*, H2O*, and mixed O/OH intact-surface states, ML-relaxes coverage/site arrangements, and builds CHE stability maps versus potential and pH.
 - The Surface Pourbaix default pH window is **-1 to 3** with configurable SHE/RHE potential scale, potential range, grid spacing, and temperature.
 - Optional provenance-checked GPAW refinement targets the clean slab plus ML-stable/near-stable states rather than blindly sending every arrangement to DFT.
