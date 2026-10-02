@@ -12,6 +12,12 @@ from dopingflow.surface_pourbaix import (
     surface_state_delta_g_eV,
 )
 from dopingflow.surface_pourbaix_thermo import KB_EV_K, LN10
+from dopingflow.surface_pourbaix_sampling import (
+    coverage_count_options,
+    enumerate_binary_patterns,
+    resolve_placement_side,
+    symmetry_permutations,
+)
 from dopingflow.leaching import (
     enumerate_leaching_sites,
     parse_leaching_config,
@@ -85,9 +91,11 @@ def test_enumeration_includes_all_requested_surface_state_families(tmp_path) -> 
                 "enabled": True,
                 "placement_side": "top",
                 "surface_window_A": 4.0,
-                "h_counts": [1],
-                "adsorbate_counts": [1],
-                "mixed_compositions": [[1, 1]],
+                "proton_coverages_pct": [50],
+                "o_coverages_pct": [50],
+                "oh_coverages_pct": [50],
+                "h2o_coverages_pct": [50],
+                "mixed_coverages_pct": [[50, 50]],
                 "max_arrangements_per_stoichiometry": 2,
             }
         },
@@ -96,11 +104,16 @@ def test_enumeration_includes_all_requested_surface_state_families(tmp_path) -> 
     states = enumerate_surface_states(_slab(), cfg)
     families = {state["family"] for state in states}
     assert {"clean", "protonated", "O", "OH", "H2O", "mixed-O-OH"} <= families
-    by_family = {state["family"]: state for state in states}
-    assert by_family["protonated"]["delta_n_H"] == 1
-    assert by_family["OH"]["delta_n_H"] == 1
-    assert by_family["OH"]["delta_n_O"] == 1
-    assert by_family["H2O"]["proton_electron_pairs"] == 0
+    protonated = [state for state in states if state["family"] == "protonated"]
+    assert protonated
+    assert all(state["actual_coverage_pct"] > 0 for state in protonated)
+    oh = [state for state in states if state["family"] == "OH"]
+    assert oh and all(state["delta_n_H"] == state["delta_n_O"] for state in oh)
+    water = [state for state in states if state["family"] == "H2O"]
+    assert water and all(state["proton_electron_pairs"] == 0 for state in water)
+    clean = next(state for state in states if state["family"] == "clean")
+    assert clean["eligible_surface_oxygen_sites"] >= 1
+    assert clean["eligible_surface_cation_sites"] >= 1
 
 
 def test_grid_selects_lowest_free_energy_state() -> None:
@@ -265,3 +278,91 @@ def test_surface_pourbaix_auto_prefers_direct_surface_over_existing_segregation(
     seg_path, seg_mode = resolve_surface_pourbaix_source_summary(config, tmp_path)
     assert seg_path == segregation.resolve()
     assert seg_mode == "segregation"
+
+
+def test_coverage_rounding_uses_actual_surface_site_count() -> None:
+    assert coverage_count_options(12, 25.0) == [3]
+    assert coverage_count_options(12, 50.0) == [6]
+    # 25% of ten sites is exactly halfway between two and three occupied sites,
+    # so both finite-cell realizations are intentionally retained.
+    assert coverage_count_options(10, 25.0) == [2, 3]
+    assert coverage_count_options(10, 75.0) == [7, 8]
+
+
+def _dopant_bottom_slab() -> Structure:
+    lattice = Lattice.from_parameters(6.0, 6.0, 24.0, 90, 90, 90)
+    return Structure(
+        lattice,
+        ["Sn", "Sn", "Sb", "In", "O", "O"],
+        [
+            [0.25, 0.25, 0.30],
+            [0.75, 0.75, 0.70],
+            [0.25, 0.75, 0.32],
+            [0.75, 0.25, 0.38],
+            [0.25, 0.25, 0.25],
+            [0.75, 0.75, 0.75],
+        ],
+    )
+
+
+def test_dopant_nearest_side_selects_side_closest_to_codopants() -> None:
+    structure = _dopant_bottom_slab()
+    side, info = resolve_placement_side(
+        structure,
+        {
+            "placement_side": "dopant-nearest",
+            "anion_species": ["O"],
+            "host_species": "Sn",
+            "side_target_species": ["Sb", "In"],
+            "dopant_side_tie_tolerance_A": 0.10,
+        },
+    )
+    assert side == "bottom"
+    assert info["side_target_species"] == ["Sb", "In"]
+    assert info["bottom_dopant_depth_A"] < info["top_dopant_depth_A"]
+
+
+def _symmetric_square_slab() -> Structure:
+    lattice = Lattice.from_parameters(4.0, 4.0, 20.0, 90, 90, 90)
+    xy = [
+        [0.25, 0.25],
+        [0.75, 0.25],
+        [0.25, 0.75],
+        [0.75, 0.75],
+    ]
+    species = ["Sn"] * 4 + ["O"] * 4
+    frac = [[x, y, 0.45] for x, y in xy] + [[x, y, 0.55] for x, y in xy]
+    return Structure(lattice, species, frac)
+
+
+def test_surface_site_symmetry_reduces_equivalent_single_occupations() -> None:
+    structure = _symmetric_square_slab()
+    sites = [(4, 1), (5, 1), (6, 1), (7, 1)]
+    permutations = symmetry_permutations(
+        structure,
+        sites,
+        enabled=True,
+        symprec_A=0.05,
+        mapping_tolerance_A=0.10,
+    )
+    assert len(permutations) > 1
+
+    patterns, stats = enumerate_binary_patterns(
+        structure,
+        sites,
+        1,
+        {
+            "symmetry_reduce": True,
+            "symmetry_symprec_A": 0.05,
+            "symmetry_angle_tolerance_deg": 5.0,
+            "symmetry_mapping_tolerance_A": 0.10,
+            "max_raw_configurations_per_stoichiometry": 1000,
+            "max_arrangements_per_stoichiometry": 8,
+            "anion_species": ["O"],
+            "host_species": "Sn",
+            "side_target_species": [],
+        },
+    )
+    assert stats["raw_total"] == 4
+    assert stats["symmetry_unique"] == 1
+    assert len(patterns) == 1
