@@ -10,7 +10,11 @@ from dopingflow.surface_pourbaix import (
     surface_state_delta_g_eV,
 )
 from dopingflow.surface_pourbaix_thermo import KB_EV_K, LN10
-from dopingflow.leaching import parse_leaching_config, resolve_surface_summary
+from dopingflow.leaching import (
+    enumerate_leaching_sites,
+    parse_leaching_config,
+    resolve_surface_summary,
+)
 
 
 def _slab() -> Structure:
@@ -150,3 +154,31 @@ def test_leaching_auto_prefers_surface_pourbaix_handoff(tmp_path) -> None:
     }
     cfg = parse_leaching_config(config, tmp_path)
     assert resolve_surface_summary(config, cfg) == handoff.resolve()
+
+
+def test_leaching_does_not_treat_surface_hydrogen_as_a_dopant(tmp_path) -> None:
+    structure = _slab().copy()
+    structure.append("H", [0.25, 0.75, 0.72])
+    config = {
+        "surface": {
+            "host_species": "Sn",
+            "anion_species": ["O"],
+            "placement_side": "top",
+            "cation_layer_tolerance_A": 2.0,
+            "layers_per_zone": 1,
+        },
+        "leaching": {
+            "enabled": True,
+            "dopant_species": [],
+            "zones": ["surface", "subsurface", "bulk"],
+            "max_sites_per_surface_species": 20,
+        },
+    }
+    cfg = parse_leaching_config(config, tmp_path)
+    rows = enumerate_leaching_sites(
+        {"host_species": "Sn", "dopant_species_json": "[]"},
+        structure,
+        cfg,
+    )
+    assert rows
+    assert {row["dopant"] for row in rows} == {"Sb"}
