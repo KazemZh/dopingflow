@@ -15,6 +15,11 @@ The format loosely follows semantic versioning.
 
 ## [Unreleased]
 ### Added
+- New **Surface Pourbaix** stage between surface segregation and leaching. It enumerates protonated, O*, OH*, H2O*, and mixed O/OH intact-surface states, ML-relaxes coverage/site arrangements, and builds CHE stability maps versus potential and pH.
+- The Surface Pourbaix default pH window is **-1 to 3** with configurable SHE/RHE potential scale, potential range, grid spacing, and temperature.
+- Optional provenance-checked GPAW refinement targets the clean slab plus ML-stable/near-stable states rather than blindly sending every arrangement to DFT.
+- A Streamlit Surface Pourbaix page, example input, restart-safe state checkpoints, stable-domain tables, and a dedicated `leaching_surface_states.csv` hand-off are included.
+- Leaching `source_mode = "auto"` now prefers electrochemically stable Surface Pourbaix states before falling back to clean/refined surface tables.
 - New **Surface Segregation Monte Carlo** stage for user-selected natural surface
   terminations. Fixed-composition host↔dopant swaps are sampled with a user-selected
   MLFF at finite temperature, with burn-in and production sampling.
