@@ -86,14 +86,21 @@ def _record_from_state(
 
 def _select_dft_candidates(records: list[dict[str, Any]], cfg: Mapping[str, Any]) -> list[dict[str, Any]]:
     window = float(cfg["dft"]["candidate_window_eV"])
+
+    def gap(row: Mapping[str, Any]) -> float:
+        try:
+            value = float(row.get("minimum_deltaG_above_stable_ml_eV", math.inf))
+            return value if math.isfinite(value) else math.inf
+        except (TypeError, ValueError):
+            return math.inf
+
     candidates = [
         row for row in records
-        if row["family"] == "clean"
-        or float(row.get("minimum_deltaG_above_stable_ml_eV", math.inf)) <= window
+        if row["family"] == "clean" or gap(row) <= window
     ]
     candidates.sort(key=lambda row: (
         0 if row["family"] == "clean" else 1,
-        float(row.get("minimum_deltaG_above_stable_ml_eV", math.inf)),
+        gap(row),
         str(row["state_id"]),
     ))
     return candidates[: int(cfg["dft"]["max_states_per_surface"])]
