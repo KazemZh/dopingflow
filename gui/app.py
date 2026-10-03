@@ -31,7 +31,7 @@ from gui_config import (
     GRACE_MODEL_CHOICES,
 )
 from io_project import ProjectIndex
-from view_structure import show_structure
+from view_structure import show_structure, structure_viewer_controls
 
 
 st.set_page_config(page_title="dopingflow GUI", layout="wide")
@@ -4456,69 +4456,6 @@ elif tab == "Results Explorer":
 # Page: Structure Viewer
 # -----------------------
 else:
-    import py3Dmol
-
-    from pymatgen.core import Structure
-    from pymatgen.io.cif import CifWriter
-
-    def show_structure(path, title=None, width=700, height=500, viewer_mode="bulk"):
-        """
-        Display a periodic structure with visible unit-cell boundaries.
-
-        Parameters
-        ----------
-        path : str or Path
-            Structure file path (POSCAR / CONTCAR / CIF / any pymatgen-readable file).
-        title : str, optional
-            Caption shown above the viewer.
-        width : int
-            Viewer width in pixels.
-        height : int
-            Viewer height in pixels.
-        viewer_mode : str
-            "bulk" or "surface". Currently used only for future extensibility.
-        """
-        try:
-            structure = Structure.from_file(str(path))
-        except Exception as e:
-            st.error(f"Failed to read structure file `{path}`: {e}")
-            return
-
-        try:
-            cif_str = str(CifWriter(structure))
-        except Exception as e:
-            st.error(f"Failed to convert structure to CIF for visualization: {e}")
-            return
-
-        try:
-            view = py3Dmol.view(width=width, height=height)
-            view.addModel(cif_str, "cif")
-
-            # Ball-stick style
-            view.setStyle(
-                {
-                    "sphere": {"scale": 0.32},
-                    "stick": {"radius": 0.14},
-                }
-            )
-
-            # Draw periodic cell boundaries
-            view.addUnitCell()
-
-            # Fit the structure nicely in the frame
-            view.zoomTo()
-
-            # White background
-            view.setBackgroundColor("white")
-
-            if title:
-                st.caption(title)
-
-            st.components.v1.html(view._make_html(), height=height, width=width)
-
-        except Exception as e:
-            st.error(f"Failed to render structure `{path}`: {e}")
-
     st.title("Structure Viewer (before/after)")
 
     view_mode = st.radio(
@@ -4568,6 +4505,14 @@ else:
         with st.expander("Structure files", expanded=False):
             st.json({k: str(v) for k, v in files.items()})
 
+        viewer_options = structure_viewer_controls(
+            [files.get("before"), files.get("after")],
+            key_prefix=f"main_bulk_viewer_{comp}_{cand_name}",
+            expanded=False,
+            show_orientation_default=True,
+            show_unit_cell_default=True,
+        )
+
         colL, colR = st.columns(2)
 
         with colL:
@@ -4579,6 +4524,7 @@ else:
                     viewer_mode="bulk",
                     width=700,
                     height=500,
+                    **viewer_options,
                 )
             else:
                 st.info("No 'before' structure file found.")
@@ -4626,7 +4572,19 @@ else:
             st.info("This parent has only the zero-vacancy reference.")
             parent_path = vacancy_root / "parent_reference" / "relaxed" / "POSCAR"
             if parent_path.exists():
-                show_structure(parent_path, title="Relaxed parent", viewer_mode="bulk")
+                parent_viewer_options = structure_viewer_controls(
+                    [parent_path],
+                    key_prefix=f"main_vacancy_parent_viewer_{comp}_{candidate}",
+                    expanded=False,
+                    show_orientation_default=True,
+                    show_unit_cell_default=True,
+                )
+                show_structure(
+                    parent_path,
+                    title="Relaxed parent",
+                    viewer_mode="bulk",
+                    **parent_viewer_options,
+                )
             st.stop()
         group = st.selectbox("Vacancy count", groups, format_func=lambda path: path.name, key="vac_view_count")
         mc_summary_path = group / "monte_carlo_summary.json"
@@ -4664,6 +4622,15 @@ else:
         count = int(group.name.rsplit("_", 1)[1])
         files = proj.find_vacancy_structure_files(comp, candidate, count, configuration.name)
         st.json({label: str(path) for label, path in files.items()})
+        vacancy_viewer_options = structure_viewer_controls(
+            [files.get("parent"), files.get("generated"), files.get("relaxed")],
+            key_prefix=(
+                f"main_vacancy_viewer_{comp}_{candidate}_{group.name}_{configuration.name}"
+            ),
+            expanded=False,
+            show_orientation_default=True,
+            show_unit_cell_default=True,
+        )
         columns = st.columns(3)
         for column, label in zip(columns, ("parent", "generated", "relaxed")):
             with column:
@@ -4675,6 +4642,7 @@ else:
                         viewer_mode="bulk",
                         width=500,
                         height=450,
+                        **vacancy_viewer_options,
                     )
                 else:
                     st.info(f"No {label} structure available.")
@@ -4785,6 +4753,15 @@ else:
         # --------------------------------------------------------
         # visualization
         # --------------------------------------------------------
+        surface_viewer_options = structure_viewer_controls(
+            [before_path, after_path],
+            key_prefix=(
+                f"main_surface_viewer_{comp}_{cand_name}_{hkl_name}_{term_name}"
+            ),
+            expanded=False,
+            show_orientation_default=True,
+            show_unit_cell_default=True,
+        )
         colL, colR = st.columns(2)
 
         with colL:
@@ -4796,6 +4773,7 @@ else:
                     viewer_mode="surface",
                     width=800,
                     height=550,
+                    **surface_viewer_options,
                 )
             else:
                 st.info("No initial slab POSCAR found.")
