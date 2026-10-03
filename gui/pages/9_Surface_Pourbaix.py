@@ -27,7 +27,7 @@ from gui_config import (
     UMA_MODEL_CHOICES,
     UMA_TASK_CHOICES,
 )
-from view_structure import show_structure
+from view_structure import show_structure, structure_viewer_controls
 
 st.set_page_config(page_title="Surface Pourbaix", layout="wide")
 st.title("Electrochemical surface states / Pourbaix")
@@ -264,6 +264,8 @@ def _show_structure_panel(
     *,
     heading: str,
     title: str,
+    viewer_options: dict[str, Any],
+    surface_side: str | None,
 ) -> None:
     st.markdown(f"#### {heading}")
     if path is None:
@@ -275,7 +277,15 @@ def _show_structure_panel(
         st.warning("The saved path does not currently exist on this machine.")
         return
     try:
-        show_structure(path, title=title, width=560, height=480)
+        show_structure(
+            path,
+            title=title,
+            width=560,
+            height=480,
+            viewer_mode="surface",
+            surface_side=surface_side,
+            **viewer_options,
+        )
     except Exception as exc:
         st.warning(f"Could not render this structure: {exc}")
 
@@ -1261,6 +1271,18 @@ try:
 
                     initial_path = _initial_state_path(chosen)
                     relaxed_path = _result_path(chosen.get("ml_structure_path"))
+                    resolved_side = (
+                        _valid_text(chosen.get("resolved_placement_side")) or None
+                    )
+                    viewer_options = structure_viewer_controls(
+                        [initial_path, relaxed_path],
+                        key_prefix=(
+                            f"surface_pourbaix_viewer_{selected}_{chosen['state_id']}"
+                        ),
+                        expanded=False,
+                        show_orientation_default=True,
+                        show_unit_cell_default=True,
+                    )
 
                     before_col, after_col = st.columns(2)
                     with before_col:
@@ -1271,6 +1293,8 @@ try:
                                 f"{selected} | {chosen['state_id']} | "
                                 "generated structure"
                             ),
+                            viewer_options=viewer_options,
+                            surface_side=resolved_side,
                         )
                     with after_col:
                         _show_structure_panel(
@@ -1280,6 +1304,8 @@ try:
                                 f"{selected} | {chosen['state_id']} | "
                                 "relaxed structure"
                             ),
+                            viewer_options=viewer_options,
+                            surface_side=resolved_side,
                         )
 
                     source_path = _result_path(
