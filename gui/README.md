@@ -99,6 +99,18 @@ thermodynamics and can display the compact vacancy free-energy / T-pO2 outputs.
 Provides interactive inspection of generated, relaxed, and vacancy-containing
 structures.
 
+All atomic-structure views now share the implementation in `gui/view_structure.py`.
+Bulk candidates, vacancy structures, surface screening, Surface Pourbaix
+before/after comparisons, and dopant-leaching site environments therefore use
+the same element palette, white background, sphere/stick styling, atom hover
+labels, coordinate axes, and optional simulation-cell display. Surface views
+mark the exposed direction using the true slab normal `a × b` rather than
+assuming Cartesian `z`.
+
+The default palette lives in `DEFAULT_ELEMENT_COLORS`, and pages use the shared
+`structure_viewer_controls(...)` helper so paired structures keep identical
+element colors while users can adjust colors, atom size, bond thickness, hover,
+axes, and cell display.
 ---
 
 ## Staged Vacancy MC page
