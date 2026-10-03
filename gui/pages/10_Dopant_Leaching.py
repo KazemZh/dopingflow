@@ -30,6 +30,7 @@ import view_structure as _view_structure
 # Reload this lightweight viewer module so the page and helper signature stay in sync.
 _view_structure = importlib.reload(_view_structure)
 show_site_environment = _view_structure.show_site_environment
+structure_viewer_controls = _view_structure.structure_viewer_controls
 
 
 st.set_page_config(page_title="Dopant leaching", layout="wide")
@@ -3097,91 +3098,16 @@ else:
                         selected_structure
                     )
 
-                elements_present = sorted(
-                    {site.specie.symbol for site in selected_structure}
-                )
-                default_element_colors = {
-                    "O": "#E41A1C",
-                    "Sn": "#377EB8",
-                    "Sb": "#984EA3",
-                    "In": "#4DAF4A",
-                    "H": "#F2F2F2",
-                    "Ti": "#FF7F00",
-                    "Zr": "#A6CEE3",
-                    "Nb": "#A65628",
-                    "Ba": "#FFD92F",
-                    "Mn": "#F781BF",
-                    "Ni": "#1B9E77",
-                    "Fe": "#E6550D",
-                    "Zn": "#66A61E",
-                    "W": "#7570B3",
-                }
-                fallback_colors = [
-                    "#4E79A7",
-                    "#F28E2B",
-                    "#59A14F",
-                    "#B07AA1",
-                    "#76B7B2",
-                    "#EDC948",
-                    "#9C755F",
-                    "#BAB0AC",
-                ]
-                element_defaults = {
-                    element: default_element_colors.get(
-                        element,
-                        fallback_colors[
-                            elements_present.index(element)
-                            % len(fallback_colors)
-                        ],
-                    )
-                    for element in elements_present
-                }
-
-                with st.expander(
-                    "Atom colors & interaction",
+                viewer_options = structure_viewer_controls(
+                    [selected_structure_path],
+                    key_prefix="leaching_environment",
                     expanded=False,
-                ):
-                    reset_colors = st.button(
-                        "Reset atom colors",
-                        key="leaching_environment_reset_colors",
-                    )
-                    if reset_colors:
-                        for element, default_color in element_defaults.items():
-                            st.session_state[
-                                f"leaching_environment_color_{element}"
-                            ] = default_color
-
-                    color_columns = st.columns(
-                        min(4, max(1, len(elements_present)))
-                    )
-                    element_colors: dict[str, str] = {}
-                    for element_index, element in enumerate(elements_present):
-                        element_colors[element] = color_columns[
-                            element_index % len(color_columns)
-                        ].color_picker(
-                            f"{element} atoms",
-                            value=element_defaults[element],
-                            key=f"leaching_environment_color_{element}",
-                        )
-
-                    enable_atom_hover = st.checkbox(
-                        "Show element and site index on hover",
-                        value=True,
-                        key="leaching_environment_enable_hover",
-                        help=(
-                            "Hovering over a base atom shows its element and the "
-                            "zero-based atom/site index used by DopingFlow."
-                        ),
-                    )
-                    show_orientation = st.checkbox(
-                        "Show coordinate axes and surface-normal direction",
-                        value=True,
-                        key="leaching_environment_show_orientation",
-                        help=(
-                            "Shows x/y/z arrows and marks the exposed surface/vacuum "
-                            "direction along the slab-normal z axis."
-                        ),
-                    )
+                    show_orientation_default=True,
+                    show_unit_cell_default=False,
+                )
+                element_colors = viewer_options["element_colors"]
+                enable_atom_hover = bool(viewer_options["enable_hover"])
+                show_orientation = bool(viewer_options["show_orientation"])
 
                 detail_left, detail_right = st.columns([1.35, 1.0])
                 with detail_left:
@@ -3225,8 +3151,9 @@ else:
                             "both": "±z",
                         }.get(placement_side, "z")
                         st.caption(
-                            f"Surface-normal direction for this workflow: **{direction_text}**. "
-                            "The orange arrow marks the exposed surface/vacuum side."
+                            f"Selected surface side for this workflow: **{placement_side}**. "
+                            "The orange arrow follows the true slab normal (a × b) toward "
+                            "the exposed surface/vacuum direction."
                         )
                     try:
                         show_site_environment(
@@ -3238,6 +3165,9 @@ else:
                             element_colors=element_colors,
                             enable_hover=enable_atom_hover,
                             show_orientation=show_orientation,
+                            show_unit_cell=bool(viewer_options["show_unit_cell"]),
+                            sphere_scale=float(viewer_options["sphere_scale"]),
+                            stick_radius=float(viewer_options["stick_radius"]),
                             surface_side=str(
                                 parsed_for_results.get("placement_side", "top")
                                 if "parsed_for_results" in locals()
