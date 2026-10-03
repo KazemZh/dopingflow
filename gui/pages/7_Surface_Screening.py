@@ -29,7 +29,7 @@ from gui_config import (
     UMA_MODEL_CHOICES,
     UMA_TASK_CHOICES,
 )
-from view_structure import show_structure
+from view_structure import show_structure, structure_viewer_controls
 
 
 st.set_page_config(page_title="Surface screening", layout="wide")
@@ -1527,12 +1527,21 @@ with structure_tab:
 
     st.caption(f"Structure file: `{structure_path}`")
     if structure_path_text and structure_path.exists():
+        viewer_options = structure_viewer_controls(
+            [structure_path],
+            key_prefix=f"surface_screening_viewer_{browser_target}_{choice}",
+            expanded=False,
+            show_orientation_default=True,
+            show_unit_cell_default=True,
+        )
         try:
             show_structure(
                 structure_path,
                 title=choice,
                 width=900,
                 height=500,
+                viewer_mode="surface",
+                **viewer_options,
             )
         except Exception as exc:
             st.warning(f"Could not render the selected structure: {exc}")
