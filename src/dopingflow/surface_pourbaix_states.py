@@ -323,13 +323,20 @@ def screen_state(
             result = json.loads(result_path.read_text(encoding="utf-8"))
             relaxed = str(result.get("relaxed_structure_path") or "")
             if saved.get("fingerprint") == fingerprint and result.get("status") == "ok" and (not relaxed or Path(relaxed).exists()):
-                return {**result, "checkpoint_reused": True, "structure_path": relaxed or str(initial)}
+                return {
+                    **result,
+                    "checkpoint_reused": True,
+                    "initial_structure_path": str(initial),
+                    "structure_path": relaxed or str(initial),
+                }
         except (OSError, json.JSONDecodeError):
             pass
     result = _evaluate(structure, fixed, cfg["screen"], calculator, state_dir)
     manifest.write_text(json.dumps({"fingerprint": fingerprint}, indent=2), encoding="utf-8")
     return {
-        **result, "checkpoint_reused": False,
+        **result,
+        "checkpoint_reused": False,
+        "initial_structure_path": str(initial),
         "structure_path": str(result.get("relaxed_structure_path") or initial),
     }
 
