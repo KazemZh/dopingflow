@@ -183,6 +183,7 @@ def _record_from_state(
         ml_final_fmax_eV_per_A=result.get("final_fmax_eV_per_A"),
         ml_optimizer_steps=result.get("optimizer_steps"),
         ml_checkpoint_reused=result.get("checkpoint_reused"),
+        ml_initial_structure_path=result.get("initial_structure_path", ""),
         ml_structure_path=result.get("structure_path", ""),
         dft_energy_eV=None,
         dft_reused=None,
