@@ -163,6 +163,24 @@ candidate_window_eV of stability anywhere on the ML grid are refined with the
 shared provenance-checked GPAW infrastructure. The clean surface is always
 included. This limits DFT work while retaining near-boundary states.
 
+Interactive structure comparison
+--------------------------------
+
+The Results section includes a ``Structure comparison`` tab. For the selected
+surface, it lists the states that are stable somewhere on the U-pH map by
+default, with an option to include all calculated states. The selected state is
+shown in two interactive 3D viewers:
+
+* ``Before relaxation`` -- the generated protonated/adsorbate configuration
+  saved as ``POSCAR_initial``;
+* ``After ML relaxation`` -- the relaxed geometry saved as ``POSCAR_relaxed``.
+
+The exact paths are printed above each viewer. The tab also exposes the parent
+surface path, the state calculation directory, requested/final chemistry, and
+post-relaxation validation status. Older runs remain viewable because the GUI
+can infer ``POSCAR_initial`` from the existing state directory even when the
+older summary CSV did not yet contain ``ml_initial_structure_path``.
+
 Surface-Pourbaix visualization
 -----------------------------
 
