@@ -131,6 +131,10 @@ def test_enumeration_includes_all_requested_surface_state_families(tmp_path) -> 
             "surface_pourbaix": {
                 "enabled": True,
                 "placement_side": "top",
+                # This test checks family enumeration rather than the new
+                # outermost-layer detector; keep the broad legacy site set so
+                # mixed 50/50 O/OH has enough cation sites to be realizable.
+                "surface_site_selection": "window",
                 "surface_window_A": 4.0,
                 "proton_coverages_pct": [50],
                 "o_coverages_pct": [50],
