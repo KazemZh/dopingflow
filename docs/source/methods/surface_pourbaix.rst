@@ -36,7 +36,9 @@ Coverage, side selection, and arrangement
 Coverage is specified as a percentage of **all eligible sites** on the chosen
 surface side(s), rather than as an absolute atom count. Separate grids are
 available for protonated lattice O, O*, OH*, and H2O*, plus explicit O*:OH*
-coverage pairs. For each surface, DopingFlow converts the requested percentage
+coverage pairs. A 0% entry is accepted for these single-family coverage lists
+but is not generated as a separate state because it is exactly the already
+present clean slab. For each surface, DopingFlow converts the requested percentage
 to the closest integer occupation allowed by that finite surface cell. When a
 requested value lies exactly halfway between two integer occupations, both are
 retained. For example, 25% coverage on 12 sites maps to 3 occupied sites,
