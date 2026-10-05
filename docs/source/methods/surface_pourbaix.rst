@@ -90,6 +90,37 @@ and the output records raw arrangement count, examined count, number of
 symmetry-unique arrangements, symmetry operations used, resolved surface side,
 eligible-site counts, and actual coverage.
 
+Parallel surface execution
+--------------------------
+
+Independent selected surfaces can be evaluated concurrently with
+``parallel_surfaces = true`` and ``surface_workers = N``. Parallelism is
+deliberately applied at the **surface level**, not by launching multiple states
+of the same surface into a shared calculator. Each worker process owns one
+surface at a time, initializes its own ML calculator, generates/screens/relaxes
+that surface's states, performs post-relaxation validation, writes only to that
+surface directory, and returns its summary to the parent process. The parent
+then aggregates the combined CSV and Pourbaix outputs in the original target
+order.
+
+H2 and H2O ML reference energies are evaluated once before workers start.
+Existing compatible state checkpoints remain reusable inside each worker, so
+enabling parallelism does not disable restart/recovery behavior.
+
+For CPU execution, the effective worker count is the smaller of
+``surface_workers`` and the number of selected surfaces. Users should avoid
+CPU oversubscription: approximately
+``surface_workers x per-worker threads`` should fit within the available
+physical cores. For a single CUDA device, DopingFlow intentionally uses one
+effective surface worker because loading several independent foundation-model
+copies onto the same GPU can exhaust VRAM or reduce throughput. Local
+surface-process parallelism is also disabled while missing GPAW calculations
+are being executed, avoiding nested multiprocessing/MPI oversubscription.
+Cached/non-executing DFT lookups do not impose that restriction.
+
+The requested/effective worker counts and the reason for any safety fallback are
+written to ``surface_pourbaix_summary.json`` and printed in the run log.
+
 Post-relaxation chemistry validation
 ------------------------------------
 
