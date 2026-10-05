@@ -8,6 +8,12 @@ surface_include = []
 max_surfaces = 10
 outdir = "10_surface_pourbaix"
 
+# Optional surface-level parallelism. Each CPU worker owns one complete surface
+# and initializes its own ML calculator. CUDA and executing GPAW are kept serial
+# locally for memory/MPI safety.
+parallel_surfaces = false
+surface_workers = 2
+
 # Sample both coverage and arrangement. "clean" is always retained as the reference.
 # Automatic side selection is evaluated independently for every actual doped surface.
 placement_side = "dopant-nearest"     # O*/OH*/H2O*: dopant-nearest, top, bottom, both
