@@ -1045,6 +1045,51 @@ with st.expander("Configuration & run controls", expanded=True):
         value=int(saved_screen.get("max_steps", 300)), step=10,
     )
 
+    with st.expander("Parallel surface execution", expanded=False):
+        pcol1, pcol2 = st.columns(2)
+        parallel_surfaces = pcol1.checkbox(
+            "Run selected surfaces in parallel",
+            value=bool(saved.get("parallel_surfaces", False)),
+            help=(
+                "Parallelism is applied at the surface level: each worker owns one "
+                "surface, creates its own ML calculator, evaluates that surface's "
+                "states, and writes only to that surface directory."
+            ),
+        )
+        surface_workers = int(
+            pcol2.number_input(
+                "Surface workers",
+                min_value=1,
+                value=int(saved.get("surface_workers", 2)),
+                step=1,
+                disabled=not parallel_surfaces,
+                help=(
+                    "Maximum number of different surfaces evaluated simultaneously. "
+                    "The effective number is also limited by the number of selected surfaces."
+                ),
+            )
+        )
+        if parallel_surfaces and device == "cuda":
+            st.warning(
+                "A single CUDA device is intentionally limited to one effective "
+                "surface worker to avoid loading several ML models into the same GPU. "
+                "CPU mode supports true multi-surface process parallelism."
+            )
+        elif parallel_surfaces:
+            tf_threads = int(saved_screen.get("tf_threads", 1))
+            omp_threads = int(saved_screen.get("omp_threads", 1))
+            per_worker_threads = max(tf_threads, omp_threads, 1)
+            st.caption(
+                f"CPU mode: up to {surface_workers} independent surface workers. "
+                f"Current per-worker thread setting is about {per_worker_threads}; "
+                "avoid requesting more worker × thread capacity than your physical cores."
+            )
+        st.caption(
+            "H2/H2O reference energies are calculated once before workers start. "
+            "Existing compatible state checkpoints are still reused independently "
+            "inside each surface worker."
+        )
+
     with st.expander("Optional DFT refinement"):
         dft_enabled = st.checkbox(
             "Refine competitive surface states with GPAW",
@@ -1069,11 +1114,20 @@ with st.expander("Configuration & run controls", expanded=True):
             "Max DFT states / surface", min_value=1,
             value=int(saved_dft.get("max_states_per_surface", 20)), step=1,
         )
+        if parallel_surfaces and dft_enabled and dft_execute:
+            st.info(
+                "Because GPAW execution is enabled, Surface Pourbaix will use one "
+                "effective surface worker to avoid nested multiprocessing/MPI "
+                "oversubscription. Cached/non-executing DFT lookups do not impose "
+                "this restriction."
+            )
 
     section = dict(saved)
     section.update(
         enabled=enabled, source_mode=source_mode, source_summary=source_summary,
         surface_include=effective_surface_include, max_surfaces=int(max_surfaces),
+        parallel_surfaces=bool(parallel_surfaces),
+        surface_workers=int(surface_workers),
         placement_side=placement_side,
         protonation_side=protonation_side,
         side_target_species=side_target_species,
