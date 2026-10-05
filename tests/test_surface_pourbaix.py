@@ -4,6 +4,7 @@ import pytest
 from pymatgen.core import Lattice, Structure
 
 from dopingflow.surface_pourbaix import (
+    _effective_surface_workers,
     _select_dft_candidates,
     build_surface_pourbaix_grid,
     enumerate_surface_states,
@@ -52,6 +53,8 @@ def test_default_ph_window_is_minus_one_to_three(tmp_path) -> None:
     assert cfg["pH_max"] == pytest.approx(3.0)
     assert cfg["potential_scale"] == "SHE"
     assert cfg["protonation_side"] == "both"
+    assert cfg["parallel_surfaces"] is False
+    assert cfg["surface_workers"] == 2
 
 
 def test_rhe_che_is_ph_independent_for_fixed_rhe_potential() -> None:
@@ -725,3 +728,64 @@ def test_protonation_can_follow_adsorbate_side(tmp_path) -> None:
     assert protonated["eligible_protonation_oxygen_sites"] == 2
     assert protonated["delta_n_H"] == 2
     assert set(protonated["site_sides"]) == {-1}
+
+
+def test_parallel_surface_workers_use_requested_cpu_concurrency() -> None:
+    cfg = {
+        "parallel_surfaces": True,
+        "surface_workers": 4,
+        "screen": {"device": "cpu"},
+        "dft": {"enabled": False, "execute": False},
+    }
+    workers, reason = _effective_surface_workers(cfg, 3)
+    assert workers == 3
+    assert "CPU surface-level" in reason
+
+
+def test_parallel_surface_workers_remain_serial_when_disabled() -> None:
+    cfg = {
+        "parallel_surfaces": False,
+        "surface_workers": 8,
+        "screen": {"device": "cpu"},
+        "dft": {"enabled": False, "execute": False},
+    }
+    workers, _ = _effective_surface_workers(cfg, 5)
+    assert workers == 1
+
+
+def test_parallel_surface_workers_limit_single_cuda_device_to_one() -> None:
+    cfg = {
+        "parallel_surfaces": True,
+        "surface_workers": 4,
+        "screen": {"device": "cuda"},
+        "dft": {"enabled": False, "execute": False},
+    }
+    workers, reason = _effective_surface_workers(cfg, 4)
+    assert workers == 1
+    assert "single-GPU safety" in reason
+
+
+def test_parallel_surface_workers_avoid_nested_gpaw_execution() -> None:
+    cfg = {
+        "parallel_surfaces": True,
+        "surface_workers": 4,
+        "screen": {"device": "cpu"},
+        "dft": {"enabled": True, "execute": True},
+    }
+    workers, reason = _effective_surface_workers(cfg, 4)
+    assert workers == 1
+    assert "GPAW/MPI" in reason
+
+
+def test_parallel_surface_worker_count_must_be_positive(tmp_path) -> None:
+    with pytest.raises(ValueError, match="surface_workers must be positive"):
+        parse_surface_pourbaix_config(
+            {
+                "surface_pourbaix": {
+                    "enabled": True,
+                    "parallel_surfaces": True,
+                    "surface_workers": 0,
+                }
+            },
+            tmp_path,
+        )
