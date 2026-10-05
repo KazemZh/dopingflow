@@ -597,7 +597,7 @@ with st.expander("Configuration & run controls", expanded=True):
         )),
     )
 
-    s1, s2, s3, s4 = st.columns(4)
+    s1, s2, s3 = st.columns(3)
     side_options = ["dopant-nearest", "top", "bottom", "both"]
     side_labels = {
         "dopant-nearest": "Near dopants — automatic (recommended)",
@@ -609,32 +609,62 @@ with st.expander("Configuration & run controls", expanded=True):
     if saved_side not in side_options:
         saved_side = "dopant-nearest"
     placement_side = s1.selectbox(
-        "Adsorbate / protonation side",
+        "O*/OH*/H2O* adsorption side",
         side_options,
         index=side_options.index(saved_side),
         format_func=lambda value: side_labels[value],
         help=(
-            "Automatic mode evaluates the actual doped slab and chooses the side "
-            "closest to the selected dopant species independently for every surface."
+            "Controls only added O*, OH*, H2O*, and mixed O*/OH* states. "
+            "Automatic mode chooses the side closest to the selected dopant species."
         ),
     )
-    surface_window = s2.number_input(
-        "Exposed-site window (Å)", min_value=0.1,
-        value=float(saved.get("surface_window_A", 2.0)), step=0.1,
+
+    protonation_options = [
+        "both",
+        "same-as-adsorbates",
+        "dopant-nearest",
+        "top",
+        "bottom",
+    ]
+    protonation_labels = {
+        "both": "Both slab sides (recommended)",
+        "same-as-adsorbates": "Same side as O*/OH*/H2O* adsorption",
+        "dopant-nearest": "Near dopants — automatic",
+        "top": "Top only",
+        "bottom": "Bottom only",
+    }
+    saved_protonation_side = (
+        str(saved.get("protonation_side", "both")).replace("_", "-")
     )
-    max_o_sites = s3.number_input(
-        "Max exposed O sites (0 = all)",
-        min_value=0,
-        value=int(saved.get("max_surface_oxygen_sites", 0)),
-        step=1,
-        help="0 uses every eligible exposed O site and is recommended for coverage definitions.",
+    if saved_protonation_side not in protonation_options:
+        saved_protonation_side = "both"
+    protonation_side = s2.selectbox(
+        "Lattice-O protonation side",
+        protonation_options,
+        index=protonation_options.index(saved_protonation_side),
+        format_func=lambda value: protonation_labels[value],
+        help=(
+            "This is independent from adsorbate placement. With 'both', the "
+            "coverage denominator contains every eligible exposed O atom on both "
+            "slab faces; therefore 100% protonation means every eligible O on both "
+            "faces receives one H."
+        ),
     )
-    max_cat_sites = s4.number_input(
-        "Max exposed cation sites (0 = all)",
-        min_value=0,
-        value=int(saved.get("max_surface_cation_sites", 0)),
-        step=1,
-        help="0 uses every eligible exposed cation adsorption site.",
+
+    surface_window = s3.number_input(
+        "Exposed-site window (Å)",
+        min_value=0.1,
+        value=float(saved.get("surface_window_A", 2.0)),
+        step=0.1,
+        help=(
+            "Atoms within this normal-distance window from the outermost O/cation "
+            "layer are eligible surface sites. No site-count cap is applied."
+        ),
+    )
+    st.caption(
+        "**Coverage always uses all eligible sites.** The former "
+        "`max_surface_oxygen_sites` / `max_surface_cation_sites` caps are ignored "
+        "because they could make a nominal 100% coverage incomplete."
     )
 
     inferred_side_targets = (
@@ -645,7 +675,10 @@ with st.expander("Configuration & run controls", expanded=True):
     side_target_text = st.text_input(
         "Dopant species for automatic side selection",
         value=_csv(inferred_side_targets),
-        disabled=placement_side != "dopant-nearest",
+        disabled=(
+            placement_side != "dopant-nearest"
+            and protonation_side != "dopant-nearest"
+        ),
         help=(
             "Example: Sb, In. Leave blank to infer all non-host cations from each "
             "actual surface. The nearest depth is calculated per species, then "
@@ -653,13 +686,13 @@ with st.expander("Configuration & run controls", expanded=True):
         ),
     )
     side_target_species = _items(side_target_text)
-    if placement_side == "dopant-nearest":
+    if placement_side == "dopant-nearest" or protonation_side == "dopant-nearest":
         st.caption(
             "If top and bottom are equally close within the tie tolerance, both sides "
             "are sampled rather than choosing one arbitrarily."
         )
 
-    st.markdown("**Coverage grid (% of eligible sites on the selected side)**")
+    st.markdown("**Coverage grid (% of all eligible sites on the chosen side(s))**")
     cH, cO, cOH, cW = st.columns(4)
     proton_coverage_text = cH.text_input(
         "Protonated O coverage (%)",
@@ -1037,7 +1070,9 @@ with st.expander("Configuration & run controls", expanded=True):
     section.update(
         enabled=enabled, source_mode=source_mode, source_summary=source_summary,
         surface_include=effective_surface_include, max_surfaces=int(max_surfaces),
-        placement_side=placement_side, side_target_species=side_target_species,
+        placement_side=placement_side,
+        protonation_side=protonation_side,
+        side_target_species=side_target_species,
         state_families=families,
         proton_coverages_pct=_floats(proton_coverage_text),
         o_coverages_pct=_floats(o_coverage_text),
@@ -1045,8 +1080,6 @@ with st.expander("Configuration & run controls", expanded=True):
         h2o_coverages_pct=_floats(h2o_coverage_text),
         mixed_coverages_pct=_mixed_coverages(mixed_coverage_text),
         surface_window_A=float(surface_window),
-        max_surface_oxygen_sites=int(max_o_sites),
-        max_surface_cation_sites=int(max_cat_sites),
         symmetry_reduce=bool(symmetry_reduce),
         symmetry_symprec_A=float(symmetry_symprec),
         symmetry_mapping_tolerance_A=float(symmetry_mapping_tol),
@@ -1067,7 +1100,13 @@ with st.expander("Configuration & run controls", expanded=True):
         temperature_K=float(temperature),
     )
     # Remove superseded count-based controls when an older input.toml is upgraded.
-    for legacy_key in ("h_counts", "adsorbate_counts", "mixed_compositions"):
+    for legacy_key in (
+        "h_counts",
+        "adsorbate_counts",
+        "mixed_compositions",
+        "max_surface_oxygen_sites",
+        "max_surface_cation_sites",
+    ):
         section.pop(legacy_key, None)
 
     section["screen"] = {
@@ -1271,9 +1310,17 @@ try:
 
                     initial_path = _initial_state_path(chosen)
                     relaxed_path = _result_path(chosen.get("ml_structure_path"))
-                    resolved_side = (
-                        _valid_text(chosen.get("resolved_placement_side")) or None
-                    )
+                    chosen_family = _valid_text(chosen.get("family"))
+                    if chosen_family == "protonated":
+                        resolved_side = (
+                            _valid_text(chosen.get("resolved_protonation_side"))
+                            or _valid_text(chosen.get("resolved_placement_side"))
+                            or None
+                        )
+                    else:
+                        resolved_side = (
+                            _valid_text(chosen.get("resolved_placement_side")) or None
+                        )
                     viewer_options = structure_viewer_controls(
                         [initial_path, relaxed_path],
                         key_prefix=(
