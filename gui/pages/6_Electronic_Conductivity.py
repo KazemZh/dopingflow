@@ -738,6 +738,8 @@ if not comparison_df.empty:
             "target_id": "Structure",
             "sigma_over_tau_trace_average_S_per_cm_per_fs": "Avg. σ/τ (S cm⁻¹ fs⁻¹)",
             "reference_sigma_over_tau_trace_average_S_per_cm_per_fs": "Reference σ/τ (S cm⁻¹ fs⁻¹)",
+            "band_gap_eV": "Band gap (eV)",
+            "reference_band_gap_eV": "Reference band gap (eV)",
             "relative_to_reference": "Relative to reference",
             "percent_change_vs_reference": "Change vs reference (%)",
             "temperature_K": "T (K)",
@@ -752,6 +754,8 @@ if not comparison_df.empty:
             "Excess e⁻ (cm⁻³)",
             "Avg. σ/τ (S cm⁻¹ fs⁻¹)",
             "Reference σ/τ (S cm⁻¹ fs⁻¹)",
+            "Band gap (eV)",
+            "Reference band gap (eV)",
             "Relative to reference",
             "Change vs reference (%)",
         )
@@ -802,6 +806,7 @@ else:
                         ),
                         "status": reference_record.get("status", "unknown"),
                         "dft_reused": reference_record.get("dft_reused"),
+                        "band_gap_eV": reference_record.get("band_gap_eV"),
                         "error": reference_record.get("error"),
                     }
                 ]
@@ -820,6 +825,7 @@ else:
                 "n_oxygen_vacancies",
                 "status",
                 "dft_reused",
+                "band_gap_eV",
                 "error",
             )
             if column in overview_frame.columns
@@ -855,6 +861,9 @@ else:
                 ),
                 "status": reference_record.get("status", "unknown"),
                 "dft_reused": reference_record.get("dft_reused"),
+                "band_gap_eV": reference_record.get("band_gap_eV"),
+                "band_gap_source": reference_record.get("band_gap_source"),
+                "band_gap_xc": reference_record.get("band_gap_xc"),
                 "structure_path": reference_record.get("structure_path", ""),
                 "output_directory": (
                     Path(str(reference_record.get("reference_store", ""))).parent
@@ -868,7 +877,7 @@ else:
                 structure_index["target_id"].astype(str) == selected_target
             ].iloc[0].to_dict()
 
-        m1, m2, m3, m4 = st.columns(4)
+        m1, m2, m3, m4, m5 = st.columns(5)
         m1.metric("Kind", str(selected_meta.get("structure_kind", "")))
         m2.metric(
             "O vacancies",
@@ -881,6 +890,13 @@ else:
         else:
             reused_label = "yes" if bool(reused_value) else "no"
         m4.metric("DFT reused", reused_label)
+
+        band_gap_value = selected_meta.get("band_gap_eV")
+        if band_gap_value is None or pd.isna(band_gap_value):
+            band_gap_label = "-"
+        else:
+            band_gap_label = f"{float(band_gap_value):.3f} eV"
+        m5.metric("Band gap", band_gap_label)
 
         st.caption(f"Structure file: `{selected_meta.get('structure_path', '')}`")
         st.caption(
@@ -915,6 +931,17 @@ else:
                 st.warning(
                     target_result.get("error")
                     or f"Conductivity status: {status}"
+                )
+
+            if target_result.get("band_gap_eV") is not None:
+                gap_source = str(
+                    target_result.get("band_gap_source", "GPAW transport k-mesh")
+                )
+                gap_xc = str(target_result.get("band_gap_xc", "")).strip()
+                method = f"{gap_source}; XC={gap_xc}" if gap_xc else gap_source
+                st.caption(
+                    "Band gap is taken from the same GPAW electronic structure used "
+                    f"for transport ({method}); it is not the ALIGNN-MBJ band-gap prediction."
                 )
 
             rows = [
