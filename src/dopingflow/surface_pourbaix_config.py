@@ -167,6 +167,7 @@ def parse_surface_pourbaix_config(
         enabled=False, source_root=str(source_root(raw, root)), source_mode="surface",
         source_summary="", surface_include=[], max_surfaces=10,
         outdir="10_surface_pourbaix", placement_side="dopant-nearest",
+        protonation_side="both",
         host_species=surface.get("host_species", ""),
         side_target_species=surface.get("dopant_species", []),
         dopant_side_tie_tolerance_A=0.25, dopant_side_fallback="top",
@@ -244,6 +245,25 @@ def parse_surface_pourbaix_config(
     section["placement_side"] = str(section["placement_side"]).lower().replace("_", "-")
     if section["placement_side"] not in {"top", "bottom", "both", "dopant-nearest"}:
         raise ValueError("placement_side must be top, bottom, both, or dopant-nearest")
+
+    section["protonation_side"] = (
+        str(section.get("protonation_side", "both")).lower().replace("_", "-")
+    )
+    protonation_aliases = {
+        "same": "same-as-adsorbates",
+        "adsorbate-side": "same-as-adsorbates",
+        "same-as-adsorbate": "same-as-adsorbates",
+    }
+    section["protonation_side"] = protonation_aliases.get(
+        section["protonation_side"], section["protonation_side"]
+    )
+    if section["protonation_side"] not in {
+        "same-as-adsorbates", "top", "bottom", "both", "dopant-nearest"
+    }:
+        raise ValueError(
+            "protonation_side must be same-as-adsorbates, top, bottom, both, "
+            "or dopant-nearest"
+        )
     section["dopant_side_fallback"] = str(section["dopant_side_fallback"]).lower()
     if section["dopant_side_fallback"] not in {"top", "bottom", "both"}:
         raise ValueError("dopant_side_fallback must be top, bottom, or both")
@@ -258,10 +278,15 @@ def parse_surface_pourbaix_config(
         raise ValueError("max_surfaces and max_arrangements_per_stoichiometry must be positive")
     if section["max_raw_configurations_per_stoichiometry"] <= 0:
         raise ValueError("max_raw_configurations_per_stoichiometry must be positive")
+    # Legacy site caps changed the physical coverage denominator (for example,
+    # max_surface_oxygen_sites=8 made "100%" mean 8 sites even when 10 were
+    # exposed). Keep accepting old input files, but intentionally ignore these
+    # caps so coverage always uses the full eligible surface site set.
     for key in ("max_surface_oxygen_sites", "max_surface_cation_sites"):
-        section[key] = int(section[key])
-        if section[key] < 0:
-            raise ValueError(f"{key} must be >= 0 (0 means all eligible sites)")
+        legacy_value = int(section.get(key, 0) or 0)
+        if legacy_value < 0:
+            raise ValueError(f"{key} must be >= 0")
+        section[key] = 0
     for key in (
         "surface_window_A", "oh_bond_length_A", "adsorbate_height_A",
         "water_oh_bond_length_A", "water_hoh_angle_deg", "temperature_K",
