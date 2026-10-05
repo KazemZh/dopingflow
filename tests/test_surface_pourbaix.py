@@ -17,6 +17,7 @@ from dopingflow.surface_pourbaix_thermo import KB_EV_K, LN10
 from dopingflow.surface_pourbaix_sampling import (
     coverage_count_options,
     enumerate_binary_patterns,
+    exposed_sites,
     resolve_placement_side,
     symmetry_permutations,
 )
@@ -327,6 +328,80 @@ def test_coverage_rounding_uses_actual_surface_site_count() -> None:
     # so both finite-cell realizations are intentionally retained.
     assert coverage_count_options(10, 25.0) == [2, 3]
     assert coverage_count_options(10, 75.0) == [7, 8]
+
+
+def _corrugated_two_layer_oxide() -> Structure:
+    lattice = Lattice.from_parameters(8.0, 8.0, 30.0, 90, 90, 90)
+    species = (
+        ["Sn"] * 4
+        + ["O"] * 4   # bottom outer O
+        + ["O"] * 4   # bottom second O layer
+        + ["O"] * 4   # top second O layer
+        + ["O"] * 4   # top outer O
+    )
+    frac = (
+        [[0.20, 0.20, 0.32], [0.70, 0.20, 0.32], [0.20, 0.70, 0.68], [0.70, 0.70, 0.68]]
+        + [[0.10, 0.10, 0.250], [0.40, 0.10, 0.253], [0.10, 0.40, 0.257], [0.40, 0.40, 0.260]]
+        + [[0.15, 0.15, 0.313], [0.45, 0.15, 0.314], [0.15, 0.45, 0.316], [0.45, 0.45, 0.317]]
+        + [[0.15, 0.15, 0.683], [0.45, 0.15, 0.684], [0.15, 0.45, 0.686], [0.45, 0.45, 0.687]]
+        + [[0.10, 0.10, 0.740], [0.40, 0.10, 0.743], [0.10, 0.40, 0.747], [0.40, 0.40, 0.750]]
+    )
+    return Structure(lattice, species, frac)
+
+
+def test_outermost_layer_site_detection_excludes_second_oxygen_layer() -> None:
+    structure = _corrugated_two_layer_oxide()
+    normal = [0.0, 0.0, 1.0]
+
+    outer = exposed_sites(
+        structure,
+        ["O"],
+        normal=normal,
+        placement_side="both",
+        window_A=2.0,
+        selection_mode="outermost-layer",
+        layer_gap_A=0.75,
+    )
+    legacy = exposed_sites(
+        structure,
+        ["O"],
+        normal=normal,
+        placement_side="both",
+        window_A=2.0,
+        selection_mode="window",
+        layer_gap_A=0.75,
+    )
+
+    assert len(outer) == 8
+    assert {sign for _, sign in outer} == {-1, 1}
+    assert len(legacy) == 16
+
+
+def test_100_percent_protonation_uses_only_detected_outermost_oxygen_layer(
+    tmp_path,
+) -> None:
+    cfg = parse_surface_pourbaix_config(
+        {
+            "surface_pourbaix": {
+                "enabled": True,
+                "placement_side": "both",
+                "protonation_side": "both",
+                "surface_site_selection": "outermost-layer",
+                "surface_layer_gap_A": 0.75,
+                "surface_window_A": 2.0,
+                "state_families": ["clean", "protonated"],
+                "proton_coverages_pct": [100],
+            }
+        },
+        tmp_path,
+    )
+    states = enumerate_surface_states(_corrugated_two_layer_oxide(), cfg)
+    protonated = next(state for state in states if state["family"] == "protonated")
+    assert protonated["eligible_protonation_oxygen_sites"] == 8
+    assert protonated["delta_n_H"] == 8
+    assert protonated["actual_coverage_pct"] == pytest.approx(100.0)
+    assert len(protonated["eligible_protonation_site_indices"]) == 8
+    assert set(protonated["eligible_protonation_site_sides"]) == {-1, 1}
 
 
 def _dopant_bottom_slab() -> Structure:
