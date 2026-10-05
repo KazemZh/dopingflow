@@ -131,6 +131,7 @@ def _base_state_metadata(
         "eligible_protonation_oxygen_sites": int(n_oxygen_sites),
         "eligible_surface_cation_sites": int(n_cation_sites),
         "eligible_adsorbate_cation_sites": int(n_cation_sites),
+        "surface_site_selection": "outermost-layer",
     }
 
 
@@ -161,6 +162,8 @@ def enumerate_surface_states(structure: Structure, cfg: Mapping[str, Any]) -> li
         placement_side=protonation_side,
         window_A=float(cfg["surface_window_A"]),
         limit=0,
+        selection_mode=str(cfg.get("surface_site_selection", "outermost-layer")),
+        layer_gap_A=float(cfg.get("surface_layer_gap_A", 0.75)),
     )
     cation_sites = exposed_sites(
         structure,
@@ -169,6 +172,8 @@ def enumerate_surface_states(structure: Structure, cfg: Mapping[str, Any]) -> li
         placement_side=resolved_side,
         window_A=float(cfg["surface_window_A"]),
         limit=0,
+        selection_mode=str(cfg.get("surface_site_selection", "outermost-layer")),
+        layer_gap_A=float(cfg.get("surface_layer_gap_A", 0.75)),
     )
     families = set(cfg["state_families"])
     common = _base_state_metadata(
@@ -177,6 +182,23 @@ def enumerate_surface_states(structure: Structure, cfg: Mapping[str, Any]) -> li
         n_oxygen_sites=len(oxygen_sites),
         n_cation_sites=len(cation_sites),
     )
+    common["surface_site_selection"] = str(
+        cfg.get("surface_site_selection", "outermost-layer")
+    )
+    common["surface_layer_gap_A"] = float(cfg.get("surface_layer_gap_A", 0.75))
+    common["surface_window_A"] = float(cfg["surface_window_A"])
+    common["eligible_protonation_site_indices"] = [
+        int(idx) for idx, _ in oxygen_sites
+    ]
+    common["eligible_protonation_site_sides"] = [
+        int(sign) for _, sign in oxygen_sites
+    ]
+    common["eligible_adsorbate_site_indices"] = [
+        int(idx) for idx, _ in cation_sites
+    ]
+    common["eligible_adsorbate_site_sides"] = [
+        int(sign) for _, sign in cation_sites
+    ]
     states = [dict(
         state_id="clean",
         family="clean",
