@@ -32,7 +32,9 @@ oh_coverages_pct = [25, 50, 75, 100]
 h2o_coverages_pct = [25, 50, 100]
 mixed_coverages_pct = [[25, 25], [25, 75], [50, 50], [75, 25]]
 
-surface_window_A = 2.0                # all eligible sites in this window are used
+surface_site_selection = "outermost-layer"  # recommended; "window" is legacy behavior
+surface_window_A = 2.0                       # safety depth for layer detection
+surface_layer_gap_A = 0.75                   # minimum resolvable layer-separation gap
 
 # Symmetry is determined from the actual doped/vacancy slab.
 symmetry_reduce = true
