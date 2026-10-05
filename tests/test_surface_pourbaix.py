@@ -57,6 +57,38 @@ def test_default_ph_window_is_minus_one_to_three(tmp_path) -> None:
     assert cfg["surface_workers"] == 2
 
 
+def test_zero_single_family_coverage_is_accepted_as_clean(tmp_path) -> None:
+    cfg = parse_surface_pourbaix_config(
+        {
+            "surface_pourbaix": {
+                "enabled": True,
+                "proton_coverages_pct": [0, 25, 100],
+                "o_coverages_pct": [0, 25, 50, 100],
+                "oh_coverages_pct": [0],
+                "h2o_coverages_pct": [0, 50],
+            }
+        },
+        tmp_path,
+    )
+    assert cfg["proton_coverages_pct"] == [25.0, 100.0]
+    assert cfg["o_coverages_pct"] == [25.0, 50.0, 100.0]
+    assert cfg["oh_coverages_pct"] == []
+    assert cfg["h2o_coverages_pct"] == [50.0]
+
+
+def test_surface_pourbaix_coverage_still_rejects_out_of_range_values(tmp_path) -> None:
+    with pytest.raises(ValueError, match="o_coverages_pct values must lie in"):
+        parse_surface_pourbaix_config(
+            {
+                "surface_pourbaix": {
+                    "enabled": True,
+                    "o_coverages_pct": [0, 25, 125],
+                }
+            },
+            tmp_path,
+        )
+
+
 def test_rhe_che_is_ph_independent_for_fixed_rhe_potential() -> None:
     kwargs = dict(
         state_energy_eV=-11.0,
