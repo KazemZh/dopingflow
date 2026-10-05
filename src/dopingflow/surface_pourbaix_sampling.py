@@ -145,6 +145,59 @@ def resolve_placement_side(
     }
 
 
+def _outer_layer_rows(
+    rows: Sequence[tuple[int, float]],
+    *,
+    side: str,
+    window_A: float,
+    layer_gap_A: float,
+    selection_mode: str,
+) -> list[tuple[int, int, float]]:
+    """Return one side's exposed-site rows as (index, sign, depth).
+
+    The legacy window mode keeps every atom in the height window. The
+    outermost-layer mode first applies that window as a safety bound, then
+    finds the largest normal-direction gap separating the outer surface
+    layer/group from deeper atoms. This keeps corrugated surface sublayers
+    together while avoiding a fixed 2 A window silently including the next
+    crystallographic layer.
+    """
+    if not rows:
+        return []
+    side = str(side).lower()
+    sign = +1 if side == "top" else -1
+    values = [value for _, value in rows]
+    boundary = max(values) if side == "top" else min(values)
+    candidates = []
+    for idx, value in rows:
+        depth = boundary - value if side == "top" else value - boundary
+        if depth <= float(window_A) + 1e-12:
+            candidates.append((idx, sign, float(depth)))
+    candidates.sort(key=lambda item: (item[2], item[0]))
+    if str(selection_mode).lower() == "window" or len(candidates) <= 1:
+        return candidates
+
+    if str(selection_mode).lower() != "outermost-layer":
+        raise ValueError(
+            "surface_site_selection must be outermost-layer or window"
+        )
+
+    gaps = [
+        candidates[pos + 1][2] - candidates[pos][2]
+        for pos in range(len(candidates) - 1)
+    ]
+    if not gaps:
+        return candidates
+    largest_gap = max(gaps)
+    if largest_gap < float(layer_gap_A):
+        # No resolvable layer boundary inside the safety window. Keeping the
+        # complete window is safer than discarding potentially real exposed
+        # atoms based on an arbitrary tiny height difference.
+        return candidates
+    cut = gaps.index(largest_gap) + 1
+    return candidates[:cut]
+
+
 def exposed_sites(
     structure: Structure,
     species: Sequence[str],
@@ -153,6 +206,8 @@ def exposed_sites(
     placement_side: str,
     window_A: float,
     limit: int = 0,
+    selection_mode: str = "outermost-layer",
+    layer_gap_A: float = 0.75,
 ) -> list[tuple[int, int]]:
     allowed = set(species)
     rows = [
@@ -162,20 +217,29 @@ def exposed_sites(
     ]
     if not rows:
         return []
-    lo, hi = min(value for _, value in rows), max(value for _, value in rows)
+
     selected: list[tuple[int, int, float]] = []
     if placement_side in {"top", "both"}:
         selected.extend(
-            (i, +1, hi - value)
-            for i, value in rows
-            if hi - value <= float(window_A) + 1e-12
+            _outer_layer_rows(
+                rows,
+                side="top",
+                window_A=window_A,
+                layer_gap_A=layer_gap_A,
+                selection_mode=selection_mode,
+            )
         )
     if placement_side in {"bottom", "both"}:
         selected.extend(
-            (i, -1, value - lo)
-            for i, value in rows
-            if value - lo <= float(window_A) + 1e-12
+            _outer_layer_rows(
+                rows,
+                side="bottom",
+                window_A=window_A,
+                layer_gap_A=layer_gap_A,
+                selection_mode=selection_mode,
+            )
         )
+
     selected.sort(key=lambda item: (item[2], item[0], -item[1]))
     result: list[tuple[int, int]] = []
     seen: set[tuple[int, int]] = set()
@@ -188,7 +252,6 @@ def exposed_sites(
         if int(limit) > 0 and len(result) >= int(limit):
             break
     return result
-
 
 def coverage_count_options(n_sites: int, requested_pct: float) -> list[int]:
     """Map coverage to realizable site counts; keep both counts for exact half ties."""
