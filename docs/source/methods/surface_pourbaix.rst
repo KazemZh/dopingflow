@@ -236,6 +236,24 @@ post-relaxation validation status. Older runs remain viewable because the GUI
 can infer ``POSCAR_initial`` from the existing state directory even when the
 older summary CSV did not yet contain ``ml_initial_structure_path``.
 
+Interactive state competition
+-----------------------------
+
+The GUI can rebuild a Surface Pourbaix map from a subset of the states that
+have already been calculated. Selection is made by generated chemistry/coverage
+group, such as ``Protonated lattice O — 50%`` or ``Protonated lattice O —
+100%``. Choosing a group includes every postprocessing-eligible calculated
+arrangement belonging to that group; no ML or DFT relaxation is rerun. This
+allows users to test how the predicted phase map changes when particular
+coverages or adsorbate families are allowed or excluded from the thermodynamic
+competition.
+
+The clean slab is always retained as the CHE reference and as a competing
+physical state. States excluded by the post-relaxation chemistry validator are
+not offered for re-entry into the interactive competition. ML replots use the
+stored ML H2/H2O reference energies. DFT replots are available when the run
+contains finite DFT energies and the corresponding DFT H2/H2O references.
+
 Surface-Pourbaix visualization
 -----------------------------
 
