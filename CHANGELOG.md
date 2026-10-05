@@ -15,6 +15,7 @@ The format loosely follows semantic versioning.
 
 ## [Unreleased]
 ### Added
+- Surface Pourbaix single-family coverage lists now accept `0%` as the clean state instead of raising a validation error; negative values and values above 100% remain invalid.
 - Surface Pourbaix can now run different selected surfaces concurrently in isolated CPU worker processes (`parallel_surfaces`, `surface_workers`), while preserving checkpoint reuse and deterministic aggregation; single-CUDA and executing-GPAW runs automatically fall back to one effective worker for safety.
 - Surface Pourbaix coverage now always uses the complete eligible site set (legacy 8-site caps are ignored), and lattice-O protonation has an independent side selector with `both` as the default while O*/OH*/H2O* adsorption keeps its own side choice.
 - Unified every GUI structure visualization behind `gui/view_structure.py`, with the enhanced shared element palette, customizable atom colors, hover site labels, consistent sphere/stick styling, unit-cell display, coordinate axes, and true slab-normal surface arrows.
