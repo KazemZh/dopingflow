@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,10 @@ from dopingflow.surface_pourbaix import (
     preview_surface_pourbaix_targets,
     resolve_surface_pourbaix_output_dir,
     surface_state_display_label,
+)
+from dopingflow.surface_pourbaix_thermo import (
+    build_surface_pourbaix_grid,
+    summarize_stable_domains,
 )
 from gui_config import (
     BACKEND_CHOICES,
@@ -226,6 +231,110 @@ def _enrich_grid_for_display(
         labels.append(label)
     output["stable_state_label"] = labels
     return output, coverage_found
+
+
+
+def _truthy(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return bool(default)
+    if isinstance(value, (bool, np.bool_)):
+        return bool(value)
+    try:
+        if pd.isna(value):
+            return bool(default)
+    except (TypeError, ValueError):
+        pass
+    text = str(value).strip().lower()
+    if text in {"true", "1", "yes", "y"}:
+        return True
+    if text in {"false", "0", "no", "n", ""}:
+        return False
+    return bool(value)
+
+
+def _finite_number(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if np.isfinite(number) else None
+
+
+def _competition_group_label(row: pd.Series) -> str:
+    """Group all arrangements generated for the same chemistry/coverage."""
+    requested = _valid_text(row.get("requested_state_label"))
+    if requested:
+        return requested
+    return surface_state_display_label(row.to_dict())
+
+
+def _load_pourbaix_summary(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _rebuild_selected_pourbaix_grid(
+    states: pd.DataFrame,
+    *,
+    selected_groups: list[str],
+    pH_values: list[float],
+    potential_values: list[float],
+    potential_scale: str,
+    temperature_K: float,
+    energy_level: str,
+    h2_energy_eV: float,
+    h2o_energy_eV: float,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Rebuild a map from already calculated states only.
+
+    Clean is always retained as the CHE reference and as a competing physical
+    surface state. Selecting a chemistry/coverage group includes every eligible
+    calculated arrangement in that group.
+    """
+    surface_states = states.copy()
+    surface_states["_group_label"] = surface_states.apply(
+        _competition_group_label,
+        axis=1,
+    )
+    eligible = surface_states[
+        surface_states.apply(
+            lambda row: _truthy(row.get("pourbaix_eligible"), True),
+            axis=1,
+        )
+    ].copy()
+
+    clean_mask = eligible["family"].astype(str) == "clean"
+    selected_mask = eligible["_group_label"].isin(selected_groups)
+    chosen = eligible[clean_mask | selected_mask].copy()
+
+    energy_key = "ml_energy_eV" if energy_level == "ML" else "dft_energy_eV"
+    chosen[energy_key] = pd.to_numeric(chosen.get(energy_key), errors="coerce")
+    chosen = chosen[np.isfinite(chosen[energy_key])].copy()
+
+    if not (chosen["family"].astype(str) == "clean").any():
+        raise ValueError(
+            f"No finite clean-surface {energy_level} energy is available."
+        )
+
+    records = chosen.to_dict(orient="records")
+    rebuilt, _ = build_surface_pourbaix_grid(
+        records,
+        h2_energy_eV=float(h2_energy_eV),
+        h2o_energy_eV=float(h2o_energy_eV),
+        potential_values=potential_values,
+        pH_values=pH_values,
+        potential_scale=potential_scale,
+        temperature_K=float(temperature_K),
+        energy_key=energy_key,
+        energy_level=energy_level,
+    )
+    rebuilt, _ = _enrich_grid_for_display(rebuilt, chosen)
+    domains = summarize_stable_domains(rebuilt)
+    return rebuilt, domains, chosen
 
 
 def _result_path(value: Any) -> Path | None:
