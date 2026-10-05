@@ -76,21 +76,61 @@ def _coverage_label(values: Sequence[float]) -> str:
     return ",".join(f"{float(value):g}" for value in values)
 
 
+def _resolve_protonation_side(
+    structure: Structure,
+    cfg: Mapping[str, Any],
+    *,
+    adsorbate_side: str,
+    adsorbate_side_info: Mapping[str, Any],
+) -> tuple[str, dict[str, Any]]:
+    requested = str(cfg.get("protonation_side", "both")).strip().lower().replace("_", "-")
+    if requested == "same-as-adsorbates":
+        return adsorbate_side, {
+            "requested_protonation_side": requested,
+            "resolved_protonation_side": adsorbate_side,
+            "protonation_side_selection_reason": "same-as-adsorbates",
+        }
+
+    proton_cfg = dict(cfg)
+    proton_cfg["placement_side"] = requested
+    resolved, info = resolve_placement_side(structure, proton_cfg)
+    return resolved, {
+        "requested_protonation_side": requested,
+        "resolved_protonation_side": resolved,
+        "protonation_side_selection_reason": info.get("side_selection_reason"),
+    }
+
+
 def _base_state_metadata(
     *,
     side_info: Mapping[str, Any],
+    protonation_side_info: Mapping[str, Any],
     n_oxygen_sites: int,
     n_cation_sites: int,
 ) -> dict[str, Any]:
     return {
         "requested_placement_side": side_info.get("requested_placement_side"),
         "resolved_placement_side": side_info.get("resolved_placement_side"),
+        "requested_protonation_side": protonation_side_info.get(
+            "requested_protonation_side"
+        ),
+        "resolved_protonation_side": protonation_side_info.get(
+            "resolved_protonation_side"
+        ),
+        "protonation_side_selection_reason": protonation_side_info.get(
+            "protonation_side_selection_reason"
+        ),
         "side_target_species": list(side_info.get("side_target_species", [])),
         "top_dopant_depth_A": side_info.get("top_dopant_depth_A"),
         "bottom_dopant_depth_A": side_info.get("bottom_dopant_depth_A"),
         "side_selection_reason": side_info.get("side_selection_reason"),
+        # These counts are deliberately based on the complete eligible site set.
+        # Legacy max_surface_*_sites caps are ignored so 100% always means 100%
+        # of the physically selected surface sites.
         "eligible_surface_oxygen_sites": int(n_oxygen_sites),
+        "eligible_protonation_oxygen_sites": int(n_oxygen_sites),
         "eligible_surface_cation_sites": int(n_cation_sites),
+        "eligible_adsorbate_cation_sites": int(n_cation_sites),
     }
 
 
@@ -98,19 +138,29 @@ def enumerate_surface_states(structure: Structure, cfg: Mapping[str, Any]) -> li
     normal = surface_normal(structure)
     inplane = _inplane_unit(structure, normal)
     resolved_side, side_info = resolve_placement_side(structure, cfg)
+    protonation_side, protonation_side_info = _resolve_protonation_side(
+        structure,
+        cfg,
+        adsorbate_side=resolved_side,
+        adsorbate_side_info=side_info,
+    )
 
     anions = list(cfg["anion_species"])
     cations = sorted({
         site.specie.symbol for site in structure
         if site.specie.symbol not in set(anions) and site.specie.symbol != "H"
     })
+
+    # Coverage must be defined from every physically eligible site on the
+    # selected side(s). Do not truncate this list for performance: doing so
+    # changes the meaning of 25/50/75/100% coverage.
     oxygen_sites = exposed_sites(
         structure,
         anions,
         normal=normal,
-        placement_side=resolved_side,
+        placement_side=protonation_side,
         window_A=float(cfg["surface_window_A"]),
-        limit=int(cfg.get("max_surface_oxygen_sites", 0)),
+        limit=0,
     )
     cation_sites = exposed_sites(
         structure,
@@ -118,11 +168,12 @@ def enumerate_surface_states(structure: Structure, cfg: Mapping[str, Any]) -> li
         normal=normal,
         placement_side=resolved_side,
         window_A=float(cfg["surface_window_A"]),
-        limit=int(cfg.get("max_surface_cation_sites", 0)),
+        limit=0,
     )
     families = set(cfg["state_families"])
     common = _base_state_metadata(
         side_info=side_info,
+        protonation_side_info=protonation_side_info,
         n_oxygen_sites=len(oxygen_sites),
         n_cation_sites=len(cation_sites),
     )
