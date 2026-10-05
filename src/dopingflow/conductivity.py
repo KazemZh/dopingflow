@@ -232,6 +232,58 @@ def gpaw_bands(path):
     )
 
 
+def _sampled_band_gap_eV(data, tolerance_eV=1.0e-5):
+    """Return the fundamental gap sampled by the transport k mesh in eV.
+
+    The band energies and Fermi level in gpaw_bands use BoltzTraP2 atomic
+    units. A band spanning the Fermi level is treated as metallic/zero-gap.
+    For an insulating sampled spectrum, the gap is the lowest empty-band
+    minimum minus the highest occupied-band maximum across all sampled k points
+    and spin channels.
+
+    This is intentionally the GPAW gap from the same electronic structure used
+    for transport. It is not the separate ALIGNN-MBJ band-gap prediction.
+    """
+    from BoltzTraP2.units import eV
+
+    bands = np.asarray(data.ebands, dtype=float)
+    if bands.ndim != 2 or bands.size == 0 or not np.isfinite(bands).all():
+        return None
+
+    energies_eV = bands / eV
+    fermi_eV = float(data.fermi) / eV
+    if not np.isfinite(fermi_eV):
+        return None
+
+    band_min = energies_eV.min(axis=1)
+    band_max = energies_eV.max(axis=1)
+
+    crosses_fermi = (band_min < fermi_eV - tolerance_eV) & (
+        band_max > fermi_eV + tolerance_eV
+    )
+    if np.any(crosses_fermi):
+        return 0.0
+
+    occupied = band_max <= fermi_eV + tolerance_eV
+    empty = band_min >= fermi_eV - tolerance_eV
+    if not np.any(occupied) or not np.any(empty):
+        return None
+
+    vbm_eV = float(np.max(band_max[occupied]))
+    cbm_eV = float(np.min(band_min[empty]))
+    return float(max(0.0, cbm_eV - vbm_eV))
+
+
+def _band_gap_metadata(data, section):
+    gap = _sampled_band_gap_eV(data)
+    xc = str((section.get("dft", {}) or {}).get("xc", "PBE"))
+    return {
+        "band_gap_eV": gap,
+        "band_gap_source": "GPAW transport k-mesh",
+        "band_gap_xc": xc,
+    }
+
+
 def _solve_mu_for_count(bandlib, energy, dos, electrons, temperature, dosweight):
     """Solve the finite-T chemical potential against the actual DOS electron count.
 
@@ -744,6 +796,18 @@ def prepare_persistent_reference(raw, root, cfg, section, *, dry_run=False):
         record["transport_settings_fingerprint"] = fingerprint_payload[
             "transport_settings_fingerprint"
         ]
+        if "band_gap_eV" not in record and record.get("gpw_file"):
+            try:
+                gpw_path = Path(record["gpw_file"])
+                if gpw_path.is_file():
+                    record.update(_band_gap_metadata(gpaw_bands(gpw_path), section))
+                    cached["record"] = record
+                    _json_write(store, cached)
+            except Exception as exc:
+                warnings.append(
+                    "Reference band gap could not be read from the cached GPAW result: "
+                    f"{type(exc).__name__}: {exc}"
+                )
         return record, warnings
 
     record = {
@@ -789,13 +853,15 @@ def prepare_persistent_reference(raw, root, cfg, section, *, dry_run=False):
     settings["reuse_workdirs"] = [str(_workdir(target, ref_cfg, oxidation))]
 
     gpw, reused = ensure_gpaw(target, ref_cfg, settings)
-    rows = integrate_transport(gpaw_bands(gpw), section)
+    band_data = gpaw_bands(gpw)
+    rows = integrate_transport(band_data, section)
     record.update(
         {
             "status": "calculated",
             "gpw_file": str(gpw),
             "dft_reused": reused,
             "transport_assumption": "band-like, constant relaxation time",
+            **_band_gap_metadata(band_data, section),
             "rows": rows,
         }
     )
@@ -901,6 +967,8 @@ def build_reference_comparison(results, comparison, reference=None):
                         result.get("n_oxygen_vacancies", 0) or 0
                     ),
                     "reference_n_oxygen_vacancies": reference_vacancies,
+                    "band_gap_eV": result.get("band_gap_eV"),
+                    "reference_band_gap_eV": reference.get("band_gap_eV"),
                     "temperature_K": key[0],
                     "excess_electrons_cm3": key[1],
                     "sigma_over_tau_trace_average_S_per_cm_per_fs": value,
@@ -1107,16 +1175,26 @@ def run_conductivity(raw, root, *, dry_run=False):
                     raise OptionalMethodUnavailable(
                         "Localized/hopping transport requires a separate validated hopping-rate model"
                     )
-                rows = integrate_transport(gpaw_bands(gpw), section)
+                band_data = gpaw_bands(gpw)
+                rows = integrate_transport(band_data, section)
                 record.update(
                     {
                         "status": "calculated",
                         "transport_assumption": "band-like, constant relaxation time",
+                        **_band_gap_metadata(band_data, section),
                         "rows": rows,
                     }
                 )
                 for row in rows:
-                    csv_rows.append({"target_id": target.target_id, **row})
+                    csv_rows.append(
+                        {
+                            "target_id": target.target_id,
+                            "band_gap_eV": record.get("band_gap_eV"),
+                            "band_gap_source": record.get("band_gap_source"),
+                            "band_gap_xc": record.get("band_gap_xc"),
+                            **row,
+                        }
+                    )
             except Exception as exc:
                 record.update(
                     {
@@ -1142,6 +1220,9 @@ def run_conductivity(raw, root, *, dry_run=False):
             "status": record["status"],
             "dft_reused": record.get("dft_reused"),
             "gpw_file": record.get("gpw_file"),
+            "band_gap_eV": record.get("band_gap_eV"),
+            "band_gap_source": record.get("band_gap_source"),
+            "band_gap_xc": record.get("band_gap_xc"),
             "error": record.get("error"),
             "transport_settings_fingerprint": record.get(
                 "transport_settings_fingerprint"
@@ -1182,6 +1263,7 @@ def run_conductivity(raw, root, *, dry_run=False):
                 "Target discovery uses the same source_root, vacancy toggles, and target_include rules as oxidation-state analysis.",
                 "Band-like transport is a hypothesis requiring localization checks; polaron hopping and AMSET scattering are not calculated by this stage.",
                 "sigma/tau is not absolute conductivity. The primary human-readable unit is S cm^-1 fs^-1; raw SI S m^-1 s^-1 is retained. Any sigma uses the explicitly assumed relaxation time.",
+                "band_gap_eV is the fundamental gap sampled from the same GPAW electronic structure and transport k mesh used for conductivity; it is not the separate ALIGNN-MBJ band-gap prediction and should be k-mesh/functional converged for quantitative use.",
                 "Reference-normalized comparisons use the selected persistent vacancy-free benchmark at the same temperature and excess-electron concentration. The same reference is shared across all compatible screened structures and vacancy counts.",
                 "Positive excess_electrons_cm3 adds electrons to the explicit structure; negative removes them. Zero preserves its DFT electron count. This is not a defect-ionization or mobile-carrier prediction.",
                 "Converge k mesh, interpolation, empty bands and DOS grid. Periodic vacancies do not model random-defect scattering or grain boundaries.",
