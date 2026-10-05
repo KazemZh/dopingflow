@@ -725,7 +725,9 @@ with st.expander("Configuration & run controls", expanded=True):
     st.caption(
         "Coverage is converted to the nearest realizable integer occupation for each "
         "surface. If the requested coverage lies exactly halfway between two integer "
-        "counts (for example 25% of 10 sites), both realizations are kept: 20% and 30%."
+        "counts (for example 25% of 10 sites), both realizations are kept: 20% and 30%. "
+        "You may include 0%; it is treated as the already-present clean surface and "
+        "does not create a duplicate state."
     )
 
     q1, q2 = st.columns(2)
