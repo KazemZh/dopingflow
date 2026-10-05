@@ -51,6 +51,7 @@ def test_default_ph_window_is_minus_one_to_three(tmp_path) -> None:
     assert cfg["pH_min"] == pytest.approx(-1.0)
     assert cfg["pH_max"] == pytest.approx(3.0)
     assert cfg["potential_scale"] == "SHE"
+    assert cfg["protonation_side"] == "both"
 
 
 def test_rhe_che_is_ph_independent_for_fixed_rhe_potential() -> None:
@@ -604,3 +605,123 @@ def test_display_label_prefers_post_relaxation_final_chemistry() -> None:
             "final_state_label": "Reconstructed surface — 50% O*, 50% H₂O*",
         }
     ) == "Reconstructed surface — 50% O*, 50% H₂O*"
+
+
+def _ten_site_bottom_surface() -> Structure:
+    lattice = Lattice.from_parameters(10.0, 10.0, 24.0, 90, 90, 90)
+    xy = [
+        (0.10, 0.10), (0.30, 0.10), (0.50, 0.10), (0.70, 0.10), (0.90, 0.10),
+        (0.10, 0.40), (0.30, 0.40), (0.50, 0.40), (0.70, 0.40), (0.90, 0.40),
+    ]
+    species = ["Sn"] * 10 + ["O"] * 10
+    frac = (
+        [[x, y, 0.30] for x, y in xy]
+        + [[x, y, 0.25] for x, y in xy]
+    )
+    return Structure(lattice, species, frac)
+
+
+def test_legacy_site_caps_do_not_truncate_100_percent_coverage(tmp_path) -> None:
+    cfg = parse_surface_pourbaix_config(
+        {
+            "surface_pourbaix": {
+                "enabled": True,
+                "placement_side": "bottom",
+                "protonation_side": "same-as-adsorbates",
+                "surface_window_A": 1.5,
+                "state_families": ["clean", "protonated", "O"],
+                "proton_coverages_pct": [100],
+                "o_coverages_pct": [100],
+                # Reproduce an older saved GUI configuration.
+                "max_surface_oxygen_sites": 8,
+                "max_surface_cation_sites": 8,
+                "max_arrangements_per_stoichiometry": 2,
+            }
+        },
+        tmp_path,
+    )
+    assert cfg["max_surface_oxygen_sites"] == 0
+    assert cfg["max_surface_cation_sites"] == 0
+
+    states = enumerate_surface_states(_ten_site_bottom_surface(), cfg)
+    protonated = next(state for state in states if state["family"] == "protonated")
+    oxygen = next(state for state in states if state["family"] == "O")
+
+    assert protonated["eligible_protonation_oxygen_sites"] == 10
+    assert protonated["delta_n_H"] == 10
+    assert protonated["actual_coverage_pct"] == pytest.approx(100.0)
+
+    assert oxygen["eligible_adsorbate_cation_sites"] == 10
+    assert oxygen["delta_n_O"] == 10
+    assert oxygen["actual_coverage_pct"] == pytest.approx(100.0)
+
+
+def _two_sided_surface() -> Structure:
+    lattice = Lattice.from_parameters(6.0, 6.0, 24.0, 90, 90, 90)
+    return Structure(
+        lattice,
+        ["Sn", "Sn", "Sn", "Sn", "O", "O", "O", "O"],
+        [
+            [0.25, 0.25, 0.30],
+            [0.75, 0.75, 0.30],
+            [0.25, 0.25, 0.70],
+            [0.75, 0.75, 0.70],
+            [0.25, 0.75, 0.25],
+            [0.75, 0.25, 0.25],
+            [0.25, 0.75, 0.75],
+            [0.75, 0.25, 0.75],
+        ],
+    )
+
+
+def test_protonation_side_can_be_both_while_adsorbates_use_one_side(tmp_path) -> None:
+    cfg = parse_surface_pourbaix_config(
+        {
+            "surface_pourbaix": {
+                "enabled": True,
+                "placement_side": "bottom",
+                "protonation_side": "both",
+                "surface_window_A": 1.5,
+                "state_families": ["clean", "protonated", "O"],
+                "proton_coverages_pct": [100],
+                "o_coverages_pct": [100],
+                "max_arrangements_per_stoichiometry": 2,
+            }
+        },
+        tmp_path,
+    )
+    states = enumerate_surface_states(_two_sided_surface(), cfg)
+    protonated = next(state for state in states if state["family"] == "protonated")
+    oxygen = next(state for state in states if state["family"] == "O")
+
+    assert protonated["resolved_protonation_side"] == "both"
+    assert protonated["eligible_protonation_oxygen_sites"] == 4
+    assert protonated["delta_n_H"] == 4
+    assert set(protonated["site_sides"]) == {-1, 1}
+
+    assert oxygen["resolved_placement_side"] == "bottom"
+    assert oxygen["eligible_adsorbate_cation_sites"] == 2
+    assert oxygen["delta_n_O"] == 2
+    assert set(oxygen["site_sides"]) == {-1}
+
+
+def test_protonation_can_follow_adsorbate_side(tmp_path) -> None:
+    cfg = parse_surface_pourbaix_config(
+        {
+            "surface_pourbaix": {
+                "enabled": True,
+                "placement_side": "bottom",
+                "protonation_side": "same-as-adsorbates",
+                "surface_window_A": 1.5,
+                "state_families": ["clean", "protonated"],
+                "proton_coverages_pct": [100],
+            }
+        },
+        tmp_path,
+    )
+    states = enumerate_surface_states(_two_sided_surface(), cfg)
+    protonated = next(state for state in states if state["family"] == "protonated")
+    assert protonated["resolved_protonation_side"] == "bottom"
+    assert protonated["eligible_protonation_oxygen_sites"] == 2
+    assert protonated["delta_n_H"] == 2
+    assert set(protonated["site_sides"]) == {-1}
