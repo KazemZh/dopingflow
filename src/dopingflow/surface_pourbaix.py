@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import gc
 import json
 import math
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -301,6 +304,249 @@ def _leaching_rows(
     return output
 
 
+
+def _effective_surface_workers(
+    cfg: Mapping[str, Any],
+    n_targets: int,
+) -> tuple[int, str]:
+    """Resolve safe surface-level concurrency for the current backend."""
+    requested = max(1, int(cfg.get("surface_workers", 1)))
+    if not bool(cfg.get("parallel_surfaces", False)):
+        return 1, "parallel surface execution disabled"
+    if int(n_targets) <= 1:
+        return 1, "only one surface selected"
+
+    device = str(cfg.get("screen", {}).get("device", "cpu")).strip().lower()
+    if device == "cuda":
+        return 1, (
+            "single-GPU safety: multiple independent ML model copies on one CUDA "
+            "device are not launched concurrently"
+        )
+
+    dft = dict(cfg.get("dft", {}) or {})
+    if bool(dft.get("enabled", False)) and bool(dft.get("execute", False)):
+        return 1, (
+            "DFT execution enabled: local process-level surface parallelism is "
+            "disabled to avoid nested GPAW/MPI oversubscription"
+        )
+
+    workers = min(requested, int(n_targets))
+    return workers, f"CPU surface-level process parallelism ({workers} workers)"
+
+
+def _surface_result_payload(
+    target: SurfacePourbaixTarget,
+    records: list[dict[str, Any]],
+    chosen_grid: pd.DataFrame,
+    domains: pd.DataFrame,
+    leaching_rows: list[dict[str, Any]],
+    energy_level: str,
+) -> dict[str, Any]:
+    return {
+        "surface_id": target.surface_id,
+        "safe_id": target.safe_id,
+        "records": records,
+        "grid_records": chosen_grid.to_dict(orient="records"),
+        "grid_columns": list(chosen_grid.columns),
+        "domain_records": domains.to_dict(orient="records"),
+        "domain_columns": list(domains.columns),
+        "leaching_rows": leaching_rows,
+        "energy_level": energy_level,
+    }
+
+
+def _run_one_surface(
+    target: SurfacePourbaixTarget,
+    cfg: Mapping[str, Any],
+    surface_cfg: Mapping[str, Any],
+    h2_ml: float,
+    h2o_ml: float,
+    potentials: list[float],
+    ph_values: list[float],
+    dft_references: tuple[float | None, float | None],
+    calculator: Any,
+) -> dict[str, Any]:
+    """Evaluate one surface completely.
+
+    The function writes only inside this surface's own directory, which makes it
+    safe to execute different surfaces in independent worker processes.
+    """
+    outdir = Path(cfg["output_dir"])
+    structure = Structure.from_file(target.structure_path)
+    fixed = (
+        _select_fixed_atom_indices(structure, dict(surface_cfg))
+        if bool(cfg["inherit_surface_fixed_atoms"])
+        else []
+    )
+    target_dir = outdir / "surfaces" / target.safe_id
+    records: list[dict[str, Any]] = []
+
+    for state in enumerate_surface_states(structure, cfg):
+        result = screen_state(
+            state,
+            cfg,
+            calculator,
+            fixed,
+            target_dir / "states_ml",
+        )
+        record = _record_from_state(target, state, result)
+        if result.get("status") == "ok":
+            validation = analyze_relaxed_surface_state_path(
+                structure,
+                state["structure"],
+                result.get("structure_path", ""),
+                state,
+                cfg,
+            )
+        else:
+            validation = {
+                "state_status": "calculation_failed",
+                "pourbaix_eligible": False,
+                "final_family": "invalid",
+                "final_state_label": "Failed relaxation",
+                "postprocess_reason": str(
+                    result.get("error", "ML relaxation failed")
+                ),
+            }
+        record.update(validation)
+        records.append(record)
+
+    ml_grid, gaps = build_surface_pourbaix_grid(
+        records,
+        h2_energy_eV=h2_ml,
+        h2o_energy_eV=h2o_ml,
+        potential_values=potentials,
+        pH_values=ph_values,
+        potential_scale=cfg["potential_scale"],
+        temperature_K=cfg["temperature_K"],
+        energy_key="ml_energy_eV",
+        energy_level="ML",
+    )
+    ml_grid = _annotate_grid_with_state_metadata(ml_grid, records)
+    ml_grid.insert(0, "surface_id", target.surface_id)
+    gap_map = dict(
+        zip(gaps["state_id"], gaps["minimum_deltaG_above_stable_eV"])
+    )
+    for record in records:
+        record["minimum_deltaG_above_stable_ml_eV"] = gap_map.get(
+            record["state_id"]
+        )
+
+    chosen_grid, energy_level = ml_grid, "ML"
+    if bool(cfg["dft"].get("enabled", False)):
+        from dopingflow.surface_pourbaix_dft import dft_energy
+
+        candidates = _select_dft_candidates(records, cfg)
+        for record in candidates:
+            energy, reused, artifact = dft_energy(
+                Path(record["ml_structure_path"]),
+                f"{target.safe_id}/{record['state_id']}",
+                cfg,
+            )
+            record["dft_energy_eV"] = energy
+            record["dft_reused"] = reused
+            record["dft_artifact"] = artifact
+
+        h2_dft, h2o_dft = dft_references
+        if h2_dft is not None and h2o_dft is not None:
+            try:
+                dft_grid, _ = build_surface_pourbaix_grid(
+                    candidates,
+                    h2_energy_eV=h2_dft,
+                    h2o_energy_eV=h2o_dft,
+                    potential_values=potentials,
+                    pH_values=ph_values,
+                    potential_scale=cfg["potential_scale"],
+                    temperature_K=cfg["temperature_K"],
+                    energy_key="dft_energy_eV",
+                    energy_level="DFT",
+                )
+                dft_grid = _annotate_grid_with_state_metadata(
+                    dft_grid,
+                    candidates,
+                )
+                dft_grid.insert(0, "surface_id", target.surface_id)
+                chosen_grid, energy_level = dft_grid, "DFT"
+                target_dir.mkdir(parents=True, exist_ok=True)
+                dft_grid.to_csv(
+                    target_dir / "pourbaix_grid_dft.csv",
+                    index=False,
+                )
+            except ValueError:
+                pass
+
+    domains = summarize_stable_domains(chosen_grid)
+    if not domains.empty:
+        domains.insert(0, "surface_id", target.surface_id)
+        domains.insert(1, "target_id", target.target_id)
+    leaching_rows = _leaching_rows(
+        target,
+        domains,
+        records,
+        energy_level,
+    )
+
+    target_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(records).to_csv(
+        target_dir / "surface_state_summary.csv",
+        index=False,
+    )
+    ml_grid.to_csv(target_dir / "pourbaix_grid_ml.csv", index=False)
+    chosen_grid.to_csv(target_dir / "pourbaix_grid.csv", index=False)
+    domains.to_csv(target_dir / "stable_surface_states.csv", index=False)
+
+    return _surface_result_payload(
+        target,
+        records,
+        chosen_grid,
+        domains,
+        leaching_rows,
+        energy_level,
+    )
+
+
+def _surface_worker_entry(
+    target: SurfacePourbaixTarget,
+    cfg: Mapping[str, Any],
+    surface_cfg: Mapping[str, Any],
+    h2_ml: float,
+    h2o_ml: float,
+    potentials: list[float],
+    ph_values: list[float],
+    dft_references: tuple[float | None, float | None],
+) -> dict[str, Any]:
+    """Spawn-safe entry point: each worker creates and owns its ML calculator."""
+    calculator = _prepare_calculator(
+        cfg["screen"],
+        f"Surface Pourbaix worker: {target.surface_id}",
+    )
+    try:
+        return _run_one_surface(
+            target,
+            cfg,
+            surface_cfg,
+            h2_ml,
+            h2o_ml,
+            potentials,
+            ph_values,
+            dft_references,
+            calculator,
+        )
+    finally:
+        del calculator
+        gc.collect()
+
+
+def _payload_frame(
+    payload: Mapping[str, Any],
+    records_key: str,
+    columns_key: str,
+) -> pd.DataFrame:
+    records = list(payload.get(records_key, []) or [])
+    columns = list(payload.get(columns_key, []) or [])
+    return pd.DataFrame(records, columns=columns or None)
+
+
 def run_surface_pourbaix(
     raw: Mapping[str, Any], root: Path | str = Path("."), *, dry_run: bool = False
 ) -> Path | None:
@@ -342,106 +588,143 @@ def run_surface_pourbaix(
     if dry_run:
         return preview_path
 
-    calculator = _prepare_calculator(cfg["screen"], "Surface Pourbaix screening")
-    h2_ml, h2_source = ml_reference_energy("H2", cfg, calculator)
-    h2o_ml, h2o_source = ml_reference_energy("H2O", cfg, calculator)
+    # H2/H2O references are evaluated once in the parent process. Individual
+    # surface workers never race over the shared reference directories.
+    reference_calculator = _prepare_calculator(
+        cfg["screen"],
+        "Surface Pourbaix references",
+    )
+    h2_ml, h2_source = ml_reference_energy(
+        "H2",
+        cfg,
+        reference_calculator,
+    )
+    h2o_ml, h2o_source = ml_reference_energy(
+        "H2O",
+        cfg,
+        reference_calculator,
+    )
     if h2_ml is None or h2o_ml is None:
-        raise RuntimeError("Surface-Pourbaix CHE requires H2 and H2O reference energies")
+        raise RuntimeError(
+            "Surface-Pourbaix CHE requires H2 and H2O reference energies"
+        )
 
-    potentials = value_grid(cfg["potential_min_V"], cfg["potential_max_V"], cfg["potential_step_V"])
-    ph_values = value_grid(cfg["pH_min"], cfg["pH_max"], cfg["pH_step"])
+    potentials = value_grid(
+        cfg["potential_min_V"],
+        cfg["potential_max_V"],
+        cfg["potential_step_V"],
+    )
+    ph_values = value_grid(
+        cfg["pH_min"],
+        cfg["pH_max"],
+        cfg["pH_step"],
+    )
     surface_cfg = parse_surface_config(raw)
-    all_states, all_grids, all_domains, leaching = [], [], [], []
 
-    for target in targets:
-        structure = Structure.from_file(target.structure_path)
-        fixed = (
-            _select_fixed_atom_indices(structure, dict(surface_cfg))
-            if bool(cfg["inherit_surface_fixed_atoms"]) else []
-        )
-        target_dir = outdir / "surfaces" / target.safe_id
-        records = []
-        for state in enumerate_surface_states(structure, cfg):
-            result = screen_state(
-                state, cfg, calculator, fixed, target_dir / "states_ml"
+    dft_references: tuple[float | None, float | None] = (None, None)
+    if bool(cfg["dft"].get("enabled", False)):
+        from dopingflow.surface_pourbaix_dft import dft_reference_energies
+
+        dft_references = dft_reference_energies(cfg)
+
+    effective_workers, parallel_reason = _effective_surface_workers(
+        cfg,
+        len(targets),
+    )
+    requested_workers = int(cfg.get("surface_workers", 1))
+    print(
+        "[surface-pourbaix] "
+        f"surfaces={len(targets)} "
+        f"parallel_requested={bool(cfg.get('parallel_surfaces', False))} "
+        f"workers_requested={requested_workers} "
+        f"workers_effective={effective_workers} "
+        f"reason={parallel_reason}",
+        flush=True,
+    )
+
+    payloads: list[dict[str, Any]] = []
+    if effective_workers <= 1:
+        # Preserve the efficient serial behavior: one model instance is reused
+        # across every surface.
+        for index, target in enumerate(targets, 1):
+            print(
+                f"[surface-pourbaix] surface {index}/{len(targets)}: "
+                f"{target.surface_id}",
+                flush=True,
             )
-            record = _record_from_state(target, state, result)
-            if result.get("status") == "ok":
-                validation = analyze_relaxed_surface_state_path(
-                    structure,
-                    state["structure"],
-                    result.get("structure_path", ""),
-                    state,
+            payloads.append(
+                _run_one_surface(
+                    target,
                     cfg,
+                    surface_cfg,
+                    float(h2_ml),
+                    float(h2o_ml),
+                    list(potentials),
+                    list(ph_values),
+                    dft_references,
+                    reference_calculator,
                 )
-            else:
-                validation = {
-                    "state_status": "calculation_failed",
-                    "pourbaix_eligible": False,
-                    "final_family": "invalid",
-                    "final_state_label": "Failed relaxation",
-                    "postprocess_reason": str(result.get("error", "ML relaxation failed")),
-                }
-            record.update(validation)
-            records.append(record)
+            )
+    else:
+        # Do not keep an unnecessary parent model resident while workers each
+        # own their independent model instance.
+        del reference_calculator
+        gc.collect()
 
-        ml_grid, gaps = build_surface_pourbaix_grid(
-            records, h2_energy_eV=h2_ml, h2o_energy_eV=h2o_ml,
-            potential_values=potentials, pH_values=ph_values,
-            potential_scale=cfg["potential_scale"], temperature_K=cfg["temperature_K"],
-            energy_key="ml_energy_eV", energy_level="ML",
-        )
-        ml_grid = _annotate_grid_with_state_metadata(ml_grid, records)
-        ml_grid.insert(0, "surface_id", target.surface_id)
-        gap_map = dict(zip(gaps["state_id"], gaps["minimum_deltaG_above_stable_eV"]))
-        for record in records:
-            record["minimum_deltaG_above_stable_ml_eV"] = gap_map.get(record["state_id"])
-
-        chosen_grid, energy_level = ml_grid, "ML"
-        if bool(cfg["dft"].get("enabled", False)):
-            from dopingflow.surface_pourbaix_dft import dft_energy, dft_reference_energies
-
-            candidates = _select_dft_candidates(records, cfg)
-            for record in candidates:
-                energy, reused, artifact = dft_energy(
-                    Path(record["ml_structure_path"]),
-                    f"{target.safe_id}/{record['state_id']}", cfg,
-                )
-                record["dft_energy_eV"] = energy
-                record["dft_reused"] = reused
-                record["dft_artifact"] = artifact
-            h2_dft, h2o_dft = dft_reference_energies(cfg)
-            if h2_dft is not None and h2o_dft is not None:
+        ordered: list[dict[str, Any] | None] = [None] * len(targets)
+        context = mp.get_context("spawn")
+        with ProcessPoolExecutor(
+            max_workers=effective_workers,
+            mp_context=context,
+        ) as executor:
+            futures = {
+                executor.submit(
+                    _surface_worker_entry,
+                    target,
+                    cfg,
+                    surface_cfg,
+                    float(h2_ml),
+                    float(h2o_ml),
+                    list(potentials),
+                    list(ph_values),
+                    dft_references,
+                ): index
+                for index, target in enumerate(targets)
+            }
+            completed = 0
+            for future in as_completed(futures):
+                index = futures[future]
+                target = targets[index]
                 try:
-                    dft_grid, _ = build_surface_pourbaix_grid(
-                        candidates, h2_energy_eV=h2_dft, h2o_energy_eV=h2o_dft,
-                        potential_values=potentials, pH_values=ph_values,
-                        potential_scale=cfg["potential_scale"], temperature_K=cfg["temperature_K"],
-                        energy_key="dft_energy_eV", energy_level="DFT",
-                    )
-                    dft_grid = _annotate_grid_with_state_metadata(
-                        dft_grid, candidates
-                    )
-                    dft_grid.insert(0, "surface_id", target.surface_id)
-                    chosen_grid, energy_level = dft_grid, "DFT"
-                    dft_grid.to_csv(target_dir / "pourbaix_grid_dft.csv", index=False)
-                except ValueError:
-                    pass
+                    ordered[index] = future.result()
+                except Exception as exc:
+                    for pending in futures:
+                        pending.cancel()
+                    raise RuntimeError(
+                        "Parallel Surface-Pourbaix worker failed for "
+                        f"{target.surface_id}: {type(exc).__name__}: {exc}"
+                    ) from exc
+                completed += 1
+                print(
+                    f"[surface-pourbaix] completed {completed}/{len(targets)}: "
+                    f"{target.surface_id}",
+                    flush=True,
+                )
+        payloads = [payload for payload in ordered if payload is not None]
 
-        domains = summarize_stable_domains(chosen_grid)
-        if not domains.empty:
-            domains.insert(0, "surface_id", target.surface_id)
-            domains.insert(1, "target_id", target.target_id)
-        leaching.extend(_leaching_rows(target, domains, records, energy_level))
-
-        target_dir.mkdir(parents=True, exist_ok=True)
-        pd.DataFrame(records).to_csv(target_dir / "surface_state_summary.csv", index=False)
-        ml_grid.to_csv(target_dir / "pourbaix_grid_ml.csv", index=False)
-        chosen_grid.to_csv(target_dir / "pourbaix_grid.csv", index=False)
-        domains.to_csv(target_dir / "stable_surface_states.csv", index=False)
-        all_states.extend(records)
-        all_grids.append(chosen_grid)
-        all_domains.append(domains)
+    all_states: list[dict[str, Any]] = []
+    all_grids: list[pd.DataFrame] = []
+    all_domains: list[pd.DataFrame] = []
+    leaching: list[dict[str, Any]] = []
+    for payload in payloads:
+        all_states.extend(list(payload["records"]))
+        all_grids.append(
+            _payload_frame(payload, "grid_records", "grid_columns")
+        )
+        all_domains.append(
+            _payload_frame(payload, "domain_records", "domain_columns")
+        )
+        leaching.extend(list(payload["leaching_rows"]))
 
     states_path = outdir / "surface_state_summary.csv"
     grid_path = outdir / "pourbaix_grid.csv"
@@ -460,6 +743,10 @@ def run_surface_pourbaix(
         potential_scale=cfg["potential_scale"], temperature_K=cfg["temperature_K"],
         h2_reference_eV_ml=h2_ml, h2_reference_source=h2_source,
         h2o_reference_eV_ml=h2o_ml, h2o_reference_source=h2o_source,
+        parallel_surfaces_requested=bool(cfg.get("parallel_surfaces", False)),
+        surface_workers_requested=int(cfg.get("surface_workers", 1)),
+        surface_workers_effective=int(effective_workers),
+        parallel_execution_reason=parallel_reason,
         states_csv=str(states_path), pourbaix_grid_csv=str(grid_path),
         stable_states_csv=str(domains_path), leaching_surface_states_csv=str(leaching_path),
         postprocess_validation_enabled=bool(cfg["postprocess_validate_relaxed_states"]),
