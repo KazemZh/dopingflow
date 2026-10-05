@@ -10,7 +10,8 @@ outdir = "10_surface_pourbaix"
 
 # Sample both coverage and arrangement. "clean" is always retained as the reference.
 # Automatic side selection is evaluated independently for every actual doped surface.
-placement_side = "dopant-nearest"     # dopant-nearest, top, bottom, both
+placement_side = "dopant-nearest"     # O*/OH*/H2O*: dopant-nearest, top, bottom, both
+protonation_side = "both"              # both, same-as-adsorbates, dopant-nearest, top, bottom
 side_target_species = ["Sb", "In"]    # blank/[] -> infer all non-host cations
 dopant_side_tie_tolerance_A = 0.25
 dopant_side_fallback = "top"
@@ -25,9 +26,7 @@ oh_coverages_pct = [25, 50, 75, 100]
 h2o_coverages_pct = [25, 50, 100]
 mixed_coverages_pct = [[25, 25], [25, 75], [50, 50], [75, 25]]
 
-surface_window_A = 2.0
-max_surface_oxygen_sites = 0          # 0 = all eligible sites
-max_surface_cation_sites = 0          # 0 = all eligible sites
+surface_window_A = 2.0                # all eligible sites in this window are used
 
 # Symmetry is determined from the actual doped/vacancy slab.
 symmetry_reduce = true
