@@ -52,6 +52,17 @@ cap of 8 could make "100%" protonation add only 8 H even when 10 O atoms were
 eligible. The arrangement-count controls, symmetry reduction, and diversity
 selection are the correct performance controls and do not redefine coverage.
 
+Surface-site detection defaults to ``surface_site_selection =
+"outermost-layer"``. The ``surface_window_A`` value is then only a maximum
+normal-depth safety window. Within that window, DopingFlow identifies the
+largest normal-direction spacing gap that exceeds
+``surface_layer_gap_A`` and treats it as the boundary between the exposed
+surface layer/group and deeper crystallographic layers. This prevents a
+corrugated oxide surface from accidentally protonating or adsorbing on the next
+subsurface layer merely because it lies within 2 Å of the outermost atom.
+The legacy ``surface_site_selection = "window"`` mode remains available for
+comparison and intentionally reproduces the former height-window behavior.
+
 Adsorbate placement and lattice-O protonation have independent side controls.
 ``placement_side`` applies to O*, OH*, H2O*, and mixed O*/OH* states.
 ``protonation_side`` applies only to H added to existing lattice O and accepts
