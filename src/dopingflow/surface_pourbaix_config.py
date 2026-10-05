@@ -198,6 +198,8 @@ def parse_surface_pourbaix_config(
         postprocess_exclude_desorbed=True,
         postprocess_exclude_fragmented=True,
         postprocess_allow_reclassified=True,
+        parallel_surfaces=False,
+        surface_workers=2,
         inherit_surface_fixed_atoms=True, resume_completed=True, screen={}, dft={},
     )
     for key, value in defaults.items():
@@ -272,10 +274,13 @@ def parse_surface_pourbaix_config(
         raise ValueError("potential_scale must be SHE or RHE")
 
     section["max_surfaces"] = int(section["max_surfaces"])
+    section["surface_workers"] = int(section.get("surface_workers", 2))
     section["max_arrangements_per_stoichiometry"] = int(section["max_arrangements_per_stoichiometry"])
     section["max_raw_configurations_per_stoichiometry"] = int(section["max_raw_configurations_per_stoichiometry"])
     if section["max_surfaces"] <= 0 or section["max_arrangements_per_stoichiometry"] <= 0:
         raise ValueError("max_surfaces and max_arrangements_per_stoichiometry must be positive")
+    if section["surface_workers"] <= 0:
+        raise ValueError("surface_workers must be positive")
     if section["max_raw_configurations_per_stoichiometry"] <= 0:
         raise ValueError("max_raw_configurations_per_stoichiometry must be positive")
     # Legacy site caps changed the physical coverage denominator (for example,
@@ -306,6 +311,7 @@ def parse_surface_pourbaix_config(
     if section["symmetry_symprec_A"] <= 0 or section["symmetry_mapping_tolerance_A"] <= 0:
         raise ValueError("symmetry tolerances must be positive")
     section["symmetry_reduce"] = bool(section["symmetry_reduce"])
+    section["parallel_surfaces"] = bool(section.get("parallel_surfaces", False))
     section["postprocess_validate_relaxed_states"] = bool(
         section["postprocess_validate_relaxed_states"]
     )
