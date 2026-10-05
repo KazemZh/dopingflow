@@ -601,7 +601,7 @@ with st.expander("Configuration & run controls", expanded=True):
         )),
     )
 
-    s1, s2, s3 = st.columns(3)
+    s1, s2, s3, s4 = st.columns(4)
     side_options = ["dopant-nearest", "top", "bottom", "both"]
     side_labels = {
         "dopant-nearest": "Near dopants — automatic (recommended)",
@@ -655,20 +655,44 @@ with st.expander("Configuration & run controls", expanded=True):
         ),
     )
 
-    surface_window = s3.number_input(
-        "Exposed-site window (Å)",
+    site_mode_options = ["outermost-layer", "window"]
+    site_mode_labels = {
+        "outermost-layer": "Outermost atomic layer (recommended)",
+        "window": "All atoms in height window (legacy)",
+    }
+    saved_site_mode = str(
+        saved.get("surface_site_selection", "outermost-layer")
+    ).replace("_", "-")
+    if saved_site_mode not in site_mode_options:
+        saved_site_mode = "outermost-layer"
+    surface_site_selection = s3.selectbox(
+        "Surface-site detection",
+        site_mode_options,
+        index=site_mode_options.index(saved_site_mode),
+        format_func=lambda value: site_mode_labels[value],
+        help=(
+            "The recommended mode identifies the outer surface layer/group from "
+            "normal-direction layer spacing. The legacy window mode can include "
+            "subsurface atoms on corrugated oxide facets."
+        ),
+    )
+
+    surface_window = s4.number_input(
+        "Safety depth window (Å)",
         min_value=0.1,
         value=float(saved.get("surface_window_A", 2.0)),
         step=0.1,
         help=(
-            "Atoms within this normal-distance window from the outermost O/cation "
-            "layer are eligible surface sites. No site-count cap is applied."
+            "Maximum normal depth considered during site detection. In "
+            "outermost-layer mode, a layer-boundary test is applied inside this "
+            "window rather than treating every atom in the window as exposed."
         ),
     )
     st.caption(
-        "**Coverage always uses all eligible sites.** The former "
-        "`max_surface_oxygen_sites` / `max_surface_cation_sites` caps are ignored "
-        "because they could make a nominal 100% coverage incomplete."
+        "**Coverage always uses all detected exposed sites.** The former "
+        "`max_surface_oxygen_sites` / `max_surface_cation_sites` caps are ignored. "
+        "Use **Outermost atomic layer** to avoid counting the next crystallographic "
+        "O/cation layer as a surface site."
     )
 
     inferred_side_targets = (
@@ -751,26 +775,38 @@ with st.expander("Configuration & run controls", expanded=True):
     )
 
     with st.expander("Advanced site/symmetry controls"):
-        a1, a2, a3, a4 = st.columns(4)
-        symmetry_symprec = a1.number_input(
+        a1, a2, a3, a4, a5 = st.columns(5)
+        surface_layer_gap = a1.number_input(
+            "Layer-separation threshold (Å)",
+            min_value=0.05,
+            value=float(saved.get("surface_layer_gap_A", 0.75)),
+            step=0.05,
+            disabled=surface_site_selection != "outermost-layer",
+            help=(
+                "Within the safety depth window, the largest normal-direction gap "
+                "must exceed this threshold to define the boundary between the "
+                "exposed layer/group and deeper atoms."
+            ),
+        )
+        symmetry_symprec = a2.number_input(
             "Symmetry tolerance (Å)",
             min_value=0.001,
             value=float(saved.get("symmetry_symprec_A", 0.10)),
             step=0.01,
         )
-        symmetry_mapping_tol = a2.number_input(
+        symmetry_mapping_tol = a3.number_input(
             "Site mapping tolerance (Å)",
             min_value=0.001,
             value=float(saved.get("symmetry_mapping_tolerance_A", 0.25)),
             step=0.01,
         )
-        side_tie_tol = a3.number_input(
+        side_tie_tol = a4.number_input(
             "Dopant-side tie tolerance (Å)",
             min_value=0.0,
             value=float(saved.get("dopant_side_tie_tolerance_A", 0.25)),
             step=0.05,
         )
-        max_raw_configs = a4.number_input(
+        max_raw_configs = a5.number_input(
             "Max raw patterns / coverage",
             min_value=100,
             value=int(saved.get("max_raw_configurations_per_stoichiometry", 100000)),
@@ -1140,6 +1176,8 @@ with st.expander("Configuration & run controls", expanded=True):
         h2o_coverages_pct=_floats(h2o_coverage_text),
         mixed_coverages_pct=_mixed_coverages(mixed_coverage_text),
         surface_window_A=float(surface_window),
+        surface_site_selection=surface_site_selection,
+        surface_layer_gap_A=float(surface_layer_gap),
         symmetry_reduce=bool(symmetry_reduce),
         symmetry_symprec_A=float(symmetry_symprec),
         symmetry_mapping_tolerance_A=float(symmetry_mapping_tol),
