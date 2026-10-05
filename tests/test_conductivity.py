@@ -270,6 +270,33 @@ def test_spin_channels_are_both_loaded(monkeypatch):
     assert not np.array_equal(data.ebands[:2], data.ebands[2:])
 
 
+def test_sampled_band_gap_reports_insulator_and_metal():
+    pytest.importorskip("BoltzTraP2")
+    from BoltzTraP2.units import eV
+
+    insulator = SimpleNamespace(
+        ebands=np.array([[-2.0, -1.0], [1.0, 2.0]]) * eV,
+        fermi=0.0 * eV,
+    )
+    assert c._sampled_band_gap_eV(insulator) == pytest.approx(2.0)
+
+    metal = SimpleNamespace(
+        ebands=np.array([[-1.0, 1.0], [2.0, 3.0]]) * eV,
+        fermi=0.0 * eV,
+    )
+    assert c._sampled_band_gap_eV(metal) == pytest.approx(0.0)
+
+
+def test_sampled_band_gap_returns_none_when_band_window_is_incomplete():
+    pytest.importorskip("BoltzTraP2")
+    from BoltzTraP2.units import eV
+
+    data = SimpleNamespace(
+        ebands=np.array([[-2.0, -1.0], [-0.8, -0.2]]) * eV,
+        fermi=0.0 * eV,
+    )
+    assert c._sampled_band_gap_eV(data) is None
+
 def test_mu_solver_refines_upstream_count_residual():
     class FakeBandlib:
         @staticmethod
@@ -419,6 +446,8 @@ def test_reference_comparison_uses_persistent_ato_reference():
     assert ce_300["percent_change_vs_reference"] == pytest.approx(12.8)
     assert ce_300["comparison_basis"] == "ato-5pct-sb-benchmark"
     assert ce_300["reference_sb_percent"] == pytest.approx(5.0)
+    assert ce_300["band_gap_eV"] is None
+    assert ce_300["reference_band_gap_eV"] is None
 
 
 def test_reference_comparison_applies_same_ato_to_vacancy_structures():
