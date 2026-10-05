@@ -15,6 +15,7 @@ The format loosely follows semantic versioning.
 
 ## [Unreleased]
 ### Added
+- Surface Pourbaix coverage now always uses the complete eligible site set (legacy 8-site caps are ignored), and lattice-O protonation has an independent side selector with `both` as the default while O*/OH*/H2O* adsorption keeps its own side choice.
 - Unified every GUI structure visualization behind `gui/view_structure.py`, with the enhanced shared element palette, customizable atom colors, hover site labels, consistent sphere/stick styling, unit-cell display, coordinate axes, and true slab-normal surface arrows.
 - Surface Pourbaix now validates relaxed surface chemistry before thermodynamic competition: surface-bound reconstructions are reclassified, while detached O/OH/H2O/O2-like and fragmented states are excluded by default and reported explicitly in the GUI/CSV outputs.
 - New **Surface Pourbaix** stage between surface segregation and leaching. It enumerates protonated, O*, OH*, H2O*, and mixed O/OH intact-surface states, ML-relaxes coverage/site arrangements, and builds CHE stability maps versus potential and pH.
