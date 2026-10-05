@@ -908,6 +908,9 @@ calculated by this backend.
 
 For screening, the primary GUI/reporting unit is **S cm⁻¹ fs⁻¹** for
 `sigma/tau`; raw SI `S m⁻¹ s⁻¹` values remain in the JSON for reproducibility.
+Each conductivity structure also reports a GPAW `band_gap_eV` extracted from
+the same electronic structure and transport k mesh, together with the XC/source
+metadata. This is separate from the optional ALIGNN-MBJ band-gap stage.
 
 The optional `[conductivity.comparison]` workflow is **material-agnostic**:
 users may choose any vacancy-free structure as a persistent conductivity reference.
