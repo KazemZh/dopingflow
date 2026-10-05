@@ -178,7 +178,10 @@ def parse_surface_pourbaix_config(
         oh_coverages_pct=[25.0, 50.0, 75.0, 100.0],
         h2o_coverages_pct=[25.0, 50.0, 100.0],
         mixed_coverages_pct=[[25.0, 25.0], [25.0, 75.0], [50.0, 50.0], [75.0, 25.0]],
-        surface_window_A=2.0, max_surface_oxygen_sites=0, max_surface_cation_sites=0,
+        surface_window_A=2.0,
+        surface_site_selection="outermost-layer",
+        surface_layer_gap_A=0.75,
+        max_surface_oxygen_sites=0, max_surface_cation_sites=0,
         symmetry_reduce=True, symmetry_symprec_A=0.10,
         symmetry_angle_tolerance_deg=5.0, symmetry_mapping_tolerance_A=0.25,
         max_raw_configurations_per_stoichiometry=100000,
@@ -251,6 +254,17 @@ def parse_surface_pourbaix_config(
     if section["placement_side"] not in {"top", "bottom", "both", "dopant-nearest"}:
         raise ValueError("placement_side must be top, bottom, both, or dopant-nearest")
 
+    section["surface_site_selection"] = (
+        str(section.get("surface_site_selection", "outermost-layer"))
+        .strip()
+        .lower()
+        .replace("_", "-")
+    )
+    if section["surface_site_selection"] not in {"outermost-layer", "window"}:
+        raise ValueError(
+            "surface_site_selection must be outermost-layer or window"
+        )
+
     section["protonation_side"] = (
         str(section.get("protonation_side", "both")).lower().replace("_", "-")
     )
@@ -296,7 +310,8 @@ def parse_surface_pourbaix_config(
             raise ValueError(f"{key} must be >= 0")
         section[key] = 0
     for key in (
-        "surface_window_A", "oh_bond_length_A", "adsorbate_height_A",
+        "surface_window_A", "surface_layer_gap_A",
+        "oh_bond_length_A", "adsorbate_height_A",
         "water_oh_bond_length_A", "water_hoh_angle_deg", "temperature_K",
         "potential_min_V", "potential_max_V", "potential_step_V", "pH_min",
         "pH_max", "pH_step", "reference_box_A", "h2_free_energy_correction_eV",
@@ -309,6 +324,8 @@ def parse_surface_pourbaix_config(
         section[key] = float(section[key])
     if section["temperature_K"] <= 0 or section["surface_window_A"] <= 0:
         raise ValueError("temperature_K and surface_window_A must be positive")
+    if section["surface_layer_gap_A"] <= 0:
+        raise ValueError("surface_layer_gap_A must be positive")
     if section["dopant_side_tie_tolerance_A"] < 0:
         raise ValueError("dopant_side_tie_tolerance_A must be >= 0")
     if section["symmetry_symprec_A"] <= 0 or section["symmetry_mapping_tolerance_A"] <= 0:
