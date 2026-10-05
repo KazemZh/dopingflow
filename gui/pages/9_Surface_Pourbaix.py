@@ -1358,10 +1358,12 @@ try:
     grid_path = resolved / "pourbaix_grid.csv"
     state_summary_path = resolved / "surface_state_summary.csv"
     domains_path = resolved / "stable_surface_states.csv"
+    run_summary_path = resolved / "surface_pourbaix_summary.json"
 
     state_summary = (
         pd.read_csv(state_summary_path) if state_summary_path.exists() else None
     )
+    run_summary = _load_pourbaix_summary(run_summary_path)
 
     if not grid_path.exists():
         st.info("No surface-Pourbaix results yet.")
@@ -1394,7 +1396,207 @@ try:
                     "implementation for full coverage-aware labels."
                 )
 
-            fig = _phase_map_figure(view, selected)
+            plot_view = view.copy()
+            plot_domains: pd.DataFrame | None = None
+
+            surface_states = None
+            if state_summary is not None and not state_summary.empty:
+                surface_states = state_summary[
+                    state_summary["surface_id"].astype(str) == selected
+                ].copy()
+
+            if surface_states is not None and not surface_states.empty and run_summary:
+                eligible_states = surface_states[
+                    surface_states.apply(
+                        lambda row: _truthy(
+                            row.get("pourbaix_eligible"),
+                            True,
+                        ),
+                        axis=1,
+                    )
+                ].copy()
+                eligible_states["_group_label"] = eligible_states.apply(
+                    _competition_group_label,
+                    axis=1,
+                )
+
+                nonclean = eligible_states[
+                    eligible_states["family"].astype(str) != "clean"
+                ].copy()
+                group_order = list(
+                    dict.fromkeys(nonclean["_group_label"].astype(str))
+                )
+                group_counts = (
+                    nonclean.groupby("_group_label", sort=False)
+                    .size()
+                    .to_dict()
+                )
+
+                h2_ml = _finite_number(run_summary.get("h2_reference_eV_ml"))
+                h2o_ml = _finite_number(run_summary.get("h2o_reference_eV_ml"))
+                h2_dft = _finite_number(run_summary.get("h2_reference_eV_dft"))
+                h2o_dft = _finite_number(run_summary.get("h2o_reference_eV_dft"))
+
+                energy_options: list[str] = []
+                if h2_ml is not None and h2o_ml is not None:
+                    ml_values = pd.to_numeric(
+                        eligible_states.get("ml_energy_eV"),
+                        errors="coerce",
+                    )
+                    if ml_values.notna().any():
+                        energy_options.append("ML")
+
+                if (
+                    h2_dft is not None
+                    and h2o_dft is not None
+                    and "dft_energy_eV" in eligible_states.columns
+                ):
+                    dft_values = pd.to_numeric(
+                        eligible_states["dft_energy_eV"],
+                        errors="coerce",
+                    )
+                    clean_dft = dft_values[
+                        eligible_states["family"].astype(str) == "clean"
+                    ]
+                    if dft_values.notna().any() and clean_dft.notna().any():
+                        energy_options.append("DFT")
+
+                with st.expander(
+                    "Choose calculated states included in the Pourbaix plot",
+                    expanded=True,
+                ):
+                    st.caption(
+                        "This does **not** run new calculations. It rebuilds the "
+                        "Pourbaix map from the energies already stored in "
+                        "\`surface_state_summary.csv\`. Selecting one chemistry/coverage "
+                        "entry includes every eligible calculated arrangement at that "
+                        "coverage. The clean slab is always included as the CHE "
+                        "reference and as a competing physical state."
+                    )
+
+                    if energy_options:
+                        current_levels = [
+                            str(value)
+                            for value in view.get(
+                                "energy_level",
+                                pd.Series(dtype=str),
+                            ).dropna()
+                        ]
+                        default_level = (
+                            current_levels[0]
+                            if current_levels
+                            and current_levels[0] in energy_options
+                            else energy_options[0]
+                        )
+                        energy_level = st.selectbox(
+                            "Energy set for interactive plot",
+                            energy_options,
+                            index=energy_options.index(default_level),
+                            key=f"surface_pourbaix_plot_energy_{selected}",
+                        )
+
+                        selected_groups = st.multiselect(
+                            "Chemistry / coverage groups allowed to compete",
+                            group_order,
+                            default=group_order,
+                            format_func=lambda label: (
+                                f"{label}  "
+                                f"({int(group_counts.get(label, 0))} calculated "
+                                f"arrangement"
+                                f"{'s' if int(group_counts.get(label, 0)) != 1 else ''})"
+                            ),
+                            key=(
+                                f"surface_pourbaix_plot_groups_"
+                                f"{selected}_{energy_level}"
+                            ),
+                            help=(
+                                "For example, if 50% and 100% protonation were "
+                                "calculated, keep both to reproduce their competition "
+                                "or deselect either coverage to remove it from the plot."
+                            ),
+                        )
+
+                        total_arrangements = int(
+                            nonclean[
+                                nonclean["_group_label"].isin(selected_groups)
+                            ].shape[0]
+                        )
+                        st.caption(
+                            f"{len(selected_groups)} selected coverage group(s), "
+                            f"{total_arrangements} non-clean calculated arrangement(s) "
+                            "entering the thermodynamic competition."
+                        )
+
+                        try:
+                            if energy_level == "ML":
+                                h2_ref, h2o_ref = h2_ml, h2o_ml
+                            else:
+                                h2_ref, h2o_ref = h2_dft, h2o_dft
+                            assert h2_ref is not None and h2o_ref is not None
+
+                            pH_values = sorted(
+                                float(value) for value in view["pH"].unique()
+                            )
+                            potential_values = sorted(
+                                float(value)
+                                for value in view["applied_potential_V"].unique()
+                            )
+                            potential_scale = (
+                                str(view["potential_scale"].iloc[0])
+                                if not view.empty
+                                else str(run_summary.get("potential_scale", "SHE"))
+                            )
+                            temperature_K = (
+                                float(view["temperature_K"].iloc[0])
+                                if "temperature_K" in view.columns
+                                and not view.empty
+                                else float(run_summary.get("temperature_K", 298.15))
+                            )
+
+                            plot_view, plot_domains, selected_state_rows = (
+                                _rebuild_selected_pourbaix_grid(
+                                    surface_states,
+                                    surface_id=selected,
+                                    selected_groups=selected_groups,
+                                    pH_values=pH_values,
+                                    potential_values=potential_values,
+                                    potential_scale=potential_scale,
+                                    temperature_K=temperature_K,
+                                    energy_level=energy_level,
+                                    h2_energy_eV=h2_ref,
+                                    h2o_energy_eV=h2o_ref,
+                                )
+                            )
+
+                            available_selected = set(
+                                selected_state_rows["_group_label"].astype(str)
+                            )
+                            unavailable_groups = [
+                                group
+                                for group in selected_groups
+                                if group not in available_selected
+                            ]
+                            if unavailable_groups:
+                                st.warning(
+                                    f"{energy_level} energies are unavailable for "
+                                    f"{len(unavailable_groups)} selected group(s); "
+                                    "those groups cannot enter this plot."
+                                )
+                        except Exception as exc:
+                            st.warning(
+                                "Could not rebuild the interactive Pourbaix map; "
+                                f"showing the saved map instead. {exc}"
+                            )
+                            plot_view = view.copy()
+                            plot_domains = None
+                    else:
+                        st.info(
+                            "The saved run does not contain the reference energies "
+                            "needed to rebuild the map interactively. Rerun Surface "
+                            "Pourbaix once with the current implementation."
+                        )
+
+            fig = _phase_map_figure(plot_view, selected)
             st.plotly_chart(fig, width="stretch")
             st.caption(
                 "Hover shows only the essential thermodynamic information. "
@@ -1402,45 +1604,53 @@ try:
                 "geometry of any stable state."
             )
 
-            if domains_path.exists():
+            if plot_domains is None and domains_path.exists():
                 domains = pd.read_csv(domains_path)
-                domain_view = domains[
+                plot_domains = domains[
                     domains["surface_id"].astype(str) == selected
                 ].copy()
-                if not domain_view.empty:
-                    label_map = dict(
-                        view[["stable_state_id", "stable_state_label"]]
-                        .drop_duplicates()
-                        .itertuples(index=False, name=None)
+
+            if plot_domains is not None and not plot_domains.empty:
+                domain_view = plot_domains.copy()
+                label_map = dict(
+                    plot_view[["stable_state_id", "stable_state_label"]]
+                    .drop_duplicates()
+                    .itertuples(index=False, name=None)
+                )
+                if "surface_state" in domain_view.columns:
+                    domain_view["surface_state"] = (
+                        domain_view["state_id"].astype(str).map(label_map)
                     )
+                else:
+                    insert_at = min(2, len(domain_view.columns))
                     domain_view.insert(
-                        2,
+                        insert_at,
                         "surface_state",
                         domain_view["state_id"].astype(str).map(label_map),
                     )
-                    preferred = [
-                        "surface_state",
-                        "family",
-                        "energy_level",
-                        "grid_fraction",
-                        "pH_min_stable",
-                        "pH_max_stable",
-                        "potential_min_V_stable",
-                        "potential_max_V_stable",
-                        "state_id",
-                    ]
-                    st.markdown("**Stable surface-state domains**")
-                    st.dataframe(
-                        domain_view[
-                            [
-                                column
-                                for column in preferred
-                                if column in domain_view.columns
-                            ]
-                        ],
-                        width="stretch",
-                        hide_index=True,
-                    )
+                preferred = [
+                    "surface_state",
+                    "family",
+                    "energy_level",
+                    "grid_fraction",
+                    "pH_min_stable",
+                    "pH_max_stable",
+                    "potential_min_V_stable",
+                    "potential_max_V_stable",
+                    "state_id",
+                ]
+                st.markdown("**Stable surface-state domains**")
+                st.dataframe(
+                    domain_view[
+                        [
+                            column
+                            for column in preferred
+                            if column in domain_view.columns
+                        ]
+                    ],
+                    width="stretch",
+                    hide_index=True,
+                )
 
         with result_tabs[1]:
             if state_summary is None or state_summary.empty:
