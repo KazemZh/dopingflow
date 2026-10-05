@@ -174,6 +174,14 @@ in ``S/cm``. For example, ``282 S cm^-1 fs^-1`` with an assumed
 ``tau = 5 fs`` gives ``1410 S/cm``. The assumed-tau result remains
 conditional: the present backend does not calculate the scattering lifetime.
 
+Each calculated conductivity record also reports ``band_gap_eV``, obtained
+from the same GPAW eigenvalues and transport k-point mesh used for the
+BoltzTraP2 calculation. The record stores the XC functional and provenance as
+``band_gap_xc`` and ``band_gap_source``. A band spanning the Fermi level
+is reported as a zero sampled gap. This GPAW transport-mesh gap is distinct from
+the separate ALIGNN-MBJ band-gap workflow and should be converged with respect
+to k-point sampling and the chosen functional before quantitative interpretation.
+
 Reference-normalized comparison
 -------------------------------
 
