@@ -127,6 +127,9 @@ def _annotate_grid_with_state_metadata(
         "eligible_protonation_oxygen_sites",
         "eligible_surface_cation_sites",
         "eligible_adsorbate_cation_sites",
+        "surface_site_selection",
+        "surface_layer_gap_A",
+        "surface_window_A",
         "arrangement_id",
         "symmetry_unique_arrangements",
         "symmetry_operations",
@@ -221,6 +224,13 @@ def _record_from_state(
         "eligible_protonation_oxygen_sites",
         "eligible_surface_cation_sites",
         "eligible_adsorbate_cation_sites",
+        "surface_site_selection",
+        "surface_layer_gap_A",
+        "surface_window_A",
+        "eligible_protonation_site_indices",
+        "eligible_protonation_site_sides",
+        "eligible_adsorbate_site_indices",
+        "eligible_adsorbate_site_sides",
         "raw_arrangements_total",
         "raw_arrangements_examined",
         "symmetry_unique_arrangements",
@@ -580,6 +590,14 @@ def run_surface_pourbaix(
             ),
             eligible_adsorbate_cation_sites=clean.get(
                 "eligible_adsorbate_cation_sites", 0
+            ),
+            surface_site_selection=clean.get("surface_site_selection", ""),
+            surface_layer_gap_A=clean.get("surface_layer_gap_A"),
+            eligible_protonation_site_indices=_scalar(
+                clean.get("eligible_protonation_site_indices", [])
+            ),
+            eligible_adsorbate_site_indices=_scalar(
+                clean.get("eligible_adsorbate_site_indices", [])
             ),
             n_states=len(planned_states),
         ))
