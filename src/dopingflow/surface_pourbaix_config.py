@@ -230,9 +230,12 @@ def parse_surface_pourbaix_config(
     }
     for key, default in coverage_defaults.items():
         values = _float_list(section.get(key), default)
-        if not values or any(value <= 0.0 or value > 100.0 for value in values):
-            raise ValueError(f"{key} values must lie in (0, 100]")
-        section[key] = values
+        if any(value < 0.0 or value > 100.0 for value in values):
+            raise ValueError(f"{key} values must lie in [0, 100]")
+        # 0% is physically the clean slab, which is already represented by the
+        # mandatory clean state. Accept it for user convenience but do not
+        # generate a duplicate adsorbate/protonation state.
+        section[key] = [value for value in values if value > 0.0]
 
     mixed = []
     for item in section["mixed_coverages_pct"]:
