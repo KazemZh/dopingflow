@@ -761,6 +761,8 @@ def run_surface_pourbaix(
         potential_scale=cfg["potential_scale"], temperature_K=cfg["temperature_K"],
         h2_reference_eV_ml=h2_ml, h2_reference_source=h2_source,
         h2o_reference_eV_ml=h2o_ml, h2o_reference_source=h2o_source,
+        h2_reference_eV_dft=dft_references[0],
+        h2o_reference_eV_dft=dft_references[1],
         parallel_surfaces_requested=bool(cfg.get("parallel_surfaces", False)),
         surface_workers_requested=int(cfg.get("surface_workers", 1)),
         surface_workers_effective=int(effective_workers),
