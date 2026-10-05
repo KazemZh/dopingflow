@@ -280,6 +280,7 @@ def _load_pourbaix_summary(path: Path) -> dict[str, Any]:
 def _rebuild_selected_pourbaix_grid(
     states: pd.DataFrame,
     *,
+    surface_id: str,
     selected_groups: list[str],
     pH_values: list[float],
     potential_values: list[float],
@@ -332,6 +333,7 @@ def _rebuild_selected_pourbaix_grid(
         energy_key=energy_key,
         energy_level=energy_level,
     )
+    rebuilt.insert(0, "surface_id", str(surface_id))
     rebuilt, _ = _enrich_grid_for_display(rebuilt, chosen)
     domains = summarize_stable_domains(rebuilt)
     return rebuilt, domains, chosen
