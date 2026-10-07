@@ -1646,9 +1646,13 @@ with raw_tab:
         screen_df,
         refine_df,
     )
+    combined_screen_selected_df = _merge_refinement_into_screen_raw(
+        screen_selected_df,
+        refine_df,
+    )
     tables = {
         "Screen summary": combined_screen_df,
-        "Screen shortlist": screen_selected_df,
+        "Screen shortlist": combined_screen_selected_df,
         "Refinement summary": refine_df,
         "Retained refined set": final_df,
     }
@@ -1656,10 +1660,10 @@ with raw_tab:
     if raw.empty:
         st.info(f"{table_choice} is not available yet.")
     else:
-        if table_choice == "Screen summary" and not refine_df.empty:
+        if table_choice in {"Screen summary", "Screen shortlist"} and not refine_df.empty:
             st.caption(
-                "The complete screen table also includes matching refinement-result "
-                "columns (refine_*) for terminations that were refined. Unrefined "
-                "screened terminations remain blank in those columns."
+                "This screen table also includes matching refinement-result columns "
+                "(refine_*) for terminations that were refined. Screened terminations "
+                "without refinement remain blank in those columns."
             )
         st.dataframe(raw, use_container_width=True, hide_index=True)
