@@ -402,6 +402,75 @@ def _ensure_target_columns(frame: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _merge_refinement_into_screen_raw(
+    screen: pd.DataFrame,
+    refine: pd.DataFrame,
+) -> pd.DataFrame:
+    """Add refinement-result columns to the complete screen table.
+
+    The screen table remains the master list, so every screened termination is
+    retained. Rows that were selected for refinement receive their ``refine_*``
+    values by stable ``surface_id``; unrefined rows keep those columns empty.
+    """
+    if screen.empty:
+        return screen.copy()
+    if refine.empty:
+        return screen.copy()
+
+    screen_with_ids = ensure_surface_ids(screen)
+    refine_with_ids = ensure_surface_ids(refine)
+    refine_columns = [
+        column
+        for column in refine_with_ids.columns
+        if column.startswith("refine_")
+        and column not in screen_with_ids.columns
+    ]
+    if not refine_columns:
+        return screen_with_ids
+
+    refinement_data = (
+        refine_with_ids[["surface_id", *refine_columns]]
+        .drop_duplicates("surface_id", keep="last")
+    )
+    merged = screen_with_ids.merge(
+        refinement_data,
+        on="surface_id",
+        how="left",
+        validate="one_to_one",
+    )
+
+    # Put the most useful screen/refinement comparison fields next to each other
+    # instead of leaving every refinement column at the far right of the table.
+    preferred_pairs = [
+        ("screen_energy_eV", "refine_energy_eV"),
+        ("screen_energy_eV_atom", "refine_energy_eV_atom"),
+        ("screen_surface_energy_J_m2", "refine_surface_energy_J_m2"),
+        ("screen_surface_energy_status", "refine_surface_energy_status"),
+        ("screen_rank_overall", "refine_rank_overall"),
+        ("screen_rank_within_hkl", "refine_rank_within_hkl"),
+        ("screen_converged", "refine_converged"),
+        ("screen_final_fmax_eV_per_A", "refine_final_fmax_eV_per_A"),
+        ("screen_optimizer_steps", "refine_optimizer_steps"),
+    ]
+    ordered: list[str] = []
+    paired = {name for pair in preferred_pairs for name in pair}
+    for column in merged.columns:
+        if column in paired:
+            continue
+        ordered.append(column)
+        if column == "termination_label":
+            for left, right in preferred_pairs:
+                if left in merged.columns and left not in ordered:
+                    ordered.append(left)
+                if right in merged.columns and right not in ordered:
+                    ordered.append(right)
+    for left, right in preferred_pairs:
+        if left in merged.columns and left not in ordered:
+            ordered.append(left)
+        if right in merged.columns and right not in ordered:
+            ordered.append(right)
+    return merged[ordered]
+
 def _target_label(row: pd.Series | dict[str, Any]) -> str:
     kind = str(row.get("structure_kind", "vacancy-free"))
     target_id = str(row.get("target_id", ""))
@@ -1573,8 +1642,12 @@ with raw_tab:
         ],
         key="surface_raw_table",
     )
+    combined_screen_df = _merge_refinement_into_screen_raw(
+        screen_df,
+        refine_df,
+    )
     tables = {
-        "Screen summary": screen_df,
+        "Screen summary": combined_screen_df,
         "Screen shortlist": screen_selected_df,
         "Refinement summary": refine_df,
         "Retained refined set": final_df,
@@ -1583,4 +1656,10 @@ with raw_tab:
     if raw.empty:
         st.info(f"{table_choice} is not available yet.")
     else:
+        if table_choice == "Screen summary" and not refine_df.empty:
+            st.caption(
+                "The complete screen table also includes matching refinement-result "
+                "columns (refine_*) for terminations that were refined. Unrefined "
+                "screened terminations remain blank in those columns."
+            )
         st.dataframe(raw, use_container_width=True, hide_index=True)
