@@ -15,6 +15,7 @@ The format loosely follows semantic versioning.
 
 ## [Unreleased]
 ### Added
+- Surface Pourbaix structure comparison now mirrors the chemistry/coverage groups selected for the current interactive Pourbaix competition by default, while still allowing users to expose all calculated states for inspection.
 - Surface Pourbaix results now support interactive thermodynamic replotting from selected already-calculated chemistry/coverage groups, so users can include or exclude specific protonation/adsorbate coverages without rerunning structure calculations.
 - Surface Pourbaix now detects exposed O/cation sites from the outermost atomic layer/group by default, using a normal-direction layer-gap criterion inside the safety depth window; the former full height-window behavior remains available only as an explicit legacy mode.
 - Surface Pourbaix single-family coverage lists now accept `0%` as the clean state instead of raising a validation error; negative values and values above 100% remain invalid.
