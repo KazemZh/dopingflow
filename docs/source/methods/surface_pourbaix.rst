@@ -222,9 +222,13 @@ Interactive structure comparison
 --------------------------------
 
 The Results section includes a ``Structure comparison`` tab. For the selected
-surface, it lists the states that are stable somewhere on the U-pH map by
-default, with an option to include all calculated states. The selected state is
-shown in two interactive 3D viewers:
+surface, its default state list is synchronized with the chemistry/coverage
+groups currently allowed to compete in the interactive U-pH map. This includes
+the clean reference plus every postprocessing-eligible calculated arrangement
+belonging to the selected groups, even if a particular arrangement does not
+become the minimum-energy state anywhere on the grid. An optional control
+exposes all calculated states, including groups excluded from the current map
+competition. The selected state is shown in two interactive 3D viewers:
 
 * ``Before relaxation`` -- the generated protonated/adsorbate configuration
   saved as ``POSCAR_initial``;
