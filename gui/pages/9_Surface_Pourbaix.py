@@ -1388,6 +1388,12 @@ try:
             ]
         )
 
+        # Keep the structure-comparison selector synchronized with the states
+        # currently allowed to compete in the interactive Pourbaix map. For
+        # legacy runs where interactive rebuilding is unavailable, fall back to
+        # the states stable on the saved map.
+        competition_state_ids = set(view["stable_state_id"].astype(str))
+
         with result_tabs[0]:
             if not coverage_labels_available:
                 st.warning(
@@ -1568,6 +1574,9 @@ try:
                                 )
                             )
 
+                            competition_state_ids = set(
+                                selected_state_rows["state_id"].astype(str)
+                            )
                             available_selected = set(
                                 selected_state_rows["_group_label"].astype(str)
                             )
@@ -1662,21 +1671,43 @@ try:
                 if surface_states.empty:
                     st.info("No calculated states were found for this surface.")
                 else:
-                    stable_ids = set(view["stable_state_id"].astype(str))
                     show_all_states = st.checkbox(
-                        "Include states that are not stable anywhere on this Pourbaix map",
+                        "Include all calculated states (also outside the current "
+                        "Pourbaix-map selection)",
                         value=False,
                         key=f"surface_pourbaix_show_all_states_{selected}",
+                        help=(
+                            "When off, the list mirrors the chemistry/coverage groups "
+                            "currently selected under **Chemistry / coverage groups "
+                            "allowed to compete** in the Pourbaix-map tab, including "
+                            "all eligible calculated arrangements in those groups and "
+                            "the clean reference. Turn this on to inspect states that "
+                            "were not included in the current map competition."
+                        ),
                     )
                     selectable = (
                         surface_states
                         if show_all_states
                         else surface_states[
-                            surface_states["state_id"].astype(str).isin(stable_ids)
+                            surface_states["state_id"]
+                            .astype(str)
+                            .isin(competition_state_ids)
                         ]
                     ).copy()
+
                     if selectable.empty:
-                        selectable = surface_states.copy()
+                        st.warning(
+                            "No inspectable states match the current Pourbaix-map "
+                            "competition. Select at least one chemistry/coverage group "
+                            "in the Pourbaix-map tab or enable all calculated states."
+                        )
+                        st.stop()
+
+                    if not show_all_states:
+                        st.caption(
+                            "This list is synchronized with the current Pourbaix-map "
+                            "competition selection."
+                        )
 
                     selectable["_option_label"] = selectable.apply(
                         _state_option_label,
@@ -1691,8 +1722,10 @@ try:
                         ],
                         key=f"surface_pourbaix_structure_state_{selected}",
                         help=(
-                            "By default this list contains only states that are stable "
-                            "somewhere on the selected Pourbaix map."
+                            "By default this list contains the clean reference plus "
+                            "all eligible calculated arrangements belonging to the "
+                            "chemistry/coverage groups currently allowed to compete in "
+                            "the Pourbaix-map tab."
                         ),
                     )
                     chosen = selectable.loc[chosen_index]
