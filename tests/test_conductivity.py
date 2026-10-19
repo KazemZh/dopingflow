@@ -910,3 +910,38 @@ def test_source_root_defaults_to_oxidation_source_root(tmp_path):
     assert cfg.source_root == oxidation_root.resolve()
     assert [t.target_id for t in chosen] == ["SnO2/oxidation_candidate"]
 
+
+
+def test_lowest_energy_parent_selection_is_shared_with_oxidation(tmp_path):
+    root = tmp_path / "structures"
+    parent(root, "c1", -20)
+    parent(root, "c2", -21)
+
+    cfg, settings = c.parse_config(
+        {
+            "structure": {"outdir": str(root)},
+            "oxidation": {"parent_pick": "all"},
+            "conductivity": {
+                "enabled": True,
+                "parent_pick": "lowest_energy",
+                "include_vacancy_free": True,
+                "include_oxygen_vacancies": False,
+            },
+        },
+        tmp_path,
+    )
+    selected, _ = c.select_targets(cfg, settings)
+    assert cfg.parent_pick == "lowest_energy"
+    assert [target.target_id for target in selected] == ["SnO2/c2"]
+
+    inherited_cfg, inherited_settings = c.parse_config(
+        {
+            "structure": {"outdir": str(root)},
+            "oxidation": {"parent_pick": "lowest_energy"},
+            "conductivity": {"enabled": True, "include_oxygen_vacancies": False},
+        },
+        tmp_path,
+    )
+    inherited, _ = c.select_targets(inherited_cfg, inherited_settings)
+    assert inherited_cfg.parent_pick == "lowest_energy"
+    assert [target.target_id for target in inherited] == ["SnO2/c2"]

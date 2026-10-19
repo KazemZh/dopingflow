@@ -207,6 +207,26 @@ if target_include:
         f"Target filtering is active: only structures matching {target_include} will be analyzed."
     )
 
+parent_pick_options = ["all", "lowest_energy"]
+saved_parent_pick = str(oxidation.get("parent_pick", "all")).strip().lower()
+if saved_parent_pick not in parent_pick_options:
+    saved_parent_pick = "all"
+parent_pick = st.selectbox(
+    "Vacancy-free parent selection",
+    options=parent_pick_options,
+    index=parent_pick_options.index(saved_parent_pick),
+    format_func=lambda value: (
+        "All selected candidates"
+        if value == "all"
+        else "Lowest relaxed energy per composition"
+    ),
+    help=(
+        "Uses every candidate listed in selected_candidates.txt, or picks the candidate "
+        "with the minimum energy_relaxed_eV in 02_relax/meta.json for each composition. "
+        "This setting applies to vacancy-free parents."
+    ),
+)
+
 st.info(
     "Bader charge, DOS/orbital populations, magnetic moments, and static Wannier centers remain "
     "supporting descriptors when used alone. The dft-auto method combines them with local bond-valence "
@@ -968,6 +988,7 @@ oxidation.update(
         "include_vacancy_free": bool(include_vacancy_free),
         "include_oxygen_vacancies": bool(include_oxygen_vacancies),
         "target_include": target_include,
+        "parent_pick": parent_pick,
         "source_root": source_root,
         "output_dir": output_dir,
         "mapping_tolerance": float(mapping_tolerance),

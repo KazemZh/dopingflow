@@ -80,6 +80,7 @@ oxidation-state stage**. The relevant parameters are::
     source_root = "vacancy-selected"
     include_vacancy_free = true
     include_oxygen_vacancies = true
+    parent_pick = "all"  # or "lowest_energy"
     target_include = []
 
 ``source_root`` has the same meaning as ``oxidation.source_root``: it is the root
@@ -93,11 +94,17 @@ Leave it empty to analyze every discovered target. Otherwise use exact target ID
 safe IDs, or shell-style wildcards such as ``Sb5_Ti2p5/*``. Vacancy-free and
 oxygen-vacancy structures can be enabled or disabled independently.
 
-There is deliberately no second conductivity-specific ``favorable/manual/all``
-selector, ``top_k_per_group``, or arbitrary ``structure_paths`` interface. Parent
-and vacancy selection should happen once upstream; conductivity and oxidation then
-consume the same target namespace. This keeps the TOML and Streamlit interfaces
-consistent and prevents the two stages from silently choosing different structures.
+parent_pick defaults to all and analyzes every selected relaxed parent. Set it to
+lowest_energy to keep only the candidate with the minimum energy_relaxed_eV per
+composition, read from each candidate's 02_relax/meta.json. All candidates in a
+composition's selected_candidates.txt must have a finite energy. If this setting is
+omitted under [conductivity], conductivity inherits oxidation.parent_pick, so both
+analyses can use the same candidates. The mode applies to vacancy-free parents;
+oxygen-vacancy structures remain selected from the vacancy database.
+
+There is no arbitrary structure_paths interface. Parent and vacancy selection
+remains based on the shared target namespace so the oxidation and conductivity
+stages can use matching structures.
 
 Shared DFT calculations
 -----------------------

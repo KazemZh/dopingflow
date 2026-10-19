@@ -1030,3 +1030,80 @@ def test_wannier_geometric_analysis_uses_periodic_distances_and_flags_spread_out
     assert summary["n_delocalized_spread_outliers"] == 1
     assert summary["max_spread_center_index"] == 3
     assert site_summary[0]["nearest_wf_count"] >= 2
+
+
+def test_lowest_energy_parent_selection_keeps_one_candidate_per_composition(tmp_path: Path) -> None:
+    source_root = tmp_path / "source"
+    first = _write_parent_tree(source_root)
+    second = source_root / "Sb25" / "candidate_0002"
+    for stage in ("01_scan", "02_relax"):
+        (second / stage).mkdir(parents=True)
+        (second / stage / "POSCAR").write_text(
+            (first / stage / "POSCAR").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+    other = source_root / "Ti25" / "candidate_0001"
+    for stage in ("01_scan", "02_relax"):
+        (other / stage).mkdir(parents=True)
+        (other / stage / "POSCAR").write_text(
+            (first / stage / "POSCAR").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+    (first / "02_relax" / "meta.json").write_text(
+        json.dumps({"energy_relaxed_eV": -10.0}), encoding="utf-8"
+    )
+    (second / "02_relax" / "meta.json").write_text(
+        json.dumps({"energy_relaxed_eV": -12.0}), encoding="utf-8"
+    )
+    (other / "02_relax" / "meta.json").write_text(
+        json.dumps({"energy_relaxed_eV": -1.0}), encoding="utf-8"
+    )
+    (source_root / "Sb25" / "selected_candidates.txt").write_text(
+        "candidate_0001\ncandidate_0002\n", encoding="utf-8"
+    )
+    (source_root / "Ti25" / "selected_candidates.txt").write_text(
+        "candidate_0001\n", encoding="utf-8"
+    )
+
+    cfg = parse_oxidation_config(
+        {
+            "oxidation": {
+                "strategy": "structural",
+                "methods": ["bond-valence"],
+                "source_root": str(source_root),
+                "include_vacancy_free": True,
+                "include_oxygen_vacancies": False,
+                "parent_pick": "lowest_energy",
+            }
+        },
+        tmp_path,
+    )
+    targets, warnings = discover_oxidation_targets(cfg)
+
+    assert warnings == []
+    assert [target.target_id for target in targets] == [
+        "Sb25/candidate_0002",
+        "Ti25/candidate_0001",
+    ]
+    assert targets[0].metadata["relaxed_energy_eV"] == -12.0
+
+
+def test_lowest_energy_parent_selection_requires_relaxation_energy(tmp_path: Path) -> None:
+    source_root = tmp_path / "source"
+    _write_parent_tree(source_root)
+    cfg = parse_oxidation_config(
+        {
+            "oxidation": {
+                "strategy": "structural",
+                "methods": ["bond-valence"],
+                "source_root": str(source_root),
+                "include_vacancy_free": True,
+                "include_oxygen_vacancies": False,
+                "parent_pick": "lowest_energy",
+            }
+        },
+        tmp_path,
+    )
+
+    with pytest.raises(ValueError, match="energy_relaxed_eV"):
+        discover_oxidation_targets(cfg)

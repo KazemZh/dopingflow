@@ -50,6 +50,7 @@ The configuration entry point is::
    methods = ["bond-valence", "toss-gnn"]
    include_vacancy_free = true
    include_oxygen_vacancies = true
+   parent_pick = "all"  # or "lowest_energy"
    # Optional exact IDs, safe IDs, or shell-style glob patterns:
    # target_include = ["Sb5_Ti2p5/candidate_014"]
    output_dir = "06_oxidation"
@@ -64,6 +65,15 @@ exact target ID (for example ``Sb5_Ti2p5/candidate_014``), its safe-ID form
 (``Sb5_Ti2p5__candidate_014``), or a shell-style glob such as
 ``Sb5_Ti2p5/*``.  This is the recommended way to constrain expensive DFT smoke
 tests to one structure before scaling up.
+
+parent_pick defaults to all and preserves the current behavior: analyze every
+candidate listed in each composition's selected_candidates.txt. Set it to
+lowest_energy to analyze only the vacancy-free candidate with the minimum
+energy_relaxed_eV in 02_relax/meta.json for each composition. Every candidate in
+the selected list must have a finite relaxation energy for this mode; otherwise
+discovery stops with the metadata path that needs fixing. Ties are resolved by
+candidate name. This option applies to vacancy-free parent structures;
+oxygen-vacancy structures remain selected from the vacancy database.
 
 TOSS-GNN
 --------

@@ -63,12 +63,15 @@ def parse_config(raw, root):
             "include_vacancy_free",
             "include_oxygen_vacancies",
             "target_include",
+            "parent_pick",
         )
         if key in section
     }
     oxidation_section = raw.get("oxidation", {}) or {}
     if "source_root" not in selection and oxidation_section.get("source_root"):
         selection["source_root"] = oxidation_section["source_root"]
+    if "parent_pick" not in selection and oxidation_section.get("parent_pick") is not None:
+        selection["parent_pick"] = oxidation_section["parent_pick"]
     selection.update(
         {"strategy": "structural", "output_dir": section.get("output_dir", "07_conductivity")}
     )
