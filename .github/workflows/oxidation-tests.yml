@@ -5,13 +5,14 @@ on:
   pull_request:
     paths:
       - "src/dopingflow/oxidation.py"
+      - "src/dopingflow/vacancies.py"
       - "src/dopingflow/oxidation_structural.py"
       - "src/dopingflow/oxidation_ml.py"
       - "src/dopingflow/oxidation_dft.py"
       - "src/dopingflow/oxidation_dft_auto.py"
       - "src/dopingflow/cli.py"
       - "tests/test_oxidation.py"
-      - "gui/pages/Oxidation_States.py"
+      - "gui/pages/5_Oxidation_States.py"
       - "README.md"
       - "docs/source/methods/oxidation_states.rst"
       - "docs/source/index.rst"
@@ -46,7 +47,7 @@ jobs:
             src/dopingflow/oxidation_dft.py \
             src/dopingflow/oxidation_dft_auto.py \
             src/dopingflow/cli.py \
-            gui/pages/Oxidation_States.py
+            gui/pages/5_Oxidation_States.py
 
       - name: Run oxidation tests
         run: pytest -q tests/test_oxidation.py
