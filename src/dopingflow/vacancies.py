@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import fnmatch
 import hashlib
 import json
 import logging
@@ -768,6 +769,7 @@ def discover_selected_parents(
     outdir: Path,
     *,
     parent_pick: str = "all",
+    target_include: Sequence[str] = (),
 ) -> list[dict[str, Path | str | float]]:
     """Discover relaxed parents, optionally keeping the lowest-energy candidate per composition.
 
@@ -782,6 +784,15 @@ def discover_selected_parents(
         raise ValueError("[parent_pick] must be 'all' or 'lowest_energy'")
 
     found: list[dict[str, Path | str | float]] = []
+    composition_patterns = []
+    for selector in target_include:
+        normalized = str(selector).strip().replace("\\", "/")
+        if "/" in normalized:
+            composition_patterns.append(normalized.split("/", 1)[0])
+        elif "__" in normalized:
+            composition_patterns.append(normalized.split("__", 1)[0])
+        elif normalized:
+            composition_patterns.append(normalized)
     selection_files = sorted(outdir.glob("*/selected_candidates.txt"))
     if not selection_files:
         raise FileNotFoundError(
@@ -789,6 +800,11 @@ def discover_selected_parents(
         )
     for selection_file in selection_files:
         composition_dir = selection_file.parent
+        if composition_patterns and not any(
+            fnmatch.fnmatchcase(composition_dir.name, pattern)
+            for pattern in composition_patterns
+        ):
+            continue
         names = [line.strip() for line in selection_file.read_text().splitlines() if line.strip()]
         for name in names:
             candidate_dir = composition_dir / name

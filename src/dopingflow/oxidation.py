@@ -312,7 +312,9 @@ def discover_oxidation_targets(cfg: OxidationConfig) -> tuple[list[StructureTarg
     if cfg.include_vacancy_free:
         try:
             parents = discover_selected_parents(
-                cfg.source_root, parent_pick=cfg.parent_pick
+                cfg.source_root,
+                parent_pick=cfg.parent_pick,
+                target_include=cfg.target_include,
             )
         except (FileNotFoundError, RuntimeError) as exc:
             parents = []

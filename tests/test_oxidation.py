@@ -1049,6 +1049,16 @@ def test_lowest_energy_parent_selection_keeps_one_candidate_per_composition(tmp_
             (first / stage / "POSCAR").read_text(encoding="utf-8"),
             encoding="utf-8",
         )
+    unrelated = source_root / "Cu25" / "candidate_0001"
+    for stage in ("01_scan", "02_relax"):
+        (unrelated / stage).mkdir(parents=True)
+        (unrelated / stage / "POSCAR").write_text(
+            (first / stage / "POSCAR").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+    (source_root / "Cu25" / "selected_candidates.txt").write_text(
+        "candidate_0001\n", encoding="utf-8"
+    )
     (first / "02_relax" / "meta.json").write_text(
         json.dumps({"energy_relaxed_eV": -10.0}), encoding="utf-8"
     )
@@ -1074,6 +1084,7 @@ def test_lowest_energy_parent_selection_keeps_one_candidate_per_composition(tmp_
                 "include_vacancy_free": True,
                 "include_oxygen_vacancies": False,
                 "parent_pick": "lowest_energy",
+                "target_include": ["Sb25/*", "Ti25/*"],
             }
         },
         tmp_path,

@@ -94,13 +94,15 @@ Leave it empty to analyze every discovered target. Otherwise use exact target ID
 safe IDs, or shell-style wildcards such as ``Sb5_Ti2p5/*``. Vacancy-free and
 oxygen-vacancy structures can be enabled or disabled independently.
 
-parent_pick defaults to all and analyzes every selected relaxed parent. Set it to
-lowest_energy to keep only the candidate with the minimum energy_relaxed_eV per
-composition, read from each candidate's 02_relax/meta.json. All candidates in a
-composition's selected_candidates.txt must have a finite energy. If this setting is
-omitted under [conductivity], conductivity inherits oxidation.parent_pick, so both
-analyses can use the same candidates. The mode applies to vacancy-free parents;
-oxygen-vacancy structures remain selected from the vacancy database.
+``parent_pick`` defaults to ``all`` and analyzes every selected relaxed parent. Set it to
+``lowest_energy`` to keep only the candidate with the minimum
+``energy_relaxed_eV`` per composition, read from each candidate's
+``02_relax/meta.json``. All selected candidates in a composition must have a
+finite energy. If ``target_include`` is set, only matching composition
+groups are checked. If this setting is omitted under ``[conductivity]``,
+conductivity inherits ``oxidation.parent_pick``, so both analyses can use the
+same candidates. The mode applies to vacancy-free parents; oxygen-vacancy
+structures remain selected from the vacancy database.
 
 There is no arbitrary structure_paths interface. Parent and vacancy selection
 remains based on the shared target namespace so the oxidation and conductivity

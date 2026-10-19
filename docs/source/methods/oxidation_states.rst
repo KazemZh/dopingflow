@@ -66,14 +66,15 @@ exact target ID (for example ``Sb5_Ti2p5/candidate_014``), its safe-ID form
 ``Sb5_Ti2p5/*``.  This is the recommended way to constrain expensive DFT smoke
 tests to one structure before scaling up.
 
-parent_pick defaults to all and preserves the current behavior: analyze every
-candidate listed in each composition's selected_candidates.txt. Set it to
-lowest_energy to analyze only the vacancy-free candidate with the minimum
-energy_relaxed_eV in 02_relax/meta.json for each composition. Every candidate in
+``parent_pick`` defaults to ``all`` and preserves the current behavior: analyze every
+candidate listed in each composition's ``selected_candidates.txt``. Set it to
+``lowest_energy`` to analyze only the vacancy-free candidate with the minimum
+``energy_relaxed_eV`` in ``02_relax/meta.json`` for each composition. Every candidate in
 the selected list must have a finite relaxation energy for this mode; otherwise
-discovery stops with the metadata path that needs fixing. Ties are resolved by
-candidate name. This option applies to vacancy-free parent structures;
-oxygen-vacancy structures remain selected from the vacancy database.
+discovery stops with the metadata path that needs fixing. If ``target_include`` is
+set, only matching composition groups are checked. Ties are resolved by candidate
+name. This option applies to vacancy-free parent structures; oxygen-vacancy
+structures remain selected from the vacancy database.
 
 TOSS-GNN
 --------
