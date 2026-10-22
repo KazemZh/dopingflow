@@ -234,6 +234,64 @@ def test_disabled_and_dry_run_never_execute(tmp_path, monkeypatch):
     assert (per_target / "summary.json").exists()
 
 
+def test_resume_skips_compatible_completed_transport_results(tmp_path, monkeypatch):
+    root = tmp_path / "structures"
+    parent(root, "c1", -10)
+    raw = {
+        "structure": {"outdir": str(root)},
+        "conductivity": {"enabled": True},
+    }
+    cfg, section = c.parse_config(raw, tmp_path)
+    targets, _ = c.select_targets(cfg, section)
+    target = targets[0]
+    target_dir = c._target_output_dir(cfg, target)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    settings_fingerprint, settings_payload = c._transport_settings_fingerprint(section)
+    saved_row = {
+        "temperature_K": 300.0,
+        "excess_electrons_cm3": 0.0,
+        "sigma_over_tau_trace_average_S_per_cm_per_fs": 1.25,
+        "sigma_over_tau_S_per_cm_per_fs": np.eye(3).tolist(),
+    }
+    # This represents a completed result from before structure fingerprints were
+    # added; the exact target ID, path, and settings still allow safe reuse.
+    (target_dir / "conductivity.json").write_text(
+        json.dumps(
+            {
+                "target_id": target.target_id,
+                "kind": target.kind,
+                "n_oxygen_vacancies": 0,
+                "structure_path": str(target.structure_path),
+                "status": "calculated",
+                "transport_settings_fingerprint": settings_fingerprint,
+                "transport_settings": settings_payload,
+                "rows": [saved_row],
+            }
+        )
+    )
+    monkeypatch.setattr(
+        cache, "ensure_gpaw", lambda *args, **kwargs: pytest.fail("GPAW should be skipped")
+    )
+    monkeypatch.setattr(
+        c, "gpaw_bands", lambda *args, **kwargs: pytest.fail("band loading should be skipped")
+    )
+    monkeypatch.setattr(
+        c,
+        "integrate_transport",
+        lambda *args, **kwargs: pytest.fail("BoltzTraP2 should be skipped"),
+    )
+
+    output = c.run_conductivity(raw, tmp_path)
+    payload = json.loads(output.read_text())
+    assert payload["results"][0]["status"] == "calculated"
+    assert payload["results"][0]["resumed"] is True
+    assert payload["results"][0]["rows"] == [saved_row]
+    index = json.loads(
+        (root / "07_conductivity" / "conductivity_structure_index.json").read_text()
+    )
+    assert index[0]["resumed"] is True
+
+
 @pytest.mark.parametrize(
     "section",
     [
