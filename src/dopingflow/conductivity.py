@@ -42,6 +42,9 @@ def _finite_list(section, name, default, positive=False):
 def parse_config(raw, root):
     section = dict(raw.get("conductivity", {}) or {})
     section.setdefault("enabled", False)  # Never append expensive work to old run-all inputs.
+    section.setdefault("resume", True)
+    if not isinstance(section["resume"], bool):
+        raise ValueError("[conductivity].resume must be true or false")
     section["temperatures_K"] = _finite_list(section, "temperatures_K", [300.0], True)
     section["excess_electrons_cm3"] = _finite_list(section, "excess_electrons_cm3", [0.0])
     if section.get("relaxation_time_fs") is not None:
@@ -700,6 +703,85 @@ def _transport_settings_fingerprint(section):
     return digest, payload
 
 
+def _target_structure_fingerprint(target):
+    """Hash the relaxed geometry so saved transport results cannot mask edits."""
+    from dopingflow.dft_cache import structure_identity
+
+    payload = structure_identity(target.structure_path)
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+
+
+def _load_resumable_target_result(target, target_dir, settings_fingerprint, section):
+    """Load a completed result only when target, geometry, and settings still match."""
+    path = Path(target_dir) / "conductivity.json"
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return None
+
+    if (
+        record.get("status") != "calculated"
+        or record.get("target_id") != target.target_id
+        or record.get("transport_settings_fingerprint") != settings_fingerprint
+        or record.get("kind") != target.kind
+        or int(record.get("n_oxygen_vacancies", 0) or 0)
+        != (target.n_vacancies if target.vacancy_species == "O" else 0)
+    ):
+        return None
+
+    try:
+        if Path(record["structure_path"]).expanduser().resolve() != Path(
+            target.structure_path
+        ).resolve():
+            return None
+        current_geometry = _target_structure_fingerprint(target)
+        stored_geometry = record.get("structure_fingerprint")
+        # Older conductivity records predate the geometry digest. Their exact target
+        # ID, source path, and transport fingerprint are still required above.
+        if stored_geometry is not None and stored_geometry != current_geometry:
+            return None
+    except (OSError, KeyError, TypeError, ValueError):
+        return None
+
+    rows = record.get("rows")
+    if not isinstance(rows, list) or not rows:
+        return None
+    expected_points = {
+        (float(temperature), float(excess))
+        for temperature in section["temperatures_K"]
+        for excess in section["excess_electrons_cm3"]
+    }
+    try:
+        saved_points = {
+            (float(row["temperature_K"]), float(row["excess_electrons_cm3"]))
+            for row in rows
+        }
+    except (KeyError, TypeError, ValueError):
+        return None
+    if len(rows) != len(expected_points) or saved_points != expected_points:
+        return None
+
+    expected_tau = section.get("relaxation_time_fs")
+    for row in rows:
+        value = row.get("sigma_over_tau_trace_average_S_per_cm_per_fs")
+        try:
+            if value is None or not np.isfinite(float(value)):
+                return None
+            saved_tau = row.get("assumed_relaxation_time_fs")
+            if expected_tau is None:
+                if saved_tau is not None:
+                    return None
+            elif saved_tau is None or not np.isclose(
+                float(saved_tau), float(expected_tau), rtol=0.0, atol=1.0e-12
+            ):
+                return None
+        except (TypeError, ValueError):
+            return None
+    return record
+
+
 def _reference_transport_fingerprint(target, section):
     """Fingerprint reference geometry plus the common comparison settings."""
     from dopingflow.dft_cache import calculation_key
@@ -1147,8 +1229,34 @@ def run_conductivity(raw, root, *, dry_run=False):
             "status": "selected",
             "transport_settings_fingerprint": transport_settings_fingerprint,
             "transport_settings": transport_settings_payload,
+            "structure_fingerprint": _target_structure_fingerprint(target),
         }
-        if not dry_run:
+        resumed_record = (
+            _load_resumable_target_result(
+                target, target_dir, transport_settings_fingerprint, section
+            )
+            if not dry_run and section.get("resume", True)
+            else None
+        )
+        if resumed_record is not None:
+            record.update(resumed_record)
+            record.update(
+                {
+                    "target_id": target.target_id,
+                    "kind": target.kind,
+                    "n_oxygen_vacancies": (
+                        target.n_vacancies if target.vacancy_species == "O" else 0
+                    ),
+                    "structure_path": str(target.structure_path),
+                    "output_directory": str(target_dir),
+                    "transport_settings_fingerprint": transport_settings_fingerprint,
+                    "transport_settings": transport_settings_payload,
+                    "structure_fingerprint": _target_structure_fingerprint(target),
+                    "resumed": True,
+                }
+            )
+        elif not dry_run:
+            record["resumed"] = False
             try:
                 # Check optional transport dependency before launching expensive DFT.
                 try:
@@ -1188,16 +1296,6 @@ def run_conductivity(raw, root, *, dry_run=False):
                         "rows": rows,
                     }
                 )
-                for row in rows:
-                    csv_rows.append(
-                        {
-                            "target_id": target.target_id,
-                            "band_gap_eV": record.get("band_gap_eV"),
-                            "band_gap_source": record.get("band_gap_source"),
-                            "band_gap_xc": record.get("band_gap_xc"),
-                            **row,
-                        }
-                    )
             except Exception as exc:
                 record.update(
                     {
@@ -1213,6 +1311,17 @@ def run_conductivity(raw, root, *, dry_run=False):
                         {"results": results + [record]},
                     )
                     raise
+        if record.get("status") == "calculated":
+            for row in record.get("rows", []):
+                csv_rows.append(
+                    {
+                        "target_id": target.target_id,
+                        "band_gap_eV": record.get("band_gap_eV"),
+                        "band_gap_source": record.get("band_gap_source"),
+                        "band_gap_xc": record.get("band_gap_xc"),
+                        **row,
+                    }
+                )
         results.append(record)
         _json_write(target_dir / "conductivity.json", record)
         summary = {
@@ -1221,6 +1330,7 @@ def run_conductivity(raw, root, *, dry_run=False):
             "n_oxygen_vacancies": record["n_oxygen_vacancies"],
             "structure_path": str(target.structure_path),
             "status": record["status"],
+            "resumed": record.get("resumed", False),
             "dft_reused": record.get("dft_reused"),
             "gpw_file": record.get("gpw_file"),
             "band_gap_eV": record.get("band_gap_eV"),
