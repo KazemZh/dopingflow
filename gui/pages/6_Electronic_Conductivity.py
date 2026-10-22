@@ -166,6 +166,16 @@ if target_include:
         f"Target filtering is active: only structures matching {target_include} will be analyzed."
     )
 
+resume = st.checkbox(
+    "Resume completed conductivity results",
+    value=bool(conductivity.get("resume", True)),
+    help=(
+        "Skip BoltzTraP2 for a completed target when its ID, relaxed structure, and "
+        "calculation settings match. Turn this off to recompute transport results; "
+        "compatible GPAW calculations can still be reused."
+    ),
+)
+
 parent_pick_options = ["all", "lowest_energy"]
 saved_parent_pick = str(
     conductivity.get("parent_pick", oxidation.get("parent_pick", "all"))
@@ -498,6 +508,7 @@ try:
         {
             "enabled": bool(enabled),
             "fail_fast": bool(fail_fast),
+            "resume": bool(resume),
             "include_vacancy_free": bool(include_vacancy_free),
             "include_oxygen_vacancies": bool(include_oxygen_vacancies),
             "target_include": target_include,
