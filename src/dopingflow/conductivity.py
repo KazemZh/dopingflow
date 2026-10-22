@@ -721,12 +721,16 @@ def _load_resumable_target_result(target, target_dir, settings_fingerprint, sect
     except (OSError, ValueError, TypeError):
         return None
 
+    try:
+        saved_vacancies = int(record.get("n_oxygen_vacancies", 0) or 0)
+    except (TypeError, ValueError):
+        return None
     if (
         record.get("status") != "calculated"
         or record.get("target_id") != target.target_id
         or record.get("transport_settings_fingerprint") != settings_fingerprint
         or record.get("kind") != target.kind
-        or int(record.get("n_oxygen_vacancies", 0) or 0)
+        or saved_vacancies
         != (target.n_vacancies if target.vacancy_species == "O" else 0)
     ):
         return None
