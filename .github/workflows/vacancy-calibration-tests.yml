@@ -25,9 +25,9 @@ on:
       - "gui/README.md"
       - "gui/vacancy_staged.py"
       - "gui/phase_diagram_plots.py"
-      - "gui/pages/Phase_Diagram.py"
-      - "gui/pages/Vacancy_Energy_Correction.py"
-      - "gui/pages/Vacancy_MC_Staged.py"
+      - "gui/pages/1_Phase_Diagram.py"
+      - "gui/pages/3_Vacancy_Energy_Correction.py"
+      - "gui/pages/2_Vacancy_MC_Staged.py"
       - "gui/vacancy_thermo_plots.py"
       - "docs/source/**"
       - "tests/test_oxygen_calibration.py"
@@ -68,9 +68,9 @@ on:
       - "gui/README.md"
       - "gui/vacancy_staged.py"
       - "gui/phase_diagram_plots.py"
-      - "gui/pages/Phase_Diagram.py"
-      - "gui/pages/Vacancy_Energy_Correction.py"
-      - "gui/pages/Vacancy_MC_Staged.py"
+      - "gui/pages/1_Phase_Diagram.py"
+      - "gui/pages/3_Vacancy_Energy_Correction.py"
+      - "gui/pages/2_Vacancy_MC_Staged.py"
       - "gui/vacancy_thermo_plots.py"
       - "docs/source/**"
       - "tests/test_oxygen_calibration.py"
@@ -113,9 +113,9 @@ jobs:
             gui/app.py \
             gui/vacancy_staged.py \
             gui/phase_diagram_plots.py \
-            gui/pages/Phase_Diagram.py \
-            gui/pages/Vacancy_Energy_Correction.py \
-            gui/pages/Vacancy_MC_Staged.py \
+            gui/pages/1_Phase_Diagram.py \
+            gui/pages/3_Vacancy_Energy_Correction.py \
+            gui/pages/2_Vacancy_MC_Staged.py \
             src/dopingflow/cli.py \
             src/dopingflow/vacancy_configurational_thermodynamics.py \
             src/dopingflow/vacancy_energy_correction_extensions.py \

@@ -81,7 +81,7 @@ def test_sphinx_docs_cover_staged_commands_and_parent_routing():
 
 def test_gui_readme_and_staged_page_document_split_environments():
     readme = _text("gui/README.md")
-    page = _text("gui/pages/Vacancy_MC_Staged.py")
+    page = _text("gui/pages/2_Vacancy_MC_Staged.py")
     helper = _text("gui/vacancy_staged.py")
 
     for token in [

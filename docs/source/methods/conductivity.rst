@@ -80,7 +80,9 @@ oxidation-state stage**. The relevant parameters are::
     source_root = "vacancy-selected"
     include_vacancy_free = true
     include_oxygen_vacancies = true
+    parent_pick = "all"  # or "lowest_energy"
     target_include = []
+    resume = true
 
 ``source_root`` has the same meaning as ``oxidation.source_root``: it is the root
 containing the selected relaxed parent structures and, when vacancy analysis is
@@ -93,11 +95,25 @@ Leave it empty to analyze every discovered target. Otherwise use exact target ID
 safe IDs, or shell-style wildcards such as ``Sb5_Ti2p5/*``. Vacancy-free and
 oxygen-vacancy structures can be enabled or disabled independently.
 
-There is deliberately no second conductivity-specific ``favorable/manual/all``
-selector, ``top_k_per_group``, or arbitrary ``structure_paths`` interface. Parent
-and vacancy selection should happen once upstream; conductivity and oxidation then
-consume the same target namespace. This keeps the TOML and Streamlit interfaces
-consistent and prevents the two stages from silently choosing different structures.
+``parent_pick`` defaults to ``all`` and analyzes every selected relaxed parent. Set it to
+``lowest_energy`` to keep only the candidate with the minimum
+``energy_relaxed_eV`` per composition, read from each candidate's
+``02_relax/meta.json``. All selected candidates in a composition must have a
+finite energy. If ``target_include`` is set, only matching composition
+groups are checked. If this setting is omitted under ``[conductivity]``,
+conductivity inherits ``oxidation.parent_pick``, so both analyses can use the
+same candidates. The mode applies to vacancy-free parents; oxygen-vacancy
+structures remain selected from the vacancy database.
+
+resume defaults to true. For each selected target, DopingFlow reuses a
+saved conductivity result when its target ID, relaxed-structure path and geometry,
+transport settings, and requested temperature/carrier points match. Set
+resume = false to recompute the transport analysis. Compatible GPAW single
+points may still be reused from the shared DFT cache.
+
+There is no arbitrary structure_paths interface. Parent and vacancy selection
+remains based on the shared target namespace so the oxidation and conductivity
+stages can use matching structures.
 
 Shared DFT calculations
 -----------------------
@@ -128,8 +144,9 @@ A process lock serializes identical single points. Run the orchestrator in one
 process; multi-rank MPI orchestration is explicitly rejected to avoid deadlocks.
 GPAW runs inside that process. The cache retains a full GPW copy, plus a stage-local
 copy, so allow disk space for wavefunctions. Removing a cache copy does not
-remove the stage copy. GPAW outputs are reused, while inexpensive DOS/transport
-postprocessing can run again. Automatic oxidation binds derived Bader and
+remove the stage copy. GPAW outputs are reused. With resume = true, compatible completed
+conductivity postprocessing is reused too; set it to false when a fresh
+transport integration is needed. Automatic oxidation binds derived Bader and
 Wannier artifacts to their source GPW and refuses stale derived data.
 
 Transport meaning and outputs

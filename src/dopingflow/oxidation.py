@@ -70,6 +70,7 @@ class OxidationConfig:
     dft_followup_execute: bool
     dft_followup_methods: tuple[str, ...]
     target_include: tuple[str, ...] = ()
+    parent_pick: str = "all"
     settings: dict[str, Any] = field(default_factory=dict)
 
 
@@ -215,6 +216,9 @@ def parse_oxidation_config(
         raise ValueError("[oxidation].mapping_tolerance must be > 0")
 
     target_include = _parse_target_include(section.get("target_include"))
+    parent_pick = str(section.get("parent_pick", "all")).strip().lower()
+    if parent_pick not in {"all", "lowest_energy"}:
+        raise ValueError("[oxidation].parent_pick must be 'all' or 'lowest_energy'")
 
     followup = section.get("dft_followup", {}) or {}
     if not isinstance(followup, dict):
@@ -248,6 +252,7 @@ def parse_oxidation_config(
         dft_followup_execute=bool(followup.get("execute", False)),
         dft_followup_methods=followup_methods,
         target_include=target_include,
+        parent_pick=parent_pick,
         settings=settings,
     )
 
@@ -306,7 +311,11 @@ def discover_oxidation_targets(cfg: OxidationConfig) -> tuple[list[StructureTarg
 
     if cfg.include_vacancy_free:
         try:
-            parents = discover_selected_parents(cfg.source_root)
+            parents = discover_selected_parents(
+                cfg.source_root,
+                parent_pick=cfg.parent_pick,
+                target_include=cfg.target_include,
+            )
         except (FileNotFoundError, RuntimeError) as exc:
             parents = []
             warnings.append(f"Could not discover vacancy-free selected parents: {exc}")
@@ -323,6 +332,8 @@ def discover_oxidation_targets(cfg: OxidationConfig) -> tuple[list[StructureTarg
                     "composition": str(parent.get("composition", "")),
                     "candidate": str(parent.get("candidate", "")),
                     "source_candidate_dir": str(parent.get("candidate_dir", "")),
+                    "parent_selection": cfg.parent_pick,
+                    "relaxed_energy_eV": parent.get("relaxed_energy_eV"),
                 },
             )
             parents_by_id[parent_id] = target

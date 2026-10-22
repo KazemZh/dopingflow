@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import fnmatch
 import hashlib
 import json
 import logging
@@ -764,10 +765,34 @@ def _write_csv(path: Path, rows: Sequence[dict[str, Any]]) -> None:
             )
 
 
-def discover_selected_parents(outdir: Path) -> list[dict[str, Path | str]]:
+def discover_selected_parents(
+    outdir: Path,
+    *,
+    parent_pick: str = "all",
+    target_include: Sequence[str] = (),
+) -> list[dict[str, Path | str | float]]:
+    """Discover relaxed parents, optionally keeping the lowest-energy candidate per composition.
+
+    The selected_candidates.txt files define the candidate pool. In lowest_energy
+    mode, every candidate in that pool must have a finite energy_relaxed_eV value
+    in 02_relax/meta.json so the choice is explicit and auditable.
+    """
     if not outdir.exists():
         raise FileNotFoundError(f"[vacancies] structure output directory does not exist: {outdir}")
-    found: list[dict[str, Path | str]] = []
+    parent_pick = str(parent_pick).strip().lower()
+    if parent_pick not in {"all", "lowest_energy"}:
+        raise ValueError("[parent_pick] must be 'all' or 'lowest_energy'")
+
+    found: list[dict[str, Path | str | float]] = []
+    composition_patterns = []
+    for selector in target_include:
+        normalized = str(selector).strip().replace("\\", "/")
+        if "/" in normalized:
+            composition_patterns.append(normalized.split("/", 1)[0])
+        elif "__" in normalized:
+            composition_patterns.append(normalized.split("__", 1)[0])
+        elif normalized:
+            composition_patterns.append(normalized)
     selection_files = sorted(outdir.glob("*/selected_candidates.txt"))
     if not selection_files:
         raise FileNotFoundError(
@@ -775,6 +800,11 @@ def discover_selected_parents(outdir: Path) -> list[dict[str, Path | str]]:
         )
     for selection_file in selection_files:
         composition_dir = selection_file.parent
+        if composition_patterns and not any(
+            fnmatch.fnmatchcase(composition_dir.name, pattern)
+            for pattern in composition_patterns
+        ):
+            continue
         names = [line.strip() for line in selection_file.read_text().splitlines() if line.strip()]
         for name in names:
             candidate_dir = composition_dir / name
@@ -783,18 +813,48 @@ def discover_selected_parents(outdir: Path) -> list[dict[str, Path | str]]:
             if not scan_path.exists() or not relaxed_path.exists():
                 missing = scan_path if not scan_path.exists() else relaxed_path
                 raise FileNotFoundError(f"[vacancies] parent {composition_dir.name}/{name}: missing {missing}")
-            found.append(
-                {
-                    "parent_id": f"{composition_dir.name}/{name}",
-                    "composition": composition_dir.name,
-                    "candidate": name,
-                    "candidate_dir": candidate_dir,
-                    "symmetry_path": scan_path,
-                    "relaxed_path": relaxed_path,
-                }
-            )
+
+            record: dict[str, Path | str | float] = {
+                "parent_id": f"{composition_dir.name}/{name}",
+                "composition": composition_dir.name,
+                "candidate": name,
+                "candidate_dir": candidate_dir,
+                "symmetry_path": scan_path,
+                "relaxed_path": relaxed_path,
+            }
+            if parent_pick == "lowest_energy":
+                meta_path = candidate_dir / "02_relax" / "meta.json"
+                try:
+                    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                    energy = float(meta["energy_relaxed_eV"])
+                except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+                    raise ValueError(
+                        f"[parent_pick=lowest_energy] cannot read a valid energy_relaxed_eV "
+                        f"from {meta_path}: {exc}"
+                    ) from exc
+                if not np.isfinite(energy):
+                    raise ValueError(
+                        f"[parent_pick=lowest_energy] non-finite energy_relaxed_eV in {meta_path}"
+                    )
+                record["relaxed_energy_eV"] = energy
+            found.append(record)
+
     if not found:
         raise RuntimeError("[vacancies] selected_candidates.txt files contain no candidates")
+    if parent_pick == "lowest_energy":
+        lowest_by_composition: dict[str, dict[str, Path | str | float]] = {}
+        for parent in found:
+            composition = str(parent["composition"])
+            previous = lowest_by_composition.get(composition)
+            key = (float(parent["relaxed_energy_eV"]), str(parent["candidate"]))
+            previous_key = (
+                (float(previous["relaxed_energy_eV"]), str(previous["candidate"]))
+                if previous is not None
+                else None
+            )
+            if previous is None or key < previous_key:
+                lowest_by_composition[composition] = parent
+        found = [lowest_by_composition[key] for key in sorted(lowest_by_composition)]
     return found
 
 

@@ -166,6 +166,38 @@ if target_include:
         f"Target filtering is active: only structures matching {target_include} will be analyzed."
     )
 
+resume = st.checkbox(
+    "Resume completed conductivity results",
+    value=bool(conductivity.get("resume", True)),
+    help=(
+        "Skip BoltzTraP2 for a completed target when its ID, relaxed structure, and "
+        "calculation settings match. Turn this off to recompute transport results; "
+        "compatible GPAW calculations can still be reused."
+    ),
+)
+
+parent_pick_options = ["all", "lowest_energy"]
+saved_parent_pick = str(
+    conductivity.get("parent_pick", oxidation.get("parent_pick", "all"))
+).strip().lower()
+if saved_parent_pick not in parent_pick_options:
+    saved_parent_pick = "all"
+parent_pick = st.selectbox(
+    "Vacancy-free parent selection",
+    options=parent_pick_options,
+    index=parent_pick_options.index(saved_parent_pick),
+    format_func=lambda value: (
+        "All selected candidates"
+        if value == "all"
+        else "Lowest relaxed energy per composition"
+    ),
+    help=(
+        "Uses every candidate listed in selected_candidates.txt, or picks the candidate "
+        "with the minimum energy_relaxed_eV in 02_relax/meta.json for each composition. "
+        "This setting applies to vacancy-free parents."
+    ),
+)
+
 
 with st.expander("Band transport (BoltzTraP2)", expanded=True):
     t1, t2 = st.columns(2)
@@ -476,9 +508,11 @@ try:
         {
             "enabled": bool(enabled),
             "fail_fast": bool(fail_fast),
+            "resume": bool(resume),
             "include_vacancy_free": bool(include_vacancy_free),
             "include_oxygen_vacancies": bool(include_oxygen_vacancies),
             "target_include": target_include,
+            "parent_pick": parent_pick,
             "source_root": source_root,
             "output_dir": output_dir,
             "temperatures_K": temperatures_K,
