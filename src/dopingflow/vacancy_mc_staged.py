@@ -243,6 +243,10 @@ def _search_parent_reference_row(
     ):
         energy = float(cache["energy_sp_total_eV"])
         energy_source = "mc_parent_reference_cache"
+        log.info(
+            "REUSE MC parent reference %s: compatible Stage-1 cache",
+            parent["parent_id"],
+        )
 
     # The selected parent is exactly its 02_relax/POSCAR when no supercell is
     # requested.  Reuse that energy only when its calculator identity matches
@@ -256,8 +260,19 @@ def _search_parent_reference_row(
         if _calculator_identity_matches(source_meta, mc_cfg) and source_energy is not None:
             energy = float(source_energy)
             energy_source = str(source_meta_path)
+            log.info(
+                "REUSE MC parent reference %s: %s",
+                parent["parent_id"],
+                source_meta_path,
+            )
 
     if energy is None:
+        log.info(
+            "CALCULATE missing MC parent reference %s with %s/%s",
+            parent["parent_id"],
+            mc_cfg.backend,
+            mc_cfg.model,
+        )
         energy = float(structure_energy_with_calculator(relaxed_parent, calculator))
 
     energy_columns = _base._energy_columns(energy, len(relaxed_parent), 0)
