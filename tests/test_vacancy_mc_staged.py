@@ -5,6 +5,8 @@ from types import SimpleNamespace
 import dopingflow.vacancy_mc_staged as staged
 import dopingflow.vacancy_parent_selection_extensions as parent_selection
 from dopingflow.vacancy_parent_selection_extensions import pick_parents
+from dopingflow.vacancy_mc_extensions import MonteCarloSearchCalculatorConfig
+from pymatgen.core import Lattice, Structure
 
 
 def _cfg(tmp_path: Path):
@@ -175,3 +177,175 @@ def test_dedicated_output_directory_is_shared_by_search_and_finalize(monkeypatch
         (output_root, expected_candidate, source_candidate),
         (output_root, expected_candidate, source_candidate),
     ]
+
+
+def _search_reference_inputs(tmp_path):
+    candidate_dir = tmp_path / "Sb5_Ti2p5" / "candidate_014"
+    (candidate_dir / "02_relax").mkdir(parents=True)
+    structure = Structure(
+        Lattice.cubic(4.8),
+        ["Sn", "O", "O"],
+        [[0, 0, 0], [0.25, 0.25, 0.25], [0.75, 0.75, 0.75]],
+    )
+    parent = {
+        "parent_id": "Sb5_Ti2p5/candidate_014",
+        "composition": "Sb5_Ti2p5",
+        "candidate": "candidate_014",
+        "candidate_dir": candidate_dir,
+    }
+    cfg = SimpleNamespace(
+        resume=True,
+        supercell=(1, 1, 1),
+        vacancy_species="O",
+    )
+    mc_cfg = MonteCarloSearchCalculatorConfig(
+        backend="grace",
+        model="GRACE-1L-OMAT",
+        task="",
+        device="cuda",
+        gpu_id=0,
+    )
+    fields = {
+        "composition_directory": "Sb5_Ti2p5",
+        "composition": "Sb5_Ti2p5",
+        "candidate": "candidate_014",
+        "host_species": "Sn",
+        "dopant_counts_from_parent": {"Sb": 16, "Ti": 8},
+        "dopant_counts_json": {"Sb": 16, "Ti": 8},
+        "n_host": 296,
+        "n_total_dopants": 24,
+        "n_total_cations": 320,
+        "n_oxygen_sites_parent": 640,
+    }
+    return parent, structure, fields, cfg, mc_cfg
+
+
+def test_search_parent_reference_calculates_once_then_uses_cache(monkeypatch, tmp_path):
+    parent, structure, fields, cfg, mc_cfg = _search_reference_inputs(tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        staged,
+        "structure_energy_with_calculator",
+        lambda structure, calculator: calls.append(structure) or -123.5,
+    )
+
+    first = staged._search_parent_reference_row(
+        parent, structure, fields, cfg, mc_cfg, object(), "same-search"
+    )
+    second = staged._search_parent_reference_row(
+        parent, structure, fields, cfg, mc_cfg, object(), "same-search"
+    )
+
+    assert len(calls) == 1
+    assert first["n_vacancies"] == 0
+    assert first["mc_search_energy_sp_total_eV"] == -123.5
+    assert second["mc_search_energy_sp_total_eV"] == -123.5
+    assert second["mc_search_energy_source"] == "mc_parent_reference_cache"
+
+
+def test_search_parent_reference_reuses_matching_source_relaxation(monkeypatch, tmp_path):
+    parent, structure, fields, cfg, mc_cfg = _search_reference_inputs(tmp_path)
+    staged._base._write_json(
+        Path(parent["candidate_dir"]) / "02_relax" / "meta.json",
+        {
+            "backend": "grace",
+            "model": "GRACE-1L-OMAT",
+            "task": "",
+            "energy_relaxed_eV": -456.25,
+        },
+    )
+    monkeypatch.setattr(
+        staged,
+        "structure_energy_with_calculator",
+        lambda structure, calculator: (_ for _ in ()).throw(
+            AssertionError("matching prior energy should be reused")
+        ),
+    )
+
+    row = staged._search_parent_reference_row(
+        parent, structure, fields, cfg, mc_cfg, object(), "search-fingerprint"
+    )
+
+    assert row["mc_search_energy_sp_total_eV"] == -456.25
+    assert row["mc_search_energy_source"].endswith("02_relax/meta.json")
+
+
+def test_merge_parent_reference_does_not_modify_defective_archive_rows():
+    old_parent = {"parent_id": "A/candidate_001", "n_vacancies": 0, "old": True}
+    defective = {
+        "parent_id": "A/candidate_001",
+        "n_vacancies": 2,
+        "configuration_id": "mc_000001",
+        "mc_search_energy_sp_total_eV": -10.0,
+    }
+    replacement = {
+        "parent_id": "A/candidate_001",
+        "n_vacancies": 0,
+        "configuration_id": "parent_reference",
+    }
+
+    merged = staged._merge_parent_reference([old_parent, defective], replacement)
+
+    assert merged == [replacement, defective]
+
+
+def test_completed_search_backfills_parent_without_rerunning_monte_carlo(
+    monkeypatch, tmp_path
+):
+    parent, structure, fields, _, mc_cfg = _search_reference_inputs(tmp_path)
+    parent["symmetry_path"] = Path(parent["candidate_dir"]) / "01_scan" / "POSCAR"
+    parent["relaxed_path"] = Path(parent["candidate_dir"]) / "02_relax" / "POSCAR"
+    vacancy_root = Path(parent["candidate_dir"]) / staged._base.VACANCY_STAGE_DIR
+    vacancy_root.mkdir(parents=True)
+    defective = {
+        "parent_id": parent["parent_id"],
+        "n_vacancies": 1,
+        "configuration_id": "mc_000001",
+        "mc_search_energy_sp_total_eV": -100.0,
+    }
+    staged._base._write_json(
+        vacancy_root / "mc_search_meta.json",
+        {"status": "complete", "search_fingerprint": "existing-search"},
+    )
+    staged._base._write_json(vacancy_root / "mc_search_results.json", [defective])
+
+    cfg = SimpleNamespace(
+        skip_if_done=True,
+        vacancy_species="O",
+        oxidation_states={},
+        host_oxidation_state=4,
+    )
+    monkeypatch.setattr(
+        staged,
+        "_expanded_parent",
+        lambda parent, cfg: (structure, structure, {0: 0, 1: 1, 2: 2}),
+    )
+    monkeypatch.setattr(
+        staged, "_composition_fields", lambda parent, structure, cfg: (fields, {})
+    )
+    monkeypatch.setattr(staged._base, "reachable_charge_scenarios", lambda *args: [])
+    monkeypatch.setattr(staged, "_count_selection", lambda *args: ([1], {}))
+    monkeypatch.setattr(staged, "_search_fingerprint", lambda *args: "existing-search")
+    parent_row = {
+        "parent_id": parent["parent_id"],
+        "n_vacancies": 0,
+        "configuration_id": "parent_reference",
+        "mc_search_energy_sp_total_eV": -110.0,
+    }
+    monkeypatch.setattr(
+        staged, "_search_parent_reference_row", lambda *args: parent_row
+    )
+    monkeypatch.setattr(
+        staged._base,
+        "monte_carlo_vacancy_search",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("completed vacancy search must not rerun")
+        ),
+    )
+
+    rows = staged._run_search_parent(parent, cfg, mc_cfg, (1,), object())
+
+    assert rows == [parent_row, defective]
+    assert staged._base._load_json(vacancy_root / "mc_search_meta.json")[
+        "parent_reference_included"
+    ] is True
