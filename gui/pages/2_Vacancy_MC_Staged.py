@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import subprocess
 
+import pandas as pd
 import streamlit as st
 import toml
 
@@ -12,6 +13,12 @@ from vacancy_staged import (
     format_int_list,
     parse_parent_selectors,
     parse_positive_int_list,
+)
+from vacancy_mc_results import (
+    lowest_energy_by_vacancy_count,
+    preferred_vacancy_heatmap,
+    preferred_vacancy_map,
+    validate_search_database,
 )
 
 
@@ -421,3 +428,180 @@ st.warning(
     "before top-k selection. Validate GRACE/MACE ranking agreement on a small test before a "
     "large production campaign."
 )
+
+st.divider()
+st.subheader("Results")
+st.caption(
+    "Inspect the Stage-1 GRACE archive and map the preferred number of oxygen "
+    "vacancies versus oxygen partial pressure and applied potential."
+)
+
+result_root = Path(output_directory.strip()).expanduser()
+if not result_root.is_absolute():
+    result_root = project_root / result_root
+search_database_path = result_root / "vacancy_mc_search_database.csv"
+
+if not search_database_path.is_file():
+    st.info(
+        "No Stage-1 search database is available yet. Expected: "
+        f"`{search_database_path}`"
+    )
+else:
+    try:
+        search_results = pd.read_csv(search_database_path)
+        validate_search_database(search_results)
+        zero_rows = search_results[search_results["n_vacancies"].astype(int) == 0]
+
+        metric1, metric2, metric3, metric4 = st.columns(4)
+        metric1.metric("Archived structures", f"{len(search_results):,}")
+        metric2.metric("Parents", search_results["parent_id"].nunique())
+        metric3.metric("Zero-vacancy references", len(zero_rows))
+        available_counts = sorted(
+            int(value) for value in search_results["n_vacancies"].unique()
+        )
+        metric4.metric("Vacancy counts", ", ".join(map(str, available_counts)))
+
+        st.markdown("#### Preferred vacancy number: pO₂–potential heatmap")
+        st.warning(
+            "Preliminary Stage-1 screening only. The map uses unrelaxed GRACE "
+            "single-point energies. Its absolute pressure and potential boundaries "
+            "depend on the supplied model-consistent oxygen reference and assumed "
+            "vacancy charge/electron-transfer model."
+        )
+
+        parent_labels = (
+            search_results[["parent_id", "composition"]]
+            .drop_duplicates()
+            .sort_values(["composition", "parent_id"])
+        )
+        label_to_parent = {
+            f"{row.composition} — {row.parent_id}": str(row.parent_id)
+            for row in parent_labels.itertuples(index=False)
+        }
+        selected_label = st.selectbox(
+            "Parent structure",
+            list(label_to_parent),
+            key="staged_vacancy_heatmap_parent",
+        )
+        selected_parent = label_to_parent[selected_label]
+
+        h1, h2, h3 = st.columns(3)
+        map_temperature = h1.number_input(
+            "Temperature (K)",
+            min_value=100.0,
+            max_value=6000.0,
+            value=float(vac.get("mc_heatmap_temperature_K", 1000.0)),
+            step=50.0,
+            key="staged_vacancy_heatmap_temperature",
+        )
+        configured_mu = vac.get("mu_O_reference_eV")
+        default_mu = float(configured_mu) if configured_mu is not None else -7.5
+        mu_o_reference = h2.number_input(
+            "Model-consistent μO reference (eV/O)",
+            value=default_mu,
+            step=0.05,
+            format="%.6f",
+            help=(
+                "Use one half of the O2 energy calculated with the same Stage-1 "
+                "backend/model, or a validated calibrated per-O reference."
+            ),
+            key="staged_vacancy_heatmap_mu_o_reference",
+        )
+        electrons_per_vacancy = h3.number_input(
+            "Electrons released per vacancy, z",
+            min_value=0.0,
+            value=float(vac.get("mc_heatmap_electrons_per_vacancy", 2.0)),
+            step=1.0,
+            help=(
+                "The potential term is -n·z·U. z=2 corresponds to an assumed "
+                "V_O^(2+) vacancy reaction releasing two electrons."
+            ),
+            key="staged_vacancy_heatmap_electrons",
+        )
+        if configured_mu is None:
+            st.error(
+                "No `[vacancies].mu_O_reference_eV` is configured. The displayed "
+                "-7.5 eV/O is only an editable plotting placeholder; do not interpret "
+                "the pressure boundaries quantitatively until it is replaced by a "
+                "GRACE-consistent or calibrated oxygen reference."
+            )
+
+        p1, p2, u1, u2 = st.columns(4)
+        logp_min = p1.number_input(
+            "Minimum log10(pO2/bar)",
+            value=float(vac.get("log10_pO2_min_bar", -20.0)),
+            step=1.0,
+            key="staged_vacancy_heatmap_logp_min",
+        )
+        logp_max = p2.number_input(
+            "Maximum log10(pO2/bar)",
+            value=float(vac.get("log10_pO2_max_bar", 1.0)),
+            step=1.0,
+            key="staged_vacancy_heatmap_logp_max",
+        )
+        potential_min = u1.number_input(
+            "Minimum potential (V)",
+            value=float(vac.get("mc_heatmap_potential_min_V", -1.0)),
+            step=0.1,
+            key="staged_vacancy_heatmap_potential_min",
+        )
+        potential_max = u2.number_input(
+            "Maximum potential (V)",
+            value=float(vac.get("mc_heatmap_potential_max_V", 2.0)),
+            step=0.1,
+            key="staged_vacancy_heatmap_potential_max",
+        )
+        include_nist = st.checkbox(
+            "Include NIST O2 standard-state thermal correction",
+            value=True,
+            help=(
+                "Adds the per-O ideal-gas standard-state correction derived from "
+                "NIST Shomate data. Explicit O2 zero-point energy remains excluded."
+            ),
+            key="staged_vacancy_heatmap_nist",
+        )
+
+        heatmap_result = preferred_vacancy_map(
+            search_results,
+            selected_parent,
+            temperature_K=float(map_temperature),
+            mu_O_reference_eV_per_O=float(mu_o_reference),
+            log10_pO2_min_bar=float(logp_min),
+            log10_pO2_max_bar=float(logp_max),
+            potential_min_V=float(potential_min),
+            potential_max_V=float(potential_max),
+            electrons_released_per_vacancy=float(electrons_per_vacancy),
+            include_nist_standard_state=include_nist,
+        )
+        heatmap_figure = preferred_vacancy_heatmap(
+            heatmap_result,
+            parent_id=selected_parent,
+            temperature_K=float(map_temperature),
+            electrons_released_per_vacancy=float(electrons_per_vacancy),
+            include_nist_standard_state=include_nist,
+        )
+        st.plotly_chart(heatmap_figure, use_container_width=True)
+        st.latex(
+            r"\Delta\Omega_n(U,p_{O_2},T)="
+            r"E_n-E_0+n\mu_O(T,p_{O_2})-nzU"
+        )
+        st.caption(
+            "Each color gives the vacancy count with the lowest screening grand "
+            "energy at that pressure and potential. Solid vibrational, electronic, "
+            "magnetic and configurational free-energy terms are not included."
+        )
+
+        with st.expander("Lowest GRACE-energy candidate used for each vacancy count"):
+            minima = lowest_energy_by_vacancy_count(
+                search_results, selected_parent
+            )
+            visible_columns = [
+                "n_vacancies",
+                "configuration_id",
+                "mc_search_energy_sp_total_eV",
+                "delta_energy_to_parent_eV",
+                "generated_poscar_path",
+            ]
+            st.dataframe(minima[visible_columns], use_container_width=True)
+    except Exception as exc:
+        st.error(f"Could not build the Stage-1 vacancy heatmap: {exc}")
