@@ -195,6 +195,132 @@ def _composition_fields(
     return fields, dopant_counts
 
 
+def _calculator_identity_matches(
+    metadata: dict[str, Any], mc_cfg: MonteCarloSearchCalculatorConfig
+) -> bool:
+    """Return whether cached energy metadata uses the active search model."""
+    return all(
+        (
+            metadata.get("backend") == mc_cfg.backend,
+            metadata.get("model") == mc_cfg.model,
+            str(metadata.get("task", "")) == mc_cfg.task,
+        )
+    )
+
+
+def _search_parent_reference_row(
+    parent: dict[str, Path | str],
+    relaxed_parent: Structure,
+    composition_fields: dict[str, Any],
+    cfg: _base.VacancyConfig,
+    mc_cfg: MonteCarloSearchCalculatorConfig,
+    calculator: Any,
+    search_fp: str,
+) -> dict[str, Any]:
+    """Return a cached/backfilled zero-vacancy search-energy database row.
+
+    The parent single point is deliberately independent of the expensive MC
+    archive.  A completed legacy search can therefore be reopened, given only
+    this missing calculation, and have its database rebuilt without repeating
+    any vacancy enumeration or defective-structure energies.
+    """
+    vacancy_root = Path(parent["candidate_dir"]) / _base.VACANCY_STAGE_DIR
+    reference_dir = vacancy_root / "parent_reference"
+    reference_dir.mkdir(parents=True, exist_ok=True)
+    reference_poscar = reference_dir / "POSCAR"
+    Poscar(relaxed_parent).write_file(reference_poscar)
+
+    cache_path = reference_dir / "mc_search_single_point.json"
+    cache = _base._load_json(cache_path)
+    energy: float | None = None
+    energy_source = "calculated"
+
+    if (
+        cfg.resume
+        and cache.get("search_fingerprint") == search_fp
+        and _calculator_identity_matches(cache, mc_cfg)
+        and cache.get("energy_sp_total_eV") is not None
+    ):
+        energy = float(cache["energy_sp_total_eV"])
+        energy_source = "mc_parent_reference_cache"
+
+    # The selected parent is exactly its 02_relax/POSCAR when no supercell is
+    # requested.  Reuse that energy only when its calculator identity matches
+    # the Stage-1 calculator; otherwise a new single point is required.
+    if energy is None and cfg.resume and cfg.supercell == (1, 1, 1):
+        source_meta_path = Path(parent["candidate_dir"]) / "02_relax" / "meta.json"
+        source_meta = _base._load_json(source_meta_path)
+        source_energy = source_meta.get(
+            "energy_relaxed_total_eV", source_meta.get("energy_relaxed_eV")
+        )
+        if _calculator_identity_matches(source_meta, mc_cfg) and source_energy is not None:
+            energy = float(source_energy)
+            energy_source = str(source_meta_path)
+
+    if energy is None:
+        energy = float(structure_energy_with_calculator(relaxed_parent, calculator))
+
+    energy_columns = _base._energy_columns(energy, len(relaxed_parent), 0)
+    cache_metadata = {
+        "search_fingerprint": search_fp,
+        **energy_columns,
+        "backend": mc_cfg.backend,
+        "model": mc_cfg.model,
+        "task": mc_cfg.task,
+        "device": mc_cfg.device,
+        "energy_role": "monte_carlo_search_parent_single_point",
+        "energy_source": energy_source,
+    }
+    _base._write_json(cache_path, cache_metadata)
+
+    return {
+        "parent_id": str(parent["parent_id"]),
+        "parent_path": str(parent["candidate_dir"]),
+        "configuration_id": "parent_reference",
+        "vacancy_species": cfg.vacancy_species,
+        "n_vacancies": 0,
+        **composition_fields,
+        "vacancy_fraction": 0.0,
+        "vacancy_percent": 0.0,
+        "minimum_vacancy_distance_angstrom": None,
+        "generated_poscar_path": str(reference_poscar),
+        "search_method": "parent-reference",
+        "supercell": list(cfg.supercell),
+        "search_fingerprint": search_fp,
+        "mc_step": 0,
+        "mc_move": "parent_reference",
+        "mc_search_backend": mc_cfg.backend,
+        "mc_search_model": mc_cfg.model,
+        "mc_search_task": mc_cfg.task,
+        "mc_search_device": mc_cfg.device,
+        "mc_search_energy_sp_total_eV": energy_columns["energy_sp_total_eV"],
+        "mc_search_energy_sp_per_atom_eV": energy_columns[
+            "energy_sp_per_atom_eV"
+        ],
+        "mc_search_energy_sp_per_vacancy_eV": None,
+        "mc_search_energy_source": energy_source,
+        "relative_mc_search_energy_same_count_eV": 0.0,
+        "relative_mc_search_energy_same_count_meV": 0.0,
+        "rank_within_vacancy_count": 1,
+        "selected_for_finalization": False,
+    }
+
+
+def _merge_parent_reference(
+    rows: list[dict[str, Any]], parent_row: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Replace any old zero-vacancy row and preserve all MC archive rows."""
+    defective_rows = [
+        row
+        for row in rows
+        if not (
+            str(row.get("parent_id")) == str(parent_row["parent_id"])
+            and int(row.get("n_vacancies", -1)) == 0
+        )
+    ]
+    return [parent_row, *defective_rows]
+
+
 def _run_search_parent(
     parent: dict[str, Path | str],
     cfg: _base.VacancyConfig,
@@ -235,7 +361,23 @@ def _run_search_parent(
         and result_json.is_file()
     ):
         log.info("SKIP MC search %s: compatible search is complete", parent_id)
-        return json.loads(result_json.read_text(encoding="utf-8"))
+        existing_rows = json.loads(result_json.read_text(encoding="utf-8"))
+        parent_row = _search_parent_reference_row(
+            parent,
+            relaxed_parent,
+            composition_fields,
+            cfg,
+            mc_cfg,
+            calculator,
+            search_fp,
+        )
+        rows = _merge_parent_reference(existing_rows, parent_row)
+        _base._write_json(result_json, rows)
+        _base._write_csv(vacancy_root / "mc_search_results.csv", rows)
+        prior["n_result_rows"] = len(rows)
+        prior["parent_reference_included"] = True
+        _base._write_json(vacancy_root / "mc_search_meta.json", prior)
+        return rows
 
     count_rows = [
         {
@@ -251,7 +393,16 @@ def _run_search_parent(
     )
     _base._write_csv(vacancy_root / "vacancy_counts.csv", count_rows)
 
-    rows: list[dict[str, Any]] = []
+    parent_row = _search_parent_reference_row(
+        parent,
+        relaxed_parent,
+        composition_fields,
+        cfg,
+        mc_cfg,
+        calculator,
+        search_fp,
+    )
+    rows: list[dict[str, Any]] = [parent_row]
     for n_vacancies in counts:
         log.info("MC search %s n=%d", parent_id, n_vacancies)
         group_dir = vacancy_root / f"V_{cfg.vacancy_species}_{n_vacancies:02d}"
@@ -419,6 +570,7 @@ def _run_search_parent(
         ),
         "vacancy_range": count_meta,
         "supercell": list(cfg.supercell),
+        "parent_reference_included": True,
         "n_result_rows": len(rows),
     }
     _base._write_json(vacancy_root / "mc_search_meta.json", metadata)
