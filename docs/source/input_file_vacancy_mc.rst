@@ -313,6 +313,28 @@ Each selected Stage-1 configuration contains a generated POSCAR and GRACE search
 metadata. Stage 2 adds a final-backend single-point record, relaxed structure,
 and final metadata in the same dedicated output tree.
 
+Stage 1 also writes a zero-vacancy ``parent_reference`` row to
+``vacancy_mc_search_database.csv/json``.  Its energy is evaluated with exactly
+the configured MC search calculator, so it is directly compatible with the
+Stage-1 energies for the defective structures.  The row has
+``n_vacancies = 0`` and ``configuration_id = "parent_reference"``.
+
+Resume and legacy-result backfill
+---------------------------------
+
+With both ``skip_if_done = true`` and ``resume = true``, rerunning
+``vacancies-mc-search`` preserves every completed Monte Carlo archive.  If an
+older completed search predates the zero-vacancy reference, DopingFlow performs
+only the missing parent single-point calculation and rebuilds the aggregate
+search database with that row included.  It does not rerun the vacancy Monte
+Carlo searches or recalculate their saved energies.
+
+The parent energy is reused instead of recalculated when either a compatible
+Stage-1 parent-reference cache exists or the source parent's relaxed energy was
+produced with the same backend, model, and task.  Otherwise, one new
+single-point evaluation is made for that parent and cached under
+``05_vacancies/parent_reference/mc_search_single_point.json``.
+
 Thermodynamic compatibility
 ---------------------------
 
