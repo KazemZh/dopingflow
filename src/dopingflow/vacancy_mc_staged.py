@@ -23,6 +23,7 @@ from pathlib import Path
 import time
 from typing import Any
 
+import numpy as np
 from pymatgen.core import Structure
 from pymatgen.io.vasp import Poscar
 
@@ -830,28 +831,88 @@ def _verify_selected_archive(
     cfg: _base.VacancyConfig,
     counts: list[int],
     fingerprint: str,
+    *,
+    relaxed_parent: Structure | None = None,
 ) -> None:
-    """Preflight all MACE inputs before any expensive calculator is loaded."""
+    """Audit all selected GRACE records and sample derived structures.
+
+    No candidate is silently trusted on filename alone. Per-candidate metadata
+    and raw GRACE energy must agree with the saved MC fingerprint. To keep
+    preflight practical for thousands of 960-atom POSCARs, structural ancestry
+    (lattice, species totals) is checked for the first and last selected
+    candidate of each vacancy count.
+    """
     archive = Path(parent["candidate_dir"]) / _base.VACANCY_STAGE_DIR
+    original_suffix = Path(str(parent["parent_id"])) / "02_relax" / "POSCAR"
+    original_chemistry = (
+        Counter(site.species_string for site in relaxed_parent)
+        if relaxed_parent is not None else None
+    )
     for count in counts:
         selection = archive / f"V_{cfg.vacancy_species}_{count:02d}" / "selected_candidates.txt"
         if not selection.is_file():
             raise FileNotFoundError(f"Missing completed GRACE selection: {selection}")
-        for candidate in (line.strip() for line in selection.read_text().splitlines()):
-            if not candidate:
-                continue
-            meta_path = selection.parent / candidate / "00_generate" / "meta.json"
+        selected = [line.strip() for line in selection.read_text().splitlines() if line.strip()]
+        if not selected or len(selected) != len(set(selected)):
+            raise ValueError(f"Missing or duplicate selected GRACE configurations: {selection}")
+
+        for index, candidate in enumerate(selected):
+            config_root = selection.parent / candidate
+            meta_path = config_root / "00_generate" / "meta.json"
             poscar = meta_path.with_name("POSCAR")
+            scan_path = config_root / "01_scan" / "meta.json"
             metadata = _base._load_json(meta_path)
-            if (
-                metadata.get("parent_id") != parent["parent_id"]
-                or metadata.get("search_fingerprint") != fingerprint
-                or int(metadata.get("n_vacancies", -1)) != count
-                or not poscar.is_file()
+            scan_meta = _base._load_json(scan_path)
+            source_text = str(metadata.get("source_parent_path", ""))
+            recorded_source = Path(source_text)
+            source_matches = (
+                bool(source_text)
+                and tuple(recorded_source.parts[-len(original_suffix.parts):])
+                == original_suffix.parts
+            )
+            scan_energy = scan_meta.get("energy_sp_total_eV")
+            try:
+                energy_valid = math.isfinite(float(scan_energy))
+                count_valid = int(metadata.get("n_vacancies", -1)) == count
+            except (TypeError, ValueError):
+                energy_valid = False
+                count_valid = False
+            if not (
+                metadata.get("parent_id") == parent["parent_id"]
+                and metadata.get("search_fingerprint") == fingerprint
+                and metadata.get("configuration_id") == candidate
+                and count_valid
+                and metadata.get("supercell") == list(cfg.supercell)
+                and source_matches
+                and scan_meta.get("search_fingerprint") == fingerprint
+                and scan_meta.get("backend") == "grace"
+                and energy_valid
+                and poscar.is_file()
             ):
                 raise ValueError(
-                    f"Inconsistent or incomplete GRACE candidate {candidate}: {meta_path}"
+                    f"Inconsistent or incomplete GRACE candidate {candidate}: "
+                    f"{meta_path}, {scan_path}"
                 )
+
+            if original_chemistry is not None and index in {0, len(selected) - 1}:
+                structure = Structure.from_file(str(poscar))
+                chemistry = Counter(site.species_string for site in structure)
+                expected = original_chemistry.copy()
+                expected[cfg.vacancy_species] -= count
+                if expected[cfg.vacancy_species] < 0:
+                    raise ValueError(f"Invalid vacancy count {count}: {selection}")
+                if (
+                    chemistry != +expected
+                    or not np.allclose(
+                        structure.lattice.matrix,
+                        relaxed_parent.lattice.matrix,
+                        atol=1e-5, rtol=1e-7,
+                    )
+                ):
+                    raise ValueError(
+                        f"GRACE candidate has incompatible composition or lattice: {poscar}"
+                    )
+
 
 
 def _load_search_context(
@@ -861,6 +922,7 @@ def _load_search_context(
     explicit_counts: tuple[int, ...] | None,
     *,
     config_root: Path,
+    allow_legacy_fingerprint_mismatch: bool = False,
 ) -> tuple[Structure, str, list[int], dict[str, Any], dict[str, int]]:
     _, relaxed_parent, _ = _expanded_parent(parent, cfg)
     composition_fields, dopant_counts = _composition_fields(parent, relaxed_parent, cfg)
@@ -905,19 +967,36 @@ def _load_search_context(
             parent, cfg, mc_cfg, explicit_counts, config_root, counts
         )
         if reconstructed != saved_fingerprint:
-            raise ValueError(
-                f"Cannot verify relocated GRACE search for {parent['parent_id']}: "
-                "the recorded fingerprint does not match the transferred structures "
-                "and search settings. The archive has not been modified. Verify the "
-                "original input.toml and source POSCARs; do not rerun MC automatically."
+            if not allow_legacy_fingerprint_mismatch:
+                raise ValueError(
+                    f"Cannot reproduce historical GRACE fingerprint for {parent['parent_id']}. "
+                    "The currently available search configuration is different from "
+                    "the one used for the archive. To opt into an independent "
+                    "archive consistency audit (not full historical reproducibility), "
+                    "set [vacancies].allow_legacy_archive_fingerprint_mismatch=true "
+                    "and rerun --check-only. No archived metadata has been modified."
+                )
+            parent["legacy_fingerprint_status"] = "audited_not_reproduced"
+            log.warning(
+                "LEGACY GRACE %s: historical fingerprint cannot be reproduced. "
+                "Auditing archived selections, source references, GRACE energies, "
+                "and representative structure compositions instead. "
+                "Historical MC parameters are NOT independently proven.",
+                parent["parent_id"],
+            )
+        else:
+            parent["legacy_fingerprint_status"] = "reproduced_original_path"
+            log.info(
+                "VERIFIED relocated GRACE checkpoint %s (original path fingerprint retained)",
+                parent["parent_id"],
             )
         search_fp = saved_fingerprint
-        log.info(
-            "VERIFIED relocated GRACE checkpoint %s (original path fingerprint retained)",
-            parent["parent_id"],
-        )
+    else:
+        parent["legacy_fingerprint_status"] = "exact"
 
-    _verify_selected_archive(parent, cfg, counts, search_fp)
+    _verify_selected_archive(
+        parent, cfg, counts, search_fp, relaxed_parent=relaxed_parent
+    )
     return relaxed_parent, search_fp, counts, composition_fields, dopant_counts
 
 
@@ -929,6 +1008,7 @@ def _run_finalize_parent(
     calculator: Any,
     *,
     config_root: Path,
+    allow_legacy_fingerprint_mismatch: bool = False,
 ) -> list[dict[str, Any]]:
     parent_id = str(parent["parent_id"])
     (
@@ -938,7 +1018,8 @@ def _run_finalize_parent(
         composition_fields,
         dopant_counts,
     ) = _load_search_context(
-        parent, cfg, mc_cfg, explicit_counts, config_root=config_root
+        parent, cfg, mc_cfg, explicit_counts, config_root=config_root,
+        allow_legacy_fingerprint_mismatch=allow_legacy_fingerprint_mismatch,
     )
     final_fp = _final_fingerprint(cfg, search_fp)
     vacancy_root = Path(parent["candidate_dir"]) / _base.VACANCY_STAGE_DIR
@@ -1159,6 +1240,9 @@ def _run_finalize_parent(
         "status": "complete",
         "stage": "finalize",
         "parent_id": parent_id,
+        "grace_archive_fingerprint_validation": parent.get(
+            "legacy_fingerprint_status", "unknown"
+        ),
         "search_fingerprint": search_fp,
         "configuration_fingerprint": final_fp,
         "mc_search_calculator": asdict(mc_cfg),
@@ -1192,8 +1276,21 @@ def validate_vacancy_finalize(
     explicit_counts = parse_explicit_vacancy_counts(section)
     mc_cfg = parse_monte_carlo_search_calculator(section, cfg)
     parents = _discover_finalize_parents(section, root, cfg)
+    allow_legacy = section.get("allow_legacy_archive_fingerprint_mismatch", False)
+    if not isinstance(allow_legacy, bool):
+        raise ValueError(
+            "[vacancies].allow_legacy_archive_fingerprint_mismatch must be true or false"
+        )
     for parent in parents:
-        _load_search_context(parent, cfg, mc_cfg, explicit_counts, config_root=root)
+        _load_search_context(
+            parent, cfg, mc_cfg, explicit_counts, config_root=root,
+            allow_legacy_fingerprint_mismatch=allow_legacy,
+        )
+        log.info(
+            "GRACE archive %s: validation=%s",
+            parent["parent_id"],
+            parent.get("legacy_fingerprint_status", "unknown"),
+        )
     return [str(parent["parent_id"]) for parent in parents]
 
 
@@ -1216,10 +1313,18 @@ def run_vacancy_finalize(
     mc_cfg = parse_monte_carlo_search_calculator(section, cfg)
 
     parents = _discover_finalize_parents(section, root, cfg)
+    allow_legacy = section.get("allow_legacy_archive_fingerprint_mismatch", False)
+    if not isinstance(allow_legacy, bool):
+        raise ValueError(
+            "[vacancies].allow_legacy_archive_fingerprint_mismatch must be true or false"
+        )
 
     # No GPU/model allocation until every selected archive passes validation.
     for parent in parents:
-        _load_search_context(parent, cfg, mc_cfg, explicit_counts, config_root=root)
+        _load_search_context(
+            parent, cfg, mc_cfg, explicit_counts, config_root=root,
+            allow_legacy_fingerprint_mismatch=allow_legacy,
+        )
     log.info("Validated %d completed GRACE checkpoints for MACE finalization", len(parents))
 
     check_backend_dependency(cfg.backend, stage_name="Vacancies final calculator")
@@ -1253,7 +1358,8 @@ def run_vacancy_finalize(
         )
         all_rows.extend(
             _run_finalize_parent(
-                parent, cfg, mc_cfg, explicit_counts, calculator, config_root=root
+                parent, cfg, mc_cfg, explicit_counts, calculator, config_root=root,
+                allow_legacy_fingerprint_mismatch=allow_legacy,
             )
         )
 
