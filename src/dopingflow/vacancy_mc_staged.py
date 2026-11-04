@@ -1234,13 +1234,14 @@ def run_vacancy_finalize(
         backend=cfg.backend, model=cfg.model, task=cfg.task, device=cfg.device
     )
 
-    parent_root = (
-        (Path(section["output_directory"]).expanduser()
-         if Path(section["output_directory"]).is_absolute()
-         else root / str(section["output_directory"])).resolve()
-        if str(section.get("output_directory", "")).strip()
-        else (cfg.parent_directory if cfg.parent_source == "directory" else cfg.outdir)
-    )
+    configured_output = str(section.get("output_directory", "")).strip()
+    if configured_output:
+        output_path = Path(configured_output).expanduser()
+        parent_root = (
+            output_path if output_path.is_absolute() else root / output_path
+        ).resolve()
+    else:
+        parent_root = cfg.parent_directory if cfg.parent_source == "directory" else cfg.outdir
     assert parent_root is not None
     all_rows: list[dict[str, Any]] = []
     for index, parent in enumerate(parents, start=1):
