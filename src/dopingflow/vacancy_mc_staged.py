@@ -656,7 +656,7 @@ def run_vacancy_mc_search(
 
 def _canonical_composition(label: str) -> tuple[tuple[str, float], ...] | None:
     """Match element/count pairs independent of order and 2.5 / 2p5 syntax."""
-    entries = re.findall(r"([A-Z][a-z]?)_?(\\d+(?:[p.]\\d+)?)", label)
+    entries = re.findall(r"([A-Z][a-z]?)_?(\d+(?:[p.]\d+)?)", label)
     if not entries:
         return None
     return tuple(sorted((el, float(value.replace("p", "."))) for el, value in entries))
