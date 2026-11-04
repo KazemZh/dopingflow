@@ -13,11 +13,12 @@ not need to be installed in the same Python environment.
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import hashlib
 import json
 import logging
 import math
+import re
 from pathlib import Path
 import time
 from typing import Any
@@ -55,8 +56,16 @@ def _search_fingerprint(
     mc_cfg: MonteCarloSearchCalculatorConfig,
     explicit_counts: tuple[int, ...] | None,
     *source_paths: Path,
+    source_identity_paths: tuple[Path, ...] | None = None,
 ) -> str:
-    """Fingerprint only search-space and MC-search settings, not final relaxation."""
+    """Fingerprint search settings and source bytes, optionally with archived path identities.
+
+    source_identity_paths allows an old search hash to be reproduced using the
+    transferred POSCAR bytes but the original (now inaccessible) absolute paths.
+    """
+    if source_identity_paths is not None and len(source_identity_paths) != len(source_paths):
+        raise ValueError("source_identity_paths must match source_paths")
+    identities = source_paths if source_identity_paths is None else source_identity_paths
     data = _base._jsonable_config(cfg)
     data.pop("analysis", None)
     for key in (
@@ -83,7 +92,8 @@ def _search_fingerprint(
             list(explicit_counts) if explicit_counts is not None else None
         ),
         "sources": {
-            str(path.resolve()): _base._file_sha256(path) for path in source_paths
+            str(identity.resolve()): _base._file_sha256(current)
+            for identity, current in zip(identities, source_paths)
         },
     }
     return _sha256_payload(payload)
@@ -643,11 +653,203 @@ def run_vacancy_mc_search(
     return output
 
 
+
+def _canonical_composition(label: str) -> tuple[tuple[str, float], ...] | None:
+    """Match element/count pairs independent of order and 2.5 / 2p5 syntax."""
+    entries = re.findall(r"([A-Z][a-z]?)_?(\\d+(?:[p.]\\d+)?)", label)
+    if not entries:
+        return None
+    return tuple(sorted((el, float(value.replace("p", "."))) for el, value in entries))
+
+
+def _parent_included(parent: dict[str, Any], selectors: list[str]) -> bool:
+    if not selectors:
+        return True
+    composition = str(parent["composition"])
+    candidate = str(parent["candidate"])
+    for raw_selector in selectors:
+        selector = str(raw_selector).strip()
+        if not selector:
+            continue
+        requested_composition, sep, requested_candidate = selector.partition("/")
+        if sep and requested_candidate != candidate:
+            continue
+        if requested_composition == composition:
+            return True
+        if (
+            _canonical_composition(requested_composition) is not None
+            and _canonical_composition(requested_composition)
+            == _canonical_composition(composition)
+        ):
+            return True
+    return False
+
+
+def _discover_finalize_parents(
+    section: dict[str, Any], config_root: Path, cfg: _base.VacancyConfig
+) -> list[dict[str, Any]]:
+    """Keep the original parent structures and mirrored MC results distinct."""
+    source_root = cfg.parent_directory if cfg.parent_source == "directory" else cfg.outdir
+    assert source_root is not None
+    selectors = section.get("parent_include") or []
+    if not isinstance(selectors, list) or any(not isinstance(x, str) for x in selectors):
+        raise ValueError("[vacancies].parent_include must be a list of strings")
+    picked = str(section.get("parent_pick", "all")).strip().lower()
+    if picked not in {"all", "lowest_energy"}:
+        raise ValueError("[vacancies].parent_pick must be 'all' or 'lowest_energy'")
+
+    parents = [
+        p for p in _base.discover_selected_parents(source_root)
+        if _parent_included(p, selectors)
+    ]
+    if not parents:
+        raise FileNotFoundError(
+            "No original relaxed parents matched [vacancies].parent_include under "
+            f"{source_root}"
+        )
+    if picked == "lowest_energy":
+        lowest: dict[str, tuple[float, dict[str, Any]]] = {}
+        for parent in parents:
+            source_meta = Path(parent["candidate_dir"]) / "02_relax" / "meta.json"
+            meta = _base._load_json(source_meta)
+            energy = meta.get("energy_relaxed_eV", meta.get("energy_relaxed_total_eV"))
+            try:
+                energy_value = float(energy)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Missing relaxed parent energy for lowest-energy selection: {source_meta}"
+                ) from exc
+            if not math.isfinite(energy_value):
+                raise ValueError(f"Non-finite relaxed parent energy: {source_meta}")
+            comp = str(parent["composition"])
+            if comp not in lowest or (energy_value, str(parent["candidate"])) < (
+                lowest[comp][0],
+                str(lowest[comp][1]["candidate"]),
+            ):
+                lowest[comp] = (energy_value, parent)
+        parents = [lowest[key][1] for key in sorted(lowest)]
+
+    configured_output = str(section.get("output_directory", "")).strip()
+    if configured_output:
+        output_root = Path(configured_output).expanduser()
+        if not output_root.is_absolute():
+            output_root = config_root / output_root
+    else:
+        output_root = source_root
+    output_root = output_root.resolve()
+
+    final_parents: list[dict[str, Any]] = []
+    for source_parent in parents:
+        parent = dict(source_parent)
+        parent["source_candidate_dir"] = parent["candidate_dir"]
+        parent["candidate_dir"] = output_root / str(parent["parent_id"])
+        archive = Path(parent["candidate_dir"]) / _base.VACANCY_STAGE_DIR
+        if not (archive / "mc_search_meta.json").is_file():
+            raise FileNotFoundError(
+                f"Missing GRACE checkpoint for {parent['parent_id']}: {archive}. "
+                "Verify [vacancies].output_directory and parent selection; "
+                "do not rerun the expensive MC search."
+            )
+        final_parents.append(parent)
+    return final_parents
+
+
+def _relocated_legacy_fingerprint(
+    parent: dict[str, Any],
+    cfg: _base.VacancyConfig,
+    mc_cfg: MonteCarloSearchCalculatorConfig,
+    explicit_counts: tuple[int, ...] | None,
+    config_root: Path,
+    counts: list[int],
+) -> str | None:
+    """Reproduce the old absolute-path fingerprint without changing the archive.
+
+    The archived source_parent_path supplies the original parent directory;
+    the original [structure].outdir is inferred from the unchanged relative
+    config value. Actual file hashes are read from the transferred parents.
+    """
+    first_selection: Path | None = None
+    archive = Path(parent["candidate_dir"]) / _base.VACANCY_STAGE_DIR
+    for count in counts:
+        selection = archive / f"V_{cfg.vacancy_species}_{count:02d}" / "selected_candidates.txt"
+        if selection.is_file():
+            candidate_ids = [x.strip() for x in selection.read_text().splitlines() if x.strip()]
+            if candidate_ids:
+                first_selection = selection.parent / candidate_ids[0] / "00_generate" / "meta.json"
+                break
+    if first_selection is None:
+        return None
+    generation = _base._load_json(first_selection)
+    recorded_path = str(generation.get("source_parent_path", "")).strip()
+    if not recorded_path:
+        return None
+    old_relaxed = Path(recorded_path)
+    if not old_relaxed.is_absolute():
+        return None
+    expected_suffix = Path(str(parent["parent_id"])) / "02_relax" / "POSCAR"
+    if tuple(old_relaxed.parts[-len(expected_suffix.parts):]) != expected_suffix.parts:
+        raise ValueError(
+            f"Archived source_parent_path does not match parent ID: {recorded_path}"
+        )
+
+    old_parent_root = old_relaxed.parents[3]
+    try:
+        relative_outdir = cfg.outdir.relative_to(config_root.resolve())
+    except ValueError:
+        return None
+    old_config_root = old_parent_root.parent
+    old_cfg = replace(
+        cfg,
+        parent_directory=old_parent_root if cfg.parent_source == "directory" else None,
+        outdir=old_config_root / relative_outdir,
+    )
+    old_scan = old_relaxed.parents[1] / "01_scan" / "POSCAR"
+    return _search_fingerprint(
+        old_cfg,
+        mc_cfg,
+        explicit_counts,
+        Path(parent["symmetry_path"]),
+        Path(parent["relaxed_path"]),
+        source_identity_paths=(old_scan, old_relaxed),
+    )
+
+
+def _verify_selected_archive(
+    parent: dict[str, Any],
+    cfg: _base.VacancyConfig,
+    counts: list[int],
+    fingerprint: str,
+) -> None:
+    """Preflight all MACE inputs before any expensive calculator is loaded."""
+    archive = Path(parent["candidate_dir"]) / _base.VACANCY_STAGE_DIR
+    for count in counts:
+        selection = archive / f"V_{cfg.vacancy_species}_{count:02d}" / "selected_candidates.txt"
+        if not selection.is_file():
+            raise FileNotFoundError(f"Missing completed GRACE selection: {selection}")
+        for candidate in (line.strip() for line in selection.read_text().splitlines()):
+            if not candidate:
+                continue
+            meta_path = selection.parent / candidate / "00_generate" / "meta.json"
+            poscar = meta_path.with_name("POSCAR")
+            metadata = _base._load_json(meta_path)
+            if (
+                metadata.get("parent_id") != parent["parent_id"]
+                or metadata.get("search_fingerprint") != fingerprint
+                or int(metadata.get("n_vacancies", -1)) != count
+                or not poscar.is_file()
+            ):
+                raise ValueError(
+                    f"Inconsistent or incomplete GRACE candidate {candidate}: {meta_path}"
+                )
+
+
 def _load_search_context(
     parent: dict[str, Path | str],
     cfg: _base.VacancyConfig,
     mc_cfg: MonteCarloSearchCalculatorConfig,
     explicit_counts: tuple[int, ...] | None,
+    *,
+    config_root: Path,
 ) -> tuple[Structure, str, list[int], dict[str, Any], dict[str, int]]:
     _, relaxed_parent, _ = _expanded_parent(parent, cfg)
     composition_fields, dopant_counts = _composition_fields(parent, relaxed_parent, cfg)
@@ -665,12 +867,19 @@ def _load_search_context(
             f"MC search is not complete for {parent['parent_id']}; "
             "run dopingflow vacancies-mc-search first"
         )
-    if search_meta.get("search_fingerprint") != search_fp:
+    if search_meta.get("parent_id") != parent["parent_id"]:
+        raise ValueError(f"GRACE checkpoint parent mismatch for {parent['parent_id']}")
+    if search_meta.get("mc_search_calculator") != asdict(mc_cfg):
         raise ValueError(
-            f"MC search fingerprint mismatch for {parent['parent_id']}; "
-            "the search settings or parent structure changed. Rerun "
-            "dopingflow vacancies-mc-search."
+            f"GRACE model/settings mismatch for {parent['parent_id']}; "
+            "restore the original mc_* values before finalization."
         )
+    if search_meta.get("supercell") != list(cfg.supercell):
+        raise ValueError(f"GRACE supercell mismatch for {parent['parent_id']}")
+    if search_meta.get("explicit_vacancy_counts") != (
+        list(explicit_counts) if explicit_counts is not None else None
+    ):
+        raise ValueError(f"GRACE explicit vacancy counts differ for {parent['parent_id']}")
     counts = [
         int(value)
         for value in search_meta.get("vacancy_range", {}).get("explicit_counts", [])
@@ -678,6 +887,26 @@ def _load_search_context(
     if not counts:
         count_data = _base._load_json(vacancy_root / "vacancy_counts.json")
         counts = [int(item["n_vacancies"]) for item in count_data.get("counts", [])]
+
+    saved_fingerprint = search_meta.get("search_fingerprint")
+    if saved_fingerprint != search_fp:
+        reconstructed = _relocated_legacy_fingerprint(
+            parent, cfg, mc_cfg, explicit_counts, config_root, counts
+        )
+        if reconstructed != saved_fingerprint:
+            raise ValueError(
+                f"Cannot verify relocated GRACE search for {parent['parent_id']}: "
+                "the recorded fingerprint does not match the transferred structures "
+                "and search settings. The archive has not been modified. Verify the "
+                "original input.toml and source POSCARs; do not rerun MC automatically."
+            )
+        search_fp = saved_fingerprint
+        log.info(
+            "VERIFIED relocated GRACE checkpoint %s (original path fingerprint retained)",
+            parent["parent_id"],
+        )
+
+    _verify_selected_archive(parent, cfg, counts, search_fp)
     return relaxed_parent, search_fp, counts, composition_fields, dopant_counts
 
 
@@ -687,6 +916,8 @@ def _run_finalize_parent(
     mc_cfg: MonteCarloSearchCalculatorConfig,
     explicit_counts: tuple[int, ...] | None,
     calculator: Any,
+    *,
+    config_root: Path,
 ) -> list[dict[str, Any]]:
     parent_id = str(parent["parent_id"])
     (
@@ -695,7 +926,9 @@ def _run_finalize_parent(
         counts,
         composition_fields,
         dopant_counts,
-    ) = _load_search_context(parent, cfg, mc_cfg, explicit_counts)
+    ) = _load_search_context(
+        parent, cfg, mc_cfg, explicit_counts, config_root=config_root
+    )
     final_fp = _final_fingerprint(cfg, search_fp)
     vacancy_root = Path(parent["candidate_dir"]) / _base.VACANCY_STAGE_DIR
 
@@ -948,6 +1181,13 @@ def run_vacancy_finalize(
     explicit_counts = parse_explicit_vacancy_counts(section)
     mc_cfg = parse_monte_carlo_search_calculator(section, cfg)
 
+    parents = _discover_finalize_parents(section, root, cfg)
+
+    # No GPU/model allocation until every selected archive passes validation.
+    for parent in parents:
+        _load_search_context(parent, cfg, mc_cfg, explicit_counts, config_root=root)
+    log.info("Validated %d completed GRACE checkpoints for MACE finalization", len(parents))
+
     check_backend_dependency(cfg.backend, stage_name="Vacancies final calculator")
     prepare_backend_runtime(
         backend=cfg.backend,
@@ -960,9 +1200,14 @@ def run_vacancy_finalize(
         backend=cfg.backend, model=cfg.model, task=cfg.task, device=cfg.device
     )
 
-    parent_root = cfg.parent_directory if cfg.parent_source == "directory" else cfg.outdir
+    parent_root = (
+        (Path(section["output_directory"]).expanduser()
+         if Path(section["output_directory"]).is_absolute()
+         else root / str(section["output_directory"])).resolve()
+        if str(section.get("output_directory", "")).strip()
+        else (cfg.parent_directory if cfg.parent_source == "directory" else cfg.outdir)
+    )
     assert parent_root is not None
-    parents = _base.discover_selected_parents(parent_root)
     all_rows: list[dict[str, Any]] = []
     for index, parent in enumerate(parents, start=1):
         log.info(
@@ -972,7 +1217,9 @@ def run_vacancy_finalize(
             parent["parent_id"],
         )
         all_rows.extend(
-            _run_finalize_parent(parent, cfg, mc_cfg, explicit_counts, calculator)
+            _run_finalize_parent(
+                parent, cfg, mc_cfg, explicit_counts, calculator, config_root=root
+            )
         )
 
     csv_path = parent_root / "vacancies_database.csv"
