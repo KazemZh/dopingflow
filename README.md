@@ -303,6 +303,43 @@ dopingflow vacancies-finalize -c input.toml --verbose
 This command checks/builds only the ordinary final vacancy calculator. It loads
 the persisted Stage-1 selection and continues from the same search tree.
 
+**Moved GRACE search to a new machine (for example Kailash → CLAIX)?**
+
+Keep the original relaxed parent structures and the separate GRACE output
+archive in their existing relative layout. In `[vacancies]`, set
+`parent_directory` to the transferred original parents and
+`output_directory` to the transferred GRACE archive, e.g.:
+
+```toml
+parent_source = "directory"
+parent_directory = "Ti-Mn-Nb-Ta-Ce-Ru-In-Sn-Sb-complete"
+output_directory = "vacancy-MC-2x2x2"
+parent_pick = "lowest_energy"
+backend = "mace"
+model = "mh-1"
+task = "matpes_r2scan"
+device = "cuda"
+```
+
+Before requesting a GPU job, run this **read-only, no-model** preflight on
+the login node from the directory containing `input.toml`:
+
+```bash
+dopingflow vacancies-finalize -c input.toml --check-only --verbose
+```
+
+The preflight checks each selected candidate, original parent files,
+GRACE model identity, vacancy counts and supercell. When a checkpoint
+was moved, DopingFlow tries to reproduce its original absolute-path
+fingerprint from the recorded source-parent path and the bytes of the
+transferred structures. It does **not** rewrite or bypass the saved
+fingerprint. If verification fails, it stops with an explanation;
+do not rerun the Monte Carlo search solely because the machine changed.
+
+Once preflight passes, request the appropriate GPU allocation and run
+`dopingflow vacancies-finalize -c input.toml --verbose`.
+
+
 ### Parent selection and dedicated output tree
 
 The staged workflow supports composition filtering, one-parent-per-composition
