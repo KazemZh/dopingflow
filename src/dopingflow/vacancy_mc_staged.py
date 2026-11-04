@@ -1168,6 +1168,29 @@ def _run_finalize_parent(
     return rows
 
 
+def validate_vacancy_finalize(
+    raw: dict[str, Any], root: Path
+) -> list[str]:
+    """Validate all archived GRACE selections without building a GPU calculator."""
+    cfg = _base.parse_vacancy_config(raw, root)
+    if cfg.search_method != "monte-carlo":
+        raise ValueError(
+            "vacancies-finalize requires [vacancies].search_method='monte-carlo'"
+        )
+    section = raw.get("vacancies") or {}
+    explicit_counts = parse_explicit_vacancy_counts(section)
+    mc_cfg = parse_monte_carlo_search_calculator(section, cfg)
+    parents = _discover_finalize_parents(section, root, cfg)
+    for parent in parents:
+        _load_search_context(parent, cfg, mc_cfg, explicit_counts, config_root=root)
+    return [str(parent["parent_id"]) for parent in parents]
+
+
+def validate_vacancy_finalize_from_toml(config_path: Path) -> list[str]:
+    raw = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    return validate_vacancy_finalize(raw, config_path.resolve().parent)
+
+
 def run_vacancy_finalize(
     raw: dict[str, Any], root: Path, *, config_path: Path | None = None
 ) -> Path:
@@ -1268,4 +1291,6 @@ __all__ = [
     "run_vacancy_mc_search_from_toml",
     "run_vacancy_finalize",
     "run_vacancy_finalize_from_toml",
+    "validate_vacancy_finalize",
+    "validate_vacancy_finalize_from_toml",
 ]
