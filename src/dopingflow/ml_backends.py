@@ -314,7 +314,8 @@ def prepare_backend_runtime(
 
     if backend == "mace":
         os.environ["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = "1"
-        if device == "cuda":
+        if device == "cuda" and "CUDA_VISIBLE_DEVICES" not in os.environ:
+            # Preserve the scheduler-assigned GPU set on shared Slurm nodes.
             os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
         return
 
