@@ -35,6 +35,7 @@ from dopingflow.vacancies import run_vacancies_from_toml
 from dopingflow.vacancy_mc_staged import (
     run_vacancy_finalize_from_toml,
     run_vacancy_mc_search_from_toml,
+    validate_vacancy_finalize_from_toml,
 )
 
 app = typer.Typer(help="dopingflow: ML doping workflow pipeline")
@@ -197,9 +198,20 @@ def vacancies_mc_search_cmd(
 def vacancies_finalize_cmd(
     config: Path = typer.Option(Path("input.toml"), "-c", "--config", exists=True),
     verbose: bool = typer.Option(False, "--verbose", help="More detailed logs"),
+    check_only: bool = typer.Option(
+        False,
+        "--check-only",
+        help="Validate the GRACE checkpoint handoff without loading MACE or a GPU",
+    ),
 ) -> None:
-    """Finalize a completed MC search with the ordinary vacancy calculator."""
+    """Validate or finalize completed GRACE MC searches with the final calculator."""
     _init(config, verbose)
+    if check_only:
+        parents = validate_vacancy_finalize_from_toml(config)
+        typer.echo(f"Validated {len(parents)} GRACE parent checkpoints; no MLFF calculations run.")
+        for parent in parents:
+            typer.echo(f"  OK {parent}")
+        return
     out_path = run_vacancy_finalize_from_toml(config)
     typer.echo(f"\nWrote finalized vacancy database CSV: {out_path}")
 
