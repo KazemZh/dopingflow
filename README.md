@@ -330,11 +330,34 @@ dopingflow vacancies-finalize -c input.toml --check-only --verbose
 
 The preflight checks each selected candidate, original parent files,
 GRACE model identity, vacancy counts and supercell. When a checkpoint
-was moved, DopingFlow tries to reproduce its original absolute-path
+was moved, DopingFlow first tries to reproduce its original absolute-path
 fingerprint from the recorded source-parent path and the bytes of the
-transferred structures. It does **not** rewrite or bypass the saved
-fingerprint. If verification fails, it stops with an explanation;
-do not rerun the Monte Carlo search solely because the machine changed.
+transferred structures. It never modifies the saved GRACE fingerprint.
+
+**Legacy historical configuration not recoverable?** An archive generated
+with a different `input.toml` may not match the historical fingerprint even
+on the original machine. Only after investigating this discrepancy, opt in to
+the explicitly **weaker independent archive consistency audit**:
+
+```toml
+[vacancies]
+allow_legacy_archive_fingerprint_mismatch = true
+```
+
+```bash
+dopingflow vacancies-finalize -c input.toml --check-only --verbose
+```
+
+This opt-in checks the archived parent ID, MC model metadata, vacancy
+counts, supercell, selection lists, all selected candidate and GRACE scan
+metadata, finite recorded GRACE energies, original source path suffixes,
+and first/last selected structure compositions and lattices for each vacancy
+count. The check **does not recover the exact historical search parameters**,
+nor does it certify every archived POSCAR or reproduce the original Monte
+Carlo trajectory. It is intended for independently re-evaluating saved
+structures with the final MACE backend when preserving the full old search
+configuration is impossible. Keep the original archives backed up and
+record the limitation in the resulting analysis.
 
 Once preflight passes, request the appropriate GPU allocation and run
 `dopingflow vacancies-finalize -c input.toml --verbose`.
