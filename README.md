@@ -32,7 +32,7 @@ The full documentation is available in multiple formats:
 
 ``` bash
 git clone https://github.com/KazemZh/dopingflow.git
-cd ml-doping-workflow
+cd doping-workflow
 ```
 
 ### Create environment
