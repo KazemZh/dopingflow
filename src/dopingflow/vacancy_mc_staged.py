@@ -688,7 +688,7 @@ def _parent_included(parent: dict[str, Any], selectors: list[str]) -> bool:
 def _discover_finalize_parents(
     section: dict[str, Any], config_root: Path, cfg: _base.VacancyConfig
 ) -> list[dict[str, Any]]:
-    """Keep the original parent structures and mirrored MC results distinct."""
+    """Locate completed GRACE archives, then map each to its original parent."""
     source_root = cfg.parent_directory if cfg.parent_source == "directory" else cfg.outdir
     assert source_root is not None
     selectors = section.get("parent_include") or []
@@ -698,19 +698,53 @@ def _discover_finalize_parents(
     if picked not in {"all", "lowest_energy"}:
         raise ValueError("[vacancies].parent_pick must be 'all' or 'lowest_energy'")
 
-    parents = [
-        p for p in _base.discover_selected_parents(source_root)
-        if _parent_included(p, selectors)
-    ]
+    configured_output = str(section.get("output_directory", "")).strip()
+    if configured_output:
+        output_root = Path(configured_output).expanduser()
+        if not output_root.is_absolute():
+            output_root = config_root / output_root
+    else:
+        output_root = source_root
+    output_root = output_root.resolve()
+    if not output_root.is_dir():
+        raise FileNotFoundError(f"GRACE output directory does not exist: {output_root}")
+
+    parents: list[dict[str, Any]] = []
+    for meta_path in sorted(
+        output_root.glob("*/candidate_*/05_vacancies/mc_search_meta.json")
+    ):
+        candidate_dir = meta_path.parent.parent
+        composition = candidate_dir.parent.name
+        candidate = candidate_dir.name
+        parent = {
+            "parent_id": f"{composition}/{candidate}",
+            "composition": composition,
+            "candidate": candidate,
+            "candidate_dir": candidate_dir,
+            "source_candidate_dir": source_root / composition / candidate,
+            "symmetry_path": source_root / composition / candidate / "01_scan" / "POSCAR",
+            "relaxed_path": source_root / composition / candidate / "02_relax" / "POSCAR",
+        }
+        if not _parent_included(parent, selectors):
+            continue
+        for key in ("symmetry_path", "relaxed_path"):
+            if not Path(parent[key]).is_file():
+                raise FileNotFoundError(
+                    f"GRACE checkpoint {parent['parent_id']} lacks transferred "
+                    f"original parent file: {parent[key]}"
+                )
+        parents.append(parent)
+
     if not parents:
         raise FileNotFoundError(
-            "No original relaxed parents matched [vacancies].parent_include under "
-            f"{source_root}"
+            f"No matching completed GRACE archives in {output_root}. "
+            "Check [vacancies].parent_include and output_directory."
         )
+
     if picked == "lowest_energy":
         lowest: dict[str, tuple[float, dict[str, Any]]] = {}
         for parent in parents:
-            source_meta = Path(parent["candidate_dir"]) / "02_relax" / "meta.json"
+            source_meta = Path(parent["source_candidate_dir"]) / "02_relax" / "meta.json"
             meta = _base._load_json(source_meta)
             energy = meta.get("energy_relaxed_eV", meta.get("energy_relaxed_total_eV"))
             try:
@@ -728,30 +762,7 @@ def _discover_finalize_parents(
             ):
                 lowest[comp] = (energy_value, parent)
         parents = [lowest[key][1] for key in sorted(lowest)]
-
-    configured_output = str(section.get("output_directory", "")).strip()
-    if configured_output:
-        output_root = Path(configured_output).expanduser()
-        if not output_root.is_absolute():
-            output_root = config_root / output_root
-    else:
-        output_root = source_root
-    output_root = output_root.resolve()
-
-    final_parents: list[dict[str, Any]] = []
-    for source_parent in parents:
-        parent = dict(source_parent)
-        parent["source_candidate_dir"] = parent["candidate_dir"]
-        parent["candidate_dir"] = output_root / str(parent["parent_id"])
-        archive = Path(parent["candidate_dir"]) / _base.VACANCY_STAGE_DIR
-        if not (archive / "mc_search_meta.json").is_file():
-            raise FileNotFoundError(
-                f"Missing GRACE checkpoint for {parent['parent_id']}: {archive}. "
-                "Verify [vacancies].output_directory and parent selection; "
-                "do not rerun the expensive MC search."
-            )
-        final_parents.append(parent)
-    return final_parents
+    return parents
 
 
 def _relocated_legacy_fingerprint(
