@@ -16,6 +16,7 @@ from dopingflow.vacancy_mc_staged import (
     _relocated_legacy_fingerprint,
     _search_fingerprint,
     _verify_selected_archive,
+    _load_search_context,
 )
 
 
@@ -178,4 +179,100 @@ def test_preflight_rejects_inconsistent_archived_candidates(tmp_path):
             cfg,
             [1],
             "expected fingerprint",
+        )
+
+
+def test_legacy_checkpoint_requires_opt_in_and_still_audits_contents(tmp_path, monkeypatch):
+    """Unknown historical search hash needs opt-in; damaged raw GRACE data still fails."""
+    from dataclasses import asdict
+    import numpy as np
+    from pymatgen.core import Lattice, Structure
+    from pymatgen.io.vasp import Poscar
+    import dopingflow.vacancy_mc_staged as module
+
+    cfg = _cfg(tmp_path)
+    mc = FakeMcCfg()
+    parent_id = "Sb5_Ti2p5/candidate_003"
+    archive = tmp_path / "vacancy-MC-2x2x2" / parent_id / "05_vacancies"
+    selection = archive / "V_O_01" / "selected_candidates.txt"
+    selection.parent.mkdir(parents=True)
+    selection.write_text("mc_000001\n")
+    generated = selection.parent / "mc_000001" / "00_generate"
+    generated.mkdir(parents=True)
+    scan_dir = generated.parent / "01_scan"
+    scan_dir.mkdir(parents=True)
+
+    parent_structure = Structure(
+        Lattice.cubic(12), ["Sn", "O", "O"],
+        [[0, 0, 0], [0.25, 0.25, 0.25], [0.75, 0.75, 0.75]],
+    )
+    defective = parent_structure.copy()
+    defective.remove_sites([1])
+    Poscar(defective).write_file(generated / "POSCAR")
+    saved_fingerprint = "legacy-search-fingerprint-that-does-not-recompute"
+    old_parent_path = (
+        "/home/shiv/nfs/kaz/KERAMHyK/SnO2/Ti-complete/"
+        "Sb5_Ti2p5/candidate_003/02_relax/POSCAR"
+    )
+    (generated / "meta.json").write_text(json.dumps({
+        "configuration_id": "mc_000001",
+        "parent_id": parent_id,
+        "search_fingerprint": saved_fingerprint,
+        "n_vacancies": 1,
+        "supercell": list(cfg.supercell),
+        "source_parent_path": old_parent_path,
+    }))
+    (scan_dir / "meta.json").write_text(json.dumps({
+        "search_fingerprint": saved_fingerprint,
+        "backend": "grace",
+        "model": mc.model,
+        "task": mc.task,
+        "energy_sp_total_eV": -23.5,
+    }))
+    (archive / "mc_search_meta.json").write_text(json.dumps({
+        "status": "complete",
+        "parent_id": parent_id,
+        "search_fingerprint": saved_fingerprint,
+        "mc_search_calculator": asdict(mc),
+        "supercell": list(cfg.supercell),
+        "explicit_vacancy_counts": [1],
+        "vacancy_range": {"explicit_counts": [1]},
+    }))
+    source = tmp_path / "Ti-complete" / parent_id
+    for relative in ("01_scan/POSCAR", "02_relax/POSCAR"):
+        target = source / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        Poscar(parent_structure).write_file(target)
+    parent = {
+        "parent_id": parent_id,
+        "candidate_dir": archive.parent,
+        "symmetry_path": source / "01_scan/POSCAR",
+        "relaxed_path": source / "02_relax/POSCAR",
+    }
+    monkeypatch.setattr(
+        module, "_expanded_parent", lambda *_: (parent_structure, parent_structure, {})
+    )
+    monkeypatch.setattr(module, "_composition_fields", lambda *_: ({}, {}))
+    monkeypatch.setattr(module, "_search_fingerprint", lambda *_args, **_kwargs: "different")
+    monkeypatch.setattr(module, "_relocated_legacy_fingerprint", lambda *_args: None)
+
+    with pytest.raises(ValueError, match="allow_legacy_archive_fingerprint_mismatch"):
+        _load_search_context(
+            parent, cfg, mc, (1,), config_root=tmp_path
+        )
+    result = _load_search_context(
+        parent, cfg, mc, (1,), config_root=tmp_path,
+        allow_legacy_fingerprint_mismatch=True,
+    )
+    assert result[1] == saved_fingerprint
+    assert parent["legacy_fingerprint_status"] == "audited_not_reproduced"
+
+    # A valid-looking archive with an incorrect GRACE scan energy is rejected.
+    scan_metadata = json.loads((scan_dir / "meta.json").read_text())
+    scan_metadata["energy_sp_total_eV"] = float("nan")
+    (scan_dir / "meta.json").write_text(json.dumps(scan_metadata))
+    with pytest.raises(ValueError, match="Inconsistent"):
+        _load_search_context(
+            parent, cfg, mc, (1,), config_root=tmp_path,
+            allow_legacy_fingerprint_mismatch=True,
         )
