@@ -276,3 +276,33 @@ def test_legacy_checkpoint_requires_opt_in_and_still_audits_contents(tmp_path, m
             parent, cfg, mc, (1,), config_root=tmp_path,
             allow_legacy_fingerprint_mismatch=True,
         )
+
+
+def test_finalize_never_redirects_parent_source_to_archive(monkeypatch, tmp_path):
+    """Archived MACE handoff owns its own directory mapping, unlike MC search."""
+    from dopingflow import vacancies as base
+    from dopingflow import vacancy_parent_selection_extensions as extension
+
+    actual_parser = base.parse_vacancy_config
+    seen = []
+
+    def fake_staged_finalizer(raw, root, *, config_path=None):
+        seen.append((raw, root, config_path))
+        # The old search-stage wrapper replaced this parser, causing MACE
+        # to discover original source POSCARs inside output_directory.
+        assert base.parse_vacancy_config is actual_parser
+        return tmp_path / "vacancy-MC-2x2x2" / "vacancies_database.csv"
+
+    monkeypatch.setattr(extension, "_ORIGINAL_FINALIZE", fake_staged_finalizer)
+    config = {
+        "vacancies": {
+            "output_directory": "vacancy-MC-2x2x2",
+            "parent_directory": "Ti-Mn-Nb-Ta-Ce-Ru-In-Sn-Sb-complete",
+            "parent_pick": "lowest_energy",
+            "parent_include": ["Ce_2.5Sb_2.5"],
+        }
+    }
+    expected = tmp_path / "vacancy-MC-2x2x2" / "vacancies_database.csv"
+    assert extension.run_vacancy_finalize(config, tmp_path) == expected
+    assert seen == [(config, tmp_path, None)]
+    assert base.parse_vacancy_config is actual_parser
