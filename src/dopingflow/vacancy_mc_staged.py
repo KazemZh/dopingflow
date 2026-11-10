@@ -1037,8 +1037,16 @@ def _run_finalize_parent(
 
     rows: list[dict[str, Any]] = []
     if cfg.include_parent_reference:
+        # The archive lives under output_directory, but the original
+        # parent relaxation metadata belongs to parent_directory.
+        # _parent_reference reads candidate_dir/02_relax/meta.json while
+        # writing its outputs beneath vacancy_root.
+        source_parent = dict(parent)
+        source_parent["candidate_dir"] = Path(
+            parent.get("source_candidate_dir", parent["candidate_dir"])
+        )
         parent_ref = _base._parent_reference(
-            parent, relaxed_parent, vacancy_root, cfg, calculator, final_fp
+            source_parent, relaxed_parent, vacancy_root, cfg, calculator, final_fp
         )
         parent_row = {
             "parent_id": parent_id,
