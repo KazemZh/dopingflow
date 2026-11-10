@@ -336,9 +336,15 @@ def run_vacancy_mc_search(raw, root, *, config_path=None):
 
 
 def run_vacancy_finalize(raw, root, *, config_path=None):
-    return _run_with_parent_filter(
-        _ORIGINAL_FINALIZE, raw, root, config_path=config_path
-    )
+    """Finalize archived GRACE results without applying search-stage redirects.
+
+    The staged finalizer already maps each archive candidate_dir into
+    [vacancies].output_directory and resolves symmetry_path/relaxed_path
+    from the *source* parent_directory. The old search-stage wrapper
+    replaces parent_directory with the output directory and makes the
+    finalizer look for source POSCARs inside the GRACE archive instead.
+    """
+    return _ORIGINAL_FINALIZE(raw, root, config_path=config_path)
 
 
 def install_extensions() -> None:
