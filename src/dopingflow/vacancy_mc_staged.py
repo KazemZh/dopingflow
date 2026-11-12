@@ -1271,6 +1271,25 @@ def _run_finalize_parent(
     return rows
 
 
+def _validate_finalize_metadata_jsonable(
+    cfg: _base.VacancyConfig, mc_cfg: MonteCarloSearchCalculatorConfig
+) -> None:
+    """Catch invalid finalization metadata *before* expensive GPU evaluations."""
+    try:
+        json.dumps(
+            {
+                "mc_search_calculator": asdict(mc_cfg),
+                "resolved_config": _base._jsonable_config(cfg),
+            },
+            sort_keys=True,
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "MACE finalization metadata cannot be serialized to JSON. "
+            "Fix this before requesting a GPU allocation."
+        ) from exc
+
+
 def validate_vacancy_finalize(
     raw: dict[str, Any], root: Path
 ) -> list[str]:
@@ -1283,6 +1302,7 @@ def validate_vacancy_finalize(
     section = raw.get("vacancies") or {}
     explicit_counts = parse_explicit_vacancy_counts(section)
     mc_cfg = parse_monte_carlo_search_calculator(section, cfg)
+    _validate_finalize_metadata_jsonable(cfg, mc_cfg)
     parents = _discover_finalize_parents(section, root, cfg)
     allow_legacy = section.get("allow_legacy_archive_fingerprint_mismatch", False)
     if not isinstance(allow_legacy, bool):
@@ -1319,6 +1339,7 @@ def run_vacancy_finalize(
     section = raw.get("vacancies") or {}
     explicit_counts = parse_explicit_vacancy_counts(section)
     mc_cfg = parse_monte_carlo_search_calculator(section, cfg)
+    _validate_finalize_metadata_jsonable(cfg, mc_cfg)
 
     parents = _discover_finalize_parents(section, root, cfg)
     allow_legacy = section.get("allow_legacy_archive_fingerprint_mismatch", False)
