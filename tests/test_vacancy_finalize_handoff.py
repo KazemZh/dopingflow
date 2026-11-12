@@ -354,3 +354,30 @@ def test_finalization_metadata_serializes_optional_none_paths(tmp_path):
     assert data["analysis"]["oxygen_calibration_experimental_data"] is None
     assert data["analysis"]["oxygen_calibration_dataset_cache_dir"] is None
     assert json.loads(json.dumps(data)) == data
+
+
+def test_mace_finalization_metadata_preflight_catches_invalid_paths(tmp_path, monkeypatch):
+    """Preflight and actual output use the same JSON compatibility requirement."""
+    from dopingflow import vacancies as base
+    from dopingflow import vacancy_mc_staged as staged
+
+    cfg = replace(
+        _cfg(tmp_path),
+        analysis=FakeAnalysis(
+            tmp_path / "O2-refs.json",
+            tmp_path / "O2.POSCAR",
+            tmp_path / "fit-refs.json",
+            tmp_path / "cache",
+        ),
+    )
+    staged._validate_finalize_metadata_jsonable(cfg, FakeMcCfg())
+    original = base._jsonable_config
+
+    def path_leak(config):
+        result = original(config)
+        result["analysis"]["oxygen_calibration_dataset_cache_dir"] = tmp_path / "bad"
+        return result
+
+    monkeypatch.setattr(base, "_jsonable_config", path_leak)
+    with pytest.raises(ValueError, match="metadata cannot be serialized"):
+        staged._validate_finalize_metadata_jsonable(cfg, FakeMcCfg())
