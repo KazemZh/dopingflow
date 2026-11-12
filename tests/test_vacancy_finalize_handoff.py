@@ -24,6 +24,8 @@ from dopingflow.vacancy_mc_staged import (
 class FakeAnalysis:
     oxygen_reference_file: Path
     oxygen_reference_structure: Path
+    oxygen_calibration_experimental_data: Path | None = None
+    oxygen_calibration_dataset_cache_dir: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -306,3 +308,49 @@ def test_finalize_never_redirects_parent_source_to_archive(monkeypatch, tmp_path
     assert extension.run_vacancy_finalize(config, tmp_path) == expected
     assert seen == [(config, tmp_path, None)]
     assert base.parse_vacancy_config is actual_parser
+
+
+def test_finalization_metadata_serializes_enhanced_analysis_paths(tmp_path):
+    """Production regression: optional calibration paths must not crash meta.json."""
+    from dopingflow import vacancies as base
+
+    cfg = _cfg(tmp_path)
+    cfg = replace(
+        cfg,
+        analysis=replace(
+            cfg.analysis,
+            oxygen_calibration_experimental_data=tmp_path / "refs" / "oxides.json",
+            oxygen_calibration_dataset_cache_dir=tmp_path / "cached-datasets",
+        ),
+    )
+    resolved_config = base._jsonable_config(cfg)
+    analysis = resolved_config["analysis"]
+    assert analysis["oxygen_reference_file"] == str(cfg.analysis.oxygen_reference_file)
+    assert analysis["oxygen_reference_structure"] == str(cfg.analysis.oxygen_reference_structure)
+    assert analysis["oxygen_calibration_experimental_data"] == str(
+        cfg.analysis.oxygen_calibration_experimental_data
+    )
+    assert analysis["oxygen_calibration_dataset_cache_dir"] == str(
+        cfg.analysis.oxygen_calibration_dataset_cache_dir
+    )
+
+    final_meta = tmp_path / "finalize-meta.json"
+    base._write_json(final_meta, {
+        "status": "complete",
+        "stage": "finalize",
+        "resolved_config": resolved_config,
+    })
+    saved = json.loads(final_meta.read_text(encoding="utf-8"))
+    assert saved["status"] == "complete"
+    assert saved["resolved_config"]["analysis"] == analysis
+
+
+def test_finalization_metadata_serializes_optional_none_paths(tmp_path):
+    """Unconfigured calibration paths remain JSON null, not string 'None'."""
+    from dopingflow import vacancies as base
+
+    cfg = _cfg(tmp_path)
+    data = base._jsonable_config(cfg)
+    assert data["analysis"]["oxygen_calibration_experimental_data"] is None
+    assert data["analysis"]["oxygen_calibration_dataset_cache_dir"] is None
+    assert json.loads(json.dumps(data)) == data
