@@ -716,10 +716,11 @@ def _jsonable_config(cfg: VacancyConfig) -> dict[str, Any]:
         str(cfg.parent_directory) if cfg.parent_directory is not None else None
     )
     data["oxidation_states"] = {key: list(value) for key, value in cfg.oxidation_states.items()}
-    data["analysis"]["oxygen_reference_file"] = str(cfg.analysis.oxygen_reference_file)
-    data["analysis"]["oxygen_reference_structure"] = str(
-        cfg.analysis.oxygen_reference_structure
-    )
+    # Enhanced thermodynamics adds optional Path fields such as the
+    # oxygen calibration cache directory. All must be JSON serializable.
+    for key, value in data["analysis"].items():
+        if isinstance(value, Path):
+            data["analysis"][key] = str(value)
     return data
 
 
