@@ -353,7 +353,10 @@ def test_finalization_metadata_serializes_optional_none_paths(tmp_path):
     data = base._jsonable_config(cfg)
     assert data["analysis"]["oxygen_calibration_experimental_data"] is None
     assert data["analysis"]["oxygen_calibration_dataset_cache_dir"] is None
-    assert json.loads(json.dumps(data)) == data
+    # JSON preserves the contents, but converts Python tuples to arrays.
+    restored = json.loads(json.dumps(data))
+    assert restored["analysis"] == data["analysis"]
+    assert restored["supercell"] == list(data["supercell"])
 
 
 def test_mace_finalization_metadata_preflight_catches_invalid_paths(tmp_path, monkeypatch):
