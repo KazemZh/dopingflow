@@ -291,3 +291,42 @@ The stage writes:
 When leaching uses source_mode = "auto", this hand-off table is preferred over
 the older clean-surface tables. Thus dissolution is evaluated from the surface
 states that are actually stable in the chosen electrochemical window.
+
+H and CO coverage on metal facets
+---------------------------------
+
+Start with the complete input in ``examples/surface_pourbaix/pd_h_co.toml``
+and a periodic bulk structure. The surface stage accepts POSCAR or CIF via
+``bulk_structure``, relative to the TOML file. Set ``conventional_millers``
+to interpret the facets in the conventional crystallographic setting even
+when supplying a primitive FCC cell. The two integers in ``inplane_repeat``
+multiply the generated slab vectors before screening and fixing layers.
+
+Run ``dopingflow surface -c input.toml``, then
+``dopingflow surface-pourbaix -c input.toml --dry-run`` to inspect the
+number of exposed atoms and configurations per facet. Remove ``--dry-run``
+to calculate the energies. Open the Surface Pourbaix GUI to plot the
+facet-resolved grids. One monolayer means one adsorbate per eligible exposed
+metal atom. A CO molecule counts once. The search samples atop sites,
+bridges between Voronoi neighbors, and hollows at Voronoi vertices of the
+projected outer layer. CO starts carbon-down. Mixed coverage pairs specify
+[H%, CO%]. The raw and retained configuration caps control sampling cost.
+Increasing them and the lateral cell size tests configurational convergence.
+
+For this ensemble the reaction adds neutral CO from a specified reservoir
+and one proton/electron pair per adsorbed H. With energies in eV,
+
+.. math::
+
+   \Delta G = E_{slab+ads}-E_{slab}
+   -n_{CO}\mu_{CO}-\tfrac12 n_H G_{H_2}
+   + n_H(U_{SHE}+k_BT\ln(10)\,\mathrm{pH}).
+
+The CO chemical potential equals the isolated molecule energy plus
+``co_free_energy_correction_eV`` and :math:`k_BT\ln a_{CO}`.
+For an ideal gas, activity is the partial pressure divided by the standard
+pressure. Set the standard-state corrections consistently with temperature
+and the energy model. The example uses unit activity and zero corrections
+for electronic-energy screening. Adsorbate vibrational and solvation free
+energies, double-layer fields, subsurface hydrogen, and bulk Pd hydride
+phases are outside this surface-state model.

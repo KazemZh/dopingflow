@@ -245,6 +245,38 @@ def analyze_relaxed_surface_state(
             "postprocess_reason": "relaxed structure contains fewer atoms than parent",
         }
 
+    if state["family"] in {"H", "CO", "mixed-H-CO"}:
+        slab = relaxed_structure
+        extra = range(n_parent, len(slab))
+        by_species = {s: [i for i in extra if relaxed_species[i] == s] for s in ("H", "C", "O")}
+        issues = set()
+        for i in by_species["H"] + by_species["C"]:
+            _, distance = _nearest(slab, i, range(n_parent))
+            if distance > cfg["postprocess_surface_attachment_cutoff_A"]:
+                issues.add("detached")
+        for i in by_species["H"]:
+            for j in extra:
+                cutoff = {"H": cfg["postprocess_hh_bond_cutoff_A"], "C": 1.25,
+                          "O": cfg["postprocess_oh_bond_cutoff_A"]}[relaxed_species[j]]
+                if j != i and slab.get_distance(i, j) <= cutoff:
+                    issues.add("reacted")
+        for symbol, partner in (("C", "O"), ("O", "C")):
+            for i in by_species[symbol]:
+                if sum(slab.get_distance(i, j) <= 1.45 for j in by_species[partner]) != 1:
+                    issues.add("fragmented")
+        # Hydrogen can enter Pd. A subsurface H is outside the adsorbed-state ensemble.
+        from dopingflow.surface_pourbaix_sampling import surface_normal
+        normal = surface_normal(parent_structure)
+        for i, sign in zip((i for i in extra if relaxed_species[i] != "O"), state["site_sides"]):
+            layer = [idx for idx, side in zip(state["eligible_adsorbate_site_indices"],
+                     state["eligible_adsorbate_site_sides"]) if side == sign]
+            heights = [slab[j].coords @ normal for j in layer]
+            if heights and sign * (slab[i].coords @ normal - sum(heights)/len(heights)) < -0.25:
+                issues.add("subsurface")
+        return dict(state_status="invalid" if issues else "intact", pourbaix_eligible=not issues,
+                    final_family="invalid" if issues else state["family"], final_state_label="",
+                    postprocess_reason=", ".join(sorted(issues)))
+
     anions = set(cfg.get("anion_species", ["O"]))
     # Surface-Pourbaix chemistry currently treats oxygen explicitly. Other
     # configured anions remain part of the parent slab connectivity.

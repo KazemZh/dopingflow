@@ -33,7 +33,8 @@ def _inplane_unit(structure: Structure, normal: np.ndarray) -> np.ndarray:
 
 
 def _append(structure: Structure, symbol: str, coords: np.ndarray) -> None:
-    structure.append(symbol, np.asarray(coords, dtype=float), coords_are_cartesian=True)
+    props = {"selective_dynamics": [True] * 3} if "selective_dynamics" in structure.site_properties else {}
+    structure.append(symbol, np.asarray(coords, dtype=float), coords_are_cartesian=True, properties=props)
 
 
 def _add_proton(
@@ -364,12 +365,15 @@ def enumerate_surface_states(structure: Structure, cfg: Mapping[str, Any]) -> li
                     structure=candidate,
                     **common,
                 ))
+    if families & {"H", "CO", "mixed-H-CO"}:
+        from dopingflow.surface_pourbaix_metal import metal_states
+        states.extend(metal_states(structure, cation_sites, normal, cfg, common))
     return states
 
 
-def _fingerprint(structure: Structure, calc: Mapping[str, Any], state: Mapping[str, Any]) -> str:
+def _fingerprint(structure: Structure, calc: Mapping[str, Any], state: Mapping[str, Any], fixed: Sequence[int]) -> str:
     payload = dict(
-        schema=1,
+        schema=2, fixed_indices=sorted(int(i) for i in fixed),
         lattice=np.round(structure.lattice.matrix, 10).tolist(),
         species=[site.specie.symbol for site in structure],
         cart_coords=np.round(structure.cart_coords, 10).tolist(),
@@ -388,7 +392,7 @@ def screen_state(
     state_dir.mkdir(parents=True, exist_ok=True)
     initial = state_dir / "POSCAR_initial"
     Poscar(structure).write_file(str(initial))
-    fingerprint = _fingerprint(structure, cfg["screen"], state)
+    fingerprint = _fingerprint(structure, cfg["screen"], state, fixed)
     manifest, result_path = state_dir / "state_manifest.json", state_dir / "result.json"
     if bool(cfg["resume_completed"]) and manifest.exists() and result_path.exists():
         try:
@@ -417,6 +421,8 @@ def screen_state(
 def molecule_structure(kind: str, box_A: float) -> Structure:
     lattice = Lattice.cubic(float(box_A))
     center = np.array([box_A / 2.0] * 3, dtype=float)
+    if kind == "CO":
+        return Structure(lattice, ["C", "O"], [center, center + [0, 0, 1.13]], coords_are_cartesian=True)
     if kind == "H2":
         d = 0.74
         coords = [center + [0, 0, -d / 2], center + [0, 0, d / 2]]
@@ -430,8 +436,8 @@ def molecule_structure(kind: str, box_A: float) -> Structure:
 
 
 def ml_reference_energy(kind: str, cfg: Mapping[str, Any], calculator: Any) -> tuple[float | None, str]:
-    manual = cfg["manual_h2_energy_eV"] if kind == "H2" else cfg["manual_h2o_energy_eV"]
-    correction = cfg["h2_free_energy_correction_eV"] if kind == "H2" else cfg["h2o_free_energy_correction_eV"]
+    manual = cfg[f"manual_{kind.lower()}_energy_eV"]
+    correction = cfg[f"{kind.lower()}_free_energy_correction_eV"]
     if manual is not None:
         return float(manual) + float(correction), "manual"
     if not bool(cfg["compute_references"]):

@@ -48,18 +48,18 @@ def dft_energy(
         return None, False, f"{type(exc).__name__}: {exc}"
 
 
-def dft_reference_energies(cfg: Mapping[str, Any]) -> tuple[float | None, float | None]:
+def dft_reference_energies(cfg: Mapping[str, Any]) -> tuple:
     root = Path(cfg["output_dir"]) / "references"
-    paths = {}
-    for kind in ("H2", "H2O"):
+    energies = {"H2O": 0.0, "CO": None}
+    kinds = ["H2"]
+    if cfg.get("needs_water", True):
+        kinds.append("H2O")
+    if cfg.get("needs_co"):
+        kinds.append("CO")
+    for kind in kinds:
         path = root / kind / "POSCAR_for_dft"
         path.parent.mkdir(parents=True, exist_ok=True)
         Poscar(molecule_structure(kind, cfg["reference_box_A"])).write_file(str(path))
-        paths[kind] = path
-    h2, _, _ = dft_energy(paths["H2"], "reference/H2", cfg, is_reference=True)
-    h2o, _, _ = dft_energy(paths["H2O"], "reference/H2O", cfg, is_reference=True)
-    if h2 is not None:
-        h2 += float(cfg["h2_free_energy_correction_eV"])
-    if h2o is not None:
-        h2o += float(cfg["h2o_free_energy_correction_eV"])
-    return h2, h2o
+        energy, _, _ = dft_energy(path, f"reference/{kind}", cfg, is_reference=True)
+        energies[kind] = None if energy is None else energy + float(cfg[f"{kind.lower()}_free_energy_correction_eV"])
+    return energies["H2"], energies["H2O"], energies["CO"]

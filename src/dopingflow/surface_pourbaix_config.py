@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import fnmatch
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -219,13 +220,33 @@ def parse_surface_pourbaix_config(
     section["side_target_species"] = _string_list(section["side_target_species"])
     section["host_species"] = str(section.get("host_species", "")).strip()
     section["state_families"] = _string_list(section["state_families"])
-    invalid = [x for x in section["state_families"] if x not in DEFAULT_FAMILIES]
+    invalid = [x for x in section["state_families"] if x not in (*DEFAULT_FAMILIES, "H", "CO", "mixed-H-CO")]
     if invalid:
         raise ValueError(f"Unsupported surface-state families: {invalid}")
     if "clean" not in section["state_families"]:
         section["state_families"].insert(0, "clean")
 
+    section.setdefault("metal_site_types", ["ontop", "bridge", "hollow"])
+    if not section["metal_site_types"] or set(section["metal_site_types"]) - {"ontop", "bridge", "hollow"}:
+        raise ValueError("metal_site_types must contain ontop, bridge or hollow")
+    section.setdefault("mixed_h_co_coverages_pct", [[25, 25], [50, 50]])
+    for pair in section["mixed_h_co_coverages_pct"]:
+        if len(pair) != 2 or not all(0 < x <= 100 for x in pair) or sum(pair) > 100:
+            raise ValueError("Mixed [H%, CO%] entries must be positive and sum to <= 100")
+    for key, default in (("metal_min_spacing_A", 1.5), ("h_adsorption_height_A", 1.35),
+                         ("co_adsorption_height_A", 1.75)):
+        section[key] = float(section.get(key, default))
+        if not math.isfinite(section[key]) or section[key] <= 0:
+            raise ValueError(f"{key} must be finite and positive")
+    section.setdefault("co_free_energy_correction_eV", 0.0)
+    section.setdefault("manual_co_energy_eV", "")
+    activity = float(section.get("co_activity", 1.0))
+    if not math.isfinite(activity) or activity <= 0:
+        raise ValueError("co_activity must be finite and positive")
+    section["co_activity"] = activity
     coverage_defaults = {
+        "h_coverages_pct": [25, 50, 75, 100],
+        "co_coverages_pct": [25, 50, 75, 100],
         "proton_coverages_pct": [25.0, 50.0, 75.0, 100.0],
         "o_coverages_pct": [25.0, 50.0, 75.0, 100.0],
         "oh_coverages_pct": [25.0, 50.0, 75.0, 100.0],
@@ -233,7 +254,7 @@ def parse_surface_pourbaix_config(
     }
     for key, default in coverage_defaults.items():
         values = _float_list(section.get(key), default)
-        if any(value < 0.0 or value > 100.0 for value in values):
+        if any(not 0.0 <= value <= 100.0 for value in values):
             raise ValueError(f"{key} values must lie in [0, 100]")
         # 0% is physically the clean slab, which is already represented by the
         # mandatory clean state. Accept it for user convenience but do not
@@ -355,7 +376,7 @@ def parse_surface_pourbaix_config(
         raise ValueError("potential_step_V and pH_step must be positive")
     if section["potential_min_V"] >= section["potential_max_V"] or section["pH_min"] >= section["pH_max"]:
         raise ValueError("Potential and pH minima must be below maxima")
-    for key in ("manual_h2_energy_eV", "manual_h2o_energy_eV"):
+    for key in ("manual_h2_energy_eV", "manual_h2o_energy_eV", "manual_co_energy_eV"):
         value = section[key]
         section[key] = None if value is None or str(value).strip() == "" else float(value)
 

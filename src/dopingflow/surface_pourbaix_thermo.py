@@ -37,23 +37,29 @@ def surface_state_delta_g_eV(
     applied_potential_V: float,
     pH: float,
     *,
+    n_co: int = 0,
+    co_energy_eV: float | None = None,
     potential_scale: str = "SHE",
     temperature_K: float = 298.15,
 ) -> float:
-    """CHE free energy for clean + dO H2O + x(H+ + e-) -> state.
+    """CHE free energy with water, neutral molecular CO and proton/electron reservoirs.
 
-    x = dH - 2*dO. This covers protonated lattice oxygen, O*, OH*, H2O*,
+    x = dH - 2*(dO - nCO). This covers protonated lattice oxygen, O*, OH*, H2O*,
     and mixed O/OH states with one expression.
     """
-    x = int(delta_n_H) - 2 * int(delta_n_O)
+    water_oxygen = int(delta_n_O) - n_co
+    x = int(delta_n_H) - 2 * water_oxygen
     u_she = to_she_potential(
         applied_potential_V, potential_scale=potential_scale,
         temperature_K=temperature_K, pH=pH,
     )
     ph_term = KB_EV_K * float(temperature_K) * LN10 * float(pH)
+    if n_co and (co_energy_eV is None or not math.isfinite(co_energy_eV)):
+        raise ValueError("CO-containing states require a finite CO chemical potential")
     zero = (
         float(state_energy_eV) - float(clean_energy_eV)
-        - int(delta_n_O) * float(h2o_energy_eV)
+        - water_oxygen * float(h2o_energy_eV)
+        - n_co * float(co_energy_eV or 0.0)
         - 0.5 * x * float(h2_energy_eV)
     )
     return float(zero + x * (u_she + ph_term))
@@ -70,6 +76,7 @@ def build_surface_pourbaix_grid(
     temperature_K: float,
     energy_key: str,
     energy_level: str,
+    co_energy_eV: float | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     usable = []
     for state in states:
@@ -95,7 +102,8 @@ def build_surface_pourbaix_grid(
                 dg = surface_state_delta_g_eV(
                     energy, clean_energy, d_h, d_o, h2_energy_eV, h2o_energy_eV,
                     float(potential), float(pH), potential_scale=potential_scale,
-                    temperature_K=temperature_K,
+                    temperature_K=temperature_K, n_co=int(state.get("n_CO", 0)),
+                    co_energy_eV=co_energy_eV,
                 )
                 evaluated.append((state, dg))
             best_state, best_dg = min(evaluated, key=lambda item: (item[1], str(item[0]["state_id"])))
@@ -108,7 +116,7 @@ def build_surface_pourbaix_grid(
                 stable_state_id=str(best_state["state_id"]),
                 stable_family=str(best_state.get("final_family", best_state["family"])),
                 deltaG_stable_eV=float(best_dg), delta_n_H=int(best_state["delta_n_H"]),
-                delta_n_O=int(best_state["delta_n_O"]),
+                delta_n_O=int(best_state["delta_n_O"]), n_CO=int(best_state.get("n_CO", 0)),
                 proton_electron_pairs=int(best_state["proton_electron_pairs"]),
                 energy_level=str(energy_level),
             ))

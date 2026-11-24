@@ -568,6 +568,12 @@ with st.expander("Configuration & run controls", expanded=False):
             )
         )
 
+        bulk_structure = st.text_input("Bulk unit-cell file (optional)", value=surface.get("bulk_structure", ""))
+        conventional = st.checkbox("Use conventional-cell Miller indices", value=surface.get("conventional_millers", False))
+        repeat = surface.get("inplane_repeat", [1, 1])
+        ra, rb = st.columns(2)
+        repeat = [ra.number_input("In-plane repeats along a", 1, value=int(repeat[0])),
+                  rb.number_input("In-plane repeats along b", 1, value=int(repeat[1]))]
         miller_list = list(surface.get("miller_list", DEFAULT_MILLERS))
         max_miller = int(surface.get("max_miller", 1))
         max_orientations = int(surface.get("max_orientations", 8))
@@ -1125,7 +1131,8 @@ with st.expander("Configuration & run controls", expanded=False):
     resolved_surface.update(
         {
             "enabled": bool(enabled),
-            "source_root": source_root,
+            "source_root": source_root, "bulk_structure": bulk_structure,
+            "conventional_millers": conventional, "inplane_repeat": repeat,
             "include_vacancy_free": bool(include_vacancy_free),
             "include_oxygen_vacancies": bool(include_oxygen_vacancies),
             "target_include": target_include,

@@ -31,7 +31,7 @@ from dopingflow.surface_pourbaix_postprocess import (
     analyze_relaxed_surface_state_path,
 )
 from dopingflow.surface_pourbaix_thermo import (
-    build_surface_pourbaix_grid,
+    KB_EV_K, build_surface_pourbaix_grid,
     summarize_stable_domains,
     surface_state_delta_g_eV,
     value_grid,
@@ -83,6 +83,8 @@ def surface_state_display_label(state: Mapping[str, Any]) -> str:
     if family == "clean":
         return "Clean"
 
+    if family == "mixed-H-CO":
+        return f"H* {_coverage_text(state['actual_h_coverage_pct'])} + CO* {_coverage_text(state['actual_co_coverage_pct'])}"
     if family == "mixed-O-OH":
         o_cov = _coverage_text(state.get("actual_o_coverage_pct"))
         oh_cov = _coverage_text(state.get("actual_oh_coverage_pct"))
@@ -92,6 +94,7 @@ def surface_state_display_label(state: Mapping[str, Any]) -> str:
 
     family_names = {
         "protonated": "Protonated lattice O",
+        "H": "H*", "CO": "CO*",
         "O": "O*",
         "OH": "OH*",
         "H2O": "H₂O*",
@@ -113,6 +116,7 @@ def _annotate_grid_with_state_metadata(
     metadata_keys = (
         "requested_coverage_pct",
         "actual_coverage_pct",
+        "actual_h_coverage_pct", "actual_co_coverage_pct",
         "requested_o_coverage_pct",
         "requested_oh_coverage_pct",
         "actual_o_coverage_pct",
@@ -183,7 +187,7 @@ def _record_from_state(
         state_id=state["state_id"],
         family=state["family"],
         delta_n_H=int(state["delta_n_H"]),
-        delta_n_O=int(state["delta_n_O"]),
+        delta_n_O=int(state["delta_n_O"]), n_CO=int(state.get("n_CO", 0)),
         proton_electron_pairs=int(state["proton_electron_pairs"]),
         arrangement_id=int(state["arrangement_id"]),
         site_indices_json=json.dumps(state["site_indices"]),
@@ -207,6 +211,7 @@ def _record_from_state(
     for key in (
         "requested_coverage_pct",
         "actual_coverage_pct",
+        "actual_h_coverage_pct", "actual_co_coverage_pct",
         "requested_o_coverage_pct",
         "requested_oh_coverage_pct",
         "actual_o_coverage_pct",
@@ -235,6 +240,7 @@ def _record_from_state(
         "raw_arrangements_examined",
         "symmetry_unique_arrangements",
         "symmetry_operations",
+        "adsorption_site_types",
         "o_site_indices",
         "oh_site_indices",
     ):
@@ -424,7 +430,7 @@ def _run_one_surface(
     ml_grid, gaps = build_surface_pourbaix_grid(
         records,
         h2_energy_eV=h2_ml,
-        h2o_energy_eV=h2o_ml,
+        h2o_energy_eV=h2o_ml, co_energy_eV=cfg.get("co_mu_ml"),
         potential_values=potentials,
         pH_values=ph_values,
         potential_scale=cfg["potential_scale"],
@@ -458,12 +464,12 @@ def _run_one_surface(
             record["dft_artifact"] = artifact
 
         h2_dft, h2o_dft = dft_references
-        if h2_dft is not None and h2o_dft is not None:
+        if h2_dft is not None and h2o_dft is not None and (not cfg.get("needs_co") or cfg.get("co_mu_dft") is not None):
             try:
                 dft_grid, _ = build_surface_pourbaix_grid(
                     candidates,
                     h2_energy_eV=h2_dft,
-                    h2o_energy_eV=h2o_dft,
+                    h2o_energy_eV=h2o_dft, co_energy_eV=cfg.get("co_mu_dft"),
                     potential_values=potentials,
                     pH_values=ph_values,
                     potential_scale=cfg["potential_scale"],
@@ -617,15 +623,21 @@ def run_surface_pourbaix(
         cfg,
         reference_calculator,
     )
-    h2o_ml, h2o_source = ml_reference_energy(
-        "H2O",
-        cfg,
-        reference_calculator,
-    )
+    families = set(cfg["state_families"])
+    cfg["needs_water"] = bool(families & {"O", "OH", "H2O", "mixed-O-OH"})
+    h2o_ml, h2o_source = (0.0, "unused")
+    if cfg["needs_water"]:
+        h2o_ml, h2o_source = ml_reference_energy("H2O", cfg, reference_calculator)
     if h2_ml is None or h2o_ml is None:
-        raise RuntimeError(
-            "Surface-Pourbaix CHE requires H2 and H2O reference energies"
-        )
+        raise RuntimeError("Missing required CHE reference energy")
+    cfg["needs_co"] = bool(families & {"CO", "mixed-H-CO"})
+    co_source = "unused"
+    if cfg["needs_co"]:
+        co_energy, co_source = ml_reference_energy("CO", cfg, reference_calculator)
+        if co_energy is None:
+            raise RuntimeError("Missing CO reference energy")
+        cfg["co_activity_shift"] = KB_EV_K * cfg["temperature_K"] * math.log(cfg["co_activity"])
+        cfg["co_mu_ml"] = co_energy + cfg["co_activity_shift"]
 
     potentials = value_grid(
         cfg["potential_min_V"],
@@ -643,7 +655,10 @@ def run_surface_pourbaix(
     if bool(cfg["dft"].get("enabled", False)):
         from dopingflow.surface_pourbaix_dft import dft_reference_energies
 
-        dft_references = dft_reference_energies(cfg)
+        refs = dft_reference_energies(cfg)
+        dft_references = refs[:2]
+        if cfg["needs_co"] and refs[2] is not None:
+            cfg["co_mu_dft"] = refs[2] + cfg["co_activity_shift"]
 
     effective_workers, parallel_reason = _effective_surface_workers(
         cfg,
@@ -759,6 +774,8 @@ def run_surface_pourbaix(
         pH_range=[cfg["pH_min"], cfg["pH_max"], cfg["pH_step"]],
         potential_range_V=[cfg["potential_min_V"], cfg["potential_max_V"], cfg["potential_step_V"]],
         potential_scale=cfg["potential_scale"], temperature_K=cfg["temperature_K"],
+        co_reference_eV_ml=cfg.get("co_mu_ml"), co_reference_source=co_source,
+        co_reference_eV_dft=cfg.get("co_mu_dft"), co_activity=cfg["co_activity"],
         h2_reference_eV_ml=h2_ml, h2_reference_source=h2_source,
         h2o_reference_eV_ml=h2o_ml, h2o_reference_source=h2o_source,
         h2_reference_eV_dft=dft_references[0],

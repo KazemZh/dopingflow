@@ -183,6 +183,12 @@ def _parse_config(config: Mapping[str, Any]) -> Dict[str, Any]:
     }
     for key, value in defaults.items():
         surface.setdefault(key, value)
+    repeat = surface.get("inplane_repeat", [1, 1])
+    if not isinstance(repeat, (list, tuple)) or len(repeat) != 2 or any(
+        type(n) is not int or n < 1 for n in repeat
+    ):
+        raise ValueError("[surface].inplane_repeat needs two positive integers")
+    surface["inplane_repeat"] = repeat
     surface["poscar_order"] = (config.get("generate", {}) or {}).get("poscar_order")
 
     # Backward-compatible flat keys are mapped to the screen calculator.
@@ -416,6 +422,12 @@ def discover_surface_targets(
     """Discover surface source structures with conductivity-style semantics."""
     cfg = _parse_config(config)
     root = Path(project_root).expanduser().resolve()
+    if cfg.get("bulk_structure"):
+        path = (root / Path(cfg["bulk_structure"]).expanduser()).resolve()
+        if not path.is_file():
+            raise FileNotFoundError(f"Surface bulk structure not found: {path}")
+        name = path.stem
+        return [StructureTarget(name, name, "bulk", path, 0, None)], []
     selection = {
         "enabled": True,
         "strategy": "structural",
@@ -905,8 +917,14 @@ def _run_candidate(
     )
 
     records: List[Dict[str, Any]] = []
-    for hkl in _millers(bulk, cfg):
-        for term_id, slab in enumerate(_slabs(bulk, hkl, cfg), start=1):
+    oriented_bulk = bulk
+    if cfg.get("conventional_millers", False):
+        from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+        oriented_bulk = SpacegroupAnalyzer(bulk).get_conventional_standard_structure()
+    for hkl in _millers(oriented_bulk, cfg):
+        for term_id, slab in enumerate(_slabs(oriented_bulk, hkl, cfg), start=1):
+            if list(cfg["inplane_repeat"]) != [1, 1]:
+                slab = Structure.from_sites(slab) * [*cfg["inplane_repeat"], 1]
             slab = _sort_structure_for_poscar(
                 slab,
                 preferred_order=cfg.get("poscar_order"),

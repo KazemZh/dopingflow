@@ -1,0 +1,50 @@
+# Place your periodic Pd unit cell beside this file (or supply an absolute path).
+[surface]
+enabled = true
+bulk_structure = "Pd.vasp"
+source_root = "pd_h_co"
+conventional_millers = true
+miller_list = [[1, 1, 1], [1, 1, 0]]
+primitive = true
+termination_mode = "first"
+inplane_repeat = [2, 2]
+min_slab_size = 12.0
+min_vacuum_size = 16.0
+host_species = "Pd"
+fix_atoms = true
+fix_region = "bottom"
+fix_n_layers = 2
+
+[surface.screen]
+backend = "mace"
+model = "mh-1"
+task = "matpes_r2scan"
+device = "cpu"
+relax = true
+
+[surface.refine]
+enabled = false
+
+[surface_pourbaix]
+enabled = true
+source_mode = "screen-summary"
+placement_side = "top"
+state_families = ["clean", "H", "CO", "mixed-H-CO"]
+metal_site_types = ["ontop", "bridge", "hollow"]
+h_coverages_pct = [25, 50, 75, 100]
+co_coverages_pct = [25, 50, 75, 100]
+mixed_h_co_coverages_pct = [[25,25], [25,50], [50,25], [25,75], [50,50], [75,25]]
+max_raw_configurations_per_stoichiometry = 1000
+max_arrangements_per_stoichiometry = 8
+potential_scale = "SHE"
+potential_min_V = -1.0
+potential_max_V = 1.0
+potential_step_V = 0.05
+pH_min = 0.0
+pH_max = 14.0
+pH_step = 0.25
+temperature_K = 298.15
+co_activity = 1.0
+# Supply model- and T-consistent gas free-energy corrections for quantitative work.
+co_free_energy_correction_eV = 0.0
+h2_free_energy_correction_eV = 0.0

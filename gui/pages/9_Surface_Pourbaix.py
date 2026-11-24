@@ -289,6 +289,7 @@ def _rebuild_selected_pourbaix_grid(
     energy_level: str,
     h2_energy_eV: float,
     h2o_energy_eV: float,
+    co_energy_eV: float | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Rebuild a map from already calculated states only.
 
@@ -325,7 +326,7 @@ def _rebuild_selected_pourbaix_grid(
     rebuilt, _ = build_surface_pourbaix_grid(
         records,
         h2_energy_eV=float(h2_energy_eV),
-        h2o_energy_eV=float(h2o_energy_eV),
+        h2o_energy_eV=float(h2o_energy_eV), co_energy_eV=co_energy_eV,
         potential_values=potential_values,
         pH_values=pH_values,
         potential_scale=potential_scale,
@@ -705,7 +706,7 @@ with st.expander("Configuration & run controls", expanded=True):
     st.subheader("Surface-state search")
     families = st.multiselect(
         "State families",
-        ["clean", "protonated", "O", "OH", "H2O", "mixed-O-OH"],
+        ["clean", "protonated", "O", "OH", "H2O", "mixed-O-OH", "H", "CO", "mixed-H-CO"],
         default=list(saved.get(
             "state_families",
             ["clean", "protonated", "O", "OH", "H2O", "mixed-O-OH"],
@@ -833,6 +834,20 @@ with st.expander("Configuration & run controls", expanded=True):
 
     st.markdown("**Coverage grid (% of all eligible sites on the chosen side(s))**")
     cH, cO, cOH, cW = st.columns(4)
+    metal_settings = {}
+    if set(families) & {"H", "CO", "mixed-H-CO"}:
+        for family, key in (("H*", "h_coverages_pct"), ("CO*", "co_coverages_pct")):
+            metal_settings[key] = _floats(st.text_input(f"{family} coverage (%)",
+                value=_csv(saved.get(key, [25, 50, 75, 100]))))
+        metal_settings["mixed_h_co_coverages_pct"] = _mixed_coverages(st.text_input(
+            "Mixed H*:CO* coverage pairs (%)", value=_mixed_coverage_text(
+                saved.get("mixed_h_co_coverages_pct", [[25, 25], [50, 50]]))))
+        metal_settings["metal_site_types"] = st.multiselect("Metal adsorption sites",
+            ["ontop", "bridge", "hollow"], default=saved.get("metal_site_types", ["ontop", "bridge", "hollow"]))
+        metal_settings["co_activity"] = st.number_input("CO activity (relative to standard state)",
+            value=float(saved.get("co_activity", 1.0)), format="%.6g")
+        metal_settings["co_free_energy_correction_eV"] = st.number_input("CO standard-state correction (eV)",
+            value=float(saved.get("co_free_energy_correction_eV", 0.0)))
     proton_coverage_text = cH.text_input(
         "Protonated O coverage (%)",
         value=_csv(saved.get("proton_coverages_pct", [25, 50, 75, 100])),
@@ -1272,6 +1287,7 @@ with st.expander("Configuration & run controls", expanded=True):
             )
 
     section = dict(saved)
+    section.update(metal_settings)
     section.update(
         enabled=enabled, source_mode=source_mode, source_summary=source_summary,
         surface_include=effective_surface_include, max_surfaces=int(max_surfaces),
@@ -1571,6 +1587,7 @@ try:
                                     energy_level=energy_level,
                                     h2_energy_eV=h2_ref,
                                     h2o_energy_eV=h2o_ref,
+                                    co_energy_eV=run_summary.get(f"co_reference_eV_{energy_level.lower()}"),
                                 )
                             )
 
