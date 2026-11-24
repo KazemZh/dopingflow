@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 15265)
-Total output lines: 1677
-
 """Configure, run, and inspect staged surface screening and refinement."""
 
 from __future__ import annotations
@@ -581,7 +578,556 @@ with st.expander("Configuration & run controls", expanded=False):
         miller_list = list(surface.get("miller_list", DEFAULT_MILLERS))
         max_miller = int(surface.get("max_miller", 1))
         max_orientations = int(surface.get("max_orientations", 8))
-        miller_error = Non…5265 tokens truncated…    )
+        miller_error = None
+        if orientation_mode == "explicit":
+            miller_input = st.text_input(
+                "Miller indices",
+                value=_miller_text(miller_list),
+                help="Use semicolons between facets, e.g. 1,1,0; 1,0,0; 1,0,1; 0,0,1.",
+            )
+            try:
+                miller_list = _parse_millers(miller_input)
+            except ValueError as exc:
+                miller_error = str(exc)
+                st.error(miller_error)
+        else:
+            m1, m2 = st.columns(2)
+            max_miller = int(
+                m1.number_input("Maximum Miller index", min_value=1, value=max_miller, step=1)
+            )
+            max_orientations = int(
+                m2.number_input(
+                    "Maximum symmetrically distinct orientations",
+                    min_value=1,
+                    value=max_orientations,
+                    step=1,
+                )
+            )
+
+        g1, g2, g3 = st.columns(3)
+        min_slab = float(
+            g1.number_input(
+                "Minimum slab thickness (Å)",
+                min_value=0.1,
+                value=float(surface.get("min_slab_size", 12.0)),
+                step=0.5,
+            )
+        )
+        min_vacuum = float(
+            g2.number_input(
+                "Minimum vacuum thickness (Å)",
+                min_value=0.1,
+                value=float(surface.get("min_vacuum_size", 15.0)),
+                step=0.5,
+            )
+        )
+        max_total_surfaces = int(
+            g3.number_input(
+                "Maximum generated terminations",
+                min_value=1,
+                value=int(surface.get("max_total_surfaces", 1000)),
+                step=10,
+            )
+        )
+
+        q1, q2, q3, q4 = st.columns(4)
+        center_slab = q1.checkbox(
+            "Center slab",
+            value=bool(surface.get("center_slab", True)),
+        )
+        orthogonal_c = q2.checkbox(
+            "Orthogonal c",
+            value=bool(surface.get("orthogonal_c", True)),
+        )
+        symmetrize_slabs = q3.checkbox(
+            "Request symmetric slabs",
+            value=bool(surface.get("symmetrize_slabs", False)),
+            help="May reduce or alter available terminations. Leave off when surveying all generated terminations.",
+        )
+        write_cif = q4.checkbox(
+            "Also write CIF",
+            value=bool(surface.get("write_cif", False)),
+        )
+
+        with st.expander("Advanced slab-generator controls", expanded=False):
+            z1, z2, z3 = st.columns(3)
+            in_unit_planes = z1.checkbox(
+                "Thickness in unit planes",
+                value=bool(surface.get("in_unit_planes", False)),
+            )
+            lll_reduce = z2.checkbox(
+                "LLL reduce",
+                value=bool(surface.get("lll_reduce", False)),
+            )
+            primitive = z3.checkbox(
+                "Use primitive slab",
+                value=bool(surface.get("primitive", False)),
+            )
+            reorient_lattice = st.checkbox(
+                "Reorient lattice",
+                value=bool(surface.get("reorient_lattice", True)),
+            )
+
+    with st.expander("Natural dopant positions in each termination", expanded=True):
+        st.caption(
+            "DopingFlow does not move or swap dopants in the surface stage. Each termination "
+            "keeps the dopant positions inherited naturally from the slab cut. The labels below "
+            "only classify those original positions as surface, subsurface, or bulk-like."
+        )
+
+        d1, d2, d3 = st.columns(3)
+        host_species = d1.text_input(
+            "Host cation",
+            value=str(surface.get("host_species", doping.get("host_species", "Sn"))),
+        ).strip()
+        anion_text = d2.text_input(
+            "Anion species",
+            value=_csv_text(
+                surface.get("anion_species", scan_cfg.get("anion_species", ["O"]))
+            ),
+        )
+        anion_species = _parse_csv(anion_text)
+        dopants_text = d3.text_input(
+            "Dopant species",
+            value=_csv_text(surface.get("dopant_species", [])),
+            placeholder="Sb, In",
+            help=(
+                "Leave empty to infer every non-host, non-anion cation from each "
+                "generated termination."
+            ),
+        )
+        dopant_species = _parse_csv(dopants_text)
+
+        z1, z2 = st.columns(2)
+        dopant_depth_layers = int(
+            z1.number_input(
+                "Cation layers used for each depth zone",
+                min_value=1,
+                value=int(
+                    surface.get(
+                        "dopant_depth_layers",
+                        surface.get("layers_per_zone", 1),
+                    )
+                ),
+                step=1,
+                help=(
+                    "Both exposed slab sides are considered. With value 1, the outermost "
+                    "cation layer on each side is surface, the next cation layer is "
+                    "subsurface, and all remaining cation layers are bulk-like."
+                ),
+            )
+        )
+        cation_layer_tol = float(
+            z2.number_input(
+                "Cation-layer tolerance (Å)",
+                min_value=0.01,
+                value=float(surface.get("cation_layer_tolerance_A", 0.8)),
+                step=0.05,
+                help="Cartesian z tolerance used to group cations into slab layers.",
+            )
+        )
+
+        st.info(
+            "Example: if the natural (110) termination places In in the outermost "
+            "cation layer and Sb one cation layer deeper, it is labeled "
+            "**In: surface | Sb: subsurface**. No atom identities are changed."
+        )
+
+    with st.expander("Fixed atoms during slab relaxation", expanded=False):
+        c1, c2, c3 = st.columns(3)
+        fix_atoms = c1.checkbox(
+            "Fix part of the slab",
+            value=bool(surface.get("fix_atoms", False)),
+        )
+        fix_region = c2.selectbox(
+            "Fixed region",
+            ["middle", "bottom"],
+            index=0 if str(surface.get("fix_region", "middle")) == "middle" else 1,
+            disabled=not fix_atoms,
+        )
+        fix_method = c3.selectbox(
+            "Selection method",
+            ["layers", "thickness"],
+            index=0 if str(surface.get("fix_method", "layers")) == "layers" else 1,
+            disabled=not fix_atoms,
+        )
+        fix_n_layers = int(surface.get("fix_n_layers", 2))
+        fix_thickness = float(surface.get("fix_thickness_A", 4.0))
+        f1, f2 = st.columns(2)
+        if fix_method == "layers":
+            fix_n_layers = int(
+                f1.number_input(
+                    "Fixed layers",
+                    min_value=0,
+                    value=fix_n_layers,
+                    step=1,
+                    disabled=not fix_atoms,
+                )
+            )
+            fix_layer_tol = float(
+                f2.number_input(
+                    "Layer grouping tolerance (Å)",
+                    min_value=0.01,
+                    value=float(surface.get("fix_layer_tolerance_A", 0.6)),
+                    step=0.05,
+                    disabled=not fix_atoms,
+                )
+            )
+        else:
+            fix_thickness = float(
+                f1.number_input(
+                    "Fixed thickness (Å)",
+                    min_value=0.0,
+                    value=fix_thickness,
+                    step=0.25,
+                    disabled=not fix_atoms,
+                )
+            )
+            fix_layer_tol = float(surface.get("fix_layer_tolerance_A", 0.6))
+
+    st.divider()
+    screen = _calculator_editor(
+        "Fast surface screen",
+        "surface_screen",
+        screen_saved,
+        enabled_default=True,
+        backend_default="grace",
+        model_default="GRACE-1L-OMAT",
+        task_default="",
+        fmax_default=0.05,
+        steps_default=300,
+        topk_default=10,
+        show_top_k=False,
+    )
+
+    st.divider()
+    refine = _calculator_editor(
+        "Higher-fidelity refinement",
+        "surface_refine",
+        refine_saved,
+        enabled_default=False,
+        backend_default="mace",
+        model_default="mh-1",
+        task_default="matpes_r2scan",
+        fmax_default=0.03,
+        steps_default=500,
+        topk_default=5,
+        show_top_k=False,
+    )
+    # Keep every successfully refined surface by default. Any later reduction
+    # is an explicit downstream choice rather than an automatic global top-k.
+    refine["final_selection_mode"] = "all"
+
+    st.markdown("##### Terminations sent to refinement")
+    selection_labels = {
+        "Global best terminations": "global",
+        "Best terminations from each orientation": "per_orientation",
+    }
+    saved_selection_mode = str(
+        refine_saved.get("selection_mode", "per_orientation")
+    ).strip().lower().replace("-", "_")
+    if saved_selection_mode in {"balanced", "orientation_termination"}:
+        saved_selection_mode = "per_orientation"
+    if saved_selection_mode not in set(selection_labels.values()):
+        saved_selection_mode = "per_orientation"
+    default_label = next(
+        label for label, value in selection_labels.items()
+        if value == saved_selection_mode
+    )
+
+    selection_label = st.selectbox(
+        "Refinement selection strategy",
+        list(selection_labels),
+        index=list(selection_labels).index(default_label),
+        help=(
+            "Global selects the lowest-energy natural terminations irrespective of facet. "
+            "Per orientation lets you choose independently how many natural terminations "
+            "from each Miller orientation are sent to the higher-fidelity calculator."
+        ),
+    )
+    refinement_selection_mode = selection_labels[selection_label]
+
+    # Locate an existing complete screen summary, if available. This powers the
+    # orientation-specific counts and exact manual termination selection.
+    source_path_for_refine = Path(source_root).expanduser()
+    if not source_path_for_refine.is_absolute():
+        source_path_for_refine = (project_root / source_path_for_refine).resolve()
+    out_path_for_refine = Path(outdir).expanduser()
+    if not out_path_for_refine.is_absolute():
+        out_path_for_refine = (source_path_for_refine / out_path_for_refine).resolve()
+    screen_summary_path_for_refine = out_path_for_refine / str(
+        surface.get("screen_summary_csv", "surface_screen_summary.csv")
+    )
+    available_screen = _ensure_target_columns(
+        _read_csv(screen_summary_path_for_refine)
+    )
+    legacy_screen = (
+        not available_screen.empty
+        and "termination_label" not in available_screen.columns
+    )
+    if legacy_screen:
+        st.warning(
+            "The existing surface_screen_summary.csv was generated by the previous "
+            "artificial dopant-variant workflow. Please rerun the surface screen once "
+            "with the new natural-termination model before refinement."
+        )
+        available_screen = pd.DataFrame()
+    elif not available_screen.empty:
+        available_screen = ensure_surface_ids(available_screen)
+
+    inherited_selection_top_k = int(
+        refine_saved.get(
+            "selection_top_k",
+            refine_saved.get("default_terminations_per_orientation", 3),
+        )
+    )
+    refinement_selection_top_k = max(1, inherited_selection_top_k)
+    orientation_limits = dict(refine_saved.get("orientation_limits", {}) or {})
+    default_n_terms = int(
+        refine_saved.get(
+            "default_terminations_per_orientation",
+            refinement_selection_top_k,
+        )
+    )
+
+    if refinement_selection_mode == "global":
+        refinement_selection_top_k = int(
+            st.number_input(
+                "Global best terminations",
+                min_value=1,
+                value=refinement_selection_top_k,
+                step=1,
+                help=(
+                    "Lowest screened surface energies across all requested orientations "
+                    "for each source structure."
+                ),
+            )
+        )
+        default_n_terms = refinement_selection_top_k
+        st.info(
+            f"The globally best {refinement_selection_top_k} natural terminations "
+            "will be sent to refinement for every source structure."
+        )
+    else:
+        st.caption(
+            "Choose the number of distinct natural terminations to refine independently "
+            "for each Miller orientation."
+        )
+        orientation_rows = []
+        if not available_screen.empty:
+            orientation_source = available_screen[
+                ["miller_h", "miller_k", "miller_l", "termination_id"]
+            ].drop_duplicates()
+            for (h, k, l), group in orientation_source.groupby(
+                ["miller_h", "miller_k", "miller_l"],
+                sort=True,
+            ):
+                key = f"{int(h)},{int(k)},{int(l)}"
+                limits = orientation_limits.get(key, {})
+                available_terms = int(group["termination_id"].nunique())
+                orientation_rows.append(
+                    {
+                        "Orientation": f"({int(h)}{int(k)}{int(l)})",
+                        "Key": key,
+                        "Available terminations": available_terms,
+                        "Terminations to refine": min(
+                            int(limits.get("terminations", default_n_terms)),
+                            available_terms,
+                        ),
+                    }
+                )
+        else:
+            source_orientations = (
+                miller_list
+                if orientation_mode == "explicit"
+                else [list(x) for x in DEFAULT_MILLERS]
+            )
+            for h, k, l in source_orientations:
+                key = f"{int(h)},{int(k)},{int(l)}"
+                limits = orientation_limits.get(key, {})
+                orientation_rows.append(
+                    {
+                        "Orientation": f"({int(h)}{int(k)}{int(l)})",
+                        "Key": key,
+                        "Available terminations": None,
+                        "Terminations to refine": int(
+                            limits.get("terminations", default_n_terms)
+                        ),
+                    }
+                )
+
+        orientation_editor = pd.DataFrame(orientation_rows)
+        edited_orientation = st.data_editor(
+            orientation_editor,
+            use_container_width=True,
+            hide_index=True,
+            disabled=["Orientation", "Key", "Available terminations"],
+            column_config={
+                "Terminations to refine": st.column_config.NumberColumn(
+                    min_value=1,
+                    step=1,
+                ),
+            },
+            key="surface_orientation_termination_editor",
+        )
+        orientation_limits = {}
+        for _, row_edit in edited_orientation.iterrows():
+            orientation_limits[str(row_edit["Key"])] = {
+                "terminations": max(
+                    1,
+                    int(row_edit["Terminations to refine"]),
+                ),
+            }
+        if len(edited_orientation):
+            default_n_terms = int(
+                edited_orientation.iloc[0]["Terminations to refine"]
+            )
+            refinement_selection_top_k = default_n_terms
+
+    refine["selection_mode"] = refinement_selection_mode
+    refine["selection_top_k"] = refinement_selection_top_k
+    refine["default_terminations_per_orientation"] = default_n_terms
+    refine["orientation_limits"] = orientation_limits
+    refine.pop("default_variants_per_termination", None)
+
+    # Manual override is applied after the automatic termination selection.
+    saved_manual_include = list(
+        refine_saved.get("manual_include_surface_ids", []) or []
+    )
+    saved_manual_exclude = list(
+        refine_saved.get("manual_exclude_surface_ids", []) or []
+    )
+    refine["manual_include_surface_ids"] = saved_manual_include
+    refine["manual_exclude_surface_ids"] = saved_manual_exclude
+    manual_review = st.checkbox(
+        "Review / manually edit exact terminations before refinement",
+        value=bool(saved_manual_include or saved_manual_exclude),
+        help=(
+            "Starts from the automatic termination shortlist and lets you include or "
+            "exclude exact screened terminations. Requires a new-format "
+            "surface_screen_summary.csv."
+        ),
+    )
+
+    if not manual_review:
+        refine["manual_include_surface_ids"] = []
+        refine["manual_exclude_surface_ids"] = []
+
+    if manual_review:
+        if available_screen.empty:
+            st.warning(
+                "Run the new natural-termination surface screen first. Manual termination "
+                "selection becomes available once its surface_screen_summary.csv exists."
+            )
+        else:
+            automatic_cfg = dict(refine)
+            automatic_cfg["manual_include_surface_ids"] = []
+            automatic_cfg["manual_exclude_surface_ids"] = []
+            automatic_selected = select_refinement_candidates(
+                available_screen,
+                automatic_cfg,
+            )
+            automatic_ids = set(
+                automatic_selected.get(
+                    "surface_id",
+                    pd.Series(dtype=str),
+                ).astype(str)
+            )
+            rankable_mask = (
+                available_screen.get(
+                    "screen_rankable",
+                    pd.Series(False, index=available_screen.index),
+                )
+                .astype(str)
+                .str.lower()
+                .eq("true")
+            )
+            manual_table = available_screen[rankable_mask].copy()
+            manual_table["Facet"] = manual_table.apply(
+                lambda row: (
+                    f"({int(row['miller_h'])}{int(row['miller_k'])}"
+                    f"{int(row['miller_l'])})"
+                ),
+                axis=1,
+            )
+            manual_table["Include"] = manual_table["surface_id"].astype(str).isin(
+                automatic_ids
+            )
+            manual_table.loc[
+                manual_table["surface_id"].astype(str).isin(saved_manual_include),
+                "Include",
+            ] = True
+            manual_table.loc[
+                manual_table["surface_id"].astype(str).isin(saved_manual_exclude),
+                "Include",
+            ] = False
+            manual_table["screen_surface_energy_J_m2"] = pd.to_numeric(
+                manual_table["screen_surface_energy_J_m2"],
+                errors="coerce",
+            )
+            manual_table = manual_table.sort_values(
+                [
+                    "target_id",
+                    "miller_h",
+                    "miller_k",
+                    "miller_l",
+                    "screen_surface_energy_J_m2",
+                ]
+            )
+            edit_cols = [
+                "Include",
+                "target_id",
+                "Facet",
+                "termination_id",
+                "termination_label",
+                "screen_surface_energy_J_m2",
+                "surface_id",
+            ]
+            edited_manual = st.data_editor(
+                manual_table[edit_cols],
+                use_container_width=True,
+                hide_index=True,
+                disabled=[
+                    "target_id",
+                    "Facet",
+                    "termination_id",
+                    "termination_label",
+                    "screen_surface_energy_J_m2",
+                    "surface_id",
+                ],
+                column_config={
+                    "Include": st.column_config.CheckboxColumn(required=True),
+                    "termination_label": st.column_config.TextColumn(
+                        "Natural dopant positions"
+                    ),
+                    "screen_surface_energy_J_m2": st.column_config.NumberColumn(
+                        "Surface energy (J/m²)",
+                        format="%.5f",
+                    ),
+                },
+                key="surface_exact_refinement_editor",
+            )
+            final_manual_ids = set(
+                edited_manual.loc[
+                    edited_manual["Include"],
+                    "surface_id",
+                ].astype(str)
+            )
+            refine["manual_include_surface_ids"] = sorted(
+                final_manual_ids - automatic_ids
+            )
+            refine["manual_exclude_surface_ids"] = sorted(
+                automatic_ids - final_manual_ids
+            )
+            st.caption(
+                f"Automatic selection: {len(automatic_ids)} terminations · "
+                f"Final manual selection: {len(final_manual_ids)} terminations."
+            )
+
+    st.caption(
+        "All successfully refined terminations are kept. Changing the refinement "
+        "selection does not require rerunning a compatible natural-termination screen."
+    )
     resolved_surface = dict(surface)
     resolved_surface.update(
         {

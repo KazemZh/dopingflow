@@ -34,6 +34,8 @@ alloy_hull_summary.json
 phase_diagrams/
 Monte-carlo-vacancies/
 vacancy-selected/
+reference_structures_before_vacancy_correction/
+results/
 
 # IDE
 .vscode/

@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 51360)
-Total output lines: 4794
-
 # gui/app.py
 from __future__ import annotations
 
@@ -617,7 +614,3685 @@ if tab == "Input Builder":
         if chosen_mode == "metal":
             st.subheader("Metal references")
 
-            cfg_e…41360 tokens truncated…
+            cfg_edit["references"]["metals_dir"] = st.text_input(
+                "metals_dir",
+                value=str(cfg_edit["references"].get("metals_dir", "reference_structures/metals")),
+                help="Directory containing <Element>.POSCAR files.",
+            )
+
+            metal_default = cfg_edit["references"].get(
+                "metal_ref",
+                ["Sn", "Sb", "Ti", "Zr", "Nb"],
+            )
+            metal_csv = st.text_input(
+                "metal_ref (comma-separated)",
+                value=",".join(metal_default),
+                help='Example: "Sn,Sb,Ti,Zr,Nb"',
+            )
+            cfg_edit["references"]["metal_ref"] = [
+                x.strip() for x in metal_csv.split(",") if x.strip()
+            ]
+
+        else:
+            st.subheader("Oxide and gas references")
+
+            cfg_edit["references"]["oxides_dir"] = st.text_input(
+                "oxides_dir",
+                value=str(cfg_edit["references"].get("oxides_dir", "reference_structures/oxides")),
+                help="Directory containing <Oxide>.POSCAR files.",
+            )
+
+            ox_default = cfg_edit["references"].get(
+                "oxides_ref",
+                ["Sb2O5", "TiO2", "ZrO2", "Nb2O5"],
+            )
+            ox_csv = st.text_input(
+                "oxides_ref (comma-separated)",
+                value=",".join(ox_default),
+                help='Example: "Sb2O5,TiO2,ZrO2,Nb2O5"',
+            )
+            cfg_edit["references"]["oxides_ref"] = [
+                x.strip() for x in ox_csv.split(",") if x.strip()
+            ]
+
+            cfg_edit["references"]["gas_dir"] = st.text_input(
+                "gas_dir",
+                value=str(cfg_edit["references"].get("gas_dir", "reference_structures/gas")),
+                help="Directory containing the gas reference POSCAR, typically O2.",
+            )
+
+            cfg_edit["references"]["gas_ref"] = st.text_input(
+                "gas_ref",
+                value=str(cfg_edit["references"].get("gas_ref", "O2")),
+                help='Typically "O2".',
+            )
+
+            oxygen_choices = ["O-rich", "O-poor"]
+            current_oxygen_mode = str(
+                cfg_edit["references"].get("oxygen_mode", "O-rich")
+            ).strip()
+            if current_oxygen_mode not in oxygen_choices:
+                current_oxygen_mode = "O-rich"
+
+            cfg_edit["references"]["oxygen_mode"] = st.radio(
+                "oxygen_mode",
+                options=oxygen_choices,
+                index=oxygen_choices.index(current_oxygen_mode),
+                horizontal=True,
+                help=(
+                    "O-rich fixes the physical oxygen chemical-potential shift to zero. "
+                    "O-poor permits delta_mu_O_ev <= 0."
+                ),
+            )
+
+            correction_enabled = bool(
+                cfg_edit.get("energy_correction", {}).get("enabled", False)
+            )
+            legacy_mu_present = "muO_shift_ev" in cfg_edit["references"]
+            try:
+                legacy_mu_value = float(
+                    cfg_edit["references"].get("muO_shift_ev", 0.0)
+                )
+            except (TypeError, ValueError):
+                legacy_mu_value = 0.0
+
+            if legacy_mu_present and abs(legacy_mu_value) > 1.0e-12:
+                # A non-zero legacy value is intentionally not mixed with the
+                # explicit new keys. This preserves the core migration policy
+                # instead of guessing whether an old user meant a reference
+                # correction or a physical O-poor chemical-potential shift.
+                cfg_edit["references"].pop("oxygen_reference_correction_ev", None)
+                cfg_edit["references"].pop("delta_mu_O_ev", None)
+                st.warning(
+                    "This input contains the legacy non-zero muO_shift_ev setting. "
+                    "Its historical meaning is ambiguous, so the GUI will not convert "
+                    "it automatically. Set it to 0, save/reload, then use the explicit "
+                    "oxygen reference and delta-mu controls below."
+                )
+                cfg_edit["references"]["muO_shift_ev"] = st.number_input(
+                    "Legacy muO_shift_ev",
+                    value=legacy_mu_value,
+                    step=0.1,
+                    format="%.3f",
+                    help=(
+                        "Migration-only legacy setting. A non-zero value cannot be "
+                        "combined with the fitted energy-correction model."
+                    ),
+                )
+                if correction_enabled:
+                    st.error(
+                        "A non-zero legacy muO_shift_ev is incompatible with enabled "
+                        "experimental energy correction. Set it to 0 and migrate to the "
+                        "explicit oxygen settings before running corrections-fit."
+                    )
+            else:
+                # Drop a harmless zero legacy alias from newly saved input files.
+                cfg_edit["references"].pop("muO_shift_ev", None)
+
+                cfg_edit["references"]["oxygen_reference_correction_ev"] = st.number_input(
+                    "oxygen_reference_correction_ev (eV per O)",
+                    value=float(
+                        cfg_edit["references"].get(
+                            "oxygen_reference_correction_ev", 0.0
+                        )
+                    ),
+                    step=0.05,
+                    format="%.3f",
+                    help=(
+                        "Empirical/electronic shift of the raw same-backend O2 reference, "
+                        "per O atom. Keep this at 0 when experimental energy correction "
+                        "is enabled to avoid double counting."
+                    ),
+                )
+                if (
+                    correction_enabled
+                    and abs(
+                        float(
+                            cfg_edit["references"][
+                                "oxygen_reference_correction_ev"
+                            ]
+                        )
+                    ) > 1.0e-12
+                ):
+                    st.error(
+                        "oxygen_reference_correction_ev must be 0 when "
+                        "[energy_correction].enabled = true."
+                    )
+
+                delta_mu_value = float(
+                    cfg_edit["references"].get("delta_mu_O_ev", 0.0)
+                )
+                if cfg_edit["references"]["oxygen_mode"] == "O-poor":
+                    cfg_edit["references"]["delta_mu_O_ev"] = st.number_input(
+                        "delta_mu_O_ev (eV per O)",
+                        value=min(delta_mu_value, 0.0),
+                        max_value=0.0,
+                        step=0.05,
+                        format="%.3f",
+                        help=(
+                            "Physical thermodynamic oxygen chemical-potential shift "
+                            "relative to O-rich conditions. O-poor values must be <= 0."
+                        ),
+                    )
+                else:
+                    cfg_edit["references"]["delta_mu_O_ev"] = st.number_input(
+                        "delta_mu_O_ev (eV per O)",
+                        value=delta_mu_value,
+                        step=0.05,
+                        format="%.3f",
+                        help=(
+                            "Physical thermodynamic oxygen chemical-potential shift. "
+                            "O-rich conditions require this value to be exactly 0."
+                        ),
+                    )
+                    if abs(float(cfg_edit["references"]["delta_mu_O_ev"])) > 1.0e-12:
+                        st.error("O-rich conditions require delta_mu_O_ev = 0.")
+
+                st.caption(
+                    "These [references] oxygen settings control formation/reference "
+                    "thermodynamics. The [vacancies] section keeps its own independent "
+                    "delta-mu grid and T-pO2 controls; those settings are not changed here."
+                )
+
+
+
+    # -----------------------------
+    # GENERATE
+    # -----------------------------
+    with st.expander("Generate", expanded=False):
+        st.subheader("POSCAR writing")
+
+        order = cfg_edit["generate"].get("poscar_order", DEFAULTS["generate"]["poscar_order"])
+        if not isinstance(order, list):
+            order = DEFAULTS["generate"]["poscar_order"]
+
+        col1, col2 = st.columns([3, 2], vertical_alignment="bottom")
+
+        with col1:
+            order_text = st.text_input(
+                "Species order in output POSCAR",
+                value=",".join(order),
+                placeholder="e.g. Zr,Ti,Sb,Sn,O",
+                help=(
+                    "Optional but recommended. Defining the species order ensures consistent "
+                    "POSCAR formatting and helps with organized output storage. "
+                    "Leave empty to keep the original species order."
+                )
+            )
+
+        with col2:
+            st.caption("Example: `Zr,Ti,Sb,Sn,O`")
+
+        parsed_order = [x.strip() for x in order_text.split(",") if x.strip()]
+        cfg_edit["generate"]["poscar_order"] = parsed_order
+
+        if len(parsed_order) == 0:
+            st.info("POSCAR species order: unchanged (original order will be kept).")
+        else:
+            st.success(f"POSCAR species order: {parsed_order}")
+
+        st.divider()
+        st.subheader("Reproducibility")
+
+        cfg_edit["generate"]["seed_base"] = st.number_input(
+            "Random seed (base)",
+            min_value=0,
+            value=int(cfg_edit["generate"].get("seed_base", DEFAULTS["generate"]["seed_base"])),
+            step=1,
+            help="Base seed used to generate deterministic randomness per composition.",
+        )
+
+
+    # -----------------------------
+    # DOPING
+    # -----------------------------
+    with st.expander("Doping", expanded=True):
+        st.subheader("Doping definition")
+
+        col1, col2 = st.columns([2, 2], vertical_alignment="bottom")
+
+        with col1:
+            mode = st.selectbox(
+                "Mode",
+                CHOICES["doping.mode"],
+                index=CHOICES["doping.mode"].index(cfg_edit["doping"].get("mode", "explicit")),
+                help="Choose how compositions are provided: explicit list or automatic enumeration rules.",
+            )
+            cfg_edit["doping"]["mode"] = mode
+
+        with col2:
+            host_in = st.text_input(
+                "Host species",
+                value=cfg_edit["doping"].get("host_species", DEFAULTS["doping"]["host_species"]),
+                help="Species to substitute during doping (e.g. Sn).",
+            )
+
+        # Normalize + store host
+        host = normalize_symbol(host_in)
+        cfg_edit["doping"]["host_species"] = host
+
+        # Build element options (exclude host)
+        element_options = [e for e in PERIODIC_TABLE if e != host]
+
+        # Optional: warn if host isn't a valid element symbol
+        if host and host not in PERIODIC_TABLE:
+            st.warning(f"`host_species` looks unusual: `{host}` is not a standard element symbol.")
+
+        st.divider()
+
+        # -----------------------------
+        # Explicit mode: composition builder
+        # -----------------------------
+        if mode == "explicit":
+            st.subheader("Explicit compositions")
+            st.caption("Build one composition at a time, then click **Add composition**.")
+
+            # Ensure list exists
+            if "compositions_ui" not in st.session_state:
+                cfg_comps = normalize_compositions_list(cfg_edit["doping"].get("compositions"))
+                st.session_state.compositions_ui = cfg_comps if cfg_comps else []
+
+            colA, colB, colC = st.columns([2, 1, 1], vertical_alignment="bottom")
+
+            with colA:
+                dopant = st.selectbox(
+                    "Dopant",
+                    options=element_options,
+                    index=0,
+                    help=f"Choose any element except the host species ({host}).",
+                )
+
+            with colB:
+                percent = st.number_input(
+                    "Percent (%)",
+                    min_value=0.0,
+                    max_value=100.0,
+                    value=5.0,
+                    step=1.0,
+                    help="Dopant percentage relative to the host sublattice.",
+                )
+
+            with colC:
+                add_btn = st.button("➕ Add dopant")
+
+            # Temporary composition in session
+            if "current_comp" not in st.session_state:
+                st.session_state.current_comp = {}
+
+            if add_btn:
+                if dopant == host:
+                    st.error("Dopant cannot be the same as the host species.")
+                else:
+                    st.session_state.current_comp[dopant] = float(percent)
+
+            # Show current composition being built
+            st.markdown("**Current composition (being built):**")
+            if st.session_state.current_comp:
+                st.json(st.session_state.current_comp)
+            else:
+                st.info("No dopants added yet. Use **Add dopant** to build a composition.")
+
+            col_save, col_clear = st.columns([1, 1], vertical_alignment="bottom")
+
+            with col_save:
+                if st.button("✅ Add composition"):
+                    if st.session_state.current_comp:
+                        st.session_state.compositions_ui.append(dict(st.session_state.current_comp))
+                        st.session_state.current_comp = {}
+                    else:
+                        st.warning("Add at least one dopant before adding a composition.")
+
+            with col_clear:
+                if st.button("🧹 Clear current composition"):
+                    st.session_state.current_comp = {}
+
+            st.divider()
+
+            # Display compositions table
+            st.markdown("### Current compositions")
+            comps = st.session_state.compositions_ui
+
+            if comps:
+                df = pd.DataFrame(comps).fillna(0.0)
+                df.index = [f"comp_{i:03d}" for i in range(len(df))]
+                st.dataframe(df, use_container_width=True)
+
+                colD, colE = st.columns([1, 1], vertical_alignment="bottom")
+                with colD:
+                    del_idx = st.number_input(
+                        "Delete composition index",
+                        min_value=0,
+                        max_value=len(comps) - 1,
+                        value=0,
+                        step=1,
+                        help="Index in the table (0-based).",
+                    )
+                    if st.button("🗑 Delete selected"):
+                        st.session_state.compositions_ui.pop(int(del_idx))
+
+                with colE:
+                    if st.button("🧨 Clear all compositions"):
+                        st.session_state.compositions_ui = []
+
+            else:
+                st.info("No compositions defined yet.")
+
+            # Write back to config
+            cfg_edit["doping"]["compositions"] = st.session_state.compositions_ui
+
+            # keep enumerate fields available but not used
+            for k in ["must_include", "dopants", "max_dopants_total", "allowed_totals", "levels"]:
+                cfg_edit["doping"].setdefault(k, DEFAULTS["doping"][k])
+
+        # -----------------------------
+        # Enumerate mode: rule inputs (no parsing)
+        # -----------------------------
+        else:
+            st.subheader("Enumerate mode rules")
+
+            colA, colB = st.columns([2, 2], vertical_alignment="bottom")
+
+            with colA:
+                default_must = [x for x in cfg_edit["doping"].get("must_include", DEFAULTS["doping"]["must_include"]) if x != host]
+                cfg_edit["doping"]["must_include"] = st.multiselect(
+                    "Must include",
+                    options=element_options,
+                    default=default_must,
+                    help="These dopants must appear in every generated composition.",
+                )
+
+            with colB:
+                default_dops = [x for x in cfg_edit["doping"].get("dopants", DEFAULTS["doping"]["dopants"]) if x != host]
+                cfg_edit["doping"]["dopants"] = st.multiselect(
+                    "Allowed dopants",
+                    options=element_options,
+                    default=default_dops,
+                    help="Dopants considered during enumeration.",
+                )
+
+            # Safety: enforce host exclusion (even if loaded from older TOML)
+            cfg_edit["doping"]["must_include"] = [x for x in cfg_edit["doping"]["must_include"] if x != host]
+            cfg_edit["doping"]["dopants"] = [x for x in cfg_edit["doping"]["dopants"] if x != host]
+
+            colC, colD = st.columns([2, 2], vertical_alignment="bottom")
+
+            with colC:
+                cfg_edit["doping"]["max_dopants_total"] = st.number_input(
+                    "Max dopants per composition",
+                    min_value=1,
+                    value=int(cfg_edit["doping"].get("max_dopants_total", DEFAULTS["doping"]["max_dopants_total"])),
+                    step=1,
+                    help="Maximum number of dopant species in any generated composition.",
+                )
+
+            with colD:
+                st.caption("Example: 2 means co-doping at most (two dopant species).")
+
+            # Totals and levels as multiselect (clean)
+            def parse_number_list(text: str) -> list[float]:
+                """
+                Parse a comma/space/semicolon-separated list of numbers into sorted unique floats.
+                Accepts: "5,10, 15;20 25" etc.
+                """
+                if text is None:
+                    return []
+                # split on commas/semicolons/whitespace
+                parts = re.split(r"[,\s;]+", str(text).strip())
+                out: list[float] = []
+                for p in parts:
+                    p = p.strip()
+                    if not p:
+                        continue
+                    try:
+                        out.append(float(p))
+                    except ValueError:
+                        raise ValueError(f"Invalid number: {p!r}")
+                # unique + sorted
+                out = sorted(set(out))
+                return out
+
+            def format_number_list(vals: list[float]) -> str:
+                if not vals:
+                    return ""
+                # Keep integers pretty
+                parts = []
+                for v in vals:
+                    if abs(v - round(v)) < 1e-12:
+                        parts.append(str(int(round(v))))
+                    else:
+                        parts.append(str(v))
+                return ", ".join(parts)
+
+            # --- Allowed total doping (%) : FREE TEXT ---
+            default_totals = cfg_edit["doping"].get("allowed_totals", DEFAULTS["doping"]["allowed_totals"])
+            totals_text_default = format_number_list(default_totals)
+
+            totals_text = st.text_input(
+                "Allowed total doping (%)",
+                value=totals_text_default,
+                help="Enter any list of numbers (comma/space/semicolon separated). Example: 5, 10, 15, 20, 25, 30",
+            )
+
+            try:
+                allowed_totals = parse_number_list(totals_text)
+                # basic sanity (you can relax these if you truly want *anything*)
+                if any(t < 0 or t > 100 for t in allowed_totals):
+                    st.error("Allowed total doping values should be between 0 and 100.")
+                cfg_edit["doping"]["allowed_totals"] = allowed_totals
+                st.caption(f"Parsed totals: {allowed_totals}")
+            except ValueError as e:
+                st.error(str(e))
+                # keep previous valid values
+                cfg_edit["doping"]["allowed_totals"] = default_totals
+
+            # --- Allowed levels (%) per dopant : FREE TEXT ---
+            default_levels = cfg_edit["doping"].get("levels", DEFAULTS["doping"]["levels"])
+            levels_text_default = format_number_list(default_levels)
+
+            levels_text = st.text_input(
+                "Allowed levels (%) per dopant",
+                value=levels_text_default,
+                help="Enter any list of numbers (comma/space/semicolon separated). Example: 2.5, 5, 7.5, 10",
+            )
+
+            try:
+                levels = parse_number_list(levels_text)
+                if any(x < 0 or x > 100 for x in levels):
+                    st.error("Allowed level values should be between 0 and 100.")
+                cfg_edit["doping"]["levels"] = levels
+                st.caption(f"Parsed levels: {levels}")
+            except ValueError as e:
+                st.error(str(e))
+                cfg_edit["doping"]["levels"] = default_levels            
+
+            # compositions unused in enumerate mode
+            cfg_edit["doping"].setdefault("compositions", [])
+
+    # -----------------------------
+    # SEQUENTIAL
+    # -----------------------------
+
+    with st.expander("Sequential workflow", expanded=False):
+        cfg_edit.setdefault("sequential", {})
+
+        cfg_edit["sequential"]["outdir"] = st.text_input(
+            "Sequential output directory",
+            value=str(cfg_edit["sequential"].get("outdir", "sequential_structures")),
+            help="Directory containing step_001_*, step_002_*, ... sequential outputs.",
+        )
+
+        mode_choices = ["full", "recompute_energies"]
+        current_mode = str(cfg_edit["sequential"].get("mode", "full")).strip().lower()
+        if current_mode not in mode_choices:
+            current_mode = "full"
+
+        cfg_edit["sequential"]["mode"] = st.selectbox(
+            "Sequential mode",
+            options=mode_choices,
+            index=mode_choices.index(current_mode),
+            help=(
+                "full: run generate → scan → relax → filter → optional bandgap → formation → collect. "
+                "recompute_energies: reuse existing relaxed sequential structures and rerun formation/collect only."
+            ),
+        )
+
+    # -----------------------------
+    # SCAN
+    # -----------------------------
+    with st.expander("Scan", expanded=False):
+        st.subheader("Screen candidates (Single-point energy)")
+
+        st.caption(
+            "Ranks doped configurations using the selected ML backend. "
+            "In auto mode, the workflow uses exact symmetry-unique enumeration for manageable cases "
+            "and switches to random symmetry-unique sampling for large configuration spaces."
+        )
+
+        cfg_edit.setdefault("scan", {})
+
+        # -----------------------------
+        # BACKEND
+        # -----------------------------
+        st.divider()
+        st.subheader("Backend")
+
+        backend_choices = ["m3gnet", "uma", "mace", "grace"]
+        current_backend = str(cfg_edit["scan"].get("backend", DEFAULTS["scan"].get("backend", "m3gnet")))
+        if current_backend not in backend_choices:
+            current_backend = "m3gnet"
+
+        colB1, colB2 = st.columns([1, 2], vertical_alignment="bottom")
+
+        with colB1:
+            cfg_edit["scan"]["backend"] = st.selectbox(
+                "Scan backend",
+                options=backend_choices,
+                index=backend_choices.index(current_backend),
+                help="ML backend used for single-point energy evaluation.",
+                key="scan_backend",
+            )
+
+        scan_backend = cfg_edit["scan"]["backend"]
+
+        with colB2:
+            if scan_backend == "m3gnet":
+                st.info("Stable general-purpose backend. Uses model='default' and ignores task.")
+            elif scan_backend == "uma":
+                st.info("Requires FAIR-Chem installation, Hugging Face login, and access to the gated UMA repository.")
+            elif scan_backend == "mace":
+                st.info("Uses MACE foundation models. The model is loaded once and reused during scan.")
+            else:
+                st.info("Uses GRACE foundation models. Task is not used.")
+
+        # Model / task
+        colBM, colBT = st.columns(2, vertical_alignment="bottom")
+
+        if scan_backend == "m3gnet":
+            cfg_edit["scan"]["model"] = "default"
+            cfg_edit["scan"]["task"] = ""
+
+            with colBM:
+                st.text_input(
+                    "Model",
+                    value="default",
+                    disabled=True,
+                    key="scan_model_disabled_m3gnet",
+                )
+            with colBT:
+                st.text_input(
+                    "Task",
+                    value="",
+                    disabled=True,
+                    key="scan_task_disabled_m3gnet",
+                )
+
+        elif scan_backend == "uma":
+            uma_models = ["uma-s-1p2", "uma-s-1p1", "uma-m-1p1"]
+            current_model = str(cfg_edit["scan"].get("model", "uma-s-1p2"))
+            if current_model not in uma_models:
+                current_model = "uma-s-1p2"
+
+            uma_tasks = ["omat", "oc20", "oc22", "oc25", "omol", "odac", "omc"]
+            current_task = str(cfg_edit["scan"].get("task", "omat"))
+            if current_task not in uma_tasks:
+                current_task = "omat"
+
+            with colBM:
+                cfg_edit["scan"]["model"] = st.selectbox(
+                    "UMA model",
+                    options=uma_models,
+                    index=uma_models.index(current_model),
+                    key="scan_model_uma",
+                )
+            with colBT:
+                cfg_edit["scan"]["task"] = st.selectbox(
+                    "UMA task",
+                    options=uma_tasks,
+                    index=uma_tasks.index(current_task),
+                    key="scan_task_uma",
+                )
+
+        elif scan_backend == "mace":
+            with colBM:
+                cfg_edit["scan"]["model"] = mace_model_input(
+                    "MACE model",
+                    cfg_edit["scan"].get("model", "small"),
+                    key="scan_model_mace",
+                )
+            with colBT:
+                cfg_edit["scan"]["task"] = mace_head_input(
+                    "MACE head (optional)",
+                    cfg_edit["scan"].get("task", ""),
+                    key="scan_task_mace",
+                )
+
+        else:  # grace
+            grace_models = [
+                "GRACE-1L-OMAT",
+                "GRACE-1L-OMAT-M-base",
+                "GRACE-1L-OMAT-M",
+                "GRACE-1L-OMAT-L-base",
+                "GRACE-1L-OMAT-L",
+                "GRACE-2L-OMAT",
+                "GRACE-2L-OMAT-M-base",
+                "GRACE-2L-OMAT-M",
+                "GRACE-2L-OMAT-L-base",
+                "GRACE-2L-OMAT-L",
+                "GRACE-1L-OAM",
+                "GRACE-1L-OAM-M",
+                "GRACE-1L-OAM-L",
+                "GRACE-2L-OAM",
+                "GRACE-2L-OAM-M",
+                "GRACE-2L-OAM-L",
+                "GRACE-1L-SMAX-L",
+                "GRACE-1L-SMAX-OMAT-L",
+                "GRACE-2L-SMAX-M",
+                "GRACE-2L-SMAX-L",
+                "GRACE-2L-SMAX-OMAT-M",
+                "GRACE-2L-SMAX-OMAT-L",
+            ]
+            current_model = str(cfg_edit["scan"].get("model", "GRACE-1L-OMAT"))
+            if current_model not in grace_models:
+                current_model = "GRACE-1L-OMAT"
+
+            cfg_edit["scan"]["task"] = ""
+
+            with colBM:
+                cfg_edit["scan"]["model"] = st.selectbox(
+                    "GRACE model",
+                    options=grace_models,
+                    index=grace_models.index(current_model),
+                    key="scan_model_grace",
+                )
+            with colBT:
+                st.text_input(
+                    "Task",
+                    value="",
+                    disabled=True,
+                    key="scan_task_disabled_grace",
+                )
+
+        # -----------------------------
+        # STRATEGY
+        # -----------------------------
+        st.divider()
+        st.subheader("Scan strategy")
+
+        colM1, colM2 = st.columns([1, 2], vertical_alignment="bottom")
+
+        with colM1:
+            scan_mode_choices = CHOICES.get("scan.mode", ["auto", "exact", "sample"])
+            current_scan_mode = str(cfg_edit["scan"].get("mode", DEFAULTS["scan"]["mode"]))
+            if current_scan_mode not in scan_mode_choices:
+                current_scan_mode = DEFAULTS["scan"]["mode"]
+
+            cfg_edit["scan"]["mode"] = st.selectbox(
+                "Scan mode",
+                options=scan_mode_choices,
+                index=scan_mode_choices.index(current_scan_mode),
+                help=(
+                    "auto: use exact enumeration when manageable, otherwise sampling. "
+                    "exact: force symmetry-unique enumeration. "
+                    "sample: force random symmetry-unique sampling."
+                ),
+                key="scan_mode",
+            )
+
+        scan_mode = cfg_edit["scan"]["mode"]
+
+        with colM2:
+            if scan_mode == "auto":
+                st.info(
+                    "Auto mode is recommended for most cases. It stays exact for small problems "
+                    "and automatically switches to sampling when the configuration space becomes too large."
+                )
+            elif scan_mode == "exact":
+                st.warning(
+                    "Exact mode can become very expensive for large supercells or many dopants."
+                )
+            else:
+                st.info(
+                    "Sample mode is more memory-friendly and is recommended for large supercells."
+                )
+
+        if scan_mode == "exact":
+            colE1, colE2 = st.columns(2, vertical_alignment="bottom")
+
+            with colE1:
+                cfg_edit["scan"]["max_enum"] = st.number_input(
+                    "Max exact raw configs",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("max_enum", DEFAULTS["scan"]["max_enum"])),
+                    step=1000,
+                    help="Hard limit for raw configuration count in exact mode.",
+                    key="scan_max_enum",
+                )
+
+            with colE2:
+                cfg_edit["scan"]["max_unique"] = st.number_input(
+                    "Max exact symmetry-unique configs",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("max_unique", DEFAULTS["scan"]["max_unique"])),
+                    step=1000,
+                    help="Hard cap on the number of symmetry-unique configurations kept in exact mode.",
+                    key="scan_max_unique",
+                )
+
+        elif scan_mode == "sample":
+            colS1, colS2, colS3 = st.columns(3, vertical_alignment="bottom")
+
+            with colS1:
+                cfg_edit["scan"]["sample_budget"] = st.number_input(
+                    "Sample budget",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("sample_budget", DEFAULTS["scan"]["sample_budget"])),
+                    step=100,
+                    help="Maximum number of random attempts in sampling mode.",
+                    key="scan_sample_budget",
+                )
+
+            with colS2:
+                cfg_edit["scan"]["sample_batch_size"] = st.number_input(
+                    "Sample batch size",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("sample_batch_size", DEFAULTS["scan"]["sample_batch_size"])),
+                    step=1,
+                    help="Number of new unique sampled configurations evaluated per batch.",
+                    key="scan_sample_batch_size",
+                )
+
+            with colS3:
+                cfg_edit["scan"]["sample_patience"] = st.number_input(
+                    "Sample patience",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("sample_patience", DEFAULTS["scan"]["sample_patience"])),
+                    step=100,
+                    help="Stop sampling after this many non-improving sampled candidates.",
+                    key="scan_sample_patience",
+                )
+
+            colS4, colS5 = st.columns(2, vertical_alignment="bottom")
+
+            with colS4:
+                cfg_edit["scan"]["sample_seed"] = st.number_input(
+                    "Sample seed",
+                    min_value=0,
+                    value=int(cfg_edit["scan"].get("sample_seed", DEFAULTS["scan"]["sample_seed"])),
+                    step=1,
+                    help="Random seed used in sampling mode.",
+                    key="scan_sample_seed",
+                )
+
+            with colS5:
+                cfg_edit["scan"]["sample_max_saved"] = st.number_input(
+                    "Sample max saved",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("sample_max_saved", DEFAULTS["scan"]["sample_max_saved"])),
+                    step=1000,
+                    help="Maximum number of sampled canonical configurations remembered to avoid duplicates.",
+                    key="scan_sample_max_saved",
+                )
+
+        else:  # auto
+            colA1, colA2 = st.columns(2, vertical_alignment="bottom")
+
+            with colA1:
+                cfg_edit["scan"]["max_enum"] = st.number_input(
+                    "Max exact raw configs",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("max_enum", DEFAULTS["scan"]["max_enum"])),
+                    step=1000,
+                    help="If exceeded in auto mode, the workflow switches to sampling.",
+                    key="scan_max_enum",
+                )
+
+            with colA2:
+                cfg_edit["scan"]["max_unique"] = st.number_input(
+                    "Max exact symmetry-unique configs",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("max_unique", DEFAULTS["scan"]["max_unique"])),
+                    step=1000,
+                    help="Hard cap on the number of symmetry-unique configurations in exact mode.",
+                    key="scan_max_unique",
+                )
+
+            colA3, colA4, colA5 = st.columns(3, vertical_alignment="bottom")
+
+            with colA3:
+                cfg_edit["scan"]["sample_budget"] = st.number_input(
+                    "Sample budget",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("sample_budget", DEFAULTS["scan"]["sample_budget"])),
+                    step=100,
+                    help="Maximum number of random attempts if auto mode switches to sampling.",
+                    key="scan_sample_budget",
+                )
+
+            with colA4:
+                cfg_edit["scan"]["sample_batch_size"] = st.number_input(
+                    "Sample batch size",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("sample_batch_size", DEFAULTS["scan"]["sample_batch_size"])),
+                    step=1,
+                    help="Batch size used if auto mode switches to sampling.",
+                    key="scan_sample_batch_size",
+                )
+
+            with colA5:
+                cfg_edit["scan"]["sample_patience"] = st.number_input(
+                    "Sample patience",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("sample_patience", DEFAULTS["scan"]["sample_patience"])),
+                    step=100,
+                    help="Stop criterion used if auto mode switches to sampling.",
+                    key="scan_sample_patience",
+                )
+
+            colA6, colA7 = st.columns(2, vertical_alignment="bottom")
+
+            with colA6:
+                cfg_edit["scan"]["sample_seed"] = st.number_input(
+                    "Sample seed",
+                    min_value=0,
+                    value=int(cfg_edit["scan"].get("sample_seed", DEFAULTS["scan"]["sample_seed"])),
+                    step=1,
+                    help="Random seed used if auto mode switches to sampling.",
+                    key="scan_sample_seed",
+                )
+
+            with colA7:
+                cfg_edit["scan"]["sample_max_saved"] = st.number_input(
+                    "Sample max saved",
+                    min_value=1,
+                    value=int(cfg_edit["scan"].get("sample_max_saved", DEFAULTS["scan"]["sample_max_saved"])),
+                    step=1000,
+                    help="Maximum number of sampled canonical configurations remembered to avoid duplicates.",
+                    key="scan_sample_max_saved",
+                )
+
+        st.divider()
+        st.subheader("Input & selection")
+
+        col1, col2 = st.columns([2, 2], vertical_alignment="bottom")
+
+        with col1:
+            cfg_edit["scan"]["topk"] = st.number_input(
+                "Keep top-K candidates",
+                min_value=1,
+                value=int(cfg_edit["scan"].get("topk", DEFAULTS["scan"]["topk"])),
+                step=1,
+                help="Number of lowest-energy configurations retained after the scan.",
+                key="scan_topk",
+            )
+
+        with col2:
+            st.caption(
+                "Scan reads `POSCAR` automatically from each generated structure folder."
+            )
+
+        st.divider()
+        st.subheader("Symmetry & uniqueness")
+
+        colA, colB = st.columns([1, 2], vertical_alignment="bottom")
+
+        with colA:
+            cfg_edit["scan"]["symprec"] = st.number_input(
+                "Symmetry tolerance (symprec)",
+                min_value=1e-6,
+                value=float(cfg_edit["scan"].get("symprec", DEFAULTS["scan"]["symprec"])),
+                step=1e-3,
+                format="%.6f",
+                help="Tolerance used when identifying symmetry-equivalent configurations.",
+                key="scan_symprec",
+            )
+
+        with colB:
+            st.caption(
+                "Smaller values are stricter and usually produce more unique structures, "
+                "which can increase runtime."
+            )
+
+        st.divider()
+        st.subheader("Execution")
+
+        colX1, colX2, colX3 = st.columns(3, vertical_alignment="bottom")
+
+        with colX1:
+            device_choices = ["cpu", "cuda"]
+            current_device = str(cfg_edit["scan"].get("device", DEFAULTS["scan"].get("device", "cpu")))
+            if current_device not in device_choices:
+                current_device = "cpu"
+
+            cfg_edit["scan"]["device"] = st.selectbox(
+                "Device",
+                options=device_choices,
+                index=device_choices.index(current_device),
+                key="scan_device",
+            )
+
+        with colX2:
+            cfg_edit["scan"]["n_workers"] = st.number_input(
+                "Workers",
+                min_value=1,
+                value=int(cfg_edit["scan"].get("n_workers", DEFAULTS["scan"]["n_workers"])),
+                step=1,
+                key="scan_n_workers",
+            )
+
+        with colX3:
+            cfg_edit["scan"]["gpu_id"] = st.number_input(
+                "GPU ID",
+                min_value=0,
+                value=int(cfg_edit["scan"].get("gpu_id", DEFAULTS["scan"].get("gpu_id", 0))),
+                step=1,
+                key="scan_gpu_id",
+            )
+
+        cfg_edit["scan"]["chunksize"] = st.number_input(
+            "Chunksize",
+            min_value=1,
+            value=int(cfg_edit["scan"].get("chunksize", DEFAULTS["scan"]["chunksize"])),
+            step=1,
+            help="Multiprocessing chunk size.",
+            key="scan_chunksize",
+        )
+
+        st.divider()
+        st.subheader("Sublattice definition")
+
+        anions = cfg_edit["scan"].get("anion_species", DEFAULTS["scan"]["anion_species"])
+        if not isinstance(anions, list):
+            anions = DEFAULTS["scan"]["anion_species"]
+
+        anion_text = st.text_input(
+            "Anion species (comma-separated)",
+            value=",".join(anions),
+            help="Elements treated as anions and excluded from substitution. Example for oxides: O",
+            placeholder="e.g. O",
+            key="scan_anion_species",
+        )
+        cfg_edit["scan"]["anion_species"] = [x.strip() for x in anion_text.split(",") if x.strip()]
+
+        st.divider()
+        st.subheader("Caching")
+
+        cfg_edit["scan"]["skip_if_done"] = st.checkbox(
+            "Skip scan if results already exist",
+            value=bool(cfg_edit["scan"].get("skip_if_done", True)),
+            help="If enabled, scan is skipped when ranking_scan.csv already exists in the structure folder.",
+            key="scan_skip_if_done",
+        )
+
+    # -----------------------------
+    # RELAX
+    # -----------------------------
+    with st.expander("Relax", expanded=False):
+        st.subheader("Doped structure relaxation")
+
+        st.caption(
+            "Relaxes the selected candidates using the chosen ML interatomic potential backend. "
+            "You can select the backend, model, optimizer, convergence threshold, and maximum number of relaxation steps."
+        )
+
+        cfg_edit.setdefault("relax", {})
+
+        # -----------------------------
+        # Backend
+        # -----------------------------
+        st.divider()
+        st.subheader("Backend")
+
+        relax_backend_choices = ["m3gnet", "uma", "mace", "grace"]
+        current_relax_backend = str(
+            cfg_edit["relax"].get("backend", DEFAULTS["relax"].get("backend", "m3gnet"))
+        ).strip().lower()
+        if current_relax_backend not in relax_backend_choices:
+            current_relax_backend = "m3gnet"
+
+        cfg_edit["relax"]["backend"] = st.selectbox(
+            "Relaxation backend",
+            options=relax_backend_choices,
+            index=relax_backend_choices.index(current_relax_backend),
+            help="Choose the ML potential backend used for structural relaxation.",
+            key="relax_backend",
+        )
+
+        relax_backend = cfg_edit["relax"]["backend"]
+
+        # Model/task choices
+        uma_model_choices = ["uma-s-1p2", "uma-s-1p1", "uma-m-1p1"]
+        uma_task_choices = ["omat", "oc20", "oc22", "oc25", "omol", "odac", "omc"]
+
+        grace_model_choices = [
+            "GRACE-1L-OMAT",
+            "GRACE-1L-OMAT-M-base",
+            "GRACE-1L-OMAT-M",
+            "GRACE-1L-OMAT-L-base",
+            "GRACE-1L-OMAT-L",
+            "GRACE-2L-OMAT",
+            "GRACE-2L-OMAT-M-base",
+            "GRACE-2L-OMAT-M",
+            "GRACE-2L-OMAT-L-base",
+            "GRACE-2L-OMAT-L",
+            "GRACE-1L-OAM",
+            "GRACE-1L-OAM-M",
+            "GRACE-1L-OAM-L",
+            "GRACE-2L-OAM",
+            "GRACE-2L-OAM-M",
+            "GRACE-2L-OAM-L",
+            "GRACE-1L-SMAX-L",
+            "GRACE-1L-SMAX-OMAT-L",
+            "GRACE-2L-SMAX-M",
+            "GRACE-2L-SMAX-L",
+            "GRACE-2L-SMAX-OMAT-M",
+            "GRACE-2L-SMAX-OMAT-L",
+        ]
+
+        colB1, colB2 = st.columns(2, vertical_alignment="bottom")
+
+        with colB1:
+            if relax_backend == "m3gnet":
+                cfg_edit["relax"]["model"] = "default"
+                st.text_input(
+                    "Model",
+                    value="default",
+                    disabled=True,
+                    help="M3GNet currently uses the default pretrained model.",
+                    key="relax_model_m3gnet_display",
+                )
+
+            elif relax_backend == "uma":
+                current_model = str(cfg_edit["relax"].get("model", "uma-s-1p2")).strip()
+                if current_model in {"", "default"} or current_model not in uma_model_choices:
+                    current_model = "uma-s-1p2"
+
+                cfg_edit["relax"]["model"] = st.selectbox(
+                    "UMA model",
+                    options=uma_model_choices,
+                    index=uma_model_choices.index(current_model),
+                    help="Choose the pretrained UMA model.",
+                    key="relax_model_uma",
+                )
+
+            elif relax_backend == "mace":
+                cfg_edit["relax"]["model"] = mace_model_input(
+                    "MACE model",
+                    cfg_edit["relax"].get("model", "small"),
+                    key="relax_model_mace",
+                )
+
+            elif relax_backend == "grace":
+                current_model = str(cfg_edit["relax"].get("model", "GRACE-1L-OMAT")).strip()
+                if current_model in {"", "default"} or current_model not in grace_model_choices:
+                    current_model = "GRACE-1L-OMAT"
+
+                cfg_edit["relax"]["model"] = st.selectbox(
+                    "GRACE model",
+                    options=grace_model_choices,
+                    index=grace_model_choices.index(current_model),
+                    help="Choose the pretrained GRACE model.",
+                    key="relax_model_grace",
+                )
+
+        with colB2:
+            if relax_backend == "uma":
+                current_task = str(cfg_edit["relax"].get("task", "omat")).strip()
+                if current_task == "" or current_task not in uma_task_choices:
+                    current_task = "omat"
+
+                cfg_edit["relax"]["task"] = st.selectbox(
+                    "UMA task",
+                    options=uma_task_choices,
+                    index=uma_task_choices.index(current_task),
+                    help="Task/domain used by the UMA predictor.",
+                    key="relax_task_uma",
+                )
+            elif relax_backend == "mace":
+                cfg_edit["relax"]["task"] = mace_head_input(
+                    "MACE head (optional)",
+                    cfg_edit["relax"].get("task", ""),
+                    key="relax_task_mace",
+                )
+            else:
+                cfg_edit["relax"]["task"] = ""
+                st.text_input(
+                    "Task",
+                    value="not used for this backend",
+                    disabled=True,
+                    key="relax_task_unused_display",
+                )
+
+        # -----------------------------
+        # Relaxation degrees of freedom
+        # -----------------------------
+        st.divider()
+        st.subheader("Relaxation degrees of freedom")
+
+        relax_mode_choices = CHOICES["relax.relax_mode"]
+        current_relax_mode = str(
+            cfg_edit["relax"].get("relax_mode", DEFAULTS["relax"]["relax_mode"])
+        ).strip().lower()
+        if current_relax_mode not in relax_mode_choices:
+            current_relax_mode = DEFAULTS["relax"]["relax_mode"]
+
+        cell_filter_choices = CHOICES["relax.cell_filter"]
+        current_cell_filter = str(
+            cfg_edit["relax"].get("cell_filter", DEFAULTS["relax"]["cell_filter"])
+        ).strip().lower()
+        if current_cell_filter not in cell_filter_choices:
+            current_cell_filter = DEFAULTS["relax"]["cell_filter"]
+
+        colR1, colR2 = st.columns(2, vertical_alignment="bottom")
+
+        with colR1:
+            cfg_edit["relax"]["relax_mode"] = st.selectbox(
+                "Relaxation mode",
+                options=relax_mode_choices,
+                index=relax_mode_choices.index(current_relax_mode),
+                help=(
+                    "atoms: atomic positions only; full: atoms + full cell; "
+                    "isotropic: atoms + uniform cell scaling; volume: volume only with fixed fractional positions; "
+                    "shape: cell shape at nearly constant volume; xy: relax a,b only and keep c fixed; "
+                    "cell_only: cell relaxation with fixed fractional positions."
+                ),
+                key="relax_mode",
+            )
+
+        with colR2:
+            cfg_edit["relax"]["cell_filter"] = st.selectbox(
+                "Cell filter",
+                options=cell_filter_choices,
+                index=cell_filter_choices.index(current_cell_filter),
+                help=(
+                    "ASE cell filter used for cell relaxation. "
+                    "frechet is recommended; unit is simpler; exp is mostly for legacy compatibility."
+                ),
+                key="relax_cell_filter",
+            )
+
+        # -----------------------------
+        # Optimizer & convergence
+        # -----------------------------
+        st.divider()
+        st.subheader("Optimizer & convergence")
+
+        optimizer_choices = ["bfgs", "lbfgs", "fire", "mdmin", "quasinewton"]
+        current_optimizer = str(
+            cfg_edit["relax"].get("optimizer", DEFAULTS["relax"].get("optimizer", "bfgs"))
+        ).strip().lower()
+        if current_optimizer not in optimizer_choices:
+            current_optimizer = "bfgs"
+
+        col1, col2, col3 = st.columns(3, vertical_alignment="bottom")
+
+        with col1:
+            cfg_edit["relax"]["optimizer"] = st.selectbox(
+                "Optimizer",
+                options=optimizer_choices,
+                index=optimizer_choices.index(current_optimizer),
+                help="ASE optimizer used to move the atoms during relaxation.",
+                key="relax_optimizer",
+            )
+
+        with col2:
+            cfg_edit["relax"]["fmax"] = st.number_input(
+                "Max force (fmax) [eV/Å]",
+                min_value=0.0,
+                value=float(cfg_edit["relax"].get("fmax", DEFAULTS["relax"]["fmax"])),
+                step=0.01,
+                help="Relaxation stops when the maximum atomic force drops below this threshold.",
+                key="relax_fmax",
+            )
+
+        with col3:
+            cfg_edit["relax"]["max_steps"] = int(
+                st.number_input(
+                    "Maximum steps",
+                    min_value=1,
+                    value=int(cfg_edit["relax"].get("max_steps", DEFAULTS["relax"].get("max_steps", 300))),
+                    step=10,
+                    help="Maximum number of optimizer steps before stopping the relaxation.",
+                    key="relax_max_steps",
+                )
+            )
+
+        st.caption(
+            "Typical screening setup: **fmax = 0.05 eV/Å** and **100-300 steps**. "
+            "Tighter relaxations may use **fmax = 0.02 eV/Å**."
+        )
+
+        # -----------------------------
+        # Execution mode
+        # -----------------------------
+        st.divider()
+        st.subheader("Execution mode")
+
+        relax_device_options = ["cpu", "cuda"]
+        current_relax_device = str(
+            cfg_edit["relax"].get("device", DEFAULTS["relax"]["device"])
+        ).lower()
+        if current_relax_device not in relax_device_options:
+            current_relax_device = "cpu"
+
+        cfg_edit["relax"]["device"] = st.selectbox(
+            "Device",
+            relax_device_options,
+            index=relax_device_options.index(current_relax_device),
+            help="Choose CPU parallel execution or CUDA GPU execution.",
+            key="relax_device",
+        )
+
+        relax_device = cfg_edit["relax"]["device"]
+
+        if relax_device == "cpu":
+            st.divider()
+            st.subheader("Parallelism & performance")
+
+            colA, colB, colC = st.columns(3, vertical_alignment="bottom")
+
+            with colA:
+                cfg_edit["relax"]["n_workers"] = int(
+                    st.number_input(
+                        "Workers",
+                        min_value=1,
+                        value=int(cfg_edit["relax"].get("n_workers", DEFAULTS["relax"]["n_workers"])),
+                        step=1,
+                        help="Number of parallel relaxation processes (one candidate per worker).",
+                        key="relax_n_workers",
+                    )
+                )
+
+            with colB:
+                cfg_edit["relax"]["tf_threads"] = int(
+                    st.number_input(
+                        "TensorFlow threads / worker",
+                        min_value=1,
+                        value=int(cfg_edit["relax"].get("tf_threads", DEFAULTS["relax"]["tf_threads"])),
+                        step=1,
+                        help="TensorFlow threads per worker. Mainly relevant for M3GNet.",
+                        key="relax_tf_threads",
+                    )
+                )
+
+            with colC:
+                cfg_edit["relax"]["omp_threads"] = int(
+                    st.number_input(
+                        "OpenMP threads / worker",
+                        min_value=1,
+                        value=int(cfg_edit["relax"].get("omp_threads", DEFAULTS["relax"]["omp_threads"])),
+                        step=1,
+                        help="OpenMP threads per worker. Keep small to avoid CPU oversubscription.",
+                        key="relax_omp_threads",
+                    )
+                )
+
+            try:
+                total_threads = int(cfg_edit["relax"]["n_workers"]) * max(
+                    int(cfg_edit["relax"]["tf_threads"]),
+                    int(cfg_edit["relax"]["omp_threads"]),
+                )
+                st.caption(f"Rule of thumb: total CPU load ~ workers × threads ≈ **{total_threads}**")
+            except Exception:
+                pass
+
+        else:
+            col1, col2 = st.columns(2, vertical_alignment="bottom")
+
+            with col1:
+                cfg_edit["relax"]["gpu_id"] = int(
+                    st.number_input(
+                        "GPU ID",
+                        min_value=0,
+                        value=int(cfg_edit["relax"].get("gpu_id", DEFAULTS["relax"]["gpu_id"])),
+                        step=1,
+                        key="relax_gpu_id",
+                    )
+                )
+
+            with col2:
+                st.info("CUDA mode uses a single effective worker internally.")
+
+            # keep these present in config even when hidden
+            cfg_edit["relax"].setdefault("n_workers", DEFAULTS["relax"]["n_workers"])
+            cfg_edit["relax"].setdefault("tf_threads", DEFAULTS["relax"]["tf_threads"])
+            cfg_edit["relax"].setdefault("omp_threads", DEFAULTS["relax"]["omp_threads"])
+
+        # -----------------------------
+        # Caching
+        # -----------------------------
+        st.divider()
+        st.subheader("Caching")
+
+        cfg_edit["relax"]["skip_if_done"] = st.checkbox(
+            "Skip relaxation if results already exist",
+            value=bool(cfg_edit["relax"].get("skip_if_done", True)),
+            help="If enabled, relaxation is skipped when ranking_relax.csv already exists in the folder.",
+            key="relax_skip_if_done",
+        )
+
+        cfg_edit["relax"]["skip_candidate_if_done"] = st.checkbox(
+            "Skip individual candidates already relaxed",
+            value=bool(cfg_edit["relax"].get("skip_candidate_if_done", True)),
+            help="If enabled, candidates with existing 02_relax/POSCAR and meta.json are skipped.",
+            key="relax_skip_candidate_if_done",
+        )
+
+    # -----------------------------
+    # FILTER
+    # -----------------------------
+    with st.expander("Filter", expanded=False):
+        st.subheader("Select best relaxed candidates")
+
+        st.caption(
+            "Filters the relaxed candidates before running bandgap and formation energy. "
+            "Choose either an energy window around the best candidate, or keep only the top-N lowest-energy structures."
+        )
+
+        st.divider()
+        col1, col2 = st.columns([2, 3], vertical_alignment="bottom")
+
+        with col1:
+            fmode = st.selectbox(
+                "Filter mode",
+                CHOICES["filter.mode"],
+                index=CHOICES["filter.mode"].index(cfg_edit["filter"].get("mode", "window")),
+                help="Window: keep all candidates within an energy window above the minimum. Top-N: keep only N lowest-energy candidates.",
+            )
+            cfg_edit["filter"]["mode"] = fmode
+
+        with col2:
+            if fmode == "window":
+                st.caption("**Window mode:** keeps everything within ΔE of the minimum relaxed energy.")
+            else:
+                st.caption("**Top-N mode:** keeps exactly N lowest-energy candidates.")
+
+        st.divider()
+        st.subheader("Threshold")
+
+        if fmode == "window":
+            cfg_edit["filter"]["window_meV"] = st.number_input(
+                "Energy window ΔE [meV]",
+                min_value=0.0,
+                value=float(cfg_edit["filter"].get("window_meV", DEFAULTS["filter"]["window_meV"])),
+                step=10.0,
+                help="Candidates with relaxed energy ≤ (E_min + ΔE) are kept.",
+            )
+            # keep config consistent
+            cfg_edit["filter"].setdefault("max_candidates", DEFAULTS["filter"]["max_candidates"])
+        else:
+            cfg_edit["filter"]["max_candidates"] = st.number_input(
+                "Number of candidates (Top-N)",
+                min_value=1,
+                value=int(cfg_edit["filter"].get("max_candidates", DEFAULTS["filter"]["max_candidates"])),
+                step=1,
+                help="Keeps only the N lowest-energy relaxed candidates.",
+            )
+            # keep config consistent
+            cfg_edit["filter"].setdefault("window_meV", DEFAULTS["filter"]["window_meV"])
+
+        st.divider()
+        st.subheader("Caching")
+
+        cfg_edit["filter"]["skip_if_done"] = st.checkbox(
+            "Skip filtering if results already exist",
+            value=bool(cfg_edit["filter"].get("skip_if_done", True)),
+            help="If enabled, filtering is skipped when ranking_relax_filtered.csv already exists in the folder.",
+        )
+
+
+    # -----------------------------
+    # BANDGAP
+    # -----------------------------
+    with st.expander("Bandgap", expanded=False):
+        cfg_edit["bandgap"]["enabled"] = st.checkbox(
+            "Enable bandgap calculation",
+            value=bool(cfg_edit["bandgap"].get("enabled", True)),
+            help="If disabled, sequential-run skips the bandgap step and leaves bandgap_eV empty in results_database.csv.",
+        )        
+        st.subheader("Bandgap prediction")
+
+        st.caption(
+            "Predicts bandgaps for filtered candidates using ALIGNN. "
+            "The parameters below control how the atomic graph is built before inference."
+        )
+
+        st.divider()
+        st.subheader("Graph construction")
+
+        col1, col2, col3 = st.columns([1, 1, 2], vertical_alignment="bottom")
+
+        with col1:
+            cfg_edit["bandgap"]["cutoff"] = st.number_input(
+                "Cutoff radius [Å]",
+                min_value=0.0,
+                value=float(cfg_edit["bandgap"].get("cutoff", DEFAULTS["bandgap"]["cutoff"])),
+                step=0.5,
+                help="Neighbor search cutoff used to build edges in the atomic graph.",
+            )
+
+        with col2:
+            cfg_edit["bandgap"]["max_neighbors"] = st.number_input(
+                "Max neighbors",
+                min_value=1,
+                value=int(cfg_edit["bandgap"].get("max_neighbors", DEFAULTS["bandgap"]["max_neighbors"])),
+                step=1,
+                help="Maximum number of neighbors kept per atom (limits graph size).",
+            )
+
+        with col3:
+            st.caption(
+                "Typical values: cutoff 6–10 Å, max neighbors 12–24. "
+                "Larger values may improve connectivity but increase runtime."
+            )
+
+        st.divider()
+        st.subheader("Execution mode")
+
+        cfg_edit.setdefault("bandgap", {})
+
+        bandgap_device_options = ["cpu", "cuda"]
+        current_device = str(cfg_edit["bandgap"].get("device", DEFAULTS["bandgap"]["device"])).lower()
+        if current_device not in bandgap_device_options:
+            current_device = "cpu"
+
+        cfg_edit["bandgap"]["device"] = st.selectbox(
+            "Device",
+            bandgap_device_options,
+            index=bandgap_device_options.index(current_device),
+            help="Choose CPU parallel execution or CUDA GPU execution.",
+            key="bandgap_device",
+        )
+
+        device = cfg_edit["bandgap"]["device"]
+
+        if device == "cpu":
+            cfg_edit["bandgap"]["n_workers"] = int(
+                st.number_input(
+                    "CPU workers",
+                    min_value=1,
+                    value=int(cfg_edit["bandgap"].get("n_workers", DEFAULTS["bandgap"]["n_workers"])),
+                    step=1,
+                    help="Number of parallel CPU processes for bandgap prediction.",
+                    key="bandgap_n_workers",
+                )
+            )
+            st.info("CPU mode uses parallel workers.")
+
+        elif device == "cuda":
+            col1, col2 = st.columns(2)
+
+            with col1:
+                cfg_edit["bandgap"]["gpu_id"] = int(
+                    st.number_input(
+                        "GPU ID",
+                        min_value=0,
+                        value=int(cfg_edit["bandgap"].get("gpu_id", DEFAULTS["bandgap"]["gpu_id"])),
+                        step=1,
+                        key="bandgap_gpu_id",
+                    )
+                )
+
+            with col2:
+                cfg_edit["bandgap"]["batch_size"] = int(
+                    st.number_input(
+                        "Batch size",
+                        min_value=1,
+                        value=int(cfg_edit["bandgap"].get("batch_size", DEFAULTS["bandgap"]["batch_size"])),
+                        step=1,
+                        help="Batch size for GPU inference.",
+                        key="bandgap_batch_size",
+                    )
+                )
+
+            cfg_edit["bandgap"]["n_workers"] = 1
+            st.info("CUDA mode uses batched GPU inference.")
+            
+    # -----------------------------
+    # FORMATION
+    # -----------------------------
+    with st.expander("Formation energy", expanded=False):
+        st.subheader("Formation energy evaluation")
+
+        st.write("Formation energy is computed as:")
+
+        st.latex(
+            r"E_{\mathrm{form}} = E_{\mathrm{doped}} - E_{\mathrm{pristine}}"
+            r" - \sum_i n_i \mu_i + \sum_j n_j \mu_j"
+        )
+
+        st.write("where:")
+        st.markdown(
+            """
+    - **$E_{\\mathrm{doped}}$**: relaxed doped structure energy  
+    - **$E_{\\mathrm{pristine}}$**: pristine reference energy  
+    - **$n_i,\\mu_i$**: number and chemical potential of dopants  
+    - **$n_j,\\mu_j$**: number and chemical potential of removed host atoms  
+
+    Chemical potentials are obtained from the **refs-build** stage.
+            """
+        )
+
+        st.divider()
+        st.subheader("Normalization scheme")
+
+        norm = st.selectbox(
+            "How to report formation energy",
+            CHOICES["formation.normalize"],
+            index=CHOICES["formation.normalize"].index(
+                cfg_edit["formation"].get("normalize", "per_dopant")
+            ),
+            help="Controls how formation energy is reported in the final CSV/summary.",
+        )
+        cfg_edit["formation"]["normalize"] = norm
+
+        # Show explanation ONLY for the selected normalization
+        if norm == "per_dopant":
+            st.info("**per_dopant**: compares stability per dopant atom (useful across different dopant counts).")
+            st.latex(r"\frac{E_{\mathrm{form}}}{N_{\mathrm{dopant}}}")
+
+        elif norm == "per_host":
+            st.info("**per_host**: normalizes by the number of atoms (or host-sites, depending on your definition).")
+            st.latex(r"\frac{E_{\mathrm{form}}}{N}")
+
+        elif norm == "total":
+            st.info("**total**: raw formation energy of the doped supercell (in eV).")
+            st.latex(r"E_{\mathrm{form}} \; [\mathrm{eV}]")
+
+        st.divider()
+        st.subheader("Relative oxide-reference energies")
+        cfg_edit["formation"]["relative_enabled"] = st.checkbox(
+            "Write relative per-cation energy columns",
+            value=bool(cfg_edit["formation"].get("relative_enabled", False)),
+            help=(
+                "Writes one relative formation and mixing-energy column for each "
+                "oxide-reference scenario. All settings remain in [formation]."
+            ),
+        )
+        endpoint_value = str(cfg_edit["formation"].get("endpoint_x", "auto"))
+        endpoint_text = st.text_input(
+            "endpoint_x",
+            value=endpoint_value,
+            help="Use 'auto' for the oxide endmember, or enter a fraction in (0, 1].",
+            disabled=not cfg_edit["formation"]["relative_enabled"],
+        ).strip()
+        if endpoint_text.lower() in {"", "auto"}:
+            cfg_edit["formation"]["endpoint_x"] = "auto"
+        else:
+            try:
+                parsed_endpoint = float(endpoint_text)
+                if not 0.0 < parsed_endpoint <= 1.0:
+                    raise ValueError
+                cfg_edit["formation"]["endpoint_x"] = parsed_endpoint
+            except ValueError:
+                st.error("endpoint_x must be 'auto' or a number in (0, 1].")
+
+    # -----------------------------
+    # OPTIONAL ENERGY CORRECTION
+    # -----------------------------
+    with st.expander("Energy correction (optional)", expanded=False):
+        correction = cfg_edit.setdefault("energy_correction", {})
+        # Streamlit may hot-reload app.py while retaining an older gui_config
+        # module in sys.modules. Keep this panel usable until the server is
+        # restarted instead of failing on a newly introduced defaults section.
+        correction_defaults = DEFAULTS.get("energy_correction") or {
+            "enabled": False,
+            "experimental_source": "kingsbury",
+            "experimental_data": "",
+            "dataset_cache_dir": "",
+            "calibration_manifest": (
+                "reference_structures/corrections/calibration_manifest.csv"
+            ),
+            "correction_terms": ["oxide"],
+            "model_family": "manual",
+            "m1_elements": "workflow",
+            "calibration_selection": "manifest",
+            "auto_fetch_phase_structures": False,
+            "optimade_base_url": "https://optimade.materialsproject.org/v1",
+            "min_element_compounds": 3,
+            "min_element_stoichiometries": 3,
+            "min_cv_improvement_eV_per_atom": 0.01,
+            "require_cv_one_standard_error": True,
+            "exclude_polyanions": [
+                "SO4", "SO3", "CO3", "NO3", "NO2", "OCl3", "ClO3",
+                "ClO4", "HO", "ClO", "SeO3", "TiO3", "TiO4", "WO4",
+                "SiO3", "SiO4", "Si2O5", "PO3", "PO4", "P2O7",
+            ],
+            "max_relative_experimental_uncertainty": 0.10,
+            "max_calculated_e_above_hull_eV_per_atom": 0.10,
+            "min_degrees_of_freedom": 1,
+            "min_term_support": 2,
+            "max_condition_number": 1.0e8,
+            "poor_fit_rmse_warning_eV_per_atom": 0.20,
+            "allow_legacy_candidate_provenance": False,
+            "reuse_fitted": True,
+        }
+        correction["enabled"] = st.checkbox(
+            "Enable backend-specific experimental energy correction",
+            value=bool(correction.get("enabled", correction_defaults["enabled"])),
+            help=(
+                "Fits new coefficients using energies from the selected references "
+                "backend. It never applies the pre-fitted MP2020 numbers."
+            ),
+        )
+
+        if correction["enabled"]:
+            refs_backend = cfg_edit.get("references", {})
+            relax_backend = cfg_edit.get("relax", {})
+            refs_identity = tuple(
+                str(refs_backend.get(key, "")).strip()
+                for key in ("backend", "model", "task")
+            )
+            relax_identity = tuple(
+                str(relax_backend.get(key, "")).strip()
+                for key in ("backend", "model", "task")
+            )
+            st.caption(
+                "Calibration backend: "
+                f"{refs_backend.get('backend', '')} / {refs_backend.get('model', '')} / "
+                f"{refs_backend.get('task', '') or '(no task)'}. Raw energies are retained."
+            )
+            st.caption(
+                "Candidate-relaxation backend: "
+                f"{relax_backend.get('backend', '')} / {relax_backend.get('model', '')} / "
+                f"{relax_backend.get('task', '') or '(no task)'}."
+            )
+            if refs_identity != relax_identity:
+                st.error(
+                    "Energy correction requires [references] and [relax] to use "
+                    "the same backend, model, and task. Align these settings and "
+                    "rerun relaxation before formation-energy analysis."
+                )
+            st.warning(
+                "Package-version or local-checkpoint changes also invalidate energy "
+                "provenance. Rerun refs-build, correction fitting, and any stale "
+                "candidate relaxations after such a change."
+            )
+            source_choices = CHOICES.get(
+                "energy_correction.experimental_source",
+                ["kingsbury", "kingsbury+custom", "custom"],
+            )
+            current_source = str(
+                correction.get(
+                    "experimental_source",
+                    correction_defaults["experimental_source"],
+                )
+            )
+            if current_source not in source_choices:
+                current_source = "kingsbury"
+            correction["experimental_source"] = st.selectbox(
+                "Experimental formation-enthalpy source",
+                source_choices,
+                index=source_choices.index(current_source),
+            )
+            if correction["experimental_source"] in {"custom", "kingsbury+custom"}:
+                correction["experimental_data"] = st.text_input(
+                    "Custom experimental CSV",
+                    value=str(correction.get("experimental_data", "")),
+                    help="Project-relative or absolute path; units must be explicit per row.",
+                )
+
+            correction["dataset_cache_dir"] = st.text_input(
+                "Experimental dataset cache directory (optional)",
+                value=str(
+                    correction.get(
+                        "dataset_cache_dir",
+                        correction_defaults["dataset_cache_dir"],
+                    )
+                ),
+                help=(
+                    "Optional project-relative or absolute matminer cache directory. "
+                    "Leave blank to use matminer's normal local cache."
+                ),
+            )
+
+            family_choices = CHOICES.get(
+                "energy_correction.model_family",
+                ["manual", "m0", "m1", "auto"],
+            )
+            current_family = str(
+                correction.get("model_family", correction_defaults["model_family"])
+            ).lower()
+            if current_family not in family_choices:
+                current_family = "manual"
+            correction["model_family"] = st.selectbox(
+                "Correction model family",
+                family_choices,
+                index=family_choices.index(current_family),
+                help=(
+                    "M0 fits only the ordinary-oxide oxygen term. M1 adds only "
+                    "independently supported oxide-cation terms. Auto compares both "
+                    "on identical cross-validation folds and prefers M0 unless M1 wins."
+                ),
+            )
+
+            selection_choices = CHOICES.get(
+                "energy_correction.calibration_selection",
+                ["manifest", "phase_resolved"],
+            )
+            current_selection = str(
+                correction.get(
+                    "calibration_selection",
+                    correction_defaults["calibration_selection"],
+                )
+            ).lower()
+            if current_selection not in selection_choices:
+                current_selection = "manifest"
+            correction["calibration_selection"] = st.selectbox(
+                "Calibration selection",
+                selection_choices,
+                index=selection_choices.index(current_selection),
+                help=(
+                    "phase_resolved discovers every strict ordinary binary oxide for "
+                    "the host/dopant elements in the experimental dataset."
+                ),
+            )
+
+            correction["calibration_manifest"] = st.text_input(
+                "Calibration manifest",
+                value=str(
+                    correction.get(
+                        "calibration_manifest",
+                        correction_defaults["calibration_manifest"],
+                    )
+                ),
+                help=(
+                    "Separate list of phase-matched calibration structures/energies. "
+                    "This is not [references].oxides_ref."
+                ),
+            )
+            if correction["model_family"] == "manual":
+                term_text = st.text_input(
+                    "Correction terms",
+                    value=", ".join(
+                        correction.get(
+                            "correction_terms",
+                            correction_defaults["correction_terms"],
+                        )
+                    ),
+                    help=(
+                        "Default: oxide. element:<symbol> is global; "
+                        "oxide_cation:<symbol> is restricted to ordinary oxides."
+                    ),
+                )
+                correction["correction_terms"] = [
+                    term.strip() for term in term_text.split(",") if term.strip()
+                ]
+                if not correction["correction_terms"]:
+                    st.error("At least one correction term is required.")
+                explicit_element_terms = any(
+                    term.lower().startswith(("element:", "oxide_cation:"))
+                    for term in correction["correction_terms"]
+                )
+                correction["allow_element_terms"] = (
+                    st.checkbox(
+                        "I explicitly accept and validated manual composition terms",
+                        value=bool(correction.get("allow_element_terms", False)),
+                    )
+                    if explicit_element_terms
+                    else False
+                )
+            else:
+                correction["correction_terms"] = ["oxide"]
+                correction["allow_element_terms"] = False
+                m1_text = st.text_input(
+                    "M1 cation scope",
+                    value=(
+                        correction.get("m1_elements", "workflow")
+                        if isinstance(correction.get("m1_elements", "workflow"), str)
+                        else ", ".join(correction.get("m1_elements", []))
+                    ),
+                    help=(
+                        "Use 'workflow' to infer elements from the host formula and the "
+                        "actual explicit/enumerated dopants, or enter symbols separated by commas."
+                    ),
+                ).strip()
+                correction["m1_elements"] = (
+                    "workflow"
+                    if m1_text.lower() == "workflow"
+                    else [item.strip() for item in m1_text.split(",") if item.strip()]
+                )
+
+            if correction["calibration_selection"] == "phase_resolved":
+                correction["auto_fetch_phase_structures"] = st.checkbox(
+                    "Fetch missing curated structures from Materials Project OPTIMADE",
+                    value=bool(
+                        correction.get(
+                            "auto_fetch_phase_structures",
+                            correction_defaults["auto_fetch_phase_structures"],
+                        )
+                    ),
+                    help=(
+                        "Downloads only structures named by curated likely MP IDs, then "
+                        "caches the exact response and computes energies with your backend."
+                    ),
+                )
+                correction["optimade_base_url"] = st.text_input(
+                    "OPTIMADE base URL",
+                    value=str(
+                        correction.get(
+                            "optimade_base_url",
+                            correction_defaults["optimade_base_url"],
+                        )
+                    ),
+                    help=(
+                        "Structure-discovery endpoint used only by phase-resolved automatic "
+                        "fetching. It supplies geometry, never correction energies or hull values."
+                    ),
+                ).strip()
+                if not correction["optimade_base_url"]:
+                    st.error("OPTIMADE base URL must not be empty in phase_resolved mode.")
+            else:
+                correction["auto_fetch_phase_structures"] = False
+
+            with st.expander("Advanced correction controls", expanded=False):
+                excluded_text = st.text_input(
+                    "Excluded polyanion formula tokens",
+                    value=", ".join(
+                        correction.get(
+                            "exclude_polyanions",
+                            correction_defaults["exclude_polyanions"],
+                        )
+                    ),
+                    help=(
+                        "Comma-separated tokens excluded from calibration by default "
+                        "because their oxygen chemistry is outside the simple oxide basis. "
+                        "Change this expert setting only with a validated correction basis."
+                    ),
+                )
+                correction["exclude_polyanions"] = [
+                    token.strip() for token in excluded_text.split(",") if token.strip()
+                ]
+                correction["max_relative_experimental_uncertainty"] = st.number_input(
+                    "Maximum relative experimental uncertainty",
+                    value=float(
+                        correction.get(
+                            "max_relative_experimental_uncertainty",
+                            correction_defaults[
+                                "max_relative_experimental_uncertainty"
+                            ],
+                        )
+                    ),
+                    step=0.01,
+                )
+                if correction["max_relative_experimental_uncertainty"] <= 0:
+                    st.error("Maximum relative experimental uncertainty must be > 0.")
+                hull_limit_raw = correction.get(
+                    "max_calculated_e_above_hull_eV_per_atom",
+                    correction_defaults[
+                        "max_calculated_e_above_hull_eV_per_atom"
+                    ],
+                )
+                hull_filter_configured = not (
+                    hull_limit_raw is None
+                    or hull_limit_raw is False
+                    or str(hull_limit_raw).strip().lower() in {"", "none", "false"}
+                )
+                hull_filter_enabled = st.checkbox(
+                    "Filter calibration phases by same-backend energy above hull",
+                    value=hull_filter_configured,
+                    help=(
+                        "When disabled, the TOML value is written as false. When enabled, "
+                        "the manifest must provide the hull value, provenance, and an exact "
+                        "backend/model/task, backend-version, and settings-hash identity."
+                    ),
+                )
+                if hull_filter_enabled:
+                    hull_limit_value = (
+                        float(hull_limit_raw)
+                        if hull_filter_configured
+                        else float(
+                            correction_defaults[
+                                "max_calculated_e_above_hull_eV_per_atom"
+                            ]
+                        )
+                    )
+                    correction[
+                        "max_calculated_e_above_hull_eV_per_atom"
+                    ] = st.number_input(
+                        "Maximum calibration energy above hull (eV/atom)",
+                        min_value=0.0,
+                        value=hull_limit_value,
+                        step=0.01,
+                    )
+                else:
+                    correction["max_calculated_e_above_hull_eV_per_atom"] = False
+                correction["min_degrees_of_freedom"] = int(
+                    st.number_input(
+                        "Minimum residual degrees of freedom",
+                        min_value=1,
+                        value=int(
+                            correction.get(
+                                "min_degrees_of_freedom",
+                                correction_defaults["min_degrees_of_freedom"],
+                            )
+                        ),
+                        step=1,
+                    )
+                )
+                correction["min_term_support"] = int(
+                    st.number_input(
+                        "Minimum calibration compounds per fitted term",
+                        min_value=2,
+                        value=int(
+                            correction.get(
+                                "min_term_support",
+                                correction_defaults["min_term_support"],
+                            )
+                        ),
+                        step=1,
+                        help=(
+                            "Every fitted correction term must be represented by at "
+                            "least this many accepted calibration compounds."
+                        ),
+                    )
+                )
+                if correction["model_family"] in {"m1", "auto"}:
+                    correction["min_element_compounds"] = int(
+                        st.number_input(
+                            "Minimum independent compounds per M1 cation",
+                            min_value=3,
+                            value=int(
+                                correction.get(
+                                    "min_element_compounds",
+                                    correction_defaults["min_element_compounds"],
+                                )
+                            ),
+                            step=1,
+                        )
+                    )
+                    correction["min_element_stoichiometries"] = int(
+                        st.number_input(
+                            "Minimum distinct O:cation stoichiometries",
+                            min_value=2,
+                            value=int(
+                                correction.get(
+                                    "min_element_stoichiometries",
+                                    correction_defaults[
+                                        "min_element_stoichiometries"
+                                    ],
+                                )
+                            ),
+                            step=1,
+                        )
+                    )
+                    correction["min_cv_improvement_eV_per_atom"] = st.number_input(
+                        "Minimum M1 cross-validation RMSE improvement (eV/atom)",
+                        min_value=0.0,
+                        value=float(
+                            correction.get(
+                                "min_cv_improvement_eV_per_atom",
+                                correction_defaults[
+                                    "min_cv_improvement_eV_per_atom"
+                                ],
+                            )
+                        ),
+                        step=0.005,
+                        format="%.3f",
+                    )
+                    correction["require_cv_one_standard_error"] = st.checkbox(
+                        "Require improvement beyond one cross-validation standard error",
+                        value=bool(
+                            correction.get(
+                                "require_cv_one_standard_error",
+                                correction_defaults[
+                                    "require_cv_one_standard_error"
+                                ],
+                            )
+                        ),
+                    )
+                correction["max_condition_number"] = st.number_input(
+                    "Maximum weighted-design condition number",
+                    value=float(
+                        correction.get(
+                            "max_condition_number",
+                            correction_defaults["max_condition_number"],
+                        )
+                    ),
+                    step=1.0e6,
+                    format="%.3e",
+                    help=(
+                        "The fit fails above this limit; the conservative default is 1e8."
+                    ),
+                )
+                if correction["max_condition_number"] <= 1:
+                    st.error("Maximum weighted-design condition number must be > 1.")
+                correction["poor_fit_rmse_warning_eV_per_atom"] = st.number_input(
+                    "Poor-fit RMSE warning threshold (eV/atom)",
+                    min_value=1.0e-6,
+                    value=float(
+                        correction.get(
+                            "poor_fit_rmse_warning_eV_per_atom",
+                            correction_defaults[
+                                "poor_fit_rmse_warning_eV_per_atom"
+                            ],
+                        )
+                    ),
+                    step=0.01,
+                    format="%.3f",
+                    help=(
+                        "Diagnostic warning threshold only. It does not change coefficient "
+                        "uncertainty or silently reject a fitted model."
+                    ),
+                )
+                correction["reuse_fitted"] = st.checkbox(
+                    "Reuse an exactly matching fitted model",
+                    value=bool(
+                        correction.get(
+                            "reuse_fitted", correction_defaults["reuse_fitted"]
+                        )
+                    ),
+                )
+                correction["allow_phase_mismatch"] = st.checkbox(
+                    "Allow an explicitly reviewed phase mismatch",
+                    value=bool(correction.get("allow_phase_mismatch", False)),
+                    help=(
+                        "Unsafe by default. Formula or likely Materials Project ID alone "
+                        "does not establish polymorph identity."
+                    ),
+                )
+                correction["allow_legacy_candidate_provenance"] = st.checkbox(
+                    "Explicitly accept legacy candidate energy provenance",
+                    value=bool(
+                        correction.get(
+                            "allow_legacy_candidate_provenance",
+                            correction_defaults[
+                                "allow_legacy_candidate_provenance"
+                            ],
+                        )
+                    ),
+                    help=(
+                        "Allows already-relaxed candidates made before package/hash "
+                        "metadata was recorded. Known backend/model/task, convergence, "
+                        "optimizer, fmax, and max_steps must still match. Missing "
+                        "original package and POSCAR-hash provenance is retained as an "
+                        "explicit assumption in outputs."
+                    ),
+                )
+            st.warning(
+                "A corrected hull is produced only when every participating "
+                "non-elemental entry is compatible with the fitted model."
+            )
+
+    # -----------------------------
+    # PHASE DIAGRAM
+    # -----------------------------
+
+    with st.expander("Phase diagram", expanded=False):
+        st.subheader("Energy above hull")
+
+        cfg_edit.setdefault("phase_diagram", {})
+
+        cfg_edit["phase_diagram"]["skip_if_done"] = st.checkbox(
+            "Skip if phase_diagram_results.csv already exists",
+            value=bool(cfg_edit["phase_diagram"].get("skip_if_done", True)),
+            help="Skip the phase-diagram step if phase_diagram_results.csv already exists.",
+        )
+
+        cfg_edit["phase_diagram"]["stable_threshold_eV_per_atom"] = st.number_input(
+            "Stability threshold (eV/atom)",
+            value=float(cfg_edit["phase_diagram"].get("stable_threshold_eV_per_atom", 1.0e-8)),
+            min_value=0.0,
+            step=0.01,
+            format="%.3f",
+            help="Candidates at or below this energy-above-hull threshold are labeled stable.",
+        )
+
+        st.info(
+            "This step builds a separate phase diagram for every exact candidate chemical "
+            "system, writes per-system CSV files under phase_diagrams/, and also writes a "
+            "combined phase_diagram_results.csv. Every element in a system requires an "
+            "elemental terminal reference from refs-build. When correction is enabled, "
+            "raw and corrected hulls are rebuilt independently from complete entry sets."
+        )
+
+    # -----------------------------
+    # VACANCIES (one flat TOML section)
+    # -----------------------------
+    with st.expander("Vacancies", expanded=False):
+        vac = cfg_edit.setdefault("vacancies", {})
+        defaults = DEFAULTS["vacancies"]
+        st.caption(
+            "One command performs formal-charge analysis, symmetry enumeration, ML "
+            "screening, top-k selection, and relaxation. All controls below are saved "
+            "directly under the single [vacancies] table."
+        )
+
+        st.markdown("#### General")
+        c1, c2, c3, c4 = st.columns(4)
+        vac["enabled"] = c1.checkbox("Enabled", bool(vac.get("enabled", defaults["enabled"])), key="vac_enabled")
+        vac["include_parent_reference"] = c2.checkbox(
+            "Include parent reference", bool(vac.get("include_parent_reference", True)), key="vac_parent_ref"
+        )
+        vac["skip_if_done"] = c3.checkbox("Skip compatible completed", bool(vac.get("skip_if_done", True)), key="vac_skip")
+        vac["resume"] = c4.checkbox("Resume compatible phases", bool(vac.get("resume", True)), key="vac_resume")
+        parent_source_options = list(CHOICES.get("vacancies.parent_source", []))
+        for supported_source in ("selected_candidates", "directory"):
+            if supported_source not in parent_source_options:
+                parent_source_options.append(supported_source)
+        current_parent_source = str(
+            vac.get("parent_source", "selected_candidates")
+        ).strip()
+        if current_parent_source not in parent_source_options:
+            current_parent_source = "selected_candidates"
+        vac["parent_source"] = st.selectbox(
+            "Parent source",
+            parent_source_options,
+            index=parent_source_options.index(current_parent_source),
+            key="vac_parent_source",
+        )
+        if vac["parent_source"] == "directory":
+            vac["parent_directory"] = st.text_input(
+                "Parent directory",
+                value=str(vac.get("parent_directory", "")),
+                key="vac_parent_directory",
+                help=(
+                    "Directory containing composition subdirectories with "
+                    "selected_candidates.txt and candidate_*/01_scan + 02_relax outputs. "
+                    "Relative paths are resolved from input.toml."
+                ),
+            )
+
+        st.markdown("#### Formal charge model")
+        c1, c2, c3, c4, c5 = st.columns(5)
+        vac["count_mode"] = c1.selectbox(
+            "Count mode", CHOICES["vacancies.count_mode"],
+            index=CHOICES["vacancies.count_mode"].index(vac.get("count_mode", "all_reachable")),
+            key="vac_count_mode",
+        )
+        vac["host_species"] = c2.text_input("Host species", str(vac.get("host_species", "Sn")), key="vac_host")
+        vac["host_oxidation_state"] = int(c3.number_input("Host oxidation state", value=int(vac.get("host_oxidation_state", 4)), step=1, key="vac_host_ox"))
+        vac["vacancy_species"] = c4.text_input("Vacancy species", str(vac.get("vacancy_species", "O")), key="vac_species")
+        vac["vacancy_compensation_charge"] = int(c5.number_input("Vacancy charge", min_value=1, value=int(vac.get("vacancy_compensation_charge", 2)), step=1, key="vac_charge"))
+        elements = list(vac.get("oxidation_state_elements", defaults["oxidation_state_elements"]))
+        state_values = list(vac.get("oxidation_state_values", defaults["oxidation_state_values"]))
+        pair_rows = [
+            {"element": str(element), "oxidation_states": ", ".join(str(x) for x in states)}
+            for element, states in zip(elements, state_values)
+        ]
+        st.caption(
+            "Enter comma-separated integer oxidation states. Rows are saved as "
+            "two flat parallel arrays in [vacancies]."
+        )
+        edited_pairs = st.data_editor(
+            pd.DataFrame(pair_rows, columns=["element", "oxidation_states"]),
+            num_rows="dynamic", use_container_width=True, key="vac_oxidation_pairs",
+        )
+        parsed_elements, parsed_states, pair_errors = [], [], []
+        for row_number, row in edited_pairs.iterrows():
+            element = str(row.get("element", "")).strip()
+            state_text = str(row.get("oxidation_states", "")).strip()
+            if not element and not state_text:
+                continue
+            try:
+                states = [int(value.strip()) for value in state_text.split(",") if value.strip()]
+            except ValueError:
+                states = []
+            if not element or not states:
+                pair_errors.append(f"Row {row_number + 1} needs an element and integer oxidation states.")
+            parsed_elements.append(element)
+            parsed_states.append(states)
+        duplicates = sorted({element for element in parsed_elements if parsed_elements.count(element) > 1})
+        if duplicates:
+            pair_errors.append("Duplicate elements: " + ", ".join(duplicates))
+        if pair_errors:
+            st.error(" ".join(pair_errors))
+        else:
+            vac["oxidation_state_elements"] = parsed_elements
+            vac["oxidation_state_values"] = parsed_states
+
+        st.markdown("#### Vacancy range")
+        c1, c2 = st.columns(2)
+        vac["extra_vacancies"] = int(c1.number_input("Extra vacancies", min_value=0, value=int(vac.get("extra_vacancies", 0)), key="vac_extra"))
+        vac["max_vacancies_cap"] = int(c2.number_input("Maximum vacancy cap", min_value=1, value=int(vac.get("max_vacancies_cap", 8)), key="vac_cap"))
+
+        st.markdown("#### Search method and supercell")
+        c1, c2, c3, c4 = st.columns(4)
+        search_methods = CHOICES["vacancies.search_method"]
+        current_search = str(vac.get("search_method", "enumeration"))
+        current_search = {
+            "pymatgen": "enumeration",
+            "monte_carlo": "monte-carlo",
+        }.get(current_search, current_search)
+        if current_search not in search_methods:
+            current_search = "enumeration"
+        vac["search_method"] = c1.selectbox(
+            "Vacancy search", search_methods,
+            index=search_methods.index(current_search), key="vac_search_method",
+            format_func=lambda value: "Enumeration" if value == "enumeration" else "Monte Carlo",
+            help="Choose symmetry-based enumeration or Metropolis Monte Carlo occupation sampling.",
+        )
+        supercell = list(vac.get("supercell", [1, 1, 1]))
+        while len(supercell) < 3:
+            supercell.append(1)
+        vac["supercell"] = [
+            int(column.number_input(label, min_value=1, value=int(supercell[index]), step=1, key=f"vac_supercell_{index}"))
+            for index, (column, label) in enumerate(zip((c2, c3, c4), ("Supercell a", "Supercell b", "Supercell c")))
+        ]
+
+        if vac["search_method"] == "enumeration":
+            st.markdown("#### Enumeration settings")
+            c1, c2, c3, c4 = st.columns(4)
+            vac["enumeration_mode"] = c1.selectbox("Mode", CHOICES["vacancies.enumeration_mode"], index=CHOICES["vacancies.enumeration_mode"].index(vac.get("enumeration_mode", "auto")), key="vac_enum_mode")
+            vac["symprec"] = float(c2.number_input("Symmetry precision", min_value=1e-8, value=float(vac.get("symprec", 1e-3)), format="%.6g", key="vac_symprec"))
+            vac["angle_tolerance"] = float(c3.number_input("Angle tolerance", min_value=0.01, value=float(vac.get("angle_tolerance", 5.0)), key="vac_angle"))
+            vac["mapping_tolerance"] = float(c4.number_input("Mapping tolerance (Å)", min_value=0.001, value=float(vac.get("mapping_tolerance", 1.0)), key="vac_mapping"))
+            numeric_keys = [
+                ("max_exact_raw_configs", "Max exact raw"), ("max_exact_unique_configs", "Max exact unique"),
+                ("sample_budget", "Sample budget"), ("sample_batch_size", "Sample batch"),
+                ("sample_patience", "Sample patience"), ("sample_seed", "Sample seed"),
+                ("sample_max_saved", "Max sampled saved"),
+            ]
+            columns = st.columns(4)
+            for index, (key, label) in enumerate(numeric_keys):
+                minimum = None if key == "sample_seed" else 1
+                vac[key] = int(columns[index % 4].number_input(label, min_value=minimum, value=int(vac.get(key, defaults[key])), step=1, key=f"vac_{key}"))
+            vac["minimum_vacancy_distance"] = float(st.number_input("Minimum vacancy distance (Å)", min_value=0.0, value=float(vac.get("minimum_vacancy_distance", 0.0)), key="vac_min_distance"))
+        else:
+            st.markdown("#### Monte Carlo settings")
+            st.caption(
+                "Monte Carlo swaps vacancies with anions and swaps every distinct cation "
+                "species present in the relaxed parent, including systems with multiple dopants."
+            )
+            c1, c2, c3, c4 = st.columns(4)
+            vac["mc_temperature_K"] = float(c1.number_input("Monte Carlo temperature (K)", min_value=0.001, value=float(vac.get("mc_temperature_K", 300.0)), key="vac_mc_temperature", help="Constant temperature, or the final target temperature when annealing is enabled."))
+            vac["mc_annealing"] = c2.checkbox(
+                "Enable annealing",
+                value=bool(vac.get("mc_annealing", False)),
+                key="vac_mc_annealing",
+            )
+            modes = CHOICES["vacancies.mc_run_mode"]
+            mode = str(vac.get("mc_run_mode", "combined"))
+            vac["mc_run_mode"] = c3.selectbox("Stopping mode", modes, index=modes.index(mode), key="vac_mc_mode")
+            vac["sample_seed"] = int(c4.number_input("Random seed", value=int(vac.get("sample_seed", 42)), key="vac_mc_seed"))
+            if vac["mc_annealing"]:
+                c1, c2, c3 = st.columns(3)
+                vac["mc_initial_temperature_K"] = float(c1.number_input("Initial high temperature (K)", min_value=0.001, value=float(vac.get("mc_initial_temperature_K", 1200.0)), key="vac_mc_initial_temperature"))
+                vac["mc_annealing_hold_steps"] = int(c2.number_input("High-temperature hold steps", min_value=0, value=int(vac.get("mc_annealing_hold_steps", 500)), key="vac_mc_hold_steps"))
+                vac["mc_annealing_steps"] = int(c3.number_input("Cooling ramp steps", min_value=0, value=int(vac.get("mc_annealing_steps", 2000)), key="vac_mc_annealing_steps"))
+                if vac["mc_initial_temperature_K"] < vac["mc_temperature_K"]:
+                    st.error("Initial temperature must be greater than or equal to the final Monte Carlo temperature.")
+            else:
+                st.caption(f"Isothermal sampling at {vac['mc_temperature_K']:g} K.")
+            c1, c2 = st.columns(2)
+            vac["mc_max_steps"] = int(c1.number_input("MC max steps", min_value=1, value=int(vac.get("mc_max_steps", 10000)), key="vac_mc_steps"))
+            vac["mc_patience"] = int(c2.number_input("MC patience", min_value=1, value=int(vac.get("mc_patience", 2000)), key="vac_mc_patience"))
+            c1, c2, c3 = st.columns(3)
+            vac["mc_energy_window_eV"] = float(c1.number_input("Archive window (eV)", min_value=0.0, value=float(vac.get("mc_energy_window_eV", 0.5)), key="vac_mc_window"))
+            vac["sample_max_saved"] = int(c2.number_input("Maximum archived candidates", min_value=1, value=int(vac.get("sample_max_saved", 50000)), key="vac_mc_max_saved"))
+            vac["mc_improvement_tolerance_eV"] = float(c3.number_input("Improvement tolerance (eV)", min_value=0.0, value=float(vac.get("mc_improvement_tolerance_eV", 1e-5)), format="%.3g", key="vac_mc_tolerance"))
+            c1, c2 = st.columns(2)
+            vac["mc_cation_move_weight"] = float(c1.number_input("Cation-swap weight", min_value=0.0, value=float(vac.get("mc_cation_move_weight", 0.5)), key="vac_mc_cation_weight"))
+            vac["mc_vacancy_move_weight"] = float(c2.number_input("Vacancy-swap weight", min_value=0.0, value=float(vac.get("mc_vacancy_move_weight", 0.5)), key="vac_mc_vacancy_weight"))
+
+        st.markdown("#### ML calculator")
+        c1, c2, c3 = st.columns(3)
+        backend_choices = CHOICES["vacancies.backend"]
+        current_backend = str(vac.get("backend", defaults["backend"]))
+        if current_backend not in backend_choices:
+            current_backend = defaults["backend"]
+        vac["backend"] = c1.selectbox("Backend", backend_choices, index=backend_choices.index(current_backend), key="vac_backend")
+        vac["device"] = c2.selectbox("Device", CHOICES["vacancies.device"], index=CHOICES["vacancies.device"].index(vac.get("device", defaults["device"])), key="vac_device")
+        vac["gpu_id"] = int(c3.number_input("GPU id", min_value=0, value=int(vac.get("gpu_id", 0)), key="vac_gpu"))
+        if vac["backend"] == "mace":
+            vac["model"] = mace_model_input("Model", vac.get("model", "small"), key="vac_model")
+            vac["task"] = mace_head_input("Task/head", vac.get("task", ""), key="vac_task")
+        elif vac["backend"] == "uma":
+            current_model = str(vac.get("model", "uma-s-1p2"))
+            if current_model not in UMA_MODEL_CHOICES:
+                current_model = "uma-s-1p2"
+            current_task = str(vac.get("task", "omat"))
+            if current_task not in UMA_TASK_CHOICES:
+                current_task = "omat"
+            c1, c2 = st.columns(2)
+            vac["model"] = c1.selectbox(
+                "UMA model", UMA_MODEL_CHOICES,
+                index=UMA_MODEL_CHOICES.index(current_model), key="vac_uma_model"
+            )
+            vac["task"] = c2.selectbox(
+                "UMA task", UMA_TASK_CHOICES,
+                index=UMA_TASK_CHOICES.index(current_task), key="vac_uma_task"
+            )
+        elif vac["backend"] == "grace":
+            current_model = str(vac.get("model", "GRACE-1L-OMAT"))
+            if current_model not in GRACE_MODEL_CHOICES:
+                current_model = "GRACE-1L-OMAT"
+            vac["model"] = st.selectbox(
+                "GRACE model", GRACE_MODEL_CHOICES,
+                index=GRACE_MODEL_CHOICES.index(current_model), key="vac_grace_model"
+            )
+            vac["task"] = ""
+        else:
+            vac["model"] = "default"
+            vac["task"] = ""
+            st.caption("M3GNet uses its default pretrained model and has no task selector.")
+
+        st.markdown("#### Screening")
+        c1, c2 = st.columns(2)
+        vac["topk_per_vacancy_count"] = int(c1.number_input("Top-k per vacancy count", min_value=1, value=int(vac.get("topk_per_vacancy_count", 15)), key="vac_topk"))
+        vac["energy_normalization"] = c2.selectbox("Reported normalization", CHOICES["vacancies.energy_normalization"], index=CHOICES["vacancies.energy_normalization"].index(vac.get("energy_normalization", "per_vacancy")), key="vac_norm")
+
+        st.markdown("#### Relaxation")
+        c1, c2, c3, c4, c5 = st.columns(5)
+        vac["optimizer"] = c1.selectbox("Optimizer", CHOICES["vacancies.optimizer"], index=CHOICES["vacancies.optimizer"].index(vac.get("optimizer", "bfgs")), key="vac_opt")
+        vac["fmax"] = float(c2.number_input("fmax", min_value=0.0001, value=float(vac.get("fmax", 0.05)), key="vac_fmax"))
+        vac["max_steps"] = int(c3.number_input("Max steps", min_value=1, value=int(vac.get("max_steps", 300)), key="vac_steps"))
+        vac["relax_mode"] = c4.selectbox("Relax mode", CHOICES["vacancies.relax_mode"], index=CHOICES["vacancies.relax_mode"].index(vac.get("relax_mode", "atoms")), key="vac_relax_mode")
+        vac["cell_filter"] = c5.selectbox("Cell filter", CHOICES["vacancies.cell_filter"], index=CHOICES["vacancies.cell_filter"].index(vac.get("cell_filter", "frechet")), key="vac_cell_filter")
+
+        st.markdown("#### Execution")
+        columns = st.columns(4)
+        for index, key in enumerate(("n_workers", "tf_threads", "omp_threads", "chunksize")):
+            vac[key] = int(columns[index].number_input(key.replace("_", " ").title(), min_value=1, value=int(vac.get(key, defaults[key])), key=f"vac_exec_{key}"))
+
+        st.markdown("#### Level-1 static-lattice thermodynamic analysis")
+        vac["static_thermodynamic_analysis"] = st.checkbox(
+            "Create static-lattice vacancy thermodynamic outputs",
+            value=bool(
+                vac.get(
+                    "static_thermodynamic_analysis",
+                    vac.get("thermodynamic_analysis", defaults["static_thermodynamic_analysis"]),
+                )
+            ),
+            key="vac_static_thermodynamic_analysis",
+            help="Disabled by default for backward compatibility. Enable only after choosing an oxygen-reference policy.",
+        )
+        if vac["static_thermodynamic_analysis"]:
+            st.warning(
+                "Static-lattice baseline: 0 K relaxed ML energies are retained. Gas-phase "
+                "O2 enthalpy/entropy and pressure can be added in the T-pO2 analysis. "
+                "Solid vacancy configurational entropy can optionally be included as an "
+                "ideal-mixing or explicit partition-function term; phonon, zero-point, "
+                "thermal-electronic, magnetic and anharmonic solid terms remain neglected."
+            )
+            modes = CHOICES["vacancies.oxygen_reference_mode"]
+            current_mode = str(vac.get("oxygen_reference_mode", defaults["oxygen_reference_mode"]))
+            if current_mode not in modes:
+                current_mode = defaults["oxygen_reference_mode"]
+            vac["oxygen_reference_mode"] = st.selectbox(
+                "Oxygen reference mode", modes, index=modes.index(current_mode), key="vac_o_ref_mode"
+            )
+            current_mode = vac["oxygen_reference_mode"]
+            if current_mode in {"global", "chemistry-specific"}:
+                vac["oxygen_reference_file"] = st.text_input(
+                    "Reference energies JSON",
+                    value=str(vac.get("oxygen_reference_file", defaults["oxygen_reference_file"])),
+                    key="vac_o_cal_ref_file",
+                    help="Uses already calculated binary oxide and bulk-metal references from refs-build.",
+                )
+                calibration_sources = CHOICES["vacancies.oxygen_calibration_experimental_source"]
+                current_calibration_source = str(
+                    vac.get(
+                        "oxygen_calibration_experimental_source",
+                        defaults["oxygen_calibration_experimental_source"],
+                    )
+                )
+                if current_calibration_source not in calibration_sources:
+                    current_calibration_source = defaults["oxygen_calibration_experimental_source"]
+                vac["oxygen_calibration_experimental_source"] = st.selectbox(
+                    "Experimental formation-enthalpy source",
+                    calibration_sources,
+                    index=calibration_sources.index(current_calibration_source),
+                    key="vac_o_cal_source",
+                )
+                if vac["oxygen_calibration_experimental_source"] in {"custom", "kingsbury+custom"}:
+                    vac["oxygen_calibration_experimental_data"] = st.text_input(
+                        "Custom experimental CSV",
+                        value=str(vac.get("oxygen_calibration_experimental_data", "")),
+                        key="vac_o_cal_custom",
+                    )
+                vac["oxygen_calibration_dataset_cache_dir"] = st.text_input(
+                    "Experimental dataset cache directory (optional)",
+                    value=str(vac.get("oxygen_calibration_dataset_cache_dir", "")),
+                    key="vac_o_cal_cache",
+                )
+                ccal1, ccal2 = st.columns(2)
+                vac["oxygen_calibration_min_references"] = int(ccal1.number_input(
+                    "Minimum calibration oxides",
+                    min_value=1,
+                    value=int(vac.get("oxygen_calibration_min_references", 2)),
+                    step=1,
+                    key="vac_o_cal_min_refs",
+                ))
+                vac["oxygen_calibration_include_host_oxide"] = ccal2.checkbox(
+                    "Include host oxide when eligible",
+                    value=bool(vac.get("oxygen_calibration_include_host_oxide", True)),
+                    key="vac_o_cal_host",
+                )
+                st.info(
+                    "Global uses all eligible real binary reference oxides. Chemistry-specific "
+                    "uses only oxides of the actual host/dopant cations. Missing oxide "
+                    "stoichiometries are never invented."
+                )
+            elif current_mode == "reference_file":
+                vac["oxygen_reference_file"] = st.text_input(
+                    "Reference energies JSON",
+                    value=str(vac.get("oxygen_reference_file", defaults["oxygen_reference_file"])),
+                    key="vac_o_ref_file",
+                )
+            elif current_mode == "same_calculator":
+                vac["oxygen_reference_structure"] = st.text_input(
+                    "O2 structure",
+                    value=str(vac.get("oxygen_reference_structure", defaults["oxygen_reference_structure"])),
+                    key="vac_o_ref_structure",
+                )
+                vac["oxygen_reference_relax"] = st.checkbox(
+                    "Relax O2 with the same calculator",
+                    value=bool(vac.get("oxygen_reference_relax", False)),
+                    key="vac_o_ref_relax",
+                )
+                st.warning("A solid-trained foundation model may describe isolated O2 inaccurately even when calculator-consistent.")
+            elif current_mode == "explicit":
+                vac["mu_O_reference_eV"] = float(st.number_input(
+                    "mu_O reference (eV per oxygen atom)",
+                    value=float(vac.get("mu_O_reference_eV", -4.8)),
+                    key="vac_mu_o_explicit",
+                ))
+            elif current_mode == "none":
+                st.info("Minima will be written, but no preferred vacancy count across oxygen contents will be claimed.")
+            if current_mode not in {"global", "chemistry-specific"}:
+                vac["allow_unverified_oxygen_reference"] = st.checkbox(
+                    "Allow an unverifiable reference (recorded as unverified)",
+                    value=bool(vac.get("allow_unverified_oxygen_reference", False)),
+                    key="vac_allow_unverified_ref",
+                )
+            else:
+                vac["allow_unverified_oxygen_reference"] = False
+            c1, c2, c3 = st.columns(3)
+            vac["delta_mu_O_min_eV"] = float(c1.number_input("Minimum delta mu_O (eV)", value=float(vac.get("delta_mu_O_min_eV", -3.0)), max_value=0.0, key="vac_delta_mu_min"))
+            vac["delta_mu_O_max_eV"] = float(c2.number_input("Maximum delta mu_O (eV)", value=float(vac.get("delta_mu_O_max_eV", 0.0)), max_value=0.0, key="vac_delta_mu_max"))
+            vac["thermodynamic_tolerance_eV"] = float(c3.number_input("Tie tolerance (eV)", min_value=1.0e-12, value=float(vac.get("thermodynamic_tolerance_eV", 1.0e-8)), format="%.3e", key="vac_thermo_tol"))
+            points_text = st.text_input(
+                "Selected delta mu_O points (comma-separated eV)",
+                value=", ".join(str(value) for value in vac.get("delta_mu_O_points_eV", defaults["delta_mu_O_points_eV"])),
+                key="vac_delta_mu_points",
+            )
+            try:
+                vac["delta_mu_O_points_eV"] = [float(value.strip()) for value in points_text.split(",") if value.strip()]
+            except ValueError:
+                st.error("Selected delta mu_O points must be comma-separated numbers.")
+            sources = CHOICES["vacancies.static_energy_source"]
+            current_source = str(
+                vac.get(
+                    "static_energy_source",
+                    vac.get("analysis_energy_source", "relaxed_only"),
+                )
+            )
+            if current_source not in sources:
+                current_source = "relaxed_only"
+            c1, c2 = st.columns(2)
+            vac["static_energy_source"] = c1.selectbox("Static energy source", sources, index=sources.index(current_source), key="vac_static_source")
+            vac["exclude_unconverged"] = c2.checkbox("Exclude unconverged structures", value=bool(vac.get("exclude_unconverged", True)), key="vac_exclude_unconverged")
+
+            entropy_modes = list(CHOICES["vacancies.solid_configurational_entropy"])
+            if vac.get("search_method") == "monte-carlo":
+                entropy_modes = [mode for mode in entropy_modes if mode != "configurational"]
+                st.caption(
+                    "Monte Carlo supports static-lattice ('none') or ideal vacancy mixing. "
+                    "The exact configurational partition function is available only with "
+                    "Enumeration and exact symmetry-orbit degeneracies."
+                )
+            current_entropy_mode = str(
+                vac.get("solid_configurational_entropy", defaults["solid_configurational_entropy"])
+            )
+            if current_entropy_mode not in entropy_modes:
+                current_entropy_mode = defaults["solid_configurational_entropy"]
+            vac["solid_configurational_entropy"] = st.selectbox(
+                "Solid vacancy configurational treatment",
+                entropy_modes,
+                index=entropy_modes.index(current_entropy_mode),
+                key="vac_solid_config_entropy",
+                help=(
+                    "none: static-lattice solid. ideal: ideal occupied/vacant mixing entropy. "
+                    "configurational: explicit canonical partition function over exact "
+                    "symmetry-distinct vacancy configurations."
+                ),
+            )
+            if vac["solid_configurational_entropy"] == "configurational":
+                st.warning(
+                    "Partition-function mode requires exact vacancy enumeration and exact orbit "
+                    "degeneracies. If auto mode switches to sampling, analysis stops with a "
+                    "clear error rather than inventing degeneracies. The complete relaxed "
+                    "spectrum is used when available; otherwise the full exact single-point "
+                    "spectrum supplies the configurational correction to the relaxed minimum."
+                )
+            elif vac["solid_configurational_entropy"] == "ideal":
+                st.info(
+                    "Ideal mode adds -T S_mix from occupied/vacant oxygen-site mixing to the "
+                    "finite-temperature vacancy free energy."
+                )
+
+            st.markdown("##### Temperature–pressure mapping")
+            vac["pressure_mapping"] = st.checkbox(
+                "Create T–pO2 map",
+                value=bool(vac.get("pressure_mapping", True)),
+                key="vac_pressure_mapping",
+            )
+            if vac["pressure_mapping"]:
+                temperatures_text = st.text_input(
+                    "Temperatures (K, comma-separated)",
+                    value=", ".join(str(value) for value in vac.get("temperatures_K", defaults["temperatures_K"])),
+                    key="vac_temperatures",
+                )
+                try:
+                    vac["temperatures_K"] = [
+                        float(value.strip())
+                        for value in temperatures_text.split(",")
+                        if value.strip()
+                    ]
+                except ValueError:
+                    st.error("Temperatures must be comma-separated numbers.")
+                c1, c2, c3, c4 = st.columns(4)
+                vac["standard_oxygen_pressure_bar"] = float(c1.number_input(
+                    "Standard pO2 (bar)", min_value=1.0e-30,
+                    value=float(vac.get("standard_oxygen_pressure_bar", 1.0)),
+                    format="%.6g", key="vac_standard_pressure",
+                ))
+                vac["log10_pO2_min_bar"] = float(c2.number_input(
+                    "Minimum log10(pO2/bar)", value=float(vac.get("log10_pO2_min_bar", -30.0)),
+                    key="vac_pressure_min",
+                ))
+                vac["log10_pO2_max_bar"] = float(c3.number_input(
+                    "Maximum log10(pO2/bar)", value=float(vac.get("log10_pO2_max_bar", 1.0)),
+                    key="vac_pressure_max",
+                ))
+                vac["log10_pO2_step"] = float(c4.number_input(
+                    "log10 pressure step", min_value=1.0e-6,
+                    value=float(vac.get("log10_pO2_step", 0.5)), key="vac_pressure_step",
+                ))
+                standard_modes = CHOICES["vacancies.oxygen_standard_state_mode"]
+                standard_mode = str(
+                    vac.get(
+                        "oxygen_standard_state_mode",
+                        defaults["oxygen_standard_state_mode"],
+                    )
+                )
+                if standard_mode not in standard_modes:
+                    standard_mode = defaults["oxygen_standard_state_mode"]
+                vac["oxygen_standard_state_mode"] = st.selectbox(
+                    "O2 standard-state correction", standard_modes,
+                    index=standard_modes.index(standard_mode), key="vac_standard_state_mode",
+                )
+                if vac["oxygen_standard_state_mode"] == "none":
+                    st.warning(
+                        "Approximate pressure mapping: the O2 standard-state thermal "
+                        "correction is omitted. Pressures are qualitative relative to "
+                        "the standard pressure at the same temperature."
+                    )
+                elif vac["oxygen_standard_state_mode"] == "nist_shomate":
+                    st.info(
+                        "NIST O2 Shomate equations provide continuous standard-state "
+                        "enthalpy and entropy corrections from 100 to 6000 K at 1 bar. "
+                        "Extrapolation and explicit O2 zero-point energy are excluded."
+                    )
+                    vac["standard_oxygen_pressure_bar"] = 1.0
+                else:
+                    table_temperatures = st.text_input(
+                        "Standard-state table temperatures (K)",
+                        value=", ".join(str(value) for value in vac.get("oxygen_standard_state_temperatures_K", [])),
+                        key="vac_standard_table_temperatures",
+                    )
+                    table_values = st.text_input(
+                        "Standard-state delta mu (eV per O)",
+                        value=", ".join(str(value) for value in vac.get("oxygen_standard_state_delta_mu_eV_per_O", [])),
+                        key="vac_standard_table_values",
+                    )
+                    try:
+                        vac["oxygen_standard_state_temperatures_K"] = [float(value.strip()) for value in table_temperatures.split(",") if value.strip()]
+                        vac["oxygen_standard_state_delta_mu_eV_per_O"] = [float(value.strip()) for value in table_values.split(",") if value.strip()]
+                    except ValueError:
+                        st.error("Standard-state table entries must be comma-separated numbers.")
+
+    # -----------------------------
+    # SURFACE
+    # -----------------------------
+    with st.expander("Surface", expanded=False):
+        st.subheader("Surface screening and refinement")
+        st.info(
+            "Surface configuration has moved to its dedicated **Surface Screening** page. "
+            "That page contains bulk-candidate selection, Miller facets and terminations, "
+            "co-dopant depth/segregation scanning, fast MLFF screening, higher-fidelity "
+            "refinement, separate-environment execution, and the results explorer."
+        )
+        st.page_link(
+            "pages/7_Surface_Screening.py",
+            label="Open Surface Screening",
+            icon="🧱",
+        )
+        st.caption("Screen the facets here, then compare adsorbate coverages as a function of potential and pH in Surface Pourbaix.")
+        st.page_link("pages/9_Surface_Pourbaix.py", label="Open Surface Pourbaix")
+        if cfg_edit.get("surface"):
+            with st.expander("Current [surface] section (read-only preview)", expanded=False):
+                st.code(toml.dumps({"surface": cfg_edit["surface"]}), language="toml")
+
+
+    # -------------------------
+    # Save Input File
+    # -------------------------
+
+    st.divider()
+    st.subheader("Save input.toml")
+
+    # Optional preview
+    with st.expander("Preview TOML", expanded=False):
+        st.code(toml.dumps(cfg_edit), language="toml")
+
+    colS1, colS2 = st.columns([1, 2], vertical_alignment="center")
+
+    with colS1:
+        if st.button("💾 Save input.toml", use_container_width=True):
+            try:
+                save_toml(input_toml_path, cfg_edit)
+                st.success(f"Saved: {input_toml_path}")
+                st.session_state["cfg_edit"] = load_toml(input_toml_path)  # reload from disk
+                st.rerun()
+            except Exception as e:
+                st.error(f"Failed to save input.toml: {e}")
+
+    with colS2:
+        st.caption("After changing parameters above, click **Save input.toml** to write the file to disk.")
+
+# ===== END PATCH =====
+
+# -----------------------
+# Page: Run
+# -----------------------
+
+elif tab == "Run":
+    st.title("Workflow Execution")
+
+    st.markdown(f"""
+**Project root:** `{project_root}`  
+**Config file:** `{input_toml_path}`
+""")
+
+    STEP_KEYS = [
+        "refs",
+        "corrections",
+        "generate",
+        "scan",
+        "relax",
+        "filter",
+        "bandgap",
+        "formation",
+        "collect",
+        "alloy-hull",
+        "phase-diagram",
+        "vacancies",
+        "site-preference",
+        "oxidation",
+        "conductivity",
+        "surface",
+        "surface-segregation",
+        "leaching",
+    ]
+
+    st.divider()
+
+    # -------------------------
+    # Run mode (3 choices)
+    # -------------------------
+    st.subheader("Run mode")
+
+    run_mode = st.radio(
+        "What do you want to run?",
+        options=[
+            "Full workflow",
+            "Full workflow including vacancies",
+            "Vacancies only",
+            "Sequential workflow",
+            "Stage range",
+            "Single stage",
+        ],
+        horizontal=True,
+        help=(
+            "Full workflow runs the standard bulk pipeline (refs → optional corrections → generate → scan → "
+            "relax → filter → bandgap → formation → collect). "
+            "Sequential workflow performs gradual sequential doping using the settings "
+            "defined in the [sequential] section of input.toml. "
+            "Stage range runs from a selected start stage to an end stage. "
+            "Single stage runs exactly one chosen stage, including surface, surface segregation, or leaching."
+        ),
+    )
+
+    # Defaults
+    step_from = "refs"
+    step_until = "collect"
+    only_steps: list[str] = []
+
+    if run_mode == "Full workflow":
+        st.success("Will run: refs → phase-diagram (bulk workflow).")
+        step_from, step_until = "refs", "phase-diagram"
+
+    elif run_mode == "Full workflow including vacancies":
+        st.success("Will run: refs → phase-diagram → vacancies.")
+        step_from, step_until = "refs", "vacancies"
+
+    elif run_mode == "Vacancies only":
+        st.success("Will run: dopingflow vacancies -c input.toml")
+        only_steps = ["vacancies"]
+        step_from, step_until = "vacancies", "vacancies"
+
+    elif run_mode == "Sequential workflow":
+        st.success(
+            "Will run: sequential doping workflow using [sequential].mode from input.toml."
+        )
+
+    elif run_mode == "Stage range":
+        colA, colB = st.columns(2)
+        with colA:
+            step_from = st.selectbox("Start stage", options=STEP_KEYS, index=0)
+        with colB:
+            step_until = st.selectbox(
+                "End stage", options=STEP_KEYS, index=STEP_KEYS.index("phase-diagram")
+            )
+
+        idx_from = STEP_KEYS.index(step_from)
+        idx_until = STEP_KEYS.index(step_until)
+
+        if idx_from > idx_until:
+            st.error("Start stage must be before (or equal to) End stage.")
+            st.stop()
+
+        st.info(f"Will run: **{step_from} → {step_until}**")
+
+    else:  # Single stage
+        single = st.selectbox("Stage", options=STEP_KEYS, index=0)
+        only_steps = [single]
+        step_from, step_until = "refs", "collect"  # range irrelevant when using --only
+        st.info(f"Will run only: **{single}**")
+
+    st.divider()
+
+    # -------------------------
+    # Common options
+    # -------------------------
+    st.subheader("Options")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        dry_run = st.checkbox("Dry run (show planned steps only)", value=False)
+    with col2:
+        verbose = st.checkbox("Verbose logging", value=False)
+
+    # Advanced controls
+    with st.expander("Advanced controls", expanded=False):
+        st.markdown("### Filter overrides (only relevant if filter runs)")
+        filter_only = st.text_input(
+            "Filter only one composition (optional)",
+            value="",
+            placeholder="e.g. Sb5_Zr5"
+        )
+        force = st.checkbox("Force recomputation (ignore existing outputs)", value=False)
+
+        colF1, colF2 = st.columns(2)
+        with colF1:
+            window_mev = st.number_input(
+                "Energy window override (meV)",
+                min_value=0.0,
+                value=0.0,
+                step=10.0
+            )
+        with colF2:
+            topn = st.number_input(
+                "Top-N override",
+                min_value=0,
+                value=0,
+                step=1
+            )
+
+        # Optional subset selection for stage-range mode
+        if run_mode == "Stage range":
+            extra_only = st.multiselect(
+                "Run only selected stages (optional)",
+                options=STEP_KEYS,
+                default=[],
+                help=(
+                    "If set, only these stages are run through the normal run-all pipeline."
+                ),
+            )
+            if extra_only:
+                only_steps = extra_only
+
+    # -------------------------
+    # Build command
+    # -------------------------
+    if run_mode == "Sequential workflow":
+        cmd = [
+            "dopingflow",
+            "sequential-run",
+            "-c",
+            str(input_toml_path),
+        ]
+        if verbose:
+            cmd += ["--verbose"]
+
+    elif run_mode in {"Vacancies only", "Single stage"} and only_steps == ["vacancies"]:
+        cmd = ["dopingflow", "vacancies", "-c", str(input_toml_path)]
+        if verbose:
+            cmd += ["--verbose"]
+
+    elif run_mode == "Single stage" and only_steps == ["surface"]:
+        cmd = ["dopingflow", "surface", "-c", str(input_toml_path)]
+        if verbose:
+            cmd += ["--verbose"]
+
+    else:
+        cmd = [
+            "dopingflow",
+            "run-all",
+            "-c",
+            str(input_toml_path),
+            "--from",
+            step_from,
+            "--until",
+            step_until,
+        ]
+
+        if only_steps:
+            cmd += ["--only", ",".join(only_steps)]
+
+        if dry_run:
+            cmd += ["--dry-run"]
+        if verbose:
+            cmd += ["--verbose"]
+
+        if filter_only.strip():
+            cmd += ["--filter-only", filter_only.strip()]
+        if force:
+            cmd += ["--force"]
+        if window_mev > 0:
+            cmd += ["--window-mev", str(float(window_mev))]
+        if topn > 0:
+            cmd += ["--topn", str(int(topn))]
+
+
+    # -------------------------
+    # Command preview
+    # -------------------------
+    st.subheader("Command preview")
+
+    st.code(" ".join(cmd))
+
+    # -------------------------
+    # Run + Log
+    # -------------------------
+    log_path = project_root / "logs" / "gui_run.log"
+
+    col_run, col_refresh = st.columns([1, 1])
+
+    with col_run:
+        if st.button("▶ Run", use_container_width=True):
+            with st.spinner("Running workflow..."):
+                rc = run_command(cmd, cwd=project_root, log_path=log_path)
+
+            if rc == 0:
+                st.success("Workflow finished successfully.")
+            else:
+                st.error(f"Workflow exited with return code {rc}.")
+
+    with col_refresh:
+        if st.button("🔄 Refresh log", use_container_width=True):
+            pass
+
+    st.subheader("Log tail")
+    st.code(tail_text(log_path, n=10000))
+
+
+# -----------------------
+# Page: Results Explorer
+# -----------------------
+elif tab == "Results Explorer":
+    from datetime import datetime    
+    import numpy as np
+    import plotly.express as px
+    import plotly.io as pio
+
+    st.title("Results Explorer")
+
+    # ============================================================
+    # Load CSV
+    # ============================================================
+    st.subheader("Data source")
+
+    default_csv = project_root / "results_database.csv"
+    results_cfg = load_toml(input_toml_path)
+    results_outdir = project_root / results_cfg.get("structure", {}).get("outdir", "random_structures")
+    results_vacancy_cfg = results_cfg.get("vacancies", {}) or {}
+    vacancy_results_root = results_outdir
+    if results_vacancy_cfg.get("parent_source") == "directory":
+        configured_parent_root = Path(str(results_vacancy_cfg.get("parent_directory", ""))).expanduser()
+        vacancy_results_root = (
+            configured_parent_root
+            if configured_parent_root.is_absolute()
+            else project_root / configured_parent_root
+        ).resolve()
+    known_sources = {
+        "Main results database": default_csv,
+        "Phase diagram (energy above hull)": project_root / "phase_diagram_results.csv",
+        "Vacancy results database": vacancy_results_root / "vacancies_database.csv",
+        "Vacancy composition minima": vacancy_results_root / "vacancy_minima_by_composition.csv",
+        "Vacancy stability intervals": vacancy_results_root / "vacancy_stability_intervals.csv",
+        "Vacancy best counts": vacancy_results_root / "vacancy_best_counts.csv",
+        "Static vacancy minima": vacancy_results_root / "vacancy_static_minima.csv",
+        "Static vacancy stability intervals": vacancy_results_root / "vacancy_static_stability_intervals.csv",
+        "Static vacancy best counts": vacancy_results_root / "vacancy_static_best_counts.csv",
+        "Static vacancy pressure map": vacancy_results_root / "vacancy_static_pressure_map.csv",
+        "Vacancy formation free energy": vacancy_results_root / "vacancy_formation_free_energy.csv",
+    }
+    source_choice = st.selectbox(
+        "Known result source",
+        options=list(known_sources) + ["Custom path"],
+    )
+    suggested_path = known_sources.get(source_choice, default_csv)
+    csv_path_str = st.text_input(
+        "Results CSV path",
+        value=str(suggested_path),
+        key=f"results_csv_path_{source_choice}",
+    )
+    csv_path = Path(csv_path_str).expanduser()
+    if not csv_path.is_absolute():
+        csv_path = (project_root / csv_path).resolve()
+
+    if not csv_path.exists():
+        st.error(f"CSV not found: `{csv_path}`")
+        st.stop()
+
+    try:
+        df = pd.read_csv(csv_path)
+    except Exception as e:
+        st.error(f"Failed to read CSV: {e}")
+        st.stop()
+
+    if df.empty:
+        st.warning("CSV loaded but is empty.")
+        st.stop()
+
+    st.success(f"Loaded {len(df):,} rows × {len(df.columns)} columns from `{csv_path.name}`")
+
+    is_phase_result = {
+        "chemical_system",
+        "candidate_path",
+        "energy_above_hull_eV_per_atom",
+        "stable",
+    }.issubset(df.columns)
+    if is_phase_result:
+        from phase_diagram_plots import (
+            build_phase_diagram_figure,
+            find_codoped_system,
+            prepare_phase_diagram_plot_data,
+        )
+
+        st.subheader("Energy above hull by dopant concentration")
+        try:
+            combined_phase_path = project_root / "phase_diagram_results.csv"
+            phase_plot_raw = (
+                pd.read_csv(combined_phase_path)
+                if combined_phase_path.exists()
+                else df
+            )
+            hull_options = ["Raw"]
+            if "energy_above_hull_corrected_eV_per_atom" in phase_plot_raw.columns:
+                hull_options.append("Corrected")
+            hull_quantity = st.radio(
+                "Hull energy shown",
+                hull_options,
+                horizontal=True,
+                key="phase_hull_quantity",
+            )
+            if hull_quantity == "Corrected":
+                phase_plot_raw = phase_plot_raw.copy()
+                phase_plot_raw["energy_above_hull_eV_per_atom"] = phase_plot_raw[
+                    "energy_above_hull_corrected_eV_per_atom"
+                ]
+                if "stable_corrected" in phase_plot_raw.columns:
+                    phase_plot_raw["stable"] = phase_plot_raw["stable_corrected"]
+            phase_metadata_columns = {
+                "candidate_path",
+                "effective_pct_json",
+                "requested_pct_json",
+            }
+            database_for_phase = pd.read_csv(
+                default_csv,
+                usecols=lambda column: column in phase_metadata_columns,
+            )
+            phase_plot_data, phase_dopants = prepare_phase_diagram_plot_data(
+                phase_plot_raw,
+                database_for_phase,
+            )
+        except Exception as exc:
+            st.error(f"Could not prepare phase-diagram plot: {exc}")
+            st.stop()
+
+        if len(phase_dopants) < 2:
+            st.info("At least two dopants are required for the co-doping plot.")
+            st.stop()
+
+        control_x, control_fixed = st.columns(2)
+        default_x = "Sb" if "Sb" in phase_dopants else phase_dopants[0]
+        dopant_x = control_x.selectbox(
+            "Dopant on x-axis",
+            phase_dopants,
+            index=phase_dopants.index(default_x),
+            key="phase_simple_x_dopant",
+        )
+        fixed_options = [element for element in phase_dopants if element != dopant_x]
+        default_fixed = "Ti" if "Ti" in fixed_options else fixed_options[0]
+        dopant_fixed = control_fixed.selectbox(
+            "Dopant defining the curves",
+            fixed_options,
+            index=fixed_options.index(default_fixed),
+            key="phase_simple_fixed_dopant",
+        )
+
+        try:
+            selected_system = find_codoped_system(
+                phase_plot_data,
+                dopant_x,
+                dopant_fixed,
+            )
+            phase_figure, phase_best = build_phase_diagram_figure(
+                phase_plot_data,
+                chemical_system=selected_system,
+                x_dopant=dopant_x,
+                series_dopant=dopant_fixed,
+                host_formula=str(
+                    results_cfg.get("references", {}).get("host", "Host")
+                ),
+            )
+        except ValueError as exc:
+            st.warning(str(exc))
+            st.stop()
+
+        st.plotly_chart(
+            phase_figure,
+            use_container_width=True,
+            key="phase_diagram_dopant_plot",
+        )
+        st.caption(
+            f"System: {selected_system}. Each curve shows a fixed {dopant_fixed} "
+            f"concentration; each point is the lowest-energy candidate at that exact "
+            f"{dopant_x}/{dopant_fixed} composition. Compatible single-dopant phase "
+            "diagrams supply the 0% boundary curves."
+        )
+        st.stop()
+
+    static_compact_paths = {
+        "minima": vacancy_results_root / "vacancy_static_minima.csv",
+        "intervals": vacancy_results_root / "vacancy_static_stability_intervals.csv",
+        "best": vacancy_results_root / "vacancy_static_best_counts.csv",
+        "pressure": vacancy_results_root / "vacancy_static_pressure_map.csv",
+    }
+    legacy_compact_paths = {
+        "minima": vacancy_results_root / "vacancy_minima_by_composition.csv",
+        "intervals": vacancy_results_root / "vacancy_stability_intervals.csv",
+        "best": vacancy_results_root / "vacancy_best_counts.csv",
+    }
+    compact_vacancy_paths = (
+        static_compact_paths
+        if all(path.exists() for path in static_compact_paths.values())
+        else legacy_compact_paths
+    )
+    if all(path.exists() for path in compact_vacancy_paths.values()):
+        # Streamlit may rerun app.py while retaining an older helper module in
+        # sys.modules. Reload it so newly added plot functions are immediately
+        # available without leaving the Results Explorer in a broken state.
+        import importlib
+        import vacancy_thermo_plots
+
+        vacancy_thermo_plots = importlib.reload(vacancy_thermo_plots)
+        grand_potential_lines = vacancy_thermo_plots.grand_potential_lines
+        grand_potential_vs_count = vacancy_thermo_plots.grand_potential_vs_count
+        preferred_count_vs_doping = vacancy_thermo_plots.preferred_count_vs_doping
+        pressure_stability_map = vacancy_thermo_plots.pressure_stability_map
+        stability_map = vacancy_thermo_plots.stability_map
+
+        try:
+            vacancy_minima = pd.read_csv(compact_vacancy_paths["minima"])
+            vacancy_intervals = pd.read_csv(compact_vacancy_paths["intervals"])
+            vacancy_best = pd.read_csv(compact_vacancy_paths["best"])
+            vacancy_pressure = (
+                pd.read_csv(compact_vacancy_paths["pressure"])
+                if "pressure" in compact_vacancy_paths
+                else pd.DataFrame()
+            )
+            vacancy_free_energy_path = (
+                vacancy_results_root / "vacancy_formation_free_energy.csv"
+            )
+            vacancy_free_energy = (
+                pd.read_csv(vacancy_free_energy_path)
+                if vacancy_free_energy_path.exists()
+                else pd.DataFrame()
+            )
+        except Exception as exc:
+            st.warning(f"Could not load compact vacancy-analysis tables: {exc}")
+        else:
+            compact_tables_ready = not any(
+                table.empty
+                for table in (vacancy_minima, vacancy_intervals, vacancy_best)
+            )
+            if compact_tables_ready:
+                with st.expander("Vacancy thermodynamic plots", expanded=True):
+                    st.caption(
+                        "Interactive plots use the compact minima, exact stability "
+                        "interval, and selected-condition best-count tables."
+                    )
+                    entropy_modes_present = set(
+                        vacancy_minima.get(
+                            "solid_configurational_entropy_mode",
+                            pd.Series("none", index=vacancy_minima.index),
+                        )
+                        .fillna("none")
+                        .astype(str)
+                        .str.lower()
+                    )
+                    if "configurational" in entropy_modes_present:
+                        st.info(
+                            "Static ΔμO plots remain based on 0 K relaxed ML minima. "
+                            "Finite-temperature T–pO2 results and vacancy formation free "
+                            "energies include the explicit vacancy configurational partition "
+                            "function. Solid vibrational, zero-point, electronic, magnetic and "
+                            "anharmonic terms remain neglected."
+                        )
+                    elif "ideal" in entropy_modes_present:
+                        st.info(
+                            "Static ΔμO plots remain based on 0 K relaxed ML minima. "
+                            "Finite-temperature T–pO2 results and vacancy formation free "
+                            "energies include ideal oxygen-vacancy mixing entropy. Solid "
+                            "vibrational, zero-point, electronic, magnetic and anharmonic "
+                            "terms remain neglected."
+                        )
+                    else:
+                        st.info(
+                            "Static-lattice approximation: solid free energies are "
+                            "approximated by 0 K relaxed ML energies. Temperature and "
+                            "pressure enter through the oxygen-gas chemical potential; solid "
+                            "configurational, vibrational, electronic, magnetic and anharmonic "
+                            "terms are not included."
+                        )
+                    compositions = sorted(
+                        vacancy_intervals["actual_composition_key"]
+                        .dropna()
+                        .astype(str)
+                        .unique()
+                    )
+                    dopants = sorted(
+                        column.removeprefix("percent_")
+                        for column in vacancy_intervals
+                        if column.startswith("percent_")
+                    )
+                    control_a, control_b, control_c = st.columns(3)
+                    composition = control_a.selectbox(
+                        "Composition",
+                        compositions,
+                        key="vac_plot_composition",
+                    )
+                    delta_values = sorted(
+                        float(value)
+                        for value in vacancy_best["delta_mu_O_eV"].dropna().unique()
+                    )
+                    default_delta_index = min(
+                        range(len(delta_values)),
+                        key=lambda index: abs(delta_values[index] + 2.0),
+                    )
+                    delta_mu_o = control_b.selectbox(
+                        "ΔμO (eV per O atom)",
+                        delta_values,
+                        index=default_delta_index,
+                        key="vac_plot_delta_mu",
+                    )
+                    dopant_axis = control_c.selectbox(
+                        "Dopant percentage axis",
+                        ["Total dopant", *dopants],
+                        key="vac_plot_dopant_axis",
+                    )
+                    selected_dopant = None if dopant_axis == "Total dopant" else dopant_axis
+                    plot_tabs = st.tabs(
+                        [
+                            "Stability map",
+                            "Grand-potential envelope",
+                            "Potential vs vacancy count",
+                            "Preferred count vs doping",
+                            "T–pO2 map",
+                            "Vacancy ΔG(T,pO2)",
+                        ]
+                    )
+                    with plot_tabs[0]:
+                        st.plotly_chart(
+                            stability_map(vacancy_intervals, selected_dopant),
+                            use_container_width=True,
+                        )
+                    with plot_tabs[1]:
+                        st.plotly_chart(
+                            grand_potential_lines(
+                                vacancy_minima, vacancy_intervals, composition
+                            ),
+                            use_container_width=True,
+                        )
+                    with plot_tabs[2]:
+                        st.plotly_chart(
+                            grand_potential_vs_count(
+                                vacancy_minima, composition, delta_mu_o
+                            ),
+                            use_container_width=True,
+                        )
+                    with plot_tabs[3]:
+                        st.plotly_chart(
+                            preferred_count_vs_doping(
+                                vacancy_best, delta_mu_o, selected_dopant
+                            ),
+                            use_container_width=True,
+                        )
+                    with plot_tabs[4]:
+                        if vacancy_pressure.empty:
+                            st.info(
+                                "Enable pressure_mapping and rerun vacancies to create "
+                                "the T–pO2 map."
+                            )
+                        else:
+                            correction_mode = st.radio(
+                                "O2 standard-state term",
+                                [
+                                    "Include ΔμOstandard(T)",
+                                    "Omit ΔμOstandard(T)",
+                                ],
+                                horizontal=True,
+                                key="vac_plot_standard_state_mode",
+                                help=(
+                                    "Include uses the configured NIST Shomate or "
+                                    "user-table correction. Omit uses only the ideal-gas "
+                                    "pressure term and is intentionally approximate."
+                                ),
+                            )
+                            include_standard_state = correction_mode.startswith("Include")
+                            entropy_applied = vacancy_pressure.get(
+                                "solid_configurational_entropy_applied",
+                                pd.Series(False, index=vacancy_pressure.index),
+                            ).astype(str).str.lower().isin({"true", "1"}).any()
+                            if entropy_applied:
+                                st.info(
+                                    "This T–pO2 map includes the configured solid oxygen-vacancy "
+                                    "configurational free-energy contribution. Other solid "
+                                    "finite-temperature terms such as phonons remain neglected."
+                                )
+                            else:
+                                st.warning(
+                                    "Static-lattice solid approximation: temperature and pressure "
+                                    "enter through the oxygen reservoir; solid configurational and "
+                                    "vibrational free-energy terms are not included."
+                                )
+                            if (not include_standard_state) or vacancy_pressure.get(
+                                "pressure_mapping_is_approximate",
+                                pd.Series(False, index=vacancy_pressure.index),
+                            ).astype(str).str.lower().isin({"true", "1"}).any():
+                                st.warning(
+                                    "Approximate pressure mapping: "
+                                    "ΔμOstandard(T) is omitted."
+                                )
+                            st.plotly_chart(
+                                pressure_stability_map(
+                                    vacancy_pressure,
+                                    composition,
+                                    vacancy_minima,
+                                    include_standard_state,
+                                ),
+                                use_container_width=True,
+                            )
+                    with plot_tabs[5]:
+                        if vacancy_free_energy.empty:
+                            st.info(
+                                "Rerun the vacancy thermodynamic analysis with the updated "
+                                "workflow to create vacancy_formation_free_energy.csv."
+                            )
+                        else:
+                            free_subset = vacancy_free_energy[
+                                vacancy_free_energy["actual_composition_key"].astype(str)
+                                == composition
+                            ].copy()
+                            temperatures = sorted(
+                                float(value)
+                                for value in free_subset["temperature_K"].dropna().unique()
+                            )
+                            control_t, control_p = st.columns(2)
+                            selected_temperature = control_t.selectbox(
+                                "Temperature (K)",
+                                temperatures,
+                                key="vac_free_energy_temperature",
+                            )
+                            free_subset = free_subset[
+                                np.isclose(
+                                    free_subset["temperature_K"].astype(float),
+                                    selected_temperature,
+                                )
+                            ]
+                            pressures = sorted(
+                                float(value)
+                                for value in free_subset[
+                                    "log10_oxygen_partial_pressure_bar"
+                                ].dropna().unique()
+                            )
+                            selected_pressure = control_p.selectbox(
+                                "log10(pO2/bar)",
+                                pressures,
+                                key="vac_free_energy_pressure",
+                            )
+                            free_subset = free_subset[
+                                np.isclose(
+                                    free_subset[
+                                        "log10_oxygen_partial_pressure_bar"
+                                    ].astype(float),
+                                    selected_pressure,
+                                )
+                            ].sort_values("n_vacancies")
+                            figure = px.line(
+                                free_subset,
+                                x="n_vacancies",
+                                y="vacancy_formation_free_energy_eV",
+                                markers=True,
+                                hover_data=[
+                                    "vacancy_formation_energy_static_reference_eV",
+                                    "oxygen_thermal_pressure_contribution_eV",
+                                    "solid_configurational_free_energy_correction_eV",
+                                ],
+                                title=(
+                                    f"Vacancy formation free energy — {composition}; "
+                                    f"T={selected_temperature:g} K; "
+                                    f"log10(pO2/bar)={selected_pressure:g}"
+                                ),
+                            )
+                            figure.update_layout(
+                                xaxis_title="Number of oxygen vacancies",
+                                yaxis_title="ΔGvac (eV)",
+                                template="plotly_white",
+                            )
+                            st.plotly_chart(figure, use_container_width=True)
+                            display_columns = [
+                                column
+                                for column in (
+                                    "n_vacancies",
+                                    "vacancy_formation_energy_static_reference_eV",
+                                    "oxygen_thermal_pressure_contribution_eV",
+                                    "solid_configurational_free_energy_correction_eV",
+                                    "solid_configurational_entropy_eV_per_K",
+                                    "vacancy_formation_free_energy_eV",
+                                )
+                                if column in free_subset.columns
+                            ]
+                            st.dataframe(
+                                free_subset[display_columns],
+                                use_container_width=True,
+                                hide_index=True,
+                            )
+                    convergence = vacancy_minima.get(
+                        "converged", pd.Series(False, index=vacancy_minima.index)
+                    ).astype(str).str.lower().isin({"true", "1"})
+                    if not convergence.all():
+                        st.warning(
+                            "Some minima, including possible zero-vacancy references, "
+                            "are marked unconverged. Treat the plotted boundaries as provisional."
+                        )
+            else:
+                st.info(
+                    "Compact vacancy-analysis files were found but at least one is empty; "
+                    "plots will appear after valid thermodynamic minima and intervals exist."
+                )
+
+    # ============================================================
+    # Generic filters (optional)
+    # ============================================================
+    numeric_cols_all = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+    non_numeric_cols_all = [c for c in df.columns if c not in numeric_cols_all]
+
+    st.divider()
+    st.subheader("Filters")
+
+    df_f = df.copy()
+
+    if csv_path.name in {
+        "vacancy_minima_by_composition.csv",
+        "vacancy_stability_intervals.csv",
+        "vacancy_best_counts.csv",
+        "vacancy_static_minima.csv",
+        "vacancy_static_stability_intervals.csv",
+        "vacancy_static_best_counts.csv",
+        "vacancy_static_pressure_map.csv",
+        "vacancy_formation_free_energy.csv",
+    }:
+        with st.expander("Vacancy thermodynamic filters", expanded=True):
+            if "actual_composition_key" in df_f:
+                compositions = sorted(df_f["actual_composition_key"].dropna().astype(str).unique())
+                selected = st.multiselect("Actual composition", compositions, default=compositions, key="vac_result_compositions")
+                if selected:
+                    df_f = df_f[df_f["actual_composition_key"].astype(str).isin(selected)]
+            dopant_percent_columns = sorted(column for column in df_f if column.startswith("percent_"))
+            for column in dopant_percent_columns:
+                low, high = float(df_f[column].min()), float(df_f[column].max())
+                if low < high:
+                    selected_range = st.slider(column, low, high, (low, high), key=f"vac_filter_{column}")
+                    df_f = df_f[df_f[column].between(*selected_range)]
+            delta_column = "delta_mu_O_eV" if "delta_mu_O_eV" in df_f else None
+            if delta_column:
+                values = sorted(float(value) for value in df_f[delta_column].dropna().unique())
+                selected_values = st.multiselect("delta mu_O (eV)", values, default=values, key="vac_result_delta_mu")
+                if selected_values:
+                    df_f = df_f[df_f[delta_column].isin(selected_values)]
+            stable_column = "stable_n_vacancies" if "stable_n_vacancies" in df_f else "best_n_vacancies" if "best_n_vacancies" in df_f else None
+            if stable_column:
+                counts = sorted(df_f[stable_column].dropna().unique())
+                selected_counts = st.multiselect("Stable vacancy count", counts, default=counts, key="vac_result_stable_count")
+                if selected_counts:
+                    df_f = df_f[df_f[stable_column].isin(selected_counts)]
+            if "temperature_K" in df_f:
+                temperatures = sorted(float(value) for value in df_f["temperature_K"].dropna().unique())
+                selected_temperatures = st.multiselect(
+                    "Temperature (K)", temperatures, default=temperatures,
+                    key="vac_result_temperatures",
+                )
+                if selected_temperatures:
+                    df_f = df_f[df_f["temperature_K"].isin(selected_temperatures)]
+            if "log10_oxygen_partial_pressure_bar" in df_f and not df_f.empty:
+                pressure_low = float(df_f["log10_oxygen_partial_pressure_bar"].min())
+                pressure_high = float(df_f["log10_oxygen_partial_pressure_bar"].max())
+                if pressure_low < pressure_high:
+                    pressure_range = st.slider(
+                        "log10(pO2/bar)", pressure_low, pressure_high,
+                        (pressure_low, pressure_high), key="vac_result_pressure",
+                    )
+                    df_f = df_f[df_f["log10_oxygen_partial_pressure_bar"].between(*pressure_range)]
+
+    with st.expander("Filter controls", expanded=True):
+        cat_col = st.selectbox(
+            "Categorical filter column (optional)",
+            options=["(none)"] + non_numeric_cols_all,
+            index=0,
+        )
+        if cat_col != "(none)":
+            vals = df_f[cat_col].dropna().astype(str).unique().tolist()
+            vals = sorted(vals)[:1000]
+            chosen = st.multiselect(f"Keep values in `{cat_col}`", options=vals, default=vals)
+            if chosen:
+                df_f = df_f[df_f[cat_col].astype(str).isin(set(chosen))]
+
+        num_col = st.selectbox(
+            "Numeric range filter column (optional)",
+            options=["(none)"] + numeric_cols_all,
+            index=0,
+        )
+        if num_col != "(none)" and len(df_f) > 0:
+            col_min = float(np.nanmin(df_f[num_col].values))
+            col_max = float(np.nanmax(df_f[num_col].values))
+            if np.isfinite(col_min) and np.isfinite(col_max) and col_min != col_max:
+                lo, hi = st.slider(
+                    f"Range for `{num_col}`",
+                    min_value=col_min,
+                    max_value=col_max,
+                    value=(col_min, col_max),
+                )
+                df_f = df_f[(df_f[num_col] >= lo) & (df_f[num_col] <= hi)]
+            else:
+                st.info(f"`{num_col}` has constant or non-finite range in current filtered set.")
+
+    st.caption(f"Filtered rows: **{len(df_f):,}**")
+
+    # Table
+    st.subheader("Table")
+    table_limit = 2_000
+    table_df = df_f.head(table_limit)
+    if len(df_f) > table_limit:
+        st.info(
+            f"Displaying the first {table_limit:,} of {len(df_f):,} filtered rows "
+            "to keep the browser response below Streamlit's message-size limit."
+        )
+    st.dataframe(table_df, use_container_width=True, height=360)
+    download_limit = 50_000
+    download_df = df_f.head(download_limit)
+    download_is_preview = len(df_f) > download_limit
+    st.download_button(
+        "⬇ Download filtered CSV preview" if download_is_preview else "⬇ Download filtered CSV",
+        data=download_df.to_csv(index=False).encode("utf-8"),
+        file_name="results_filtered_preview.csv" if download_is_preview else "results_filtered.csv",
+        mime="text/csv",
+    )
+    if download_is_preview:
+        st.caption(
+            f"The download is capped at {download_limit:,} rows. The complete source "
+            f"remains available on disk at `{csv_path}`; apply filters to export a smaller full selection."
+        )
+
+    # ============================================================
+    # Dopant parsing (only if available)
+    # ============================================================
+    st.divider()
+
+    has_json = "dopant_counts_json" in df_f.columns
+    has_str = "dopant_counts" in df_f.columns
+    has_dopant_data = has_json or has_str
+
+    def parse_dopants_from_counts_json(s) -> dict:
+        """
+        s like: '{"Sb": 2, "Zr": 1}'  (as a string in CSV)
+        Returns dict[str,int]
+        """
+        if s is None or (isinstance(s, float) and np.isnan(s)):
+            return {}
+        try:
+            d = json.loads(str(s))
+            if isinstance(d, dict):
+                out = {}
+                for k, v in d.items():
+                    try:
+                        vv = int(v)
+                    except Exception:
+                        continue
+                    if vv > 0:
+                        out[str(k)] = vv
+                return out
+        except Exception:
+            return {}
+        return {}
+
+    def parse_dopants_from_counts_str(s) -> dict:
+        """
+        s like: 'Sb:2;Zr:1'
+        Returns dict[str,int]
+        """
+        if s is None or (isinstance(s, float) and np.isnan(s)):
+            return {}
+        txt = str(s).strip()
+        if not txt:
+            return {}
+        out = {}
+        for part in txt.split(";"):
+            part = part.strip()
+            if not part:
+                continue
+            if ":" not in part:
+                out[part] = max(out.get(part, 0), 1)
+                continue
+            el, cnt = part.split(":", 1)
+            el = el.strip()
+            try:
+                cnt_i = int(str(cnt).strip())
+            except Exception:
+                cnt_i = 1
+            if el:
+                out[el] = max(out.get(el, 0), cnt_i)
+        return out
+
+    def dopant_sig_from_dict(d: dict) -> str:
+        keys = sorted(d.keys())
+        return "+".join(keys) if keys else "Undoped"
+
+    def to_float_or_none(value):
+        try:
+            value = str(value).strip()
+            if value == "":
+                return None
+            return float(value)
+        except Exception:
+            return None
+
+    if has_dopant_data:
+        st.subheader("Dopant-set plot studio (correct filtering + full hover)")
+
+        # Build parsing columns
+        dfp = df_f.copy()
+
+        if has_json:
+            dfp["_dopant_dict"] = dfp["dopant_counts_json"].apply(parse_dopants_from_counts_json)
+            if has_str:
+                mask_empty = dfp["_dopant_dict"].apply(lambda d: len(d) == 0)
+                dfp.loc[mask_empty, "_dopant_dict"] = dfp.loc[mask_empty, "dopant_counts"].apply(parse_dopants_from_counts_str)
+        else:
+            dfp["_dopant_dict"] = dfp["dopant_counts"].apply(parse_dopants_from_counts_str)
+
+        dfp["dopant_sig"] = dfp["_dopant_dict"].apply(dopant_sig_from_dict)
+        dfp["n_dopants"] = dfp["_dopant_dict"].apply(lambda d: len(d.keys()))
+        dfp["dopant_list_str"] = dfp["_dopant_dict"].apply(lambda d: ", ".join(sorted(d.keys())) if d else "Undoped")
+
+        all_elements = sorted({el for d in dfp["_dopant_dict"].values for el in d.keys()})
+
+        st.markdown("### Select structures")
+
+        selected_classes = st.multiselect(
+            "Dopant count class",
+            options=["0 (undoped)", "1 (single)", "2 (double)", "3 (triple)", "4+ (>=4)"],
+            default=["1 (single)", "2 (double)", "3 (triple)"],
+        )
+
+        required = set(
+            st.multiselect(
+                "Required dopants (optional)",
+                options=all_elements,
+                default=[],
+                help=(
+                    "Rules:\n"
+                    "- For 1/2 dopants: EXACT match (only these dopants)\n"
+                    "- For >=3 dopants: CONTAINS (must include these, plus others allowed)\n"
+                    "- Leave empty: show ALL structures in the selected dopant-count class(es)"
+                ),
+            )
+        )
+
+        excluded = set(
+            st.multiselect(
+                "Exclude dopants (optional)",
+                options=all_elements,
+                default=[],
+            )
+        )
+
+        def class_selected(n: int) -> bool:
+            if n == 0:
+                return "0 (undoped)" in selected_classes
+            if n == 1:
+                return "1 (single)" in selected_classes
+            if n == 2:
+                return "2 (double)" in selected_classes
+            if n == 3:
+                return "3 (triple)" in selected_classes
+            return "4+ (>=4)" in selected_classes
+
+        def keep_row(d: dict, n: int) -> bool:
+            ds = set(d.keys())
+
+            if not class_selected(n):
+                return False
+
+            if excluded and (ds & excluded):
+                return False
+
+            if not required:
+                return True
+
+            if n in (1, 2):
+                return ds == required
+
+            if n >= 3:
+                return required.issubset(ds)
+
+            return False
+
+        plot_df = dfp[dfp.apply(lambda r: keep_row(r["_dopant_dict"], int(r["n_dopants"])), axis=1)].copy()
 
         st.caption(f"Selected structures: **{len(plot_df):,}**")
         if plot_df.empty:

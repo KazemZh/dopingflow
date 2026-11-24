@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 19360)
-Total output lines: 1941
-
 """Configure, run, and inspect electrochemical surface-state / Pourbaix analysis."""
 
 from __future__ import annotations
@@ -623,7 +620,902 @@ with st.expander("Configuration & run controls", expanded=True):
     source_labels = {
         "surface": "Surface stage — best available (default)",
         "segregation": "Surface segregation output",
-        "au…9360 tokens truncated…view.get(
+        "auto": "Auto — direct surface first, segregation fallback",
+        "final-selected": "Surface stage — final selected",
+        "refine-summary": "Surface stage — all refined",
+        "screen-selected": "Surface stage — screened shortlist",
+        "screen-summary": "Surface stage — all screened/generated",
+    }
+    saved_mode = str(saved.get("source_mode", "surface"))
+    source_mode = c1.selectbox(
+        "Surface source",
+        source_modes,
+        index=source_modes.index(saved_mode) if saved_mode in source_modes else 0,
+        format_func=lambda mode: source_labels[mode],
+        help=(
+            "Surface segregation is optional. The default reads the best available "
+            "table produced directly by the surface stage."
+        ),
+    )
+    source_summary = c2.text_input(
+        "Explicit source CSV (optional)", value=str(saved.get("source_summary", ""))
+    ).strip()
+    max_surfaces = c3.number_input(
+        "Maximum surfaces", min_value=1, value=int(saved.get("max_surfaces", 10)), step=1
+    )
+
+    slab_files = [line.strip() for line in st.text_area(
+        "Prepared slab files (optional, one path per line)",
+        value="\n".join(saved.get("slab_files", [])),
+        help="When supplied, these files provide the input slabs directly.",
+    ).splitlines() if line.strip()]
+    selector_text = st.text_input(
+        "Surface selectors (optional, comma-separated exact IDs or globs)",
+        value=_csv(saved.get("surface_include", [])),
+        help="Leave empty for all surfaces in the chosen source table.",
+    )
+    requested_selectors = _items(selector_text)
+
+    # First discover all surfaces from the selected source so users can pick
+    # exact generated/refined surfaces without having to know their IDs.
+    available_preview = pd.DataFrame()
+    try:
+        available_cfg = dict(cfg)
+        available_section = dict(saved)
+        available_section.update(
+            enabled=True,
+            source_mode=source_mode,
+            source_summary=source_summary, slab_files=slab_files,
+            surface_include=[],
+            max_surfaces=10000,
+        )
+        available_cfg["surface_pourbaix"] = available_section
+        available_preview = preview_surface_pourbaix_targets(available_cfg, project_root)
+    except Exception:
+        pass
+
+    exact_surface_ids = (
+        list(dict.fromkeys(available_preview["surface_id"].astype(str)))
+        if not available_preview.empty and "surface_id" in available_preview.columns
+        else []
+    )
+    exact_defaults = [value for value in requested_selectors if value in exact_surface_ids]
+    picked_surfaces = st.multiselect(
+        "Pick exact surfaces (optional)",
+        exact_surface_ids,
+        default=exact_defaults,
+        help=(
+            "This list is populated directly from the selected surface-stage or "
+            "segregation table. If you select entries here, they override the text selectors above."
+        ),
+    )
+    effective_surface_include = picked_surfaces or requested_selectors
+
+    preview_cfg = dict(cfg)
+    preview_section = dict(saved)
+    preview_section.update(
+        enabled=True, source_mode=source_mode, source_summary=source_summary, slab_files=slab_files,
+        surface_include=effective_surface_include, max_surfaces=int(max_surfaces),
+    )
+    preview_cfg["surface_pourbaix"] = preview_section
+    try:
+        preview = preview_surface_pourbaix_targets(preview_cfg, project_root)
+        st.caption(
+            f"Selected source table: {preview.attrs.get('source_summary', '')} "
+            f"({len(preview)} surface(s) selected)"
+        )
+        st.dataframe(preview, width="stretch", hide_index=True)
+    except Exception as exc:
+        st.warning(str(exc))
+
+    st.subheader("Surface states and adsorbate coverage")
+    families = st.multiselect(
+        "State families",
+        ["clean", "protonated", "O", "OH", "H2O", "mixed-O-OH", "H", "CO", "mixed-H-CO"],
+        default=list(saved.get(
+            "state_families",
+            ["clean", "protonated", "O", "OH", "H2O", "mixed-O-OH"],
+        )),
+    )
+
+    with st.expander("User-defined adsorbates", expanded=bool(saved.get("adsorbates"))):
+        st.caption("Configured molecules compete alongside the selected state families. Define one TOML table per adsorbate. Use an ASE molecule name or a local XYZ file. "
+                   "Geometry uses a local frame with +z pointing out of the slab.")
+        example = '[CO]\nmolecule = "CO"\nanchor_index = 1\ncoverages_pct = [25, 50]'
+        adsorbate_text = st.text_area("Adsorbate tables", value=toml.dumps(saved.get("adsorbates", {})),
+                                      placeholder=example, height=180)
+        try:
+            adsorbates = toml.loads(adsorbate_text)
+        except ValueError as exc:
+            st.error(f"Invalid adsorbate TOML: {exc}")
+            st.stop()
+    s1, s2, s3, s4 = st.columns(4)
+    side_options = ["dopant-nearest", "top", "bottom", "both"]
+    side_labels = {
+        "dopant-nearest": "Near dopants — automatic (recommended)",
+        "top": "Top",
+        "bottom": "Bottom",
+        "both": "Both",
+    }
+    saved_side = str(saved.get("placement_side", "dopant-nearest")).replace("_", "-")
+    if saved_side not in side_options:
+        saved_side = "dopant-nearest"
+    placement_side = s1.selectbox(
+        "O*/OH*/H2O* adsorption side",
+        side_options,
+        index=side_options.index(saved_side),
+        format_func=lambda value: side_labels[value],
+        help=(
+            "Controls only added O*, OH*, H2O*, and mixed O*/OH* states. "
+            "Automatic mode chooses the side closest to the selected dopant species."
+        ),
+    )
+
+    protonation_options = [
+        "both",
+        "same-as-adsorbates",
+        "dopant-nearest",
+        "top",
+        "bottom",
+    ]
+    protonation_labels = {
+        "both": "Both slab sides (recommended)",
+        "same-as-adsorbates": "Same side as O*/OH*/H2O* adsorption",
+        "dopant-nearest": "Near dopants — automatic",
+        "top": "Top only",
+        "bottom": "Bottom only",
+    }
+    saved_protonation_side = (
+        str(saved.get("protonation_side", "both")).replace("_", "-")
+    )
+    if saved_protonation_side not in protonation_options:
+        saved_protonation_side = "both"
+    protonation_side = s2.selectbox(
+        "Lattice-O protonation side",
+        protonation_options,
+        index=protonation_options.index(saved_protonation_side),
+        format_func=lambda value: protonation_labels[value],
+        help=(
+            "This is independent from adsorbate placement. With 'both', the "
+            "coverage denominator contains every eligible exposed O atom on both "
+            "slab faces; therefore 100% protonation means every eligible O on both "
+            "faces receives one H."
+        ),
+    )
+
+    site_mode_options = ["outermost-layer", "window"]
+    site_mode_labels = {
+        "outermost-layer": "Outermost atomic layer (recommended)",
+        "window": "All atoms in height window (legacy)",
+    }
+    saved_site_mode = str(
+        saved.get("surface_site_selection", "outermost-layer")
+    ).replace("_", "-")
+    if saved_site_mode not in site_mode_options:
+        saved_site_mode = "outermost-layer"
+    surface_site_selection = s3.selectbox(
+        "Surface-site detection",
+        site_mode_options,
+        index=site_mode_options.index(saved_site_mode),
+        format_func=lambda value: site_mode_labels[value],
+        help=(
+            "The recommended mode identifies the outer surface layer/group from "
+            "normal-direction layer spacing. The legacy window mode can include "
+            "subsurface atoms on corrugated oxide facets."
+        ),
+    )
+
+    surface_window = s4.number_input(
+        "Safety depth window (Å)",
+        min_value=0.1,
+        value=float(saved.get("surface_window_A", 2.0)),
+        step=0.1,
+        help=(
+            "Maximum normal depth considered during site detection. In "
+            "outermost-layer mode, a layer-boundary test is applied inside this "
+            "window rather than treating every atom in the window as exposed."
+        ),
+    )
+    st.caption(
+        "**Coverage always uses all detected exposed sites.** The former "
+        "`max_surface_oxygen_sites` / `max_surface_cation_sites` caps are ignored. "
+        "Use **Outermost atomic layer** to avoid counting the next crystallographic "
+        "O/cation layer as a surface site."
+    )
+
+    inferred_side_targets = (
+        saved.get("side_target_species")
+        or surface_cfg.get("dopant_species")
+        or []
+    )
+    side_target_text = st.text_input(
+        "Dopant species for automatic side selection",
+        value=_csv(inferred_side_targets),
+        disabled=(
+            placement_side != "dopant-nearest"
+            and protonation_side != "dopant-nearest"
+        ),
+        help=(
+            "Example: Sb, In. Leave blank to infer all non-host cations from each "
+            "actual surface. The nearest depth is calculated per species, then "
+            "averaged so one dopant type does not dominate simply by atom count."
+        ),
+    )
+    side_target_species = _items(side_target_text)
+    if placement_side == "dopant-nearest" or protonation_side == "dopant-nearest":
+        st.caption(
+            "If top and bottom are equally close within the tie tolerance, both sides "
+            "are sampled rather than choosing one arbitrarily."
+        )
+
+    st.markdown("**Coverage grid (% of all eligible sites on the chosen side(s))**")
+    cH, cO, cOH, cW = st.columns(4)
+    metal_settings = {}
+    if set(families) & {"H", "CO", "mixed-H-CO"}:
+        for family, key in (("H*", "h_coverages_pct"), ("CO*", "co_coverages_pct")):
+            metal_settings[key] = _floats(st.text_input(f"{family} coverage (%)",
+                value=_csv(saved.get(key, [25, 50, 75, 100]))))
+        metal_settings["mixed_h_co_coverages_pct"] = _mixed_coverages(st.text_input(
+            "Mixed H*:CO* coverage pairs (%)", value=_mixed_coverage_text(
+                saved.get("mixed_h_co_coverages_pct", [[25, 25], [50, 50]]))))
+        metal_settings["metal_site_types"] = st.multiselect("Metal adsorption sites",
+            ["ontop", "bridge", "hollow"], default=saved.get("metal_site_types", ["ontop", "bridge", "hollow"]))
+        metal_settings["co_activity"] = st.number_input("CO activity (relative to standard state)",
+            value=float(saved.get("co_activity", 1.0)), format="%.6g")
+        metal_settings["co_free_energy_correction_eV"] = st.number_input("CO standard-state correction (eV)",
+            value=float(saved.get("co_free_energy_correction_eV", 0.0)))
+    proton_coverage_text = cH.text_input(
+        "Protonated O coverage (%)",
+        value=_csv(saved.get("proton_coverages_pct", [25, 50, 75, 100])),
+    )
+    o_coverage_text = cO.text_input(
+        "O* coverage (%)",
+        value=_csv(saved.get("o_coverages_pct", [25, 50, 75, 100])),
+    )
+    oh_coverage_text = cOH.text_input(
+        "OH* coverage (%)",
+        value=_csv(saved.get("oh_coverages_pct", [25, 50, 75, 100])),
+    )
+    h2o_coverage_text = cW.text_input(
+        "H2O* coverage (%)",
+        value=_csv(saved.get("h2o_coverages_pct", [25, 50, 100])),
+    )
+    mixed_coverage_text = st.text_input(
+        "Mixed O*:OH* coverage pairs (%)",
+        value=_mixed_coverage_text(saved.get("mixed_coverages_pct")),
+        help=(
+            "Format O%:OH%, separated by commas; e.g. 25:25, 25:75, 50:50, 75:25. "
+            "The two coverages must sum to at most 100%."
+        ),
+    )
+    st.caption(
+        "Coverage is converted to the nearest realizable integer occupation for each "
+        "surface. If the requested coverage lies exactly halfway between two integer "
+        "counts (for example 25% of 10 sites), both realizations are kept: 20% and 30%. "
+        "You may include 0%; it is treated as the already-present clean surface and "
+        "does not create a duplicate state."
+    )
+
+    q1, q2 = st.columns(2)
+    max_arrangements = q1.number_input(
+        "Max symmetry-distinct configurations / coverage",
+        min_value=1,
+        value=int(saved.get("max_arrangements_per_stoichiometry", 8)),
+        step=1,
+        help=(
+            "Symmetry-equivalent patterns are removed first. If more configurations "
+            "remain, a geometry/dopant-proximity diversity selection is applied."
+        ),
+    )
+    symmetry_reduce = q2.checkbox(
+        "Remove symmetry-equivalent arrangements",
+        value=bool(saved.get("symmetry_reduce", True)),
+        help=(
+            "Symmetry is determined from the actual doped/vacancy slab, not the "
+            "undoped parent crystal."
+        ),
+    )
+
+    with st.expander("Advanced site/symmetry controls"):
+        a1, a2, a3, a4, a5 = st.columns(5)
+        surface_layer_gap = a1.number_input(
+            "Layer-separation threshold (Å)",
+            min_value=0.05,
+            value=float(saved.get("surface_layer_gap_A", 0.75)),
+            step=0.05,
+            disabled=surface_site_selection != "outermost-layer",
+            help=(
+                "Within the safety depth window, the largest normal-direction gap "
+                "must exceed this threshold to define the boundary between the "
+                "exposed layer/group and deeper atoms."
+            ),
+        )
+        symmetry_symprec = a2.number_input(
+            "Symmetry tolerance (Å)",
+            min_value=0.001,
+            value=float(saved.get("symmetry_symprec_A", 0.10)),
+            step=0.01,
+        )
+        symmetry_mapping_tol = a3.number_input(
+            "Site mapping tolerance (Å)",
+            min_value=0.001,
+            value=float(saved.get("symmetry_mapping_tolerance_A", 0.25)),
+            step=0.01,
+        )
+        side_tie_tol = a4.number_input(
+            "Dopant-side tie tolerance (Å)",
+            min_value=0.0,
+            value=float(saved.get("dopant_side_tie_tolerance_A", 0.25)),
+            step=0.05,
+        )
+        max_raw_configs = a5.number_input(
+            "Max raw patterns / coverage",
+            min_value=100,
+            value=int(saved.get("max_raw_configurations_per_stoichiometry", 100000)),
+            step=1000,
+        )
+
+    with st.expander("Post-relaxation chemistry validation", expanded=True):
+        st.caption(
+            "The final relaxed geometry, not the generated starting label, determines "
+            "whether a state enters the Pourbaix diagram. Detached O2/H2O and fragmented "
+            "states are excluded by default; adsorbed reconstructions can be reclassified."
+        )
+        v1, v2, v3 = st.columns(3)
+        validate_relaxed = v1.checkbox(
+            "Validate relaxed surface chemistry",
+            value=bool(saved.get("postprocess_validate_relaxed_states", True)),
+        )
+        exclude_desorbed = v2.checkbox(
+            "Exclude desorbed states",
+            value=bool(saved.get("postprocess_exclude_desorbed", True)),
+            disabled=not validate_relaxed,
+        )
+        exclude_fragmented = v3.checkbox(
+            "Exclude fragmented states",
+            value=bool(saved.get("postprocess_exclude_fragmented", True)),
+            disabled=not validate_relaxed,
+        )
+        allow_reclassified = st.checkbox(
+            "Allow adsorbed reconstructed/reclassified states in Pourbaix competition",
+            value=bool(saved.get("postprocess_allow_reclassified", True)),
+            disabled=not validate_relaxed,
+            help=(
+                "For example, if 2OH* relaxes to O* + H2O* while everything remains "
+                "surface-bound, the final chemistry is relabeled and can still compete."
+            ),
+        )
+        vc1, vc2, vc3, vc4 = st.columns(4)
+        oh_bond_cutoff = vc1.number_input(
+            "O-H bond cutoff (Å)",
+            min_value=0.5,
+            value=float(saved.get("postprocess_oh_bond_cutoff_A", 1.25)),
+            step=0.05,
+        )
+        oo_bond_cutoff = vc2.number_input(
+            "O-O molecular cutoff (Å)",
+            min_value=0.8,
+            value=float(saved.get("postprocess_oo_bond_cutoff_A", 1.75)),
+            step=0.05,
+            help=(
+                "Used only as a structural O-O-like flag; it does not assign "
+                "O2/superoxo/peroxo electronic character."
+            ),
+        )
+        attachment_cutoff = vc3.number_input(
+            "Surface O-cation attachment cutoff (Å)",
+            min_value=1.0,
+            value=float(
+                saved.get("postprocess_surface_attachment_cutoff_A", 2.80)
+            ),
+            step=0.05,
+        )
+        hh_bond_cutoff = vc4.number_input(
+            "H-H molecular cutoff (Å)",
+            min_value=0.4,
+            value=float(saved.get("postprocess_hh_bond_cutoff_A", 0.90)),
+            step=0.05,
+        )
+
+    st.subheader("Electrochemical grid")
+    p1, p2, p3, p4 = st.columns(4)
+    ph_min = p1.number_input("pH minimum", value=float(saved.get("pH_min", -1.0)), step=0.1)
+    ph_max = p2.number_input("pH maximum", value=float(saved.get("pH_max", 3.0)), step=0.1)
+    ph_step = p3.number_input(
+        "pH step", min_value=0.01, value=float(saved.get("pH_step", 0.1)), step=0.05
+    )
+    potential_scale = p4.selectbox(
+        "Potential scale", ["SHE", "RHE"],
+        index=0 if str(saved.get("potential_scale", "SHE")).upper() == "SHE" else 1,
+    )
+    u1, u2, u3, u4 = st.columns(4)
+    u_min = u1.number_input(
+        "Potential minimum (V)", value=float(saved.get("potential_min_V", 0.0)), step=0.1
+    )
+    u_max = u2.number_input(
+        "Potential maximum (V)", value=float(saved.get("potential_max_V", 2.0)), step=0.1
+    )
+    u_step = u3.number_input(
+        "Potential step (V)", min_value=0.01,
+        value=float(saved.get("potential_step_V", 0.05)), step=0.01,
+    )
+    temperature = u4.number_input(
+        "Temperature (K)", min_value=1.0,
+        value=float(saved.get("temperature_K", 298.15)), step=1.0,
+    )
+    if potential_scale == "RHE":
+        st.info(
+            "At fixed RHE potential, ideal CHE H+/e− terms are pH-independent. "
+            "Use SHE for the conventional pH-sloped Pourbaix representation."
+        )
+
+    st.subheader("ML screening")
+    m1, m2, m3, m4 = st.columns(4)
+
+    backend_options = list(BACKEND_CHOICES)
+    saved_backend = str(saved_screen.get("backend", "mace")).strip().lower()
+    if saved_backend not in backend_options:
+        saved_backend = "mace"
+    backend = m1.selectbox(
+        "Backend",
+        backend_options,
+        index=backend_options.index(saved_backend),
+        key="surface_pourbaix_screen_backend",
+    )
+
+    backend_model_default, backend_task_default = _backend_model_defaults(backend)
+
+    if backend == "m3gnet":
+        model = "default"
+        m2.text_input(
+            "Model",
+            value="default",
+            disabled=True,
+            key="surface_pourbaix_screen_model_m3gnet",
+            help="M3GNet uses its default pretrained model in this workflow.",
+        )
+        task = ""
+        m3.text_input(
+            "Task / head",
+            value="not used",
+            disabled=True,
+            key="surface_pourbaix_screen_task_m3gnet",
+        )
+
+    elif backend == "grace":
+        current_model = _saved_screen_value(
+            backend, "model", backend_model_default
+        )
+        if current_model not in GRACE_MODEL_CHOICES:
+            current_model = "GRACE-1L-OMAT"
+        model = m2.selectbox(
+            "GRACE model",
+            list(GRACE_MODEL_CHOICES),
+            index=list(GRACE_MODEL_CHOICES).index(current_model),
+            key="surface_pourbaix_screen_model_grace",
+        )
+        task = ""
+        m3.text_input(
+            "Task / head",
+            value="not used",
+            disabled=True,
+            key="surface_pourbaix_screen_task_grace",
+            help="GRACE model selection defines the potential; no separate task/head is used.",
+        )
+
+    elif backend == "uma":
+        current_model = _saved_screen_value(
+            backend, "model", backend_model_default
+        )
+        if current_model not in UMA_MODEL_CHOICES:
+            current_model = "uma-s-1p2"
+        model = m2.selectbox(
+            "UMA model",
+            list(UMA_MODEL_CHOICES),
+            index=list(UMA_MODEL_CHOICES).index(current_model),
+            key="surface_pourbaix_screen_model_uma",
+        )
+
+        current_task = _saved_screen_value(
+            backend, "task", backend_task_default
+        )
+        if current_task not in UMA_TASK_CHOICES:
+            current_task = "omat"
+        task = m3.selectbox(
+            "UMA task",
+            list(UMA_TASK_CHOICES),
+            index=list(UMA_TASK_CHOICES).index(current_task),
+            key="surface_pourbaix_screen_task_uma",
+        )
+
+    else:  # MACE
+        mace_models = list(_available_mace_models())
+        custom_label = "Custom checkpoint path…"
+        current_model = _saved_screen_value(
+            backend, "model", backend_model_default
+        )
+        initial_model_choice = (
+            current_model if current_model in mace_models else custom_label
+        )
+
+        selected_model = m2.selectbox(
+            "MACE model",
+            [*mace_models, custom_label],
+            index=[*mace_models, custom_label].index(initial_model_choice),
+            key="surface_pourbaix_screen_model_mace_choice",
+        )
+        if selected_model == custom_label:
+            model = m2.text_input(
+                "Checkpoint path",
+                value=current_model if current_model not in mace_models else "",
+                key="surface_pourbaix_screen_model_mace_custom",
+                help="Path to a local MACE checkpoint.",
+            ).strip()
+        else:
+            model = selected_model
+
+        saved_mace_model = (
+            str(saved_screen.get("model", "")).strip()
+            if str(saved_screen.get("backend", "")).strip().lower() == "mace"
+            else ""
+        )
+        if model == saved_mace_model:
+            mace_task_default = str(
+                saved_screen.get("task", backend_task_default)
+            ).strip()
+        elif model == "mh-1":
+            mace_task_default = "matpes_r2scan"
+        else:
+            mace_task_default = ""
+
+        is_multihead_or_custom = (
+            model.startswith("mh-") or selected_model == custom_label
+        )
+        if is_multihead_or_custom:
+            task = m3.text_input(
+                "MACE head",
+                value=mace_task_default,
+                key=f"surface_pourbaix_screen_task_mace_{model}",
+                help=(
+                    "Head for a multi-head MACE checkpoint. For MH-1, "
+                    "matpes_r2scan is the default. Leave blank only if the "
+                    "selected checkpoint does not require a head."
+                ),
+            ).strip()
+        else:
+            task = ""
+            m3.text_input(
+                "MACE head",
+                value="not used",
+                disabled=True,
+                key=f"surface_pourbaix_screen_task_mace_single_{model}",
+            )
+
+    saved_device = str(saved_screen.get("device", "cpu")).strip().lower()
+    if saved_device not in DEVICE_CHOICES:
+        saved_device = "cpu"
+    device = m4.selectbox(
+        "Device",
+        DEVICE_CHOICES,
+        index=DEVICE_CHOICES.index(saved_device),
+        key="surface_pourbaix_screen_device",
+    )
+
+    st.caption(
+        {
+            "m3gnet": "M3GNet: fixed default pretrained model; no task/head.",
+            "grace": "GRACE: choose only from GRACE checkpoints; no separate task/head.",
+            "uma": "UMA: choose a UMA foundation model and its task.",
+            "mace": "MACE: choose an installed packaged model or a custom checkpoint; a head is shown only where relevant.",
+        }[backend]
+    )
+
+    m5, m6, m7 = st.columns(3)
+    saved_optimizer = str(saved_screen.get("optimizer", "bfgs"))
+    optimizer = m5.selectbox(
+        "Optimizer", OPTIMIZER_CHOICES,
+        index=OPTIMIZER_CHOICES.index(saved_optimizer)
+        if saved_optimizer in OPTIMIZER_CHOICES else 0,
+    )
+    fmax = m6.number_input(
+        "fmax (eV/Å)", min_value=0.001, value=float(saved_screen.get("fmax", 0.05)), step=0.01
+    )
+    max_steps = m7.number_input(
+        "Max relaxation steps", min_value=1,
+        value=int(saved_screen.get("max_steps", 300)), step=10,
+    )
+
+    with st.expander("Parallel surface execution", expanded=False):
+        pcol1, pcol2 = st.columns(2)
+        parallel_surfaces = pcol1.checkbox(
+            "Run selected surfaces in parallel",
+            value=bool(saved.get("parallel_surfaces", False)),
+            help=(
+                "Parallelism is applied at the surface level: each worker owns one "
+                "surface, creates its own ML calculator, evaluates that surface's "
+                "states, and writes only to that surface directory."
+            ),
+        )
+        surface_workers = int(
+            pcol2.number_input(
+                "Surface workers",
+                min_value=1,
+                value=int(saved.get("surface_workers", 2)),
+                step=1,
+                disabled=not parallel_surfaces,
+                help=(
+                    "Maximum number of different surfaces evaluated simultaneously. "
+                    "The effective number is also limited by the number of selected surfaces."
+                ),
+            )
+        )
+        if parallel_surfaces and device == "cuda":
+            st.warning(
+                "A single CUDA device is intentionally limited to one effective "
+                "surface worker to avoid loading several ML models into the same GPU. "
+                "CPU mode supports true multi-surface process parallelism."
+            )
+        elif parallel_surfaces:
+            tf_threads = int(saved_screen.get("tf_threads", 1))
+            omp_threads = int(saved_screen.get("omp_threads", 1))
+            per_worker_threads = max(tf_threads, omp_threads, 1)
+            st.caption(
+                f"CPU mode: up to {surface_workers} independent surface workers. "
+                f"Current per-worker thread setting is about {per_worker_threads}; "
+                "avoid requesting more worker × thread capacity than your physical cores."
+            )
+        st.caption(
+            "H2/H2O reference energies are calculated once before workers start. "
+            "Existing compatible state checkpoints are still reused independently "
+            "inside each surface worker."
+        )
+
+    with st.expander("Optional DFT refinement"):
+        dft_enabled = st.checkbox(
+            "Refine competitive surface states with GPAW",
+            value=bool(saved_dft.get("enabled", False)),
+        )
+        d1, d2, d3, d4 = st.columns(4)
+        dft_execute = d1.checkbox(
+            "Execute missing GPAW calculations", value=bool(saved_dft.get("execute", False))
+        )
+        dft_ecut = d2.number_input(
+            "PW cutoff (eV)", min_value=100.0,
+            value=float(saved_dft.get("ecut_eV", 500.0)), step=50.0,
+        )
+        dft_kpts = d3.text_input(
+            "k-points", value="x".join(str(x) for x in saved_dft.get("kpts", [3, 3, 1]))
+        )
+        dft_window = d4.number_input(
+            "ML candidate window (eV)", min_value=0.0,
+            value=float(saved_dft.get("candidate_window_eV", 0.30)), step=0.05,
+        )
+        dft_cap = st.number_input(
+            "Max DFT states / surface", min_value=1,
+            value=int(saved_dft.get("max_states_per_surface", 20)), step=1,
+        )
+        if parallel_surfaces and dft_enabled and dft_execute:
+            st.info(
+                "Because GPAW execution is enabled, Surface Pourbaix will use one "
+                "effective surface worker to avoid nested multiprocessing/MPI "
+                "oversubscription. Cached/non-executing DFT lookups do not impose "
+                "this restriction."
+            )
+
+    section = dict(saved)
+    section.update(metal_settings)
+    section.update(
+        enabled=enabled, source_mode=source_mode, source_summary=source_summary, slab_files=slab_files,
+        surface_include=effective_surface_include, max_surfaces=int(max_surfaces),
+        parallel_surfaces=bool(parallel_surfaces),
+        surface_workers=int(surface_workers),
+        placement_side=placement_side,
+        protonation_side=protonation_side,
+        side_target_species=side_target_species,
+        state_families=families, adsorbates=adsorbates,
+        proton_coverages_pct=_floats(proton_coverage_text),
+        o_coverages_pct=_floats(o_coverage_text),
+        oh_coverages_pct=_floats(oh_coverage_text),
+        h2o_coverages_pct=_floats(h2o_coverage_text),
+        mixed_coverages_pct=_mixed_coverages(mixed_coverage_text),
+        surface_window_A=float(surface_window),
+        surface_site_selection=surface_site_selection,
+        surface_layer_gap_A=float(surface_layer_gap),
+        symmetry_reduce=bool(symmetry_reduce),
+        symmetry_symprec_A=float(symmetry_symprec),
+        symmetry_mapping_tolerance_A=float(symmetry_mapping_tol),
+        dopant_side_tie_tolerance_A=float(side_tie_tol),
+        max_raw_configurations_per_stoichiometry=int(max_raw_configs),
+        max_arrangements_per_stoichiometry=int(max_arrangements),
+        postprocess_validate_relaxed_states=bool(validate_relaxed),
+        postprocess_exclude_desorbed=bool(exclude_desorbed),
+        postprocess_exclude_fragmented=bool(exclude_fragmented),
+        postprocess_allow_reclassified=bool(allow_reclassified),
+        postprocess_oh_bond_cutoff_A=float(oh_bond_cutoff),
+        postprocess_oo_bond_cutoff_A=float(oo_bond_cutoff),
+        postprocess_surface_attachment_cutoff_A=float(attachment_cutoff),
+        postprocess_hh_bond_cutoff_A=float(hh_bond_cutoff),
+        pH_min=float(ph_min), pH_max=float(ph_max), pH_step=float(ph_step),
+        potential_scale=potential_scale, potential_min_V=float(u_min),
+        potential_max_V=float(u_max), potential_step_V=float(u_step),
+        temperature_K=float(temperature),
+    )
+    # Remove superseded count-based controls when an older input.toml is upgraded.
+    for legacy_key in (
+        "h_counts",
+        "adsorbate_counts",
+        "mixed_compositions",
+        "max_surface_oxygen_sites",
+        "max_surface_cation_sites",
+    ):
+        section.pop(legacy_key, None)
+
+    section["screen"] = {
+        **saved_screen, "backend": backend, "model": model, "task": task,
+        "device": device, "optimizer": optimizer, "fmax": float(fmax),
+        "max_steps": int(max_steps), "relax": True,
+    }
+    try:
+        kpts = [int(x) for x in dft_kpts.lower().replace("x", ",").split(",") if x.strip()]
+    except ValueError:
+        kpts = [3, 3, 1]
+    section["dft"] = {
+        **saved_dft, "enabled": dft_enabled, "execute": dft_execute,
+        "ecut_eV": float(dft_ecut), "kpts": kpts,
+        "candidate_window_eV": float(dft_window),
+        "max_states_per_surface": int(dft_cap),
+    }
+
+    b1, b2, b3 = st.columns(3)
+    if b1.button("Save settings", type="primary"):
+        cfg["surface_pourbaix"] = section
+        with config_path.open("w", encoding="utf-8") as handle:
+            toml.dump(cfg, handle)
+        st.success(f"Saved {config_path}")
+    if b2.button("Dry run"):
+        cfg["surface_pourbaix"] = section
+        with config_path.open("w", encoding="utf-8") as handle:
+            toml.dump(cfg, handle)
+        _run(["dopingflow", "surface-pourbaix", "-c", str(config_path), "--dry-run"])
+    if b3.button("Run surface-Pourbaix"):
+        cfg["surface_pourbaix"] = section
+        with config_path.open("w", encoding="utf-8") as handle:
+            toml.dump(cfg, handle)
+        _run(["dopingflow", "surface-pourbaix", "-c", str(config_path)])
+
+st.divider()
+st.subheader("Results")
+try:
+    resolved = resolve_surface_pourbaix_output_dir(cfg, project_root)
+    grid_path = resolved / "pourbaix_grid.csv"
+    state_summary_path = resolved / "surface_state_summary.csv"
+    domains_path = resolved / "stable_surface_states.csv"
+    run_summary_path = resolved / "surface_pourbaix_summary.json"
+
+    state_summary = (
+        pd.read_csv(state_summary_path) if state_summary_path.exists() else None
+    )
+    run_summary = _load_pourbaix_summary(run_summary_path)
+
+    if not grid_path.exists():
+        st.info("No surface-Pourbaix results yet.")
+    else:
+        grid = pd.read_csv(grid_path)
+        grid, coverage_labels_available = _enrich_grid_for_display(
+            grid, state_summary
+        )
+        surface_ids = list(dict.fromkeys(grid["surface_id"].astype(str)))
+        selected = st.selectbox(
+            "Surface",
+            surface_ids,
+            key="surface_pourbaix_result_surface",
+        )
+        view = grid[grid["surface_id"].astype(str) == selected].copy()
+
+        result_tabs = st.tabs(
+            [
+                "Pourbaix map",
+                "Structure comparison",
+                "State validation / provenance",
+            ]
+        )
+
+        # Keep the structure-comparison selector synchronized with the states
+        # currently allowed to compete in the interactive Pourbaix map. For
+        # legacy runs where interactive rebuilding is unavailable, fall back to
+        # the states stable on the saved map.
+        competition_state_ids = set(view["stable_state_id"].astype(str))
+
+        with result_tabs[0]:
+            if not coverage_labels_available:
+                st.warning(
+                    "These results were generated by an older Surface-Pourbaix run "
+                    "without coverage metadata. Rerun the stage with the current "
+                    "implementation for full coverage-aware labels."
+                )
+
+            plot_view = view.copy()
+            plot_domains: pd.DataFrame | None = None
+
+            surface_states = None
+            if state_summary is not None and not state_summary.empty:
+                surface_states = state_summary[
+                    state_summary["surface_id"].astype(str) == selected
+                ].copy()
+
+            if surface_states is not None and not surface_states.empty and run_summary:
+                eligible_states = surface_states[
+                    surface_states.apply(
+                        lambda row: _truthy(
+                            row.get("pourbaix_eligible"),
+                            True,
+                        ),
+                        axis=1,
+                    )
+                ].copy()
+                eligible_states["_group_label"] = eligible_states.apply(
+                    _competition_group_label,
+                    axis=1,
+                )
+
+                nonclean = eligible_states[
+                    eligible_states["family"].astype(str) != "clean"
+                ].copy()
+                group_order = list(
+                    dict.fromkeys(nonclean["_group_label"].astype(str))
+                )
+                group_counts = (
+                    nonclean.groupby("_group_label", sort=False)
+                    .size()
+                    .to_dict()
+                )
+
+                h2_ml = _finite_number(run_summary.get("h2_reference_eV_ml"))
+                h2o_ml = _finite_number(run_summary.get("h2o_reference_eV_ml"))
+                h2_dft = _finite_number(run_summary.get("h2_reference_eV_dft"))
+                h2o_dft = _finite_number(run_summary.get("h2o_reference_eV_dft"))
+
+                energy_options: list[str] = []
+                if h2_ml is not None and h2o_ml is not None:
+                    ml_values = pd.to_numeric(
+                        eligible_states.get("ml_energy_eV"),
+                        errors="coerce",
+                    )
+                    if ml_values.notna().any():
+                        energy_options.append("ML")
+
+                if (
+                    h2_dft is not None
+                    and h2o_dft is not None
+                    and "dft_energy_eV" in eligible_states.columns
+                ):
+                    dft_values = pd.to_numeric(
+                        eligible_states["dft_energy_eV"],
+                        errors="coerce",
+                    )
+                    clean_dft = dft_values[
+                        eligible_states["family"].astype(str) == "clean"
+                    ]
+                    if dft_values.notna().any() and clean_dft.notna().any():
+                        energy_options.append("DFT")
+
+                with st.expander(
+                    "Choose calculated states included in the Pourbaix plot",
+                    expanded=True,
+                ):
+                    st.caption(
+                        "This does **not** run new calculations. It rebuilds the "
+                        "Pourbaix map from the energies already stored in "
+                        "`surface_state_summary.csv`. Selecting one chemistry/coverage "
+                        "entry includes every eligible calculated arrangement at that "
+                        "coverage. The clean slab is always included as the CHE "
+                        "reference and as a competing physical state."
+                    )
+
+                    if energy_options:
+                        current_levels = [
+                            str(value)
+                            for value in view.get(
                                 "energy_level",
                                 pd.Series(dtype=str),
                             ).dropna()

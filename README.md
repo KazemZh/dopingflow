@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 10407)
-Total output lines: 1030
-
 <p align="center">
   <img src="logo.png" width="500">
 </p>
@@ -537,7 +534,44 @@ oxygen_reference_mode = "reference_file"
 ```
 
 `global` fits an effective backend/model/task-specific oxygen reference from
-eligible calculated binary oxides and experimental 298 K formation enthal…407 tokens truncated…ods from multiple groups. Every method is
+eligible calculated binary oxides and experimental 298 K formation enthalpies.
+`chemistry-specific` performs the same fit using only oxides relevant to the
+actual host/dopant chemistry. The audit trail is written to
+`oxygen_calibration_report.json`.
+
+### Optional fitted energy correction in vacancy thermodynamics
+
+If a compatible backend-specific experimental correction model has already been
+fitted, the vacancy analysis can opt in:
+
+```toml
+apply_fitted_energy_correction = true
+allow_legacy_energy_correction_provenance = false
+oxygen_reference_mode = "reference_file"
+```
+
+The solid reaction correction is applied as
+`ΔE_corrected = ΔE_raw + C(defect) - C(parent)`.
+
+When this path is active, use a **raw same-backend oxygen reservoir** such as
+`reference_file` or `same_calculator`. Do not combine it with the experimental
+`global` or `chemistry-specific` oxygen-reference calibration because both paths
+use experimental formation-enthalpy information for oxygen-related calibration.
+
+---
+
+## Oxidation-state analysis
+
+The oxidation stage is independent of the ML potential used for structural
+relaxation. The same MACE-, UMA-, GRACE-, or M3GNet-relaxed structures can be
+analyzed with structural, ML, DFT, or explicitly combined strategies.
+
+Available methods are:
+
+- **Structural:** pymatgen bond valence.
+- **ML:** pretrained TOSS-GNN, CHGNet magnetic-moment analysis, and BERTOS.
+- **DFT:** `dft-auto` for an automated per-atom formal oxidation-state suggestion backed by GPAW, Bader, band-edge localization, and conditional Wannier analysis; the lower-level GPAW electronic, Bader, Wannier, and validated EOS routes remain available separately.
+- **Combined:** an explicit set of methods from multiple groups. Every method is
   retained separately; labels are not averaged and no majority vote is used.
 
 A small structural smoke test can start with:
