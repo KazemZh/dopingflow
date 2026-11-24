@@ -88,6 +88,12 @@ def build_surface_pourbaix_grid(
         except (KeyError, TypeError, ValueError):
             continue
         if math.isfinite(energy):
+            if state["family"].startswith("ads:"):
+                mu = state.get(f"adsorbate_mu_eV_{energy_level.lower()}")
+                if mu is None or not math.isfinite(float(mu)):
+                    raise ValueError(f"Missing {energy_level} molecular reservoir for {state['family']}")
+                energy -= int(state["molecule_count"]) * float(mu)
+                d_h, d_o = int(state["proton_electron_pairs"]), 0
             usable.append((state, energy, d_h, d_o))
     clean = next((item for item in usable if item[0].get("family") == "clean"), None)
     if clean is None:

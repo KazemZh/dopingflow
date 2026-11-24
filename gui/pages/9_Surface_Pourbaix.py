@@ -644,6 +644,11 @@ with st.expander("Configuration & run controls", expanded=True):
         "Maximum surfaces", min_value=1, value=int(saved.get("max_surfaces", 10)), step=1
     )
 
+    slab_files = [line.strip() for line in st.text_area(
+        "Prepared slab files (optional, one path per line)",
+        value="\n".join(saved.get("slab_files", [])),
+        help="When supplied, these files provide the input slabs directly.",
+    ).splitlines() if line.strip()]
     selector_text = st.text_input(
         "Surface selectors (optional, comma-separated exact IDs or globs)",
         value=_csv(saved.get("surface_include", [])),
@@ -660,7 +665,7 @@ with st.expander("Configuration & run controls", expanded=True):
         available_section.update(
             enabled=True,
             source_mode=source_mode,
-            source_summary=source_summary,
+            source_summary=source_summary, slab_files=slab_files,
             surface_include=[],
             max_surfaces=10000,
         )
@@ -689,7 +694,7 @@ with st.expander("Configuration & run controls", expanded=True):
     preview_cfg = dict(cfg)
     preview_section = dict(saved)
     preview_section.update(
-        enabled=True, source_mode=source_mode, source_summary=source_summary,
+        enabled=True, source_mode=source_mode, source_summary=source_summary, slab_files=slab_files,
         surface_include=effective_surface_include, max_surfaces=int(max_surfaces),
     )
     preview_cfg["surface_pourbaix"] = preview_section
@@ -713,6 +718,17 @@ with st.expander("Configuration & run controls", expanded=True):
         )),
     )
 
+    with st.expander("User-defined adsorbates", expanded=bool(saved.get("adsorbates"))):
+        st.caption("Configured molecules compete alongside the selected state families. Define one TOML table per adsorbate. Use an ASE molecule name or a local XYZ file. "
+                   "Geometry uses a local frame with +z pointing out of the slab.")
+        example = '[CO]\nmolecule = "CO"\nanchor_index = 1\ncoverages_pct = [25, 50]'
+        adsorbate_text = st.text_area("Adsorbate tables", value=toml.dumps(saved.get("adsorbates", {})),
+                                      placeholder=example, height=180)
+        try:
+            adsorbates = toml.loads(adsorbate_text)
+        except ValueError as exc:
+            st.error(f"Invalid adsorbate TOML: {exc}")
+            st.stop()
     s1, s2, s3, s4 = st.columns(4)
     side_options = ["dopant-nearest", "top", "bottom", "both"]
     side_labels = {
@@ -1289,14 +1305,14 @@ with st.expander("Configuration & run controls", expanded=True):
     section = dict(saved)
     section.update(metal_settings)
     section.update(
-        enabled=enabled, source_mode=source_mode, source_summary=source_summary,
+        enabled=enabled, source_mode=source_mode, source_summary=source_summary, slab_files=slab_files,
         surface_include=effective_surface_include, max_surfaces=int(max_surfaces),
         parallel_surfaces=bool(parallel_surfaces),
         surface_workers=int(surface_workers),
         placement_side=placement_side,
         protonation_side=protonation_side,
         side_target_species=side_target_species,
-        state_families=families,
+        state_families=families, adsorbates=adsorbates,
         proton_coverages_pct=_floats(proton_coverage_text),
         o_coverages_pct=_floats(o_coverage_text),
         oh_coverages_pct=_floats(oh_coverage_text),

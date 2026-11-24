@@ -209,10 +209,16 @@ def parse_surface_pourbaix_config(
     for key, value in defaults.items():
         section.setdefault(key, value)
 
+    from dopingflow.surface_pourbaix_adsorbates import parse_adsorbates
+    section["adsorbates"] = parse_adsorbates(section.get("adsorbates", {}), root)
+    section["slab_files"] = _string_list(section.get("slab_files", []))
     section["root"] = root
     section["source_root"] = source_root(raw, root)
     section["output_dir"] = resolve_surface_pourbaix_output_dir(raw, root)
-    summary, mode = resolve_surface_pourbaix_source_summary(raw, root)
+    if section["slab_files"]:
+        mode, summary = "slab-files", ", ".join(section["slab_files"])
+    else:
+        summary, mode = resolve_surface_pourbaix_source_summary(raw, root)
     section["resolved_source_summary"] = summary
     section["resolved_source_mode"] = mode
     section["surface_include"] = _string_list(section["surface_include"])
@@ -434,6 +440,20 @@ def _target_path(row: Mapping[str, Any], root: Path) -> tuple[Path, str]:
 
 
 def discover_surface_pourbaix_targets(cfg: Mapping[str, Any]) -> list[SurfacePourbaixTarget]:
+    if cfg.get("slab_files"):
+        targets = []
+        seen = set()
+        for filename in cfg["slab_files"]:
+            path = _resolve(Path(cfg["root"]), filename)
+            if not path.is_file():
+                raise FileNotFoundError(path)
+            if path.stem in seen:
+                raise ValueError("Use distinct filenames for directly supplied slabs")
+            seen.add(path.stem)
+            if cfg["surface_include"] and not any(fnmatch.fnmatchcase(path.stem, p) for p in cfg["surface_include"]):
+                continue
+            targets.append(SurfacePourbaixTarget(path.stem, path.stem, path.stem, path, "slab-file"))
+        return targets[:cfg["max_surfaces"]]
     summary = Path(cfg["resolved_source_summary"])
     if not summary.exists():
         raise FileNotFoundError(f"Surface-Pourbaix source table not found: {summary}")

@@ -368,6 +368,9 @@ def enumerate_surface_states(structure: Structure, cfg: Mapping[str, Any]) -> li
     if families & {"H", "CO", "mixed-H-CO"}:
         from dopingflow.surface_pourbaix_metal import metal_states
         states.extend(metal_states(structure, cation_sites, normal, cfg, common))
+    if cfg.get("adsorbates"):
+        from dopingflow.surface_pourbaix_adsorbates import configured_states
+        states.extend(configured_states(structure, normal, inplane, resolved_side, cfg, common))
     return states
 
 

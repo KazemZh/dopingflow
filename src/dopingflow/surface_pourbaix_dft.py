@@ -50,8 +50,8 @@ def dft_energy(
 
 def dft_reference_energies(cfg: Mapping[str, Any]) -> tuple:
     root = Path(cfg["output_dir"]) / "references"
-    energies = {"H2O": 0.0, "CO": None}
-    kinds = ["H2"]
+    energies = {"H2": 0.0, "H2O": 0.0, "CO": None}
+    kinds = ["H2"] if cfg.get("needs_h2", True) else []
     if cfg.get("needs_water", True):
         kinds.append("H2O")
     if cfg.get("needs_co"):

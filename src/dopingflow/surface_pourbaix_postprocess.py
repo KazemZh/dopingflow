@@ -245,6 +245,9 @@ def analyze_relaxed_surface_state(
             "postprocess_reason": "relaxed structure contains fewer atoms than parent",
         }
 
+    if state.get("adsorbate_name"):
+        from dopingflow.surface_pourbaix_adsorbates import validate_molecules
+        return validate_molecules(parent_structure, generated_structure, relaxed_structure, state, cfg)
     if state["family"] in {"H", "CO", "mixed-H-CO"}:
         slab = relaxed_structure
         extra = range(n_parent, len(slab))
