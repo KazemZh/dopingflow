@@ -2,7 +2,7 @@
 [surface]
 enabled = true
 bulk_structure = "Pd.vasp"
-source_root = "pd_h_co"
+source_root = "surface_adsorbate_coverage"
 conventional_millers = true
 miller_list = [[1, 1, 1], [1, 1, 0]]
 primitive = true

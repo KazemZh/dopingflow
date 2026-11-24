@@ -292,11 +292,13 @@ When leaching uses source_mode = "auto", this hand-off table is preferred over
 the older clean-surface tables. Thus dissolution is evaluated from the surface
 states that are actually stable in the chosen electrochemical window.
 
-H and CO coverage on metal facets
----------------------------------
+Surface adsorbate coverage
+--------------------------
 
-Start with the complete input in ``examples/surface_pourbaix/pd_h_co.toml``
-and a periodic bulk structure. The surface stage accepts POSCAR or CIF via
+Start with the complete input in
+``examples/surface_pourbaix/surface_adsorbate_coverage.toml`` and a periodic
+bulk structure. This example samples H, CO, and mixed H/CO coverage on metal
+facets. The surface stage accepts POSCAR or CIF via
 ``bulk_structure``, relative to the TOML file. Set ``conventional_millers``
 to interpret the facets in the conventional crystallographic setting even
 when supplying a primitive FCC cell. The two integers in ``inplane_repeat``
@@ -330,3 +332,44 @@ and the energy model. The example uses unit activity and zero corrections
 for electronic-energy screening. Adsorbate vibrational and solvation free
 energies, double-layer fields, subsurface hydrogen, and bulk Pd hydride
 phases are outside this surface-state model.
+
+User-defined molecular adsorbates
+----------------------------------
+
+Use one ``[surface_pourbaix.adsorbates.NAME]`` table for each adsorbate.
+The complete example in ``examples/surface_pourbaix/molecular_adsorbates.toml``
+compares clean, H*, CO* and NH3* states. Supply slab files directly with
+``slab_files`` or use the existing surface-stage tables. Slabs must have
+the surface in the a,b plane, with vacuum separating periodic replicas.
+Both the slab and molecular XYZ paths are relative to the TOML file.
+
+Choose ``molecule = "NH3"`` for an ASE database geometry or
+``xyz = "molecules/my_species.xyz"`` for a single Cartesian geometry in
+angstroms. Set a zero-based ``anchor_index`` and ``height_A``.
+The local +z points out of the chosen facet. Optional ``rotation_deg``
+sets successive extrinsic x, y, z rotations in degrees. For distinct
+binding modes, define additional named tables with the same molecular
+reservoir. Set ``binding_species`` to select elements within the exposed layer
+and ``site_types`` to select atop, bridge or hollow geometries. Coverage
+is molecules per eligible exposed atom. Check the dry-run state counts
+per molecule and facet. A missing binding element gives zero states there.
+
+Each state in a custom family contains one species at the requested coverage.
+All families compete together. The dedicated mixed H/CO family also samples
+simultaneous H and CO adsorption. Coverage and arrangement sampling alone do
+not enumerate molecular conformers, orientations or arbitrary mixed adlayers.
+
+For an adsorbate X the supported formation reaction per copy is
+R + m(H+ + e-) -> X*, with one neutral reservoir molecule R. By default
+R has the geometry and composition of X, and m is zero. For example,
+supplying ``reference = {molecule = "NH3"}`` for NH2* gives m = -1.
+The parser checks elemental balance. At fixed activity a neutral intact
+molecule has no independent pH or potential slope in this approximation,
+but competes with potential-dependent states. The reservoir potential is
+the isolated reference energy plus ``free_energy_correction_eV`` and
+kBT ln(activity). Optional ``reference_energy_eV_ml`` and
+``reference_energy_eV_dft`` replace the corresponding isolated reference
+energy before these shifts. Charged solution reservoirs, independent
+electron transfers and reactions requiring several molecular reservoirs
+need a different reaction model. Check the calculator's element coverage
+and accuracy for each slab and reference molecule.

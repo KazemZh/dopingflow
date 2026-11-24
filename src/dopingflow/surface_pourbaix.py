@@ -74,7 +74,8 @@ def surface_state_display_label(state: Mapping[str, Any]) -> str:
     post-relaxation validation is available, the relaxed final chemistry takes
     precedence over the originally generated state label.
     """
-    final_label = str(state.get("final_state_label") or "").strip()
+    value = state.get("final_state_label")
+    final_label = str(value).strip() if value is not None and pd.notna(value) else ""
     if final_label:
         return final_label
     family = str(
@@ -83,6 +84,8 @@ def surface_state_display_label(state: Mapping[str, Any]) -> str:
     if family == "clean":
         return "Clean"
 
+    if family.startswith("ads:"):
+        return f"{family[4:]}* — {_coverage_text(state.get('actual_coverage_pct'))}"
     if family == "mixed-H-CO":
         return f"H* {_coverage_text(state['actual_h_coverage_pct'])} + CO* {_coverage_text(state['actual_co_coverage_pct'])}"
     if family == "mixed-O-OH":
@@ -116,6 +119,7 @@ def _annotate_grid_with_state_metadata(
     metadata_keys = (
         "requested_coverage_pct",
         "actual_coverage_pct",
+        "adsorbate_name", "molecule_count", "eligible_binding_sites",
         "actual_h_coverage_pct", "actual_co_coverage_pct",
         "requested_o_coverage_pct",
         "requested_oh_coverage_pct",
@@ -211,6 +215,7 @@ def _record_from_state(
     for key in (
         "requested_coverage_pct",
         "actual_coverage_pct",
+        "adsorbate_name", "molecule_count", "eligible_binding_sites",
         "actual_h_coverage_pct", "actual_co_coverage_pct",
         "requested_o_coverage_pct",
         "requested_oh_coverage_pct",
@@ -406,6 +411,9 @@ def _run_one_surface(
             target_dir / "states_ml",
         )
         record = _record_from_state(target, state, result)
+        if state.get("adsorbate_name"):
+            for level, values in cfg["adsorbate_mu"].items():
+                record[f"adsorbate_mu_eV_{level}"] = values.get(state["adsorbate_name"])
         if result.get("status") == "ok":
             validation = analyze_relaxed_surface_state_path(
                 structure,
@@ -464,7 +472,8 @@ def _run_one_surface(
             record["dft_artifact"] = artifact
 
         h2_dft, h2o_dft = dft_references
-        if h2_dft is not None and h2o_dft is not None and (not cfg.get("needs_co") or cfg.get("co_mu_dft") is not None):
+        complete_refs = all(v is not None for v in cfg.get("adsorbate_mu", {}).get("dft", {}).values())
+        if complete_refs and h2_dft is not None and h2o_dft is not None and (not cfg.get("needs_co") or cfg.get("co_mu_dft") is not None):
             try:
                 dft_grid, _ = build_surface_pourbaix_grid(
                     candidates,
@@ -606,6 +615,10 @@ def run_surface_pourbaix(
                 clean.get("eligible_adsorbate_site_indices", [])
             ),
             n_states=len(planned_states),
+            configured_adsorbate_state_counts=json.dumps({
+                name: sum(s.get("adsorbate_name") == name for s in planned_states)
+                for name in cfg["adsorbates"]
+            }),
         ))
     preview_path = outdir / "surface_pourbaix_preview.csv"
     pd.DataFrame(preview_rows).to_csv(preview_path, index=False)
@@ -618,12 +631,13 @@ def run_surface_pourbaix(
         cfg["screen"],
         "Surface Pourbaix references",
     )
-    h2_ml, h2_source = ml_reference_energy(
-        "H2",
-        cfg,
-        reference_calculator,
-    )
     families = set(cfg["state_families"])
+    cfg["needs_h2"] = bool(families - {"clean", "CO", "H2O"}) or any(
+        spec["pairs"] for spec in cfg["adsorbates"].values()
+    )
+    h2_ml, h2_source = (0.0, "unused")
+    if cfg["needs_h2"]:
+        h2_ml, h2_source = ml_reference_energy("H2", cfg, reference_calculator)
     cfg["needs_water"] = bool(families & {"O", "OH", "H2O", "mixed-O-OH"})
     h2o_ml, h2o_source = (0.0, "unused")
     if cfg["needs_water"]:
@@ -638,6 +652,14 @@ def run_surface_pourbaix(
             raise RuntimeError("Missing CO reference energy")
         cfg["co_activity_shift"] = KB_EV_K * cfg["temperature_K"] * math.log(cfg["co_activity"])
         cfg["co_mu_ml"] = co_energy + cfg["co_activity_shift"]
+
+    from dopingflow.surface_pourbaix_adsorbates import reference_mu
+    cfg["adsorbate_mu"] = {}
+    for level in (["ml", "dft"] if cfg["dft"]["enabled"] else ["ml"]):
+        cfg["adsorbate_mu"][level] = {
+            name: reference_mu(name, spec, cfg, reference_calculator, level)
+            for name, spec in cfg["adsorbates"].items()
+        }
 
     potentials = value_grid(
         cfg["potential_min_V"],
@@ -774,6 +796,7 @@ def run_surface_pourbaix(
         pH_range=[cfg["pH_min"], cfg["pH_max"], cfg["pH_step"]],
         potential_range_V=[cfg["potential_min_V"], cfg["potential_max_V"], cfg["potential_step_V"]],
         potential_scale=cfg["potential_scale"], temperature_K=cfg["temperature_K"],
+        adsorbate_mu_eV=cfg["adsorbate_mu"],
         co_reference_eV_ml=cfg.get("co_mu_ml"), co_reference_source=co_source,
         co_reference_eV_dft=cfg.get("co_mu_dft"), co_activity=cfg["co_activity"],
         h2_reference_eV_ml=h2_ml, h2_reference_source=h2_source,

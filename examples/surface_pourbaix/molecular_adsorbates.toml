@@ -1,0 +1,41 @@
+# Replace the filename with any prepared slab, with a,b in plane and vacuum along the normal.
+# To use DopingFlow surface-stage outputs instead, remove slab_files.
+[surface_pourbaix]
+enabled = true
+slab_files = ["slab.vasp"]
+source_root = "."
+outdir = "molecular_pourbaix"
+placement_side = "top"
+state_families = ["clean", "H"]
+h_coverages_pct = [25, 50, 75, 100]
+potential_scale = "SHE"
+potential_min_V = -1.0
+potential_max_V = 1.0
+pH_min = 0.0
+pH_max = 14.0
+max_raw_configurations_per_stoichiometry = 1000
+
+[surface_pourbaix.adsorbates.CO]
+molecule = "CO"
+anchor_index = 1   # Carbon in ASE's CO geometry (O, C)
+height_A = 1.8
+site_types = ["ontop", "bridge", "hollow"]
+binding_species = []   # All exposed elements. Use e.g. ["Sn"] for exposed Sn sites.
+coverages_pct = [25, 50, 75, 100]
+activity = 1.0
+free_energy_correction_eV = 0.0
+
+[surface_pourbaix.adsorbates.NH3]
+molecule = "NH3"
+anchor_index = 0
+rotation_deg = [180, 0, 0]  # N toward slab, H away
+site_types = ["ontop"]
+height_A = 2.0
+coverages_pct = [25, 50]
+
+[surface_pourbaix.screen]
+backend = "mace"
+model = "mh-1"
+task = "matpes_r2scan"
+device = "cpu"
+relax = true

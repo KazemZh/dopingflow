@@ -1,4 +1,8 @@
 [surface]
+# To build facets directly from a bulk unit cell, set the path relative to this file.
+# bulk_structure = "bulk.vasp"
+# conventional_millers = true
+# inplane_repeat = [2, 2]
 enabled = true
 # Same structure-selection interface used by oxidation/conductivity.
 source_root = "vacancy-selected"

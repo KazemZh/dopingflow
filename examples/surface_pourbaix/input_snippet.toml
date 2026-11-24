@@ -25,6 +25,12 @@ dopant_side_fallback = "top"
 anion_species = ["O"]
 state_families = ["clean", "protonated", "O", "OH", "H2O", "mixed-O-OH"]
 
+# For H/CO on metal facets, set state_families = ["clean", "H", "CO", "mixed-H-CO"]
+# h_coverages_pct = [25, 50, 75, 100]
+# co_coverages_pct = [25, 50, 75, 100]
+# mixed_h_co_coverages_pct = [[25, 25], [50, 50]]
+# For custom molecular families see molecular_adsorbates.toml.
+
 # Coverages are percentages of the eligible sites on the selected surface side.
 proton_coverages_pct = [25, 50, 75, 100]
 o_coverages_pct = [25, 50, 75, 100]

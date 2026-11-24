@@ -21,8 +21,8 @@ def test_neutral_co_and_che_hydrogen():
     assert energy(1, 1, 14, "RHE") == pytest.approx(-1)
 
 
-def test_bulk_pd_to_two_coverage_grids(tmp_path, monkeypatch):
-    path = Path(__file__).resolve().parents[1] / "examples/surface_pourbaix/pd_h_co.toml"
+def test_bulk_metal_to_two_coverage_grids(tmp_path, monkeypatch):
+    path = Path(__file__).resolve().parents[1] / "examples/surface_pourbaix/surface_adsorbate_coverage.toml"
     cfg = sf.tomllib.loads(path.read_text())
     write(tmp_path / "Pd.vasp", bulk("Pd"))
     cfg["surface"]["screen"]["relax"] = False
