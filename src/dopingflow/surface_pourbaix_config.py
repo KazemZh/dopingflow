@@ -157,74 +157,11 @@ def _calculator_defaults(raw: Mapping[str, Any]) -> dict[str, Any]:
     return defaults
 
 
-STATE_SETTING_GROUPS = {
-    "placement": (
-        "placement_side",
-        "protonation_side",
-        "side_target_species",
-        "surface_site_selection",
-        "surface_window_A",
-        "surface_layer_gap_A",
-        "dopant_side_tie_tolerance_A",
-    ),
-    "coverage": (
-        "state_families",
-        "proton_coverages_pct",
-        "o_coverages_pct",
-        "oh_coverages_pct",
-        "h2o_coverages_pct",
-        "mixed_coverages_pct",
-        "h_coverages_pct",
-        "co_coverages_pct",
-        "mixed_h_co_coverages_pct",
-    ),
-    "metal_adsorption": (
-        "metal_site_types",
-        "co_binding_modes",
-        "co_orientation_limit",
-        "metal_min_spacing_A",
-        "h_adsorption_height_A",
-        "co_adsorption_height_A",
-    ),
-    "sampling": (
-        "symmetry_reduce",
-        "symmetry_symprec_A",
-        "symmetry_mapping_tolerance_A",
-        "symmetry_angle_tolerance_deg",
-        "max_arrangements_per_stoichiometry",
-        "max_raw_configurations_per_stoichiometry",
-    ),
-}
-
-
-def unpack_state_settings(section):
-    """Read grouped state settings and legacy flat inputs."""
-    result = dict(section)
-    for group, keys in STATE_SETTING_GROUPS.items():
-        values = result.pop(group, {})
-        if not isinstance(values, Mapping):
-            raise ValueError(f"surface_pourbaix.{group} must be a table")
-        for key, value in values.items():
-            if key not in keys or key in result:
-                raise ValueError(f"Unknown or duplicate setting: {group}.{key}")
-            result[key] = value
-    return result
-
-
-def pack_state_settings(section):
-    result = dict(section)
-    for group, keys in STATE_SETTING_GROUPS.items():
-        values = {key: result.pop(key) for key in keys if key in result}
-        if values:
-            result[group] = values
-    return result
-
-
 def parse_surface_pourbaix_config(
     raw: Mapping[str, Any], root: Path | str = Path(".")
 ) -> dict[str, Any]:
     root = Path(root).expanduser().resolve()
-    section = unpack_state_settings(raw.get("surface_pourbaix", {}) or {})
+    section = dict(raw.get("surface_pourbaix", {}) or {})
     surface = dict(raw.get("surface", {}) or {})
     scan = dict(raw.get("scan", {}) or {})
     defaults = dict(

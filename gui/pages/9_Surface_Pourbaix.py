@@ -608,7 +608,7 @@ with st.expander("Configuration & run controls", expanded=True):
     enabled = st.checkbox("Enable surface-Pourbaix stage", value=bool(saved.get("enabled", False)))
 
     st.subheader("Input surfaces")
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     source_modes = [
         "surface",
         "segregation",
@@ -644,6 +644,14 @@ with st.expander("Configuration & run controls", expanded=True):
     max_surfaces = c3.number_input(
         "Maximum surfaces", min_value=1, value=int(saved.get("max_surfaces", 10)), step=1
     )
+    outdir = c4.text_input(
+        "Results directory",
+        value=str(saved.get("outdir", "10_surface_pourbaix")),
+        help=(
+            "Relative to Project root. The GUI reads existing Surface Pourbaix "
+            "results here and writes new run results here."
+        ),
+    ).strip()
 
     slab_files = [line.strip() for line in st.text_area(
         "Prepared slab files (optional, one path per line)",
@@ -667,7 +675,7 @@ with st.expander("Configuration & run controls", expanded=True):
             enabled=True,
             source_mode=source_mode,
             source_summary=source_summary, slab_files=slab_files,
-            surface_include=[],
+            outdir=outdir, surface_include=[],
             max_surfaces=10000,
         )
         available_cfg["surface_pourbaix"] = available_section
@@ -696,7 +704,7 @@ with st.expander("Configuration & run controls", expanded=True):
     preview_section = dict(saved)
     preview_section.update(
         enabled=True, source_mode=source_mode, source_summary=source_summary, slab_files=slab_files,
-        surface_include=effective_surface_include, max_surfaces=int(max_surfaces),
+        outdir=outdir, surface_include=effective_surface_include, max_surfaces=int(max_surfaces),
     )
     preview_cfg["surface_pourbaix"] = preview_section
     try:
@@ -1320,7 +1328,7 @@ with st.expander("Configuration & run controls", expanded=True):
     section.update(metal_settings)
     section.update(
         enabled=enabled, source_mode=source_mode, source_summary=source_summary, slab_files=slab_files,
-        surface_include=effective_surface_include, max_surfaces=int(max_surfaces),
+        outdir=outdir, surface_include=effective_surface_include, max_surfaces=int(max_surfaces),
         parallel_surfaces=bool(parallel_surfaces),
         surface_workers=int(surface_workers),
         placement_side=placement_side,
