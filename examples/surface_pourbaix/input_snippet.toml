@@ -16,7 +16,7 @@ surface_workers = 2
 
 # Sample both coverage and arrangement. "clean" is always retained as the reference.
 # Automatic side selection is evaluated independently for every actual doped surface.
-placement_side = "dopant-nearest"     # O*/OH*/H2O*: dopant-nearest, top, bottom, both
+placement_side = "dopant-nearest"     # slab face for adsorbates: dopant-nearest, top, bottom, both
 protonation_side = "both"              # both, same-as-adsorbates, dopant-nearest, top, bottom
 side_target_species = ["Sb", "In"]    # blank/[] -> infer all non-host cations
 dopant_side_tie_tolerance_A = 0.25

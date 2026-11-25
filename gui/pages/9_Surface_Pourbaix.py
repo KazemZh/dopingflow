@@ -741,13 +741,14 @@ with st.expander("Configuration & run controls", expanded=True):
     if saved_side not in side_options:
         saved_side = "dopant-nearest"
     placement_side = s1.selectbox(
-        "O*/OH*/H2O* adsorption side",
+        "Adsorbate placement side",
         side_options,
         index=side_options.index(saved_side),
         format_func=lambda value: side_labels[value],
         help=(
-            "Controls only added O*, OH*, H2O*, and mixed O*/OH* states. "
-            "Automatic mode chooses the side closest to the selected dopant species."
+            "Selects the slab face for built-in O*/OH*/H2O* states and user-defined "
+            "adsorbates. H/CO states use this placement side too. Automatic mode "
+            "chooses the side closest to the selected dopant species."
         ),
     )
 

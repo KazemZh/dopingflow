@@ -64,7 +64,8 @@ The legacy ``surface_site_selection = "window"`` mode remains available for
 comparison and intentionally reproduces the former height-window behavior.
 
 Adsorbate placement and lattice-O protonation have independent side controls.
-``placement_side`` applies to O*, OH*, H2O*, and mixed O*/OH* states.
+``placement_side`` selects the slab face for built-in O*, OH*, H2O*, and
+mixed O*/OH* states, H/CO states, and configured adsorbate molecules.
 ``protonation_side`` applies only to H added to existing lattice O and accepts
 ``both`` (default), ``same-as-adsorbates``, ``dopant-nearest``,
 ``top``, or ``bottom``. With ``protonation_side = "both"``, the
