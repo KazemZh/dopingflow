@@ -316,7 +316,9 @@ projected outer layer. Set ``co_binding_modes = ["C-down", "O-down", "side-on"]`
 CO centered above each site in four directed azimuths. The default is C-down.
 ``co_orientation_limit`` (default 9) bounds the number of joint orientation
 assignments per retained site arrangement. Relaxation can change the binding
-mode. ``co_starting_poses`` records the initial orientations. Mixed coverage pairs specify
+mode. ``co_starting_poses`` records the initial orientations. With ``symmetry_reduce = true``, site occupations are
+reduced under the slab symmetry before these orientations are generated. Horizontal
+starts related by a surface rotation or reflection can therefore both be relaxed. Mixed coverage pairs specify
 [H%, CO%]. The raw and retained configuration caps control sampling cost.
 Increasing them and the lateral cell size tests configurational convergence.
 
