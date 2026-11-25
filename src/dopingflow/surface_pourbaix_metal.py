@@ -139,7 +139,7 @@ def _upright_states(slab, exposed, normal, cfg, common):
                        symmetry_operations=len(perms), structure=candidate)
 
 
-def metal_states(slab, exposed, normal, cfg, common):
+def _legacy_tilt_states(slab, exposed, normal, cfg, common):
     """Retain the original upright state and sample C-bound CO rotations."""
     tilt = float(cfg.get("co_tilt_deg", 0))
     cap = int(cfg.get("co_orientation_limit", 9))
@@ -190,3 +190,67 @@ def metal_states(slab, exposed, normal, cfg, common):
                 continue
             yield dict(state, structure=candidate, co_seed_angles_deg=angles,
                        state_id=f"{state['state_id']}_tilt{tilt:g}_orient{code}")
+
+
+def metal_states(slab, exposed, normal, cfg, common):
+    """Place each CO end-on or side-on before unconstrained adsorbate relaxation."""
+    if "co_binding_modes" not in cfg and cfg.get("co_tilt_deg", 0):
+        yield from _legacy_tilt_states(slab, exposed, normal, cfg, common)
+        return
+    modes = cfg.get("co_binding_modes", ["C-down"])
+    if not isinstance(modes, list) or not modes or set(modes) - {"C-down", "O-down", "side-on"}:
+        raise ValueError("co_binding_modes must list C-down, O-down, or side-on")
+    a = slab.lattice.matrix[0]
+    u = a / np.linalg.norm(a)
+    v = np.cross(normal, u)
+    axes = {"side+a": u, "side-a": -u, "side+b": v, "side-b": -v}
+    poses = [p for p in ("C-down", "O-down") if p in modes]
+    if "side-on" in modes:
+        poses.extend(axes)
+    cap = int(cfg.get("co_orientation_limit", 9))
+    if cap < len(poses):
+        raise ValueError(f"co_orientation_limit needs at least {len(poses)} for these modes")
+    for state in _upright_states(slab, exposed, normal, cfg, common):
+        if not state["n_CO"]:
+            yield state
+            continue
+        base = state["structure"]
+        carbons = [i for i in range(len(slab), len(base)) if base[i].specie.symbol == "C"]
+        # First cover each homogeneous geometry, then sample joint assignments.
+        choices = len(poses)
+        total = choices ** len(carbons)
+        codes = [k * ((total - 1) // (choices - 1)) for k in range(choices)] if choices > 1 else [0]
+        used = set(codes)
+        rng = random.Random(17)
+        while len(codes) < min(total, cap):
+            code = rng.randrange(total)
+            if code not in used:
+                codes.append(code)
+                used.add(code)
+        for code in codes:
+            candidate = base.copy()
+            names = []
+            for i in carbons:
+                code, digit = divmod(code, choices)
+                pose = poses[digit]
+                names.append(pose)
+                origin = base[i].coords
+                bond = base[i + 1].coords - origin
+                if pose == "C-down":
+                    continue
+                if pose == "O-down":
+                    c_shift, o_shift = bond, -bond
+                else:
+                    half = axes[pose] * np.linalg.norm(bond) / 2
+                    c_shift, o_shift = -half, half - bond
+                for j, shift in ((i, c_shift), (i + 1, o_shift)):
+                    candidate.translate_sites([j], shift, frac_coords=False, to_unit_cell=False)
+            upright = all(name == "C-down" for name in names)
+            if not upright and any(candidate.get_distance(k, j) < 1.1
+                                   for i in carbons for k in (i, i + 1)
+                                   for j in range(len(base)) if j not in (i, i + 1)):
+                continue
+            signature = "".join(str(("C-down", "O-down", *axes).index(name)) for name in names)
+            suffix = "" if upright else "_pose" + signature
+            yield dict(state, structure=candidate, co_starting_poses=names,
+                       state_id=state["state_id"] + suffix)

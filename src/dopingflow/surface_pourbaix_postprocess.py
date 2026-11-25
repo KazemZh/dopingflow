@@ -253,9 +253,13 @@ def analyze_relaxed_surface_state(
         extra = range(n_parent, len(slab))
         by_species = {s: [i for i in extra if relaxed_species[i] == s] for s in ("H", "C", "O")}
         issues = set()
-        for i in by_species["H"] + by_species["C"]:
+        for i in by_species["H"]:
             _, distance = _nearest(slab, i, range(n_parent))
             if distance > cfg["postprocess_surface_attachment_cutoff_A"]:
+                issues.add("detached")
+        for carbon in by_species["C"]:
+            ends = [carbon] + [o for o in by_species["O"] if slab.get_distance(carbon, o) <= 1.45]
+            if min(_nearest(slab, i, range(n_parent))[1] for i in ends) > cfg["postprocess_surface_attachment_cutoff_A"]:
                 issues.add("detached")
         for i in by_species["H"]:
             for j in extra:

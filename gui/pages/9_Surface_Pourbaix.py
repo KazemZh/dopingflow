@@ -860,9 +860,10 @@ with st.expander("Configuration & run controls", expanded=True):
                 saved.get("mixed_h_co_coverages_pct", [[25, 25], [50, 50]]))))
         metal_settings["metal_site_types"] = st.multiselect("Metal adsorption sites",
             ["ontop", "bridge", "hollow"], default=saved.get("metal_site_types", ["ontop", "bridge", "hollow"]))
-        metal_settings["co_tilt_deg"] = st.number_input(
-            "Additional CO starting tilt from surface normal (degrees)", 0.0, 90.0,
-            value=float(saved.get("co_tilt_deg", 0)), help="Zero uses only upright CO.")
+        metal_settings["co_binding_modes"] = st.multiselect(
+            "CO starting geometries", ["C-down", "O-down", "side-on"],
+            default=saved.get("co_binding_modes", ["C-down"]),
+            help="Side-on places the molecular midpoint over the site and tries four in-plane directions.")
         metal_settings["co_orientation_limit"] = st.number_input(
             "Maximum orientation starts per site arrangement", 1,
             value=int(saved.get("co_orientation_limit", 9)))
