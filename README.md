@@ -180,6 +180,8 @@ Pourbaix window is **pH -1 to 3** and 0--2 V vs SHE; both ranges and the SHE/RHE
 reference scale are configurable. Optional GPAW refinement is restricted to
 ML-stable and near-stable states.
 
+For built-in CO and mixed H/CO states, `co_binding_modes` selects vertical `C-down`, vertical `O-down`, or horizontal `side-on` starts. Site symmetry removes equivalent occupations before molecular orientations are generated, so some side-on starts can still be symmetry equivalent.
+
 For **surface adsorbate coverage**, set `bulk_structure`, `miller_list`, and
 `inplane_repeat` in the existing `[surface]` section to build facets from a
 bulk unit cell. In `[surface_pourbaix]`, select the screened facets and set
