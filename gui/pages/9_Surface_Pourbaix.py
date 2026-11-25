@@ -863,7 +863,7 @@ with st.expander("Configuration & run controls", expanded=True):
         metal_settings["co_binding_modes"] = st.multiselect(
             "CO starting geometries", ["C-down", "O-down", "side-on"],
             default=saved.get("co_binding_modes", ["C-down"]),
-            help="Side-on places the molecular midpoint over the site and tries four in-plane directions.")
+            help="Side-on places the molecular midpoint over the site and tries four in-plane directions. Site symmetry is applied before orientation sampling, so equivalent directions can both be relaxed.")
         metal_settings["co_orientation_limit"] = st.number_input(
             "Maximum orientation starts per site arrangement", 1,
             value=int(saved.get("co_orientation_limit", 9)))
