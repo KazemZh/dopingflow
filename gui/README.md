@@ -318,6 +318,9 @@ relevant. Backend-specific model/task values are not reused across backends.
 
 ## Surface Pourbaix page
 
+Surface Pourbaix groups state settings into `coverage` (families and percentages), `placement` (faces and exposed atoms), `metal_adsorption` (H/CO starting sites and poses), and `sampling` (symmetry and arrangement limits). Add one `[surface_pourbaix.adsorbates.NAME]` table per custom species for its geometry, coverage, binding sites, and reservoir. Existing flat inputs are accepted. Saving in the GUI writes the grouped format.
+
+
 On the **Surface Pourbaix** page, select **CO** or **mixed-H-CO** under **State families**. Use **CO starting geometries** to select `C-down`, `O-down`, or `side-on`. Side-on tries four in-plane directions. **Maximum orientation starts per site arrangement** limits the joint starts across all CO molecules in that arrangement (default 9). Site symmetry is applied before this step.
 
 Under **Surface states and adsorbate coverage**, select the built-in families and their coverage percentages. **Adsorbate placement side** selects the slab face for built-in adsorbates, H/CO, and user-defined molecules. For a custom molecule, expand **User-defined adsorbates** and enter its ASE name or XYZ path and coverage list. **Save settings** writes these choices to `[surface_pourbaix]` in the project’s `input.toml`.

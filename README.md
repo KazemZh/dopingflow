@@ -185,7 +185,10 @@ For built-in CO and mixed H/CO states, `co_binding_modes` selects vertical `C-do
 For **surface adsorbate coverage**, set `bulk_structure`, `miller_list`, and
 `inplane_repeat` in the existing `[surface]` section to build facets from a
 bulk unit cell. In `[surface_pourbaix]`, select the screened facets and set
-the state families and coverages. The [facet example](examples/surface_pourbaix/surface_adsorbate_coverage.toml)
+the state families and coverages.
+
+Surface Pourbaix groups state settings into `coverage` (families and percentages), `placement` (faces and exposed atoms), `metal_adsorption` (H/CO starting sites and poses), and `sampling` (symmetry and arrangement limits). Add one `[surface_pourbaix.adsorbates.NAME]` table per custom species for its geometry, coverage, binding sites, and reservoir. Existing flat inputs are accepted. Saving in the GUI writes the grouped format.
+ The [facet example](examples/surface_pourbaix/surface_adsorbate_coverage.toml)
 compares H*, CO*, and mixed H*/CO* on Pd. The [molecular example](examples/surface_pourbaix/molecular_adsorbates.toml)
 shows how to supply a prepared slab and define additional adsorbates.
 

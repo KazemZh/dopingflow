@@ -14,41 +14,9 @@ outdir = "10_surface_pourbaix"
 parallel_surfaces = false
 surface_workers = 2
 
-# Sample both coverage and arrangement. "clean" is always retained as the reference.
-# Automatic side selection is evaluated independently for every actual doped surface.
-placement_side = "dopant-nearest"     # slab face for adsorbates: dopant-nearest, top, bottom, both
-protonation_side = "both"              # both, same-as-adsorbates, dopant-nearest, top, bottom
-side_target_species = ["Sb", "In"]    # blank/[] -> infer all non-host cations
-dopant_side_tie_tolerance_A = 0.25
 dopant_side_fallback = "top"
 
 anion_species = ["O"]
-state_families = ["clean", "protonated", "O", "OH", "H2O", "mixed-O-OH"]
-
-# For H/CO on metal facets, set state_families = ["clean", "H", "CO", "mixed-H-CO"]
-# h_coverages_pct = [25, 50, 75, 100]
-# co_coverages_pct = [25, 50, 75, 100]
-# mixed_h_co_coverages_pct = [[25, 25], [50, 50]]
-# For custom molecular families see molecular_adsorbates.toml.
-
-# Coverages are percentages of the eligible sites on the selected surface side.
-proton_coverages_pct = [25, 50, 75, 100]
-o_coverages_pct = [25, 50, 75, 100]
-oh_coverages_pct = [25, 50, 75, 100]
-h2o_coverages_pct = [25, 50, 100]
-mixed_coverages_pct = [[25, 25], [25, 75], [50, 50], [75, 25]]
-
-surface_site_selection = "outermost-layer"  # recommended; "window" is legacy behavior
-surface_window_A = 2.0                       # safety depth for layer detection
-surface_layer_gap_A = 0.75                   # minimum resolvable layer-separation gap
-
-# Symmetry is determined from the actual doped/vacancy slab.
-symmetry_reduce = true
-symmetry_symprec_A = 0.10
-symmetry_angle_tolerance_deg = 5.0
-symmetry_mapping_tolerance_A = 0.25
-max_raw_configurations_per_stoichiometry = 100000
-max_arrangements_per_stoichiometry = 8
 
 # Validate the relaxed chemistry before a state is allowed into the Pourbaix map.
 # Short O-O distances are structural flags only; they do not assign electronic
@@ -85,6 +53,34 @@ h2_free_energy_correction_eV = 0.0
 h2o_free_energy_correction_eV = 0.0
 resume_completed = true
 inherit_surface_fixed_atoms = true
+
+[surface_pourbaix.placement]
+placement_side = "dopant-nearest"     # slab face for adsorbates: dopant-nearest, top, bottom, both
+protonation_side = "both"              # both, same-as-adsorbates, dopant-nearest, top, bottom
+side_target_species = ["Sb", "In"]    # blank/[] -> infer all non-host cations
+dopant_side_tie_tolerance_A = 0.25
+surface_site_selection = "outermost-layer"  # recommended; "window" is legacy behavior
+surface_window_A = 2.0                       # safety depth for layer detection
+surface_layer_gap_A = 0.75                   # minimum resolvable layer-separation gap
+
+[surface_pourbaix.coverage]
+state_families = ["clean", "protonated", "O", "OH", "H2O", "mixed-O-OH"]
+# h_coverages_pct = [25, 50, 75, 100]
+# co_coverages_pct = [25, 50, 75, 100]
+# mixed_h_co_coverages_pct = [[25, 25], [50, 50]]
+proton_coverages_pct = [25, 50, 75, 100]
+o_coverages_pct = [25, 50, 75, 100]
+oh_coverages_pct = [25, 50, 75, 100]
+h2o_coverages_pct = [25, 50, 100]
+mixed_coverages_pct = [[25, 25], [25, 75], [50, 50], [75, 25]]
+
+[surface_pourbaix.sampling]
+symmetry_reduce = true
+symmetry_symprec_A = 0.10
+symmetry_angle_tolerance_deg = 5.0
+symmetry_mapping_tolerance_A = 0.25
+max_raw_configurations_per_stoichiometry = 100000
+max_arrangements_per_stoichiometry = 8
 
 [surface_pourbaix.screen]
 backend = "mace"

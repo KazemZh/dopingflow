@@ -64,6 +64,9 @@ The legacy ``surface_site_selection = "window"`` mode remains available for
 comparison and intentionally reproduces the former height-window behavior.
 
 Adsorbate placement and lattice-O protonation have independent side controls.
+
+Surface Pourbaix groups state settings into ``coverage`` (families and percentages), ``placement`` (faces and exposed atoms), ``metal_adsorption`` (H/CO starting sites and poses), and ``sampling`` (symmetry and arrangement limits). Add one ``[surface_pourbaix.adsorbates.NAME]`` table per custom species for its geometry, coverage, binding sites, and reservoir. Existing flat inputs are accepted. Saving in the GUI writes the grouped format.
+
 ``placement_side`` selects the slab face for built-in O*, OH*, H2O*, and
 mixed O*/OH* states, H/CO states, and configured adsorbate molecules.
 ``protonation_side`` applies only to H added to existing lattice O and accepts

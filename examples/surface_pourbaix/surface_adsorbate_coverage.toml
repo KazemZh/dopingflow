@@ -28,17 +28,6 @@ enabled = false
 [surface_pourbaix]
 enabled = true
 source_mode = "screen-summary"
-placement_side = "top"
-state_families = ["clean", "H", "CO", "mixed-H-CO"]
-# Optional: uncomment both lines to sample end-on and side-on CO.
-# co_binding_modes = ["C-down", "O-down", "side-on"]
-# co_orientation_limit = 9
-metal_site_types = ["ontop", "bridge", "hollow"]
-h_coverages_pct = [25, 50, 75, 100]
-co_coverages_pct = [25, 50, 75, 100]
-mixed_h_co_coverages_pct = [[25,25], [25,50], [50,25], [25,75], [50,50], [75,25]]
-max_raw_configurations_per_stoichiometry = 1000
-max_arrangements_per_stoichiometry = 8
 potential_scale = "SHE"
 potential_min_V = -1.0
 potential_max_V = 1.0
@@ -51,3 +40,21 @@ co_activity = 1.0
 # Supply model- and T-consistent gas free-energy corrections for quantitative work.
 co_free_energy_correction_eV = 0.0
 h2_free_energy_correction_eV = 0.0
+
+[surface_pourbaix.placement]
+placement_side = "top"
+
+[surface_pourbaix.coverage]
+state_families = ["clean", "H", "CO", "mixed-H-CO"]
+h_coverages_pct = [25, 50, 75, 100]
+co_coverages_pct = [25, 50, 75, 100]
+mixed_h_co_coverages_pct = [[25,25], [25,50], [50,25], [25,75], [50,50], [75,25]]
+
+[surface_pourbaix.metal_adsorption]
+# co_binding_modes = ["C-down", "O-down", "side-on"]
+# co_orientation_limit = 9
+metal_site_types = ["ontop", "bridge", "hollow"]
+
+[surface_pourbaix.sampling]
+max_raw_configurations_per_stoichiometry = 1000
+max_arrangements_per_stoichiometry = 8

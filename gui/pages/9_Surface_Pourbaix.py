@@ -14,6 +14,7 @@ import plotly.graph_objects as go
 import streamlit as st
 import toml
 
+from dopingflow.surface_pourbaix_config import pack_state_settings, unpack_state_settings
 from dopingflow.surface_pourbaix import (
     preview_surface_pourbaix_targets,
     resolve_surface_pourbaix_output_dir,
@@ -51,7 +52,7 @@ if not config_path.exists():
     st.stop()
 
 cfg = toml.load(str(config_path))
-saved = dict(cfg.get("surface_pourbaix", {}) or {})
+saved = unpack_state_settings(cfg.get("surface_pourbaix", {}) or {})
 saved_screen = dict(saved.get("screen", {}) or {})
 saved_dft = dict(saved.get("dft", {}) or {})
 surface_cfg = dict(cfg.get("surface", {}) or {})
@@ -709,14 +710,20 @@ with st.expander("Configuration & run controls", expanded=True):
         st.warning(str(exc))
 
     st.subheader("Surface states and adsorbate coverage")
-    families = st.multiselect(
-        "State families",
-        ["clean", "protonated", "O", "OH", "H2O", "mixed-O-OH", "H", "CO", "mixed-H-CO"],
-        default=list(saved.get(
-            "state_families",
-            ["clean", "protonated", "O", "OH", "H2O", "mixed-O-OH"],
-        )),
-    )
+    family_labels = {
+        "protonated": "H on lattice oxygen",
+        "O": "Adsorbed O", "OH": "Adsorbed OH", "H2O": "Adsorbed H₂O",
+        "H": "Adsorbed H", "CO": "Adsorbed CO",
+        "mixed-O-OH": "O + OH on the same slab",
+        "mixed-H-CO": "H + CO on the same slab",
+    }
+    saved_families = saved.get("state_families", ["protonated", "O", "OH", "H2O", "mixed-O-OH"])
+    families = ["clean", *st.multiselect(
+        "Surface states to compare", list(family_labels),
+        default=[family for family in saved_families if family in family_labels],
+        format_func=family_labels.get,
+        help="The clean slab is always included as the reference.",
+    )]
 
     with st.expander("User-defined adsorbates", expanded=bool(saved.get("adsorbates"))):
         st.caption("Configured molecules compete alongside the selected state families. Define one TOML table per adsorbate. Use an ASE molecule name or a local XYZ file. "
@@ -729,6 +736,7 @@ with st.expander("Configuration & run controls", expanded=True):
         except ValueError as exc:
             st.error(f"Invalid adsorbate TOML: {exc}")
             st.stop()
+    st.markdown("**Slab faces and exposed atoms**")
     s1, s2, s3, s4 = st.columns(4)
     side_options = ["dopant-nearest", "top", "bottom", "both"]
     side_labels = {
@@ -761,7 +769,7 @@ with st.expander("Configuration & run controls", expanded=True):
     ]
     protonation_labels = {
         "both": "Both slab sides (recommended)",
-        "same-as-adsorbates": "Same side as O*/OH*/H2O* adsorption",
+        "same-as-adsorbates": "Same face as adsorbates",
         "dopant-nearest": "Near dopants — automatic",
         "top": "Top only",
         "bottom": "Bottom only",
@@ -774,6 +782,7 @@ with st.expander("Configuration & run controls", expanded=True):
     protonation_side = s2.selectbox(
         "Lattice-O protonation side",
         protonation_options,
+        disabled="protonated" not in families,
         index=protonation_options.index(saved_protonation_side),
         format_func=lambda value: protonation_labels[value],
         help=(
@@ -850,52 +859,47 @@ with st.expander("Configuration & run controls", expanded=True):
         )
 
     st.markdown("**Coverage grid (% of all eligible sites on the chosen side(s))**")
-    cH, cO, cOH, cW = st.columns(4)
+    coverage_settings = {}
     metal_settings = {}
     if set(families) & {"H", "CO", "mixed-H-CO"}:
-        for family, key in (("H*", "h_coverages_pct"), ("CO*", "co_coverages_pct")):
+        for family, key in (("H", "h_coverages_pct"), ("CO", "co_coverages_pct")):
+            if family not in families:
+                continue
             metal_settings[key] = _floats(st.text_input(f"{family} coverage (%)",
                 value=_csv(saved.get(key, [25, 50, 75, 100]))))
-        metal_settings["mixed_h_co_coverages_pct"] = _mixed_coverages(st.text_input(
-            "Mixed H*:CO* coverage pairs (%)", value=_mixed_coverage_text(
-                saved.get("mixed_h_co_coverages_pct", [[25, 25], [50, 50]]))))
+        if "mixed-H-CO" in families:
+            metal_settings["mixed_h_co_coverages_pct"] = _mixed_coverages(st.text_input(
+                "Mixed H*:CO* coverage pairs (%)", value=_mixed_coverage_text(
+                    saved.get("mixed_h_co_coverages_pct", [[25, 25], [50, 50]]))))
+        st.markdown("**H and CO adsorption geometry**")
         metal_settings["metal_site_types"] = st.multiselect("Metal adsorption sites",
             ["ontop", "bridge", "hollow"], default=saved.get("metal_site_types", ["ontop", "bridge", "hollow"]))
-        metal_settings["co_binding_modes"] = st.multiselect(
-            "CO starting geometries", ["C-down", "O-down", "side-on"],
-            default=saved.get("co_binding_modes", ["C-down"]),
-            help="Side-on places the molecular midpoint over the site and tries four in-plane directions. Site symmetry is applied before orientation sampling, so equivalent directions can both be relaxed.")
-        metal_settings["co_orientation_limit"] = st.number_input(
-            "Maximum orientation starts per site arrangement", 1,
-            value=int(saved.get("co_orientation_limit", 9)))
-        metal_settings["co_activity"] = st.number_input("CO activity (relative to standard state)",
-            value=float(saved.get("co_activity", 1.0)), format="%.6g")
-        metal_settings["co_free_energy_correction_eV"] = st.number_input("CO standard-state correction (eV)",
-            value=float(saved.get("co_free_energy_correction_eV", 0.0)))
-    proton_coverage_text = cH.text_input(
-        "Protonated O coverage (%)",
-        value=_csv(saved.get("proton_coverages_pct", [25, 50, 75, 100])),
-    )
-    o_coverage_text = cO.text_input(
-        "O* coverage (%)",
-        value=_csv(saved.get("o_coverages_pct", [25, 50, 75, 100])),
-    )
-    oh_coverage_text = cOH.text_input(
-        "OH* coverage (%)",
-        value=_csv(saved.get("oh_coverages_pct", [25, 50, 75, 100])),
-    )
-    h2o_coverage_text = cW.text_input(
-        "H2O* coverage (%)",
-        value=_csv(saved.get("h2o_coverages_pct", [25, 50, 100])),
-    )
-    mixed_coverage_text = st.text_input(
-        "Mixed O*:OH* coverage pairs (%)",
-        value=_mixed_coverage_text(saved.get("mixed_coverages_pct")),
-        help=(
-            "Format O%:OH%, separated by commas; e.g. 25:25, 25:75, 50:50, 75:25. "
-            "The two coverages must sum to at most 100%."
-        ),
-    )
+        if set(families) & {"CO", "mixed-H-CO"}:
+            metal_settings["co_binding_modes"] = st.multiselect(
+                "CO starting geometries", ["C-down", "O-down", "side-on"],
+                default=saved.get("co_binding_modes", ["C-down"]),
+                help="Side-on places the molecular midpoint over the site and tries four in-plane directions. Site symmetry is applied before orientation sampling, so equivalent directions can both be relaxed.")
+            metal_settings["co_orientation_limit"] = st.number_input(
+                "Maximum orientation starts per site arrangement", 1,
+                value=int(saved.get("co_orientation_limit", 9)))
+            metal_settings["co_activity"] = st.number_input("CO activity (relative to standard state)",
+                value=float(saved.get("co_activity", 1.0)), format="%.6g")
+            metal_settings["co_free_energy_correction_eV"] = st.number_input("CO standard-state correction (eV)",
+                value=float(saved.get("co_free_energy_correction_eV", 0.0)))
+    for family, label, key, default in (
+        ("protonated", "Protonated lattice O", "proton_coverages_pct", [25, 50, 75, 100]),
+        ("O", "O*", "o_coverages_pct", [25, 50, 75, 100]),
+        ("OH", "OH*", "oh_coverages_pct", [25, 50, 75, 100]),
+        ("H2O", "H2O*", "h2o_coverages_pct", [25, 50, 100]),
+    ):
+        if family in families:
+            coverage_settings[key] = _floats(st.text_input(
+                f"{label} coverage (%)", value=_csv(saved.get(key, default))
+            ))
+    if "mixed-O-OH" in families:
+        coverage_settings["mixed_coverages_pct"] = _mixed_coverages(st.text_input(
+            "Mixed O*:OH* coverage pairs (%)", value=_mixed_coverage_text(saved.get("mixed_coverages_pct"))
+        ))
     st.caption(
         "Coverage is converted to the nearest realizable integer occupation for each "
         "surface. If the requested coverage lies exactly halfway between two integer "
@@ -904,6 +908,7 @@ with st.expander("Configuration & run controls", expanded=True):
         "does not create a duplicate state."
     )
 
+    st.markdown("**Arrangement sampling**")
     q1, q2 = st.columns(2)
     max_arrangements = q1.number_input(
         "Max symmetry-distinct configurations / coverage",
@@ -1311,6 +1316,7 @@ with st.expander("Configuration & run controls", expanded=True):
             )
 
     section = dict(saved)
+    section.update(coverage_settings)
     section.update(metal_settings)
     section.update(
         enabled=enabled, source_mode=source_mode, source_summary=source_summary, slab_files=slab_files,
@@ -1321,11 +1327,6 @@ with st.expander("Configuration & run controls", expanded=True):
         protonation_side=protonation_side,
         side_target_species=side_target_species,
         state_families=families, adsorbates=adsorbates,
-        proton_coverages_pct=_floats(proton_coverage_text),
-        o_coverages_pct=_floats(o_coverage_text),
-        oh_coverages_pct=_floats(oh_coverage_text),
-        h2o_coverages_pct=_floats(h2o_coverage_text),
-        mixed_coverages_pct=_mixed_coverages(mixed_coverage_text),
         surface_window_A=float(surface_window),
         surface_site_selection=surface_site_selection,
         surface_layer_gap_A=float(surface_layer_gap),
@@ -1376,17 +1377,17 @@ with st.expander("Configuration & run controls", expanded=True):
 
     b1, b2, b3 = st.columns(3)
     if b1.button("Save settings", type="primary"):
-        cfg["surface_pourbaix"] = section
+        cfg["surface_pourbaix"] = pack_state_settings(section)
         with config_path.open("w", encoding="utf-8") as handle:
             toml.dump(cfg, handle)
         st.success(f"Saved {config_path}")
     if b2.button("Dry run"):
-        cfg["surface_pourbaix"] = section
+        cfg["surface_pourbaix"] = pack_state_settings(section)
         with config_path.open("w", encoding="utf-8") as handle:
             toml.dump(cfg, handle)
         _run(["dopingflow", "surface-pourbaix", "-c", str(config_path), "--dry-run"])
     if b3.button("Run surface-Pourbaix"):
-        cfg["surface_pourbaix"] = section
+        cfg["surface_pourbaix"] = pack_state_settings(section)
         with config_path.open("w", encoding="utf-8") as handle:
             toml.dump(cfg, handle)
         _run(["dopingflow", "surface-pourbaix", "-c", str(config_path)])
