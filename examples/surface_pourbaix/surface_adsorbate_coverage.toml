@@ -30,6 +30,9 @@ enabled = true
 source_mode = "screen-summary"
 placement_side = "top"
 state_families = ["clean", "H", "CO", "mixed-H-CO"]
+# Optional: uncomment both lines to sample end-on and side-on CO.
+# co_binding_modes = ["C-down", "O-down", "side-on"]
+# co_orientation_limit = 9
 metal_site_types = ["ontop", "bridge", "hollow"]
 h_coverages_pct = [25, 50, 75, 100]
 co_coverages_pct = [25, 50, 75, 100]
