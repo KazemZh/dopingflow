@@ -311,7 +311,13 @@ to calculate the energies. Open the Surface Pourbaix GUI to plot the
 facet-resolved grids. One monolayer means one adsorbate per eligible exposed
 metal atom. A CO molecule counts once. The search samples atop sites,
 bridges between Voronoi neighbors, and hollows at Voronoi vertices of the
-projected outer layer. CO starts carbon-down. Mixed coverage pairs specify
+projected outer layer. CO starts carbon-down. Set ``co_tilt_deg = 45`` in ``[surface_pourbaix]``
+to add four azimuths around the surface normal, measured from the slab's
+first lattice vector. The carbon position and initial bond length are fixed
+during placement. For multiple CO molecules, ``co_orientation_limit``
+(default 9, including upright) bounds the joint orientation samples per
+retained site arrangement. Larger limits can include independent tilts.
+The default zero tilt preserves the upright-only search. Mixed coverage pairs specify
 [H%, CO%]. The raw and retained configuration caps control sampling cost.
 Increasing them and the lateral cell size tests configurational convergence.
 

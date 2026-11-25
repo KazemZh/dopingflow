@@ -245,7 +245,7 @@ def _record_from_state(
         "raw_arrangements_examined",
         "symmetry_unique_arrangements",
         "symmetry_operations",
-        "adsorption_site_types",
+        "adsorption_site_types", "co_seed_angles_deg",
         "o_site_indices",
         "oh_site_indices",
     ):

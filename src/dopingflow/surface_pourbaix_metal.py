@@ -66,7 +66,7 @@ def _occupancies(n, nh, nc, limit):
             yield tuple(sorted(occupied[:nh])), tuple(sorted(occupied[nh:]))
 
 
-def metal_states(slab, exposed, normal, cfg, common):
+def _upright_states(slab, exposed, normal, cfg, common):
     if not exposed:
         raise ValueError("H/CO coverage needs exposed surface metal atoms")
     pool = _site_pool(slab, exposed, normal, cfg["metal_site_types"])
@@ -137,3 +137,56 @@ def metal_states(slab, exposed, normal, cfg, common):
                        raw_arrangements_total=comb(n, nh+nc)*comb(nh+nc, nh),
                        raw_arrangements_examined=examined, symmetry_unique_arrangements=len(unique),
                        symmetry_operations=len(perms), structure=candidate)
+
+
+def metal_states(slab, exposed, normal, cfg, common):
+    """Retain the original upright state and sample C-bound CO rotations."""
+    tilt = float(cfg.get("co_tilt_deg", 0))
+    cap = int(cfg.get("co_orientation_limit", 9))
+    if not 0 <= tilt <= 90 or cap < 1:
+        raise ValueError("co_tilt_deg must be 0–90 and co_orientation_limit at least 1")
+    a = slab.lattice.matrix[0]
+    u = a / np.linalg.norm(a)
+    v = np.cross(normal, u)
+    theta = np.deg2rad(tilt)
+    for state in _upright_states(slab, exposed, normal, cfg, common):
+        yield state
+        if not tilt or not state["n_CO"] or cap == 1:
+            continue
+        structure = state["structure"]
+        carbons = [i for i in range(len(slab), len(structure))
+                   if structure[i].specie.symbol == "C"]
+        # Base-five digits encode upright or four azimuths per molecule.
+        # Sample the joint space without allocating 5**N geometries.
+        total = 5 ** len(carbons)
+        rng = random.Random(17)
+        codes = list(range(1, total)) if total <= cap else []
+        if total > cap:
+            # Include collective tilts first, then independent molecular tilts.
+            codes = [k * ((total - 1) // 4) for k in range(1, min(5, cap))]
+            used = {0, *codes}
+            while len(codes) < cap - 1:
+                code = rng.randrange(1, total)
+                if code not in used:
+                    codes.append(code)
+                    used.add(code)
+        for code in codes:
+            candidate = structure.copy()
+            digits = code
+            angles = []
+            for i in carbons:
+                digits, direction = divmod(digits, 5)
+                angles.append([tilt if direction else 0, 90 * max(0, direction - 1)])
+                if direction:
+                    bond = structure[i + 1].coords - structure[i].coords
+                    outward = bond / np.linalg.norm(bond)
+                    tangent = (u, v, -u, -v)[direction - 1]
+                    axis = np.cos(theta) * outward + np.sin(theta) * tangent
+                    candidate.translate_sites([i + 1], np.linalg.norm(bond) * axis - bond,
+                                              frac_coords=False, to_unit_cell=False)
+            # Reject overlapping seeds, excluding each CO's own C–O bond.
+            if any(candidate.get_distance(i + 1, j) < 1.1 for i in carbons
+                   for j in range(len(candidate)) if j not in (i, i + 1)):
+                continue
+            yield dict(state, structure=candidate, co_seed_angles_deg=angles,
+                       state_id=f"{state['state_id']}_tilt{tilt:g}_orient{code}")
