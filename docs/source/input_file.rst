@@ -1648,7 +1648,11 @@ Set ``bulk_structure`` to a periodic POSCAR or CIF to generate facets directly
 from a bulk unit cell. Set ``conventional_millers`` to interpret the indices
 in the conventional cell and ``inplane_repeat`` to repeat the slab laterally.
 To compare coverages on the screened facets, configure ``state_families`` and
-coverage percentages in ``[surface_pourbaix]``. Custom molecules use nested
+coverage percentages in ``[surface_pourbaix]``. For built-in CO and mixed H/CO, set
+``co_binding_modes`` to a list drawn from ``C-down``, ``O-down``, and ``side-on``.
+The default is C-down only. ``co_orientation_limit`` defaults to 9 joint starts
+per site arrangement. Selecting all three modes requires a limit of at least 6.
+Custom molecules use nested
 ``[surface_pourbaix.adsorbates.NAME]`` tables. See :doc:`methods/surface_pourbaix`.
 
 For candidate-based screening the stage reads a database file:
